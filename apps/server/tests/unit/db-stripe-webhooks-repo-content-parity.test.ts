@@ -43,12 +43,14 @@ describe('W446.C apps/server/src/db/stripe-webhooks-repo.ts content parity', () 
     );
   });
 
-  it('imports: and/desc/eq/gt/inArray/isNull/lte/or/sql + the SQL type from drizzle-orm; AccountTier; StripeWebhooksRepo from services; Database; accounts + billingInvoicePayments + cryptoEntitlements + processedStripeEvents + subscriptions schemas', () => {
+  it('imports: and/asc/desc/eq/gt/gte/inArray/isNull/lte/ne/or/sql + the SQL type from drizzle-orm; AccountTier; StripeWebhooksRepo from services; Database; accounts + billingInvoicePayments + cryptoEntitlements + processedStripeEvents + subscriptions schemas', () => {
     // Live-billing audit #9 — `type SQL` types cryptoTermRunningAt, the fragment both
     // tier recomputes judge a crypto term's expiry against. Live-billing audit #3 —
     // `asc` orders the two new reads (collecting subscriptions, the past-due sweep's).
+    // Security sweep #28 — `gte` and `ne` select the terms stacked after a refunded
+    // one, which the refund moves back.
     expect(body).toMatch(
-      /import \{ and, asc, desc, eq, gt, inArray, isNull, lte, or, sql, type SQL \} from 'drizzle-orm';/,
+      /import \{\s*and,\s*asc,\s*desc,\s*eq,\s*gt,\s*gte,\s*inArray,\s*isNull,\s*lte,\s*ne,\s*or,\s*sql,\s*type SQL,?\s*\} from 'drizzle-orm';/,
     );
     expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
     // Live-billing audit #3 — the grace length and the stored-row shape come from

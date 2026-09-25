@@ -10,9 +10,11 @@
 //   bench-regression (advisory mode, V-165)
 //
 // CRITICAL invariants:
-//   1. Trigger surface: push to main + PR to main, with
-//      cancel-in-progress concurrency (prevents stale CI runs from
-//      blocking new commits).
+//   1. Trigger surface: push to main + PR to main. A pull request's
+//      superseded run is cancelled; a run on main never is, because
+//      production deploys only a commit whose CI run went green
+//      (2026-09-25; evaluated in
+//      a-burst-of-pushes-to-main-never-cancels-the-ci-run-a-deploy-waits-on).
 //   2. Node 22 across all Node jobs; Python 3.10; Go 1.22.
 //   3. Postgres 17 + Redis 7 services with health-check gates.
 //   4. Coverage thresholds enforced (V-107).
@@ -47,11 +49,12 @@ describe('W723 GitHub Actions ci.yml workflow parity', () => {
     );
   });
 
-  it('CRITICAL concurrency `cancel-in-progress: true` pinned. Cancels stale CI runs when a new commit lands on the same ref — prevents pipeline saturation from busy days. Drift to false would let queued runs stack up.', () => {
+  it('CRITICAL concurrency pinned: a pull request cancels its own superseded run; a run on main is never cancelled and has a group of its own. Production deploys only a commit whose CI went green, so a cancelled run on main is a commit that never deploys — a burst of pushes used to leave production behind with no alert. What the expressions evaluate to is asserted in a-burst-of-pushes-to-main-never-cancels-the-ci-run-a-deploy-waits-on.', () => {
     const c = read(CI);
     expect(c).toMatch(
-      /concurrency:\s*\n\s*group: \$\{\{ github\.workflow \}\}-\$\{\{ github\.ref \}\}\s*\n\s*cancel-in-progress: true/,
+      /concurrency:\s*\n(?:\s*#[^\n]*\n)*\s*group: \$\{\{ github\.workflow \}\}-\$\{\{ github\.ref == 'refs\/heads\/main' && format\('main-\{0\}', github\.run_id\) \|\| github\.ref \}\}\s*\n\s*cancel-in-progress: \$\{\{ github\.ref != 'refs\/heads\/main' \}\}\n/,
     );
+    expect(c).not.toMatch(/cancel-in-progress: true/);
   });
 
   it('CRITICAL 5-job roster pinned — build-test + e2e + python-sdk + go-sdk + bench-regression. Drift to dropping any job would silently widen the surface that ships unverified.', () => {
@@ -312,7 +315,7 @@ describe('W723 GitHub Actions ci.yml workflow parity', () => {
     expect(npmCiCount, 'npm ci invocations').toBeGreaterThanOrEqual(3);
   });
 
-  it('CI workflow 6-invariant cluster — 5-job roster + Node 22 + PG 17 + Redis 7 + V-107 coverage gate + V-165 advisory bench + cancel-in-progress concurrency + frozen-lockfile npm ci.', () => {
+  it('CI workflow 6-invariant cluster — 5-job roster + Node 22 + PG 17 + Redis 7 + V-107 coverage gate + V-165 advisory bench + cancel-in-progress off main only + frozen-lockfile npm ci.', () => {
     const c = read(CI);
 
     expect(c).toMatch(/build-test:/);
@@ -325,7 +328,7 @@ describe('W723 GitHub Actions ci.yml workflow parity', () => {
     expect(c).toMatch(/redis:7-alpine/);
     expect(c).toMatch(/V-107/);
     expect(c).toMatch(/V-165/);
-    expect(c).toMatch(/cancel-in-progress: true/);
+    expect(c).toMatch(/cancel-in-progress: \$\{\{ github\.ref != 'refs\/heads\/main' \}\}/);
     expect(c).toMatch(/run: npm ci$/m);
   });
 

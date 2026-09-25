@@ -12,6 +12,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import type { NowPaymentsApiClient, CreatePaymentResult } from '../../src/lib/nowpayments-api.js';
+import { PAYMENT_MINT_CLAIM_STALE_AFTER_MS } from '../../src/services/crypto-orders.js';
 
 function mockNowpayments(): {
   client: NowPaymentsApiClient;
@@ -36,6 +37,7 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
   let fx: TestAppFixture;
 
   afterEach(async () => {
+    vi.useRealTimers();
     if (fx) await fx.cleanup();
   });
 
@@ -112,6 +114,9 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
   });
 
   it('never exposes a minted address until that exact payment id is durably bound', async () => {
+    // Security sweep #18 (residual): the first mint's claim holds off every retry
+    // until it is stale, so the clock is moved past it before the retry that mints B.
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() });
     let mint = 0;
     const createPayment = vi.fn((): Promise<CreatePaymentResult> => {
       mint += 1;
@@ -148,8 +153,24 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
       payment_address: null,
     });
 
-    // The customer never received orphan A. A same-key retry may mint B, but
+    // The customer never received orphan A. A same-key retry while A's claim is
+    // fresh mints nothing: A's server may still be binding it.
+    const early = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers,
+      payload,
+    });
+    expect(early.statusCode).toBe(201);
+    expect(early.json<{ provider: string; payment_address: string | null }>()).toMatchObject({
+      provider: 'stub',
+      payment_address: null,
+    });
+    expect(createPayment).toHaveBeenCalledTimes(1);
+
+    // Once A's claim is stale with nothing bound, a same-key retry may mint B, but
     // B becomes payable only after the original service method binds it.
+    vi.setSystemTime(Date.now() + PAYMENT_MINT_CLAIM_STALE_AFTER_MS + 1);
     const replay = await fx.app.inject({
       method: 'POST',
       url: '/v1/billing/crypto-checkout',
@@ -408,14 +429,16 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
     },
   );
 
-  it('CONCURRENT same-key checkouts never surface an orphaned mint — the loser echoes the BOUND payment (comprehensive audit 2026-07-02)', async () => {
+  it('CONCURRENT same-key checkouts never surface an orphaned mint — the second waits for the first mint and shows the BOUND payment (comprehensive audit 2026-07-02; security sweep #18 residual)', async () => {
     // Two overlapping checkouts on one Idempotency-Key both read
     // order.payment_id === null and reach the mint branch (the sequential replay
-    // guard doesn't fire yet). Whoever binds first wins; the loser's freshly
-    // minted payment is orphaned and MUST NOT be surfaced — else the customer
-    // pays an address whose IPN applyIpnStatus rejects on the payment_id
-    // mismatch and their crypto is lost. Deferred createPayment lets us park
-    // BOTH requests in the mint branch before either binds.
+    // guard doesn't fire yet). They used to BOTH mint: whoever bound first won and
+    // the loser's payment was orphaned (and had to be hidden, or the customer paid
+    // an address whose IPN applyIpnStatus rejects). Now the second waits for the
+    // first request's mint and answers with the payment it bound, so there is no
+    // orphan. (A stale claim re-taken on another server while the first mint still
+    // runs can still orphan one; that loser echoing the bound payment is pinned in
+    // concurrent-crypto-checkouts-sharing-one-idempotency-key-mint-one-payment.)
     const release: Array<() => void> = [];
     let call = 0;
     const createPayment = vi.fn((): Promise<CreatePaymentResult> => {
@@ -458,21 +481,17 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
       });
 
     const pA = inject();
+    // Request 1 has parked at createPayment: the concurrent window is open.
+    await vi.waitFor(() => expect(release).toHaveLength(1));
     const pB = inject();
 
-    // Wait until BOTH requests have parked at createPayment → the concurrent
-    // window is genuinely open (both in the mint branch, neither bound yet).
-    const started = Date.now();
-    while (release.length < 2 && Date.now() - started < 3000) {
-      await new Promise((r) => setImmediate(r));
-    }
-    expect(release.length).toBe(2);
+    // Request 2 reaches the mint while request 1's payment is unbound, and must
+    // not call the provider: give it ample time to do so if it were going to.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(createPayment, 'the second checkout minted its own payment').toHaveBeenCalledTimes(1);
 
-    // Request 1 binds pay_A and returns; request 2 then mints pay_B, detects the
-    // order is bound to pay_A, and echoes pay_A instead of its orphan.
     release[0]?.();
     const a = await pA;
-    release[1]?.();
     const b = await pB;
 
     const bodyA = a.json<{ order_id: string; payment_address: string | null }>();
@@ -481,8 +500,9 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
     expect(b.statusCode).toBe(201);
     expect(bodyB.order_id).toBe(bodyA.order_id); // same order (idempotent)
     expect(bodyA.payment_address).toBe('0xADDR_A');
-    // The loser MUST show the BOUND address (0xADDR_A), never its orphan 0xADDR_B.
+    // The second MUST show the BOUND address (0xADDR_A), never an orphan.
     expect(bodyB.payment_address).toBe('0xADDR_A');
-    expect(getPayment).toHaveBeenCalledWith('pay_A');
+    expect(createPayment).toHaveBeenCalledTimes(1);
+    expect(getPayment).not.toHaveBeenCalledWith('pay_B');
   });
 });

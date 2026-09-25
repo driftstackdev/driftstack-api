@@ -66,6 +66,7 @@ function makeRecord(status: AgentSessionRecord['status'] = 'active'): AgentSessi
     proxyId: null,
     stopOnExitIpChange: false,
     firstExitIp: null,
+    profileSaveBackRefused: false,
     status,
     transcript: [],
     tokenBudgetTotal: 100_000,

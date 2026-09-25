@@ -22,10 +22,18 @@ import { readBoundedResponseBody, ResponseBodyLimitError } from './bounded-respo
 
 const MAX_NOWPAYMENTS_RESPONSE_BODY_BYTES = 256 * 1024;
 
+/**
+ * The default per-request timeout, and the one production runs with (bootstrap
+ * passes none). A createPayment call has either answered or been aborted by then,
+ * so the checkout route treats a payment mint claimed longer ago than this plus a
+ * margin as abandoned (see PAYMENT_MINT_CLAIM_STALE_AFTER_MS).
+ */
+export const NOWPAYMENTS_REQUEST_TIMEOUT_MS = 10_000;
+
 export interface NowPaymentsApiClientConfig {
   /** NowPayments API key (live env). */
   apiKey: string;
-  /** Per-request timeout in ms. Default 10000. */
+  /** Per-request timeout in ms. Default {@link NOWPAYMENTS_REQUEST_TIMEOUT_MS}. */
   timeoutMs?: number;
   /** Override base URL for tests. Default 'https://api.nowpayments.io'. */
   baseUrl?: string;
@@ -134,7 +142,7 @@ export class NowPaymentsApiClient {
 
   constructor(opts: NowPaymentsApiClientConfig) {
     this.apiKey = opts.apiKey;
-    this.timeoutMs = opts.timeoutMs ?? 10000;
+    this.timeoutMs = opts.timeoutMs ?? NOWPAYMENTS_REQUEST_TIMEOUT_MS;
     this.baseUrl = opts.baseUrl ?? 'https://api.nowpayments.io';
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.logger = opts.logger;

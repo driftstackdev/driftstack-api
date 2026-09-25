@@ -36,7 +36,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
 import type { CryptoOrdersService } from '../services/crypto-orders.js';
-import { mapNowpaymentsStatus } from '../services/crypto-orders.js';
+import { mapNowpaymentsStatus, type CryptoOrder } from '../services/crypto-orders.js';
 import { BadRequestError, FeatureUnavailableError, ValidationError } from '../lib/errors.js';
 import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
@@ -149,6 +149,28 @@ export function registerCryptoCheckoutRoutes(
   app: FastifyInstance,
   deps: CryptoCheckoutRoutesDeps,
 ): void {
+  // Security sweep #18 (residual) — the payment mints this server is running, by
+  // order id. Checkouts that repeat one Idempotency-Key while its first request is
+  // still minting all replay the same pending, unbound order; each of them used to
+  // reach createPayment. The first to get here runs the mint (claim, create, bind)
+  // and every concurrent request for that order awaits it and answers with the
+  // payment it bound, never calling the provider itself. Other servers are held
+  // off by the claim the mint writes on the order row (claimPaymentMint).
+  const mintsInFlight = new Map<string, Promise<MintedPayment>>();
+  const mintOnce = (
+    wired: WiredMintDeps,
+    order: CryptoOrder,
+    log: FastifyRequest['log'],
+  ): Promise<MintedPayment> => {
+    const running = mintsInFlight.get(order.order_id);
+    if (running !== undefined) return running;
+    const mint = mintAndBindPayment(wired, order, log).finally(() => {
+      mintsInFlight.delete(order.order_id);
+    });
+    mintsInFlight.set(order.order_id, mint);
+    return mint;
+  };
+
   app.post(
     '/v1/billing/crypto-checkout',
     // W496 — admin:billing (scopes.md): initiating a crypto checkout is a
@@ -366,126 +388,24 @@ export function registerCryptoCheckoutRoutes(
         mayMintPayment
       ) {
         // Fresh order, OR a replay whose original mint never bound a payment_id
-        // (order.payment_id === null). A mint is not customer-payable until the
-        // exact order has durably adopted that payment id. If binding fails, the
-        // provider payment may be orphaned internally but its address is never
-        // exposed; a later same-key retry can mint and bind a safe replacement.
-        try {
-          const payment = await deps.nowpayments.createPayment({
-            priceAmount: order.price_cents / 100,
-            priceCurrency: order.price_currency,
-            orderId: order.order_id,
-            orderDescription: `Driftstack ${order.product}`,
-            ipnCallbackUrl: deps.nowpaymentsIpnCallbackUrl,
-          });
-          // Billing-integrity (#9 payment_id binding + #1 crypto-denominated
-          // quote) — persist the minted NowPayments payment_id AND the
-          // crypto-denominated quote (pay_amount + pay_currency) on the order so
-          // applyIpnStatus can (a) reject an IPN whose payment_id doesn't match
-          // and (b) reconcile the IPN's actually_paid against the SAME-unit
-          // pay_amount (not the fiat price). Best-effort: a failure here leaves
-          // these null (the first IPN backfills them), so it must not fail the
-          // checkout response.
-          //
-          // CONCURRENCY (audit 2026-07-02): the sequential idempotency
-          // replay is guarded above, but two checkouts sharing one
-          // Idempotency-Key that overlap in the createPayment window BOTH reach
-          // this mint branch (each read order.payment_id === null before either
-          // bound). recordPaymentId runs under the order row-lock and returns the
-          // order with its EFFECTIVE bound payment_id: whoever binds first wins,
-          // and the loser's freshly-minted payment is ORPHANED. We MUST surface
-          // the bound payment's address, never the orphan — else the customer
-          // pays an address whose IPN applyIpnStatus rejects on the payment_id
-          // mismatch and their crypto is lost.
-          let boundOrder = null as Awaited<ReturnType<typeof deps.service.recordPaymentId>>;
-          try {
-            boundOrder = await deps.service.recordPaymentId({
-              order_id: order.order_id,
-              payment_id: payment.paymentId,
-              ...(payment.payAmount !== null && payment.payAmount !== undefined
-                ? { pay_amount: payment.payAmount }
-                : {}),
-              ...(payment.payCurrency !== null && payment.payCurrency !== undefined
-                ? { pay_currency: payment.payCurrency }
-                : {}),
-            });
-            // recordPaymentId owns the row lock and may observe an IPN/cancel
-            // transition that happened after createIdempotent returned. Keep
-            // the response status on that newer authoritative snapshot rather
-            // than pairing a hidden address with a stale `pending` status.
-            if (boundOrder !== null) order = boundOrder;
-          } catch (bindErr) {
-            req.log.warn(
-              {
-                event: 'nowpayments_record_payment_id_failed',
-                order_id: order.order_id,
-                err: bindErr instanceof Error ? bindErr.message : String(bindErr),
-              },
-              'failed to bind NowPayments payment_id to order (will bind on first IPN)',
-            );
-          }
-          if (
-            boundOrder !== null &&
-            boundOrder.payment_id !== null &&
-            boundOrder.payment_id !== payment.paymentId
-          ) {
-            // A concurrent checkout bound this order to a DIFFERENT payment first;
-            // our mint is orphaned. Echo the bound payment so the customer pays
-            // the address whose IPN will actually reconcile.
-            try {
-              const bound = await deps.nowpayments.getPayment(boundOrder.payment_id);
-              if (
-                boundOrder.status === 'pending' &&
-                mapNowpaymentsStatus(bound.paymentStatus) === 'pending'
-              ) {
-                provider = 'nowpayments';
-                paymentAddress = bound.payAddress;
-                payCurrency = bound.payCurrency;
-                payAmount = bound.payAmount;
-              }
-            } catch (err) {
-              req.log.warn(
-                {
-                  event: 'nowpayments_concurrent_bound_get_payment_failed',
-                  order_id: order.order_id,
-                  err: err instanceof Error ? err.message : String(err),
-                },
-                'failed to re-fetch the concurrently-bound NowPayments payment; returning stub posture',
-              );
-            }
-          } else if (
-            boundOrder !== null &&
-            boundOrder.payment_id === payment.paymentId &&
-            boundOrder.status === 'pending' &&
-            mapNowpaymentsStatus(payment.paymentStatus) === 'pending'
-          ) {
-            // The order durably owns this exact, still-payable provider payment.
-            provider = 'nowpayments';
-            paymentAddress = payment.payAddress;
-            payCurrency = payment.payCurrency;
-            payAmount = payment.payAmount;
-          } else {
-            req.log.warn(
-              {
-                event: 'nowpayments_payment_not_safely_bound',
-                order_id: order.order_id,
-              },
-              'minted NowPayments payment is not safely bound and will not be exposed',
-            );
-          }
-        } catch (err) {
-          // Soft-fail: the local order persists, the customer sees
-          // the stub posture, support can mint the payment manually.
-          // Log so ops sees the upstream failure.
-          req.log.error(
-            {
-              event: 'nowpayments_create_payment_failed',
-              order_id: order.order_id,
-              err: err instanceof Error ? err.message : String(err),
-            },
-            'NowPayments create-payment call failed; returning stub posture',
-          );
-        }
+        // (order.payment_id === null). Security sweep #18 (residual): one mint per
+        // order at a time — concurrent requests on this server share it, and the
+        // claim it writes on the order row holds off every other server (see
+        // mintAndBindPayment). A throw here is the daily mint budget's 409.
+        const minted = await mintOnce(
+          {
+            service: deps.service,
+            nowpayments: deps.nowpayments,
+            nowpaymentsIpnCallbackUrl: deps.nowpaymentsIpnCallbackUrl,
+          },
+          order,
+          req.log,
+        );
+        order = minted.order;
+        provider = minted.provider;
+        paymentAddress = minted.paymentAddress;
+        payCurrency = minted.payCurrency;
+        payAmount = minted.payAmount;
       }
 
       return reply.code(201).send({
@@ -502,6 +422,212 @@ export function registerCryptoCheckoutRoutes(
       });
     },
   );
+}
+
+/** The dependencies a payment mint needs, all present (the provider is wired). */
+interface WiredMintDeps {
+  service: CryptoOrdersService;
+  nowpayments: NowPaymentsApiClient;
+  nowpaymentsIpnCallbackUrl: string;
+}
+
+/** What a mint answers the checkout with: the order as the mint left it, and its payment. */
+interface MintedPayment {
+  order: CryptoOrder;
+  provider: 'stub' | 'nowpayments';
+  paymentAddress: string | null;
+  payCurrency: string | null;
+  payAmount: number | null;
+}
+
+/**
+ * Security sweep #18 (residual) — mint and bind the order's NowPayments payment,
+ * at most once per order across every server.
+ *
+ * The right to call createPayment is claimed first, under the order's row lock, by
+ * writing a claim time on the order (claimPaymentMint). A request that finds:
+ *   · a payment already bound answers with it (re-fetched, and only while it is
+ *     still waiting for payment), never minting another;
+ *   · a fresh claim from another checkout answers without an address: the order's
+ *     payment is being prepared, and a retry after it is bound gets it;
+ *   · an order no longer pending answers with its real status and no address;
+ *   · the account's daily mint budget spent is refused with the order limits' 409
+ *     problem (thrown).
+ * Only a claim older than the provider timeout plus a margin, with no payment bound,
+ * is claimed again — its holder died or could not bind — and then by one request.
+ */
+async function mintAndBindPayment(
+  deps: WiredMintDeps,
+  unclaimed: CryptoOrder,
+  log: FastifyRequest['log'],
+): Promise<MintedPayment> {
+  const claim = await deps.service.claimPaymentMint({ order_id: unclaimed.order_id });
+  let order = claim?.order ?? unclaimed;
+  let provider: 'stub' | 'nowpayments' = 'stub';
+  let paymentAddress: string | null = null;
+  let payCurrency: string | null = null;
+  let payAmount: number | null = null;
+  const answer = (): MintedPayment => ({
+    order,
+    provider,
+    paymentAddress,
+    payCurrency,
+    payAmount,
+  });
+  if (claim?.kind === 'bound' && order.status === 'pending' && order.payment_id !== null) {
+    // Bound while this request was on its way here (by this server's previous mint
+    // or another server's): answer with that payment, as a replay does.
+    try {
+      const existing = await deps.nowpayments.getPayment(order.payment_id);
+      if (mapNowpaymentsStatus(existing.paymentStatus) === 'pending') {
+        provider = 'nowpayments';
+        paymentAddress = existing.payAddress;
+        payCurrency = existing.payCurrency;
+        payAmount = existing.payAmount;
+      }
+    } catch (err) {
+      log.warn(
+        {
+          event: 'nowpayments_replay_get_payment_failed',
+          order_id: order.order_id,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        'failed to re-fetch the original NowPayments payment on replay; returning stub posture',
+      );
+    }
+    return answer();
+  }
+  if (claim?.kind === 'in_progress') {
+    log.info(
+      { event: 'crypto_checkout_payment_mint_in_progress', order_id: order.order_id },
+      "another checkout is creating this order's NowPayments payment; answering without minting",
+    );
+    return answer();
+  }
+  if (claim?.kind !== 'claimed') return answer();
+
+  // This request alone holds the claim. A mint is not customer-payable until
+  // the exact order has durably adopted that payment id. If binding fails, the
+  // provider payment may be orphaned internally but its address is never
+  // exposed; once the claim is stale, one same-key retry can mint and bind a
+  // safe replacement.
+  try {
+    const payment = await deps.nowpayments.createPayment({
+      priceAmount: order.price_cents / 100,
+      priceCurrency: order.price_currency,
+      orderId: order.order_id,
+      orderDescription: `Driftstack ${order.product}`,
+      ipnCallbackUrl: deps.nowpaymentsIpnCallbackUrl,
+    });
+    // Billing-integrity (#9 payment_id binding + #1 crypto-denominated
+    // quote) — persist the minted NowPayments payment_id AND the
+    // crypto-denominated quote (pay_amount + pay_currency) on the order so
+    // applyIpnStatus can (a) reject an IPN whose payment_id doesn't match
+    // and (b) reconcile the IPN's actually_paid against the SAME-unit
+    // pay_amount (not the fiat price). Best-effort: a failure here leaves
+    // these null (the first IPN backfills them), so it must not fail the
+    // checkout response.
+    //
+    // CONCURRENCY (audit 2026-07-02): two checkouts sharing one
+    // Idempotency-Key that overlapped in the createPayment window used to BOTH
+    // mint. The claim now admits one mint per order at a time, but a claim
+    // re-taken as stale while its first holder is still running (a stalled
+    // server) can still overlap it. recordPaymentId runs under the order
+    // row-lock and returns the order with its EFFECTIVE bound payment_id:
+    // whoever binds first wins, and the loser's freshly-minted payment is
+    // ORPHANED. We MUST surface the bound payment's address, never the orphan
+    // — else the customer pays an address whose IPN applyIpnStatus rejects on
+    // the payment_id mismatch and their crypto is lost.
+    let boundOrder = null as Awaited<ReturnType<typeof deps.service.recordPaymentId>>;
+    try {
+      boundOrder = await deps.service.recordPaymentId({
+        order_id: order.order_id,
+        payment_id: payment.paymentId,
+        ...(payment.payAmount !== null && payment.payAmount !== undefined
+          ? { pay_amount: payment.payAmount }
+          : {}),
+        ...(payment.payCurrency !== null && payment.payCurrency !== undefined
+          ? { pay_currency: payment.payCurrency }
+          : {}),
+      });
+      // recordPaymentId owns the row lock and may observe an IPN/cancel
+      // transition that happened after createIdempotent returned. Keep
+      // the response status on that newer authoritative snapshot rather
+      // than pairing a hidden address with a stale `pending` status.
+      if (boundOrder !== null) order = boundOrder;
+    } catch (bindErr) {
+      log.warn(
+        {
+          event: 'nowpayments_record_payment_id_failed',
+          order_id: order.order_id,
+          err: bindErr instanceof Error ? bindErr.message : String(bindErr),
+        },
+        'failed to bind NowPayments payment_id to order (will bind on first IPN)',
+      );
+    }
+    if (
+      boundOrder !== null &&
+      boundOrder.payment_id !== null &&
+      boundOrder.payment_id !== payment.paymentId
+    ) {
+      // A concurrent checkout bound this order to a DIFFERENT payment first;
+      // our mint is orphaned. Echo the bound payment so the customer pays
+      // the address whose IPN will actually reconcile.
+      try {
+        const bound = await deps.nowpayments.getPayment(boundOrder.payment_id);
+        if (
+          boundOrder.status === 'pending' &&
+          mapNowpaymentsStatus(bound.paymentStatus) === 'pending'
+        ) {
+          provider = 'nowpayments';
+          paymentAddress = bound.payAddress;
+          payCurrency = bound.payCurrency;
+          payAmount = bound.payAmount;
+        }
+      } catch (err) {
+        log.warn(
+          {
+            event: 'nowpayments_concurrent_bound_get_payment_failed',
+            order_id: order.order_id,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          'failed to re-fetch the concurrently-bound NowPayments payment; returning stub posture',
+        );
+      }
+    } else if (
+      boundOrder !== null &&
+      boundOrder.payment_id === payment.paymentId &&
+      boundOrder.status === 'pending' &&
+      mapNowpaymentsStatus(payment.paymentStatus) === 'pending'
+    ) {
+      // The order durably owns this exact, still-payable provider payment.
+      provider = 'nowpayments';
+      paymentAddress = payment.payAddress;
+      payCurrency = payment.payCurrency;
+      payAmount = payment.payAmount;
+    } else {
+      log.warn(
+        {
+          event: 'nowpayments_payment_not_safely_bound',
+          order_id: order.order_id,
+        },
+        'minted NowPayments payment is not safely bound and will not be exposed',
+      );
+    }
+  } catch (err) {
+    // Soft-fail: the local order persists, the customer sees
+    // the stub posture, support can mint the payment manually.
+    // Log so ops sees the upstream failure.
+    log.error(
+      {
+        event: 'nowpayments_create_payment_failed',
+        order_id: order.order_id,
+        err: err instanceof Error ? err.message : String(err),
+      },
+      'NowPayments create-payment call failed; returning stub posture',
+    );
+  }
+  return answer();
 }
 
 /**

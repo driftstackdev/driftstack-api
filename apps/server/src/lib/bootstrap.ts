@@ -223,7 +223,7 @@ import {
   registerAgentSessionOrphanReapJob,
 } from '../services/agent-session-orphan-sweeper.js';
 import { WorkerDisconnectReaperService } from '../services/worker-disconnect-reaper.js';
-import { ProfileBlobOrphanSweeperService } from '../services/profile-blob-orphan-sweeper.js';
+import { ProfileBlobOrphanReaper } from '../services/profile-blob-orphan-reaper.js';
 import {
   SessionDurationSweeperService,
   enqueueNextSessionDurationSweep,
@@ -2647,6 +2647,18 @@ export async function createProductionDeps(
     r2Public === null
       ? undefined
       : new AvatarOrphanReaper(r2Public, new DrizzleAvatarPointerRepo(dbHandle));
+  // #158 — sealed profile blobs no profile owns (GDPR erasure backstop): a purge
+  // can hard-delete a profile row + its blob while a just-closed session's final
+  // save-back PUT is still in flight, and that PUT re-creates
+  // `profiles/<uuid>.sealed` with no row behind it. This lists the PRIVATE bucket
+  // and deletes each sealed blob older than a 6h grace (above the longest
+  // save-back PUT) whose uuid has no profiles row at all, trashed included. It
+  // was an in-process six-hour timer re-armed at boot, which continuous deploys
+  // restarted before it ever fired; it now rides the daily purge below, which is
+  // scheduled in the database. Needs list + delete on the private bucket; a
+  // refused listing reports the arm failed and deletes nothing.
+  const profileBlobOrphanReaper =
+    r2 === null ? undefined : new ProfileBlobOrphanReaper(r2, profilesRepo);
   const accountDeletionPurgeSweeper = new AccountDeletionPurgeSweeperService({
     repo: new DrizzleAccountDeletionPurgeRepo(dbHandle),
     ...(byokAnthropicService ? { byok: byokAnthropicService } : {}),
@@ -2711,6 +2723,7 @@ export async function createProductionDeps(
     // reports skipped.
     ...(terminatedAccountAvatarPurge ? { avatars: terminatedAccountAvatarPurge } : {}),
     ...(avatarOrphanReaper ? { avatarOrphans: avatarOrphanReaper } : {}),
+    ...(profileBlobOrphanReaper ? { profileBlobOrphans: profileBlobOrphanReaper } : {}),
     logger,
     // Four §9 commitments ride on this sweep and it emitted nothing until now.
     // The `skipped` label is what makes an unwired arm visible: a promise that
@@ -2738,24 +2751,6 @@ export async function createProductionDeps(
     logger,
   });
   await enqueueNextAgentSessionOrphanReap({ scheduledJobs: scheduledJobsService });
-  // #158 — R2 orphaned profile sealed-blob reaper (GDPR erasure backstop). A
-  // purge can hard-delete a profile row + its R2 blob while a just-closed
-  // session's final save-back PUT is still in flight; the harness's direct PUT
-  // then recreates `profiles/<uuid>.sealed` with NO DB row — a permanent orphan
-  // no other sweep reaps. This 6h self-arming sweep lists profiles/*.sealed and
-  // deletes any object OLDER than a 2h grace (safely exceeds the max presigned
-  // save-back PUT TTL) whose uuid has no profiles row at all (trashed-inclusive
-  // existence check → a trashed profile's blob survives). Gated on R2 being
-  // configured; needs the s3:ListBucket permission — a missing grant makes each
-  // pass a logged no-op (never a crash). Uses the same profilesRepo wired above.
-  if (r2 !== null) {
-    const profileBlobOrphanSweeper = new ProfileBlobOrphanSweeperService({
-      r2,
-      profiles: profilesRepo,
-      logger,
-    });
-    profileBlobOrphanSweeper.start();
-  }
   // Profile-backed sessions (file 57): decode the master key once at boot (null
   // when PROFILE_MASTER_KEY unset → profiles created without a DEK; feature inert).
   const profileMasterKeyBuf =
@@ -3442,6 +3437,10 @@ export async function createProductionDeps(
               ? makeProfileSavedPersister(r2, logger, {
                   agentSessions: agentSessionsRepo,
                   profiles: profilesRepo,
+                  // 0143 — a save-back refused because the session never started
+                  // from the stored profile reaches the customer on the same
+                  // session.profile_save_failed webhook.
+                  webhooks: webhooksService,
                 })
               : undefined,
             makeChallengeRelay(agentSessionsRepo, webhooksService, logger),
@@ -4142,6 +4141,9 @@ export async function createProductionDeps(
     // posture so flipping PERMISSIVE_CORS=false can't lock out the primary
     // dashboard even if CORS_ALLOWED_ORIGINS omits it.
     dashboardOrigin: config.dashboardOrigin,
+    // Security sweep #31 — Checkout's plain-HTTP dev and e2e return origins are
+    // for development and tests only; production returns to the HTTPS dashboard.
+    allowDevelopmentReturnOrigins: config.nodeEnv !== 'production',
     // V-117: pass through to buildApp so it installs the Sentry
     // error-capture + breadcrumb hooks. Both are no-ops when
     // sentry.isInitialized is false (i.e. SENTRY_DSN unset).

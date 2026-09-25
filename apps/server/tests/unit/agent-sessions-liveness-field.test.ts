@@ -24,6 +24,7 @@ function makeRecord(id: string, overrides: Partial<AgentSessionRecord> = {}): Ag
     proxyId: null,
     stopOnExitIpChange: false,
     firstExitIp: null,
+    profileSaveBackRefused: false,
     status: 'active',
     transcript: [],
     tokenBudgetTotal: 100_000,

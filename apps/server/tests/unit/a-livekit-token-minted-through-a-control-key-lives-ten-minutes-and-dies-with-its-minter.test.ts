@@ -81,6 +81,7 @@ function sessionWith(controlKeyEncryptionKey: string, minted: boolean): AgentSes
     proxyId: null,
     stopOnExitIpChange: false,
     firstExitIp: null,
+    profileSaveBackRefused: false,
     status: 'active',
     transcript: [],
     tokenBudgetTotal: 100_000,

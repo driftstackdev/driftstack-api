@@ -402,6 +402,12 @@ export interface TestAppOptions {
    */
   disableBilling?: boolean;
   /**
+   * Security sweep #31 — pass through to AppDeps.allowDevelopmentReturnOrigins:
+   * Checkout may also return to the plain-HTTP dev and e2e origins, as it does when
+   * NODE_ENV is not production. Default unset: the production allowlist.
+   */
+  allowDevelopmentReturnOrigins?: boolean;
+  /**
    * EG-API-1.4 — when `true`, injects a no-op `sessionEgressService`
    * stub so `egressProxyRequired` flips on in the session-routes wiring
    * (planning 133 §"Egress safeguard enforcement" defense-in-depth
@@ -1944,6 +1950,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ...(opts.disableProfilesService === true ? {} : { profilesService }),
     profileSnapshotsService,
     ...(opts.disableBilling === true ? {} : { billingService }),
+    ...(opts.allowDevelopmentReturnOrigins === true ? { allowDevelopmentReturnOrigins: true } : {}),
     ...(opts.enableEgressSafeguard === true
       ? {
           sessionEgressService: {

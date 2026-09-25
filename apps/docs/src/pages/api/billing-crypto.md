@@ -55,6 +55,33 @@ long as the order row exists — there is no 24-hour expiry. See
 [Idempotency keys](/reference/idempotency/) for which endpoints honour
 the header and which ignore it.
 
+An account can hold at most five orders waiting for payment
+(`pending`). A sixth checkout is refused with `409 Conflict` (`limit: 5`
+in the problem body) until one of them is paid, is cancelled with
+`POST /v1/billing/crypto-orders/:id/cancel`, or closes unpaid after 24
+hours.
+
+An account can also start at most ten orders in any 24 hours without
+paying for them: orders still waiting for payment, cancelled, or closed
+unpaid all count, and a cancelled order keeps counting until it is 24
+hours old. An eleventh checkout is refused with `409 Conflict`
+(`limit: 10` in the problem body) until the oldest of them is 24 hours
+old. Paid orders never count, so an account that pays for its orders
+is never held back.
+
+Payments are limited the same way: at most ten crypto payments can be
+created in any 24 hours for orders the account has not paid for. Each
+order normally has one, so an account meets this limit only when the
+payment for an order had to be created again. One more is refused with
+`409 Conflict` (`limit: 10`, `field: "payment_id"` in the problem body)
+until the oldest of them is 24 hours old.
+
+The order limits are checked before an order is created, and the
+payment limit before a payment is created. Repeating an
+`Idempotency-Key` returns its original order and is never refused,
+unless the payment for that order has to be created again after the
+payment limit is reached.
+
 Returns:
 
 ```json
@@ -229,6 +256,11 @@ Idempotency-Key: a1b2c3d4-5e6f-7890-1234-567890abcdef
 A duplicate key returns the original order verbatim with an
 `Idempotent-Replayed: 1` response header, for as long as the order
 row exists.
+Only one payment is created for an order, however many requests carry
+its key at once. A duplicate sent while that payment is still being
+created returns the order with `provider: "stub"` and null payment
+fields if the payment is not ready yet; repeat the request with the
+same key a few seconds later to receive the payment details.
 A duplicate key with a different request body still replays the
 original order; the mismatch is recorded so support can spot
 accidental key reuse.

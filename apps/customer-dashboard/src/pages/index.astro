@@ -20,6 +20,8 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 import { TIER_DISPLAY_NAMES } from '../data/tier-display-names.ts';
 import { ARCHETYPE_REGISTRY, archetypeDisplayLabel } from '@driftstack/api-types';
+// Security sweep #32: the post-checkout banner greets only a plan a checkout sells.
+import { PURCHASABLE_TIERS } from '@driftstack/api-types';
 const apiBaseUrl = resolveApiBaseUrl();
 
 // Friendly archetype labels (slug → "iPhone 17 / iOS 18.7 / Safari 26.4"),
@@ -416,6 +418,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
     define:vars={{
       apiBaseUrl,
       tierDisplayNames: TIER_DISPLAY_NAMES,
+      purchasableTiers: PURCHASABLE_TIERS,
       archetypeLabels: ARCHETYPE_LABELS,
     }}
   >
@@ -501,16 +504,43 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       // Stripe success_url returns the customer to /?subscribed=<tier>
       // (the old /first-session landing was retired with the
       // account-portal IA); greet the new subscription inline.
+      //
+      // Security sweep #32 — the query string is anyone's to write, so it is
+      // never shown: only a plan a checkout sells is kept (not free, not
+      // enterprise), and the greeting waits for /v1/billing below. It says the
+      // plan is active only when billing reports an active or trialing
+      // subscription on that plan. It says the payment is being confirmed only
+      // when that is true or cannot be known — a subscription on that plan still
+      // `incomplete`, or billing that could not be read — and asks for a
+      // refresh: billing is read once, so the plan does not appear here by
+      // itself. No subscription, one on another plan, or one on that plan that
+      // has lapsed: nothing is being confirmed, and no banner is shown.
+      let subscribedTier = null;
       try {
         const sub = new URLSearchParams(location.search).get('subscribed');
-        if (sub) {
-          showBanner(
-            'Your ' + tierLabel(sub) + ' subscription is active — welcome aboard. ' +
-              'Download the desktop app to start your first session.',
-          );
+        if (sub && purchasableTiers.indexOf(sub) !== -1) {
+          subscribedTier = sub;
         }
       } catch (_) {
         /* greeting is best-effort */
+      }
+
+      let subscriberGreeted = false;
+      function greetSubscriber(subscription, billingUnread) {
+        if (subscribedTier === null || subscriberGreeted) return;
+        subscriberGreeted = true;
+        const onPlan = Boolean(subscription) && subscription.tier === subscribedTier;
+        if (onPlan && (subscription.status === 'active' || subscription.status === 'trialing')) {
+          showBanner(
+            'Your ' + tierLabel(subscribedTier) + ' subscription is active — welcome aboard. ' +
+              'Download the desktop app to start your first session.',
+          );
+        } else if (billingUnread === true || (onPlan && subscription.status === 'incomplete')) {
+          showBanner(
+            'Thanks for subscribing to ' + tierLabel(subscribedTier) + '. Your payment is ' +
+              'being confirmed; refresh this page in a moment to see your plan.',
+          );
+        }
       }
 
       // Fleet v2 (2026-07-02) — onboarding checklist state. Mirrors the
@@ -763,6 +793,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       getJson('/v1/billing')
         .then(function (b) {
           const sub = b.subscription;
+          greetSubscriber(sub, false);
           const empty = root.querySelector('[data-subscription-empty]');
           const card = root.querySelector('[data-subscription-card]');
           const planSub = root.querySelector('[data-stat-plan-sub]');
@@ -794,6 +825,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           }
         })
         .catch(function () {
+          greetSubscriber(null, true);
           const empty = root.querySelector('[data-subscription-empty]');
           if (empty) {
             empty.textContent = 'Could not load billing.';

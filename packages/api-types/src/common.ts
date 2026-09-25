@@ -851,7 +851,7 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
  */
 export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
   // <generated:archetype-registry> — regenerate, do not hand-edit
-  // 105 entries from operations/archetype-catalog.json (bit_identical 81, available 8, held 6).
+  // 105 entries from operations/archetype-catalog.json (bit_identical 81, available 11, held 6).
   {
     id: 'iphone13_ios18_4_1_safari18_4',
     displayLabel: 'iPhone 13 / iOS 18.4.1 / Safari 18.4',
@@ -1069,9 +1069,8 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     iosVersion: '18.7',
     safariVersion: '26.2',
     canvasFamily: 'A',
-    status: 'planned',
-    lifecycle: 'in_development',
-    heldReason: 'Canvas fidelity verification in progress',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone14_ios18_7_safari26_3',
@@ -1171,9 +1170,8 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     iosVersion: '18.7',
     safariVersion: '26.2',
     canvasFamily: 'A',
-    status: 'planned',
-    lifecycle: 'in_development',
-    heldReason: 'Canvas fidelity verification in progress',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone14pro_ios18_7_safari26_3',
@@ -1282,9 +1280,8 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     iosVersion: '18.7',
     safariVersion: '26.2',
     canvasFamily: 'A',
-    status: 'planned',
-    lifecycle: 'in_development',
-    heldReason: 'Canvas fidelity verification in progress',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone15_ios18_7_safari26_3',
@@ -1446,7 +1443,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     canvasFamily: 'A',
     status: 'planned',
     lifecycle: 'in_development',
-    heldReason: 'Canvas fidelity verification in progress',
+    heldReason: '26.2 A19-class canvas scenes pending',
   },
   {
     id: 'iphone15promax_ios18_7_safari26_3',
@@ -1799,7 +1796,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     canvasFamily: 'A',
     status: 'planned',
     lifecycle: 'in_development',
-    heldReason: 'Canvas fidelity verification in progress',
+    heldReason: '26.2 A19-class canvas scenes pending',
   },
   {
     id: 'iphone17pro_ios18_7_safari26_3',
@@ -1882,7 +1879,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     canvasFamily: 'A',
     status: 'planned',
     lifecycle: 'in_development',
-    heldReason: 'Canvas fidelity verification in progress',
+    heldReason: '26.2 A19-class canvas scenes pending',
   },
   {
     id: 'iphone17promax_ios18_7_safari26_3',

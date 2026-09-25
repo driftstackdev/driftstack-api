@@ -116,6 +116,15 @@ function termRunningAt(at: Date): number {
   return Math.max(Date.now(), at.getTime());
 }
 
+/**
+ * Security sweep #28 twin of the Drizzle `cryptoTermHoldsThePlanAt`: a term holds the
+ * plan when it has started and not ended, both judged at termRunningAt.
+ */
+function termHoldsThePlan(e: { startsAt: Date; expiresAt: Date }, at: Date): boolean {
+  const runningAt = termRunningAt(at);
+  return e.startsAt.getTime() <= runningAt && e.expiresAt.getTime() > runningAt;
+}
+
 // V-1263 — the billed-status set is READ from the shared module, not restated. Both call sites
 // below used to spell out `s.status === 'active' || s.status === 'trialing'`, which is the same
 // decision the Drizzle repo makes and the same one admin-billing makes — four copies across
@@ -245,6 +254,7 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
             status: row.status,
             createdAt: new Date(row.createdAt.getTime()),
             pastDueSince: row.pastDueSince === null ? null : new Date(row.pastDueSince.getTime()),
+            updatedAt: new Date(row.updatedAt.getTime()),
           },
     );
   }
@@ -552,9 +562,8 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     // the Drizzle union, judged when this runs: see termRunningAt). No rows →
     // byte-identical to before.
     let appliedTier = remaining[0]?.tier ?? args.fallbackTier;
-    const runningAt = termRunningAt(args.at);
     for (const e of this.entitlements.values()) {
-      if (e.accountId !== args.accountId || e.expiresAt.getTime() <= runningAt) continue;
+      if (e.accountId !== args.accountId || !termHoldsThePlan(e, args.at)) continue;
       if (tierActivationRank(e.tier) > tierActivationRank(appliedTier)) appliedTier = e.tier;
     }
     this.writeTier(a, appliedTier);
@@ -583,9 +592,8 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     }
     // C1 — also rank in UNEXPIRED crypto entitlements (mirrors the Drizzle union),
     // so a LOWER active/trialing upsert never wipes a higher crypto-paid tier.
-    const runningAt = termRunningAt(args.at);
     for (const e of this.entitlements.values()) {
-      if (e.accountId !== args.accountId || e.expiresAt.getTime() <= runningAt) continue;
+      if (e.accountId !== args.accountId || !termHoldsThePlan(e, args.at)) continue;
       if (appliedTier === null || tierActivationRank(e.tier) > tierActivationRank(appliedTier)) {
         appliedTier = e.tier;
       }
@@ -681,19 +689,57 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
   revokeCryptoEntitlementByOrderId(args: {
     orderId: string;
     at: Date;
-  }): Promise<{ revoked: boolean }> {
+    ifMissing?: { accountId: string; tier: AccountTier };
+  }): Promise<{ revoked: boolean; recordedEnded?: boolean }> {
     // C3 — mirrors DrizzleStripeWebhooksRepo.revokeCryptoEntitlementByOrderId:
     // bring the order's entitlement expiry forward to `at` ONLY when still valid
-    // (expiresAt > at). A replayed refund finds it already expired → 0 rows →
+    // (expiresAt > at). A replayed refund finds it already expired →
     // revoked:false (idempotent). expiredProcessedAt is left as-is (NULL).
-    let revoked = false;
+    const entry = Array.from(this.entitlements.entries()).find(
+      ([, e]) => e.orderId === args.orderId,
+    );
+    if (entry === undefined) {
+      // Security sweep #29 — no entitlement yet: record one that has already ended.
+      if (args.ifMissing === undefined || !this.accounts.has(args.ifMissing.accountId)) {
+        return Promise.resolve({ revoked: false });
+      }
+      const id = randomUUID();
+      this.entitlements.set(id, {
+        id,
+        accountId: args.ifMissing.accountId,
+        orderId: args.orderId,
+        tier: args.ifMissing.tier,
+        startsAt: args.at,
+        expiresAt: args.at,
+        expiredProcessedAt: args.at,
+      });
+      return Promise.resolve({ revoked: false, recordedEnded: true });
+    }
+    const [termId, term] = entry;
+    if (term.expiresAt.getTime() <= args.at.getTime()) return Promise.resolve({ revoked: false });
+    // Security sweep #28 — later same-tier terms move back by what this one had left.
+    const unusedMs =
+      term.expiresAt.getTime() - Math.max(term.startsAt.getTime(), args.at.getTime());
+    this.entitlements.set(termId, {
+      ...term,
+      startsAt: new Date(Math.min(term.startsAt.getTime(), args.at.getTime())),
+      expiresAt: args.at,
+    });
     for (const [id, e] of this.entitlements) {
-      if (e.orderId === args.orderId && e.expiresAt.getTime() > args.at.getTime()) {
-        this.entitlements.set(id, { ...e, expiresAt: args.at });
-        revoked = true;
+      if (
+        id !== termId &&
+        e.accountId === term.accountId &&
+        e.tier === term.tier &&
+        e.startsAt.getTime() >= term.expiresAt.getTime()
+      ) {
+        this.entitlements.set(id, {
+          ...e,
+          startsAt: new Date(e.startsAt.getTime() - unusedMs),
+          expiresAt: new Date(e.expiresAt.getTime() - unusedMs),
+        });
       }
     }
-    return Promise.resolve({ revoked });
+    return Promise.resolve({ revoked: true });
   }
 
   listExpiredUnprocessedCryptoEntitlements(args: {

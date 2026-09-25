@@ -305,7 +305,19 @@ describe('migration 0133 adds the fourth leg and the shadow charge rule, and not
     expect(journal.entries[at + 9]?.when).toBeGreaterThan(
       journal.entries[at + 8]?.when ?? Infinity,
     );
-    expect(journal.entries, 'and 0142 is the last one').toHaveLength(143);
+    // 0143 (a session that did not start from its profile's stored state may not
+    // save the profile back) follows 0142; its own guard pins its shape.
+    expect(journal.entries[at + 10]?.tag).toBe('0143_agent_session_profile_save_back_refused');
+    expect(journal.entries[at + 10]?.when).toBeGreaterThan(
+      journal.entries[at + 9]?.when ?? Infinity,
+    );
+    // 0144 (security sweep #18 residual — a crypto order records the claim to
+    // create its payment) follows 0143; its own guard pins its shape.
+    expect(journal.entries[at + 11]?.tag).toBe('0144_crypto_order_payment_mint_claim');
+    expect(journal.entries[at + 11]?.when).toBeGreaterThan(
+      journal.entries[at + 10]?.when ?? Infinity,
+    );
+    expect(journal.entries, 'and 0144 is the last one').toHaveLength(145);
   });
 
   it('CRITICAL schema.ts names the trigger this migration installs, says where the shadow rule lives, and carries the one sentence about the relaxed clawback guard that 0133 is the record of', () => {

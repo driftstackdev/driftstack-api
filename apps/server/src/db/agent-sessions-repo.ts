@@ -144,6 +144,8 @@ function rowToRecord(
     // is NULL until the relay records the first observation.
     stopOnExitIpChange: row.stopOnExitIpChange,
     firstExitIp: row.firstExitIp,
+    // 0143 — NOT NULL DEFAULT false; true only when dispatch refused save-back.
+    profileSaveBackRefused: row.profileSaveBackRefused,
     pairModeState: row.pairModeState,
     lastErrorEvent: readLastErrorEvent(row.lastErrorEvent),
     guiControlKeyExpiresAt: row.guiControlKeyExpiresAt,
@@ -937,6 +939,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     id: string,
     nodeId: string,
     proxyId?: string | null,
+    opts?: { refuseProfileSaveBack?: boolean },
   ): Promise<AgentSessionRecord | null> {
     // Worker-disconnect fix (2026-06-19) — persist which node a session was
     // dispatched to. This UPDATE is the atomic active-only ownership claim:
@@ -945,10 +948,17 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     // T-6 — when the caller supplies proxyId, record which proxy the session
     // browses through on the SAME atomic claim; an omitted argument leaves
     // proxy_id untouched.
+    // 0143 — a refused profile save-back rides the SAME claim, so it is durable
+    // before the assign is sent. Only ever set here, never cleared.
     const now = this.clock();
     const updated = await this.database.db
       .update(agentSessions)
-      .set({ nodeId, ...(proxyId !== undefined ? { proxyId } : {}), updatedAt: now })
+      .set({
+        nodeId,
+        ...(proxyId !== undefined ? { proxyId } : {}),
+        ...(opts?.refuseProfileSaveBack === true ? { profileSaveBackRefused: true } : {}),
+        updatedAt: now,
+      })
       .where(and(eq(agentSessions.id, id), eq(agentSessions.status, 'active')))
       .returning();
     const row = updated[0];

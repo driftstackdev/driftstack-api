@@ -1962,6 +1962,18 @@ export const ChallengeDetectedSchema = z.object({
 });
 export type ChallengeDetected = z.infer<typeof ChallengeDetectedSchema>;
 
+/** The save-back failure reasons a DEVICE reports. The server adds one of its
+ *  own on the customer webhook (PROFILE_SAVE_FAILED_WEBHOOK_REASONS in
+ *  profile-save-failed-relay.ts); it is not a value a device sends. */
+export const PROFILE_SAVE_FAILED_DEVICE_REASONS = [
+  'serialize_failed',
+  'seal_failed',
+  'too_large',
+  'upload_failed',
+  'degenerate_dump',
+  'superseded',
+] as const;
+
 // ── HarnessOutbound.profileSaveFailed (harness → server; W1364 / decision 2026-06-12) ──
 // Emitted on session TEARDOWN when a profile-backed session's save-back fails
 // on any leg (serialize / seal / >256MiB / presigned-PUT) — the asymmetry fix:
@@ -1990,16 +2002,7 @@ export const ProfileSaveFailedSchema = z.object({
   // distinction instead of misreporting it to customers as `upload_failed`.
   // `.catch` keeps an unrecognised FUTURE reason from rejecting the frame too
   // (forward-compat; falls back to the generic 'upload_failed' bucket).
-  reason: z
-    .enum([
-      'serialize_failed',
-      'seal_failed',
-      'too_large',
-      'upload_failed',
-      'degenerate_dump',
-      'superseded',
-    ])
-    .catch('upload_failed'),
+  reason: z.enum(PROFILE_SAVE_FAILED_DEVICE_REASONS).catch('upload_failed'),
   // Security-audit hardening (2026-06-30) — bounded like the sibling hardened
   // fields in this file (bootId 256, ControlCommand.reason 512): this flows
   // unfiltered into WebhooksService.enqueueEvent (profile-save-failed-relay.ts)

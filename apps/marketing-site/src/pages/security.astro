@@ -610,19 +610,26 @@ import CtaBand from '../components/CtaBand.astro';
            deploy is a plain image build + pull). Rewritten to the
            deploy controls that DO exist: lockfile-pinned installs
            (package-lock.json + `npm ci` in .github/workflows/ci.yml),
-           staging-first + manual prod approval
+           staging-first + CI-gated production
            (.github/workflows/deploy.yml), pre-deploy live smoke +
            post-deploy health-check with automatic rollback
            (.github/workflows/server-deploy.yml V-549.A/V-549.B), and
            the public /version endpoint reporting the deployed git SHA
-           (apps/server/src/lib/app.ts V-195). */}
+           (apps/server/src/lib/app.ts V-195).
+           2026-09-25 — accuracy fix: nobody approves a release. The API
+           server's production deploys only after CI passes on the same commit
+           and staging has taken that commit (deploy.yml ci-gate), so the card
+           says that — and names the API server, because only its deploy waits
+           for CI. The web apps publish on a push to main through their own
+           deploy-*.yml workflows, with no CI gate and no test copy. */}
       <div>
-        <h3 class="text-base font-medium text-tk-ink">Releases are tested, approved, and reversible</h3>
+        <h3 class="text-base font-medium text-tk-ink">API releases are tested and reversible</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
           Every software component is fixed to an exact version. A
-          release reaches production only after running on a test copy
-          first and being explicitly approved. The moment a release is
-          live it is health-checked and automatically rolled back if
+          release of our API server reaches production only after the
+          full automated test suite passes on it and it has run on a
+          test copy first. The moment a release is live it is
+          health-checked and automatically rolled back if
           that check fails — and anyone can see exactly which version
           is running at <code class="font-mono">api.driftstack.dev/version</code>.
         </p>

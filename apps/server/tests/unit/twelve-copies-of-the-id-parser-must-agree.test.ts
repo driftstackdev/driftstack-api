@@ -256,8 +256,9 @@ describe('the copied id parsers must agree', () => {
   // V-2007 — the arms above, and the length-check arm, all scan ROUTES. V-1565
   // fixed the loose `[0-9a-fA-F-]{36}` class and guarded it "as a shape, not a
   // filename" — but the scope was route files, so the same class survived in
-  // `services/profile-blob-orphan-sweeper.ts` as `[0-9a-f-]{36}`, matching 36
-  // dashes and feeding them to `inArray(profiles.id, …)` on a `uuid` column.
+  // `services/profile-blob-orphan-sweeper.ts` (now profile-blob-orphan-reaper.ts)
+  // as `[0-9a-f-]{36}`, matching 36 dashes and feeding them to
+  // `inArray(profiles.id, …)` on a `uuid` column.
   // A shape guard scoped to one directory is a filename guard wearing a shape's
   // clothes. This one walks the whole server source.
   //

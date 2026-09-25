@@ -340,15 +340,37 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
     account_id: string;
     order_id: string;
     at: Date;
+    /** The order's purchased tier; lets a refund that beats activation be recorded. */
+    product?: string;
   }): Promise<{
     revoked: boolean;
     previousTier: AccountTier | null;
     appliedTier: AccountTier | null;
   }> {
-    const { revoked } = await this.repo.revokeCryptoEntitlementByOrderId({
+    // Security sweep #29 — with the order's tier known, a refund that finds no
+    // entitlement (activation failed, or has not run yet) records an already-ended
+    // one, so the paid-order reconciler and a late activation grant nothing.
+    const refundedTier =
+      args.product !== undefined ? AccountTierSchema.safeParse(args.product) : null;
+    const { revoked, recordedEnded } = await this.repo.revokeCryptoEntitlementByOrderId({
       orderId: args.order_id,
       at: args.at,
+      ...(refundedTier?.success === true
+        ? { ifMissing: { accountId: args.account_id, tier: refundedTier.data } }
+        : {}),
     });
+    if (recordedEnded === true) {
+      this.logger.warn(
+        {
+          component: 'crypto-tier-activation',
+          event: 'crypto_refund_before_entitlement_recorded',
+          account_id: args.account_id,
+          order_id: args.order_id,
+          tier: refundedTier?.success === true ? refundedTier.data : null,
+        },
+        'crypto order refunded before its entitlement existed — an already-ended entitlement was recorded, so the refunded payment grants no term',
+      );
+    }
     if (!revoked) {
       // Already expired / replayed refund — the grant is not (or no longer) a
       // floor, so there is no tier to claw back. No tier change, no emit.

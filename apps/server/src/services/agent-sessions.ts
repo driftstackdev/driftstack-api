@@ -147,6 +147,15 @@ export interface AgentSessionRecord {
    */
   firstExitIp: string | null;
   /**
+   * Migration 0143 — this session may not save its profile back. Set by
+   * `setNodeId` at dispatch whenever the device could not be given the
+   * profile's stored state, so the session started from an empty profile and a
+   * teardown save would replace the customer's stored one. The profileSaved
+   * consumer refuses the save and tells the customer. `false` on every other row;
+   * never cleared.
+   */
+  profileSaveBackRefused: boolean;
+  /**
    * Arc 2 sub-slice 8.2 (v2-#8) — pair-mode state machine discriminator
    * payload (sub-slice 8.7 will define the exact shape). NULL when
    * the session is not in pair mode, OR is in pair mode but no
@@ -432,11 +441,19 @@ export interface AgentSessionsRepo {
    * proxy it browses through (NULL for an operator-default egress). Passing it
    * here rather than as a second write keeps node + proxy attribution on one
    * active-only UPDATE; omit the argument to leave proxy_id untouched.
+   *
+   * Migration 0143 — `refuseProfileSaveBack: true` records, on the SAME claim,
+   * that this session may not save its profile back (the device could not be
+   * given the profile's stored state). Riding the claim makes the refusal
+   * durable before the assign is sent: if it cannot be written, neither can the
+   * claim, and no assign goes out. Only ever sets the flag; omitted or false
+   * leaves it as it is.
    */
   setNodeId(
     id: string,
     nodeId: string,
     proxyId?: string | null,
+    opts?: { refuseProfileSaveBack?: boolean },
   ): Promise<AgentSessionRecord | null>;
 
   /**
@@ -643,6 +660,8 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       // baseline exit IP fills in later via setFirstExitIpIfUnset.
       stopOnExitIpChange: args.stopOnExitIpChange ?? false,
       firstExitIp: null,
+      // 0143 — set later by setNodeId at dispatch when save-back is refused.
+      profileSaveBackRefused: false,
       pairModeState: null,
       lastErrorEvent: null,
       guiControlKeyExpiresAt: null,
@@ -1172,6 +1191,7 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     id: string,
     nodeId: string,
     proxyId?: string | null,
+    opts?: { refuseProfileSaveBack?: boolean },
   ): Promise<AgentSessionRecord | null> {
     const rec = this.records.get(id);
     // A dispatch can race any terminal closer. Missing or already-closed rows
@@ -1184,6 +1204,8 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       // T-6 — record the proxy alongside the node when the caller supplies one;
       // an omitted argument leaves the prior value untouched.
       ...(proxyId !== undefined ? { proxyId } : {}),
+      // 0143 — only ever sets the refusal; never clears one.
+      ...(opts?.refuseProfileSaveBack === true ? { profileSaveBackRefused: true } : {}),
       updatedAt: this.clock(),
     };
     this.records.set(id, updated);

@@ -45435,6 +45435,16 @@
               }
             }
           },
+          "409": {
+            "description": "The account already has five crypto orders waiting for payment (`limit: 5` in the body): pay or cancel one of them, or wait for an unpaid one to close after 24 hours, before starting another. Or the account has started ten crypto orders in the last 24 hours without paying for them (`limit: 10`): pay one of its open orders, or start a new one once the oldest of them is 24 hours old. Or ten crypto payments have been created in the last 24 hours for orders the account has not paid for (`limit: 10`, `field: payment_id`): pay one of its open orders, or try again once the oldest of them is 24 hours old. Paid orders never count. Repeating an Idempotency-Key replays its order and is never refused, unless the payment for that order has to be created again after that limit is reached.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "headers": {

@@ -89,7 +89,7 @@ export const DEVICE_SUPPORT = {
   /** Archetypes whose five named dimensions are verified (catalog lifecycle `bit_identical`). */
   verifiedCount: 81,
   /** Customer-selectable archetypes (registry status 'launch' | 'available'). */
-  selectableCount: 89,
+  selectableCount: 92,
   /** Device-model span of the catalog (19 iPhone models between the endpoints). */
   deviceFamilies: 'iPhone 13 → 17 Pro Max',
   /** iOS versions present in the catalog. */

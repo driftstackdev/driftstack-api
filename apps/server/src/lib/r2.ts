@@ -73,9 +73,9 @@ export interface R2 {
    * ⚠️ Requires the `s3:ListBucket` permission on the bucket — a scoped R2 token
    * granted only object read/write (Get/Put/Delete) will make this throw
    * `AccessDenied`. That may need an ops grant on the credentials. This method
-   * deliberately does NOT swallow that error: it lets it propagate so the caller
-   * (the reaper) can catch + log it once and no-op the pass rather than the
-   * failure being silently absorbed here.
+   * deliberately does NOT swallow that error: it propagates, the reaper's pass
+   * rejects having deleted nothing, and the purge reports the arm as failed,
+   * rather than the failure being silently absorbed here.
    */
   listObjects(prefix: string): Promise<Array<{ key: string; lastModified: Date | null }>>;
   /** Bucket the client is configured against. */

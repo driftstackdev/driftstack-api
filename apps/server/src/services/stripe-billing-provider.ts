@@ -20,6 +20,7 @@
 
 import { createHash } from 'node:crypto';
 import type { BillingProvider } from './billing.js';
+import type { SubscriptionPaymentReading } from './subscription-payment-state.js';
 import type { StripeApiClient } from '../lib/stripe-api.js';
 
 export class StripeBillingProvider implements BillingProvider {
@@ -112,13 +113,54 @@ export class StripeBillingProvider implements BillingProvider {
 
   /**
    * Cancel now (see StripeApiClient.cancelSubscription): prorated unless
-   * `prorate: false` — the caller says so for a subscription whose period was
-   * never paid (security sweep #11). Account termination passes nothing.
+   * `prorate: false` — the caller says so for a subscription that was not paid
+   * (subscription-payment-state.ts): a replaced one (security sweep #11) and,
+   * on account termination, any one (owner decision of 2026-09-24).
    */
   async cancelSubscriptionNow(args: { subscriptionId: string; prorate?: boolean }): Promise<void> {
     await this.client.cancelSubscription({
       subscriptionId: args.subscriptionId,
       ...(args.prorate !== undefined ? { prorate: args.prorate } : {}),
     });
+  }
+
+  /**
+   * Owner decision of 2026-09-24 — the subscription's status, its `pause_collection`
+   * behavior and its latest invoice's status, as Stripe holds them now. The latest
+   * invoice is read by its id (the subscription carries only the id unless expanded).
+   * Throws when the subscription cannot be read or has no status; the caller then
+   * decides from the stored status. When only the latest invoice cannot be read, what
+   * was read is kept: its status is null and the reading is `partlyUnread`.
+   */
+  async readSubscriptionPaymentState(args: {
+    subscriptionId: string;
+  }): Promise<SubscriptionPaymentReading> {
+    const sub = await this.client.getSubscription(args.subscriptionId);
+    if (typeof sub.status !== 'string') {
+      throw new Error('Stripe returned a subscription with no status');
+    }
+    const pause = sub.pause_collection;
+    const behavior =
+      pause !== null && typeof pause === 'object'
+        ? (pause as { behavior?: unknown }).behavior
+        : null;
+    const latest = sub.latest_invoice;
+    let latestInvoiceStatus: unknown = null;
+    let partlyUnread = false;
+    if (typeof latest === 'string' && latest.length > 0) {
+      try {
+        latestInvoiceStatus = (await this.client.getInvoice(latest)).status;
+      } catch {
+        partlyUnread = true;
+      }
+    } else if (latest !== null && typeof latest === 'object') {
+      latestInvoiceStatus = (latest as { status?: unknown }).status;
+    }
+    return {
+      status: sub.status,
+      pauseCollectionBehavior: typeof behavior === 'string' ? behavior : null,
+      latestInvoiceStatus: typeof latestInvoiceStatus === 'string' ? latestInvoiceStatus : null,
+      ...(partlyUnread ? { partlyUnread: true } : {}),
+    };
   }
 }

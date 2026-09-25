@@ -177,11 +177,13 @@ describe('db/agent-sessions-repo content parity', () => {
     // T-6 — proxyId is an optional third param persisted on the SAME atomic
     // active-only UPDATE as node_id (no second write), so node + proxy
     // attribution land together or not at all.
+    // 0143 — the refused profile save-back rides the same claim, and is only
+    // ever SET there (never cleared by a later claim).
     expect(body).toMatch(
-      /async setNodeId\(\s*id: string,\s*nodeId: string,\s*proxyId\?: string \| null,\s*\)/,
+      /async setNodeId\(\s*id: string,\s*nodeId: string,\s*proxyId\?: string \| null,\s*opts\?: \{ refuseProfileSaveBack\?: boolean \},\s*\)/,
     );
     expect(body).toMatch(
-      /\.set\(\{ nodeId, \.\.\.\(proxyId !== undefined \? \{ proxyId \} : \{\}\), updatedAt: now \}\)/,
+      /\.set\(\{\s*nodeId,\s*\.\.\.\(proxyId !== undefined \? \{ proxyId \} : \{\}\),\s*\.\.\.\(opts\?\.refuseProfileSaveBack === true \? \{ profileSaveBackRefused: true \} : \{\}\),\s*updatedAt: now,\s*\}\)/,
     );
     expect(body).toMatch(
       /\.where\(and\(eq\(agentSessions\.id, id\), eq\(agentSessions\.status, 'active'\)\)\)/,

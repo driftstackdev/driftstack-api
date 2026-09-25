@@ -537,6 +537,9 @@ export async function startTestServer(): Promise<TestServer> {
     accountLifecycleService,
     scheduledJobsService,
     billingService,
+    // The e2e billing specs return Checkout to the dashboard dev server, which only
+    // a non-production server accepts (security sweep #31).
+    allowDevelopmentReturnOrigins: true,
     oauthStore,
     costMonitoringService,
     rateLimitStore,

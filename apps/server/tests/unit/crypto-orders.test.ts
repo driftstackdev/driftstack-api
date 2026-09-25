@@ -678,11 +678,13 @@ describe('V-666.K expireOrder + sweepExpiredOrders', () => {
     // rows.
     const { svc, setNow } = makeService();
     setNow(1_000_000);
-    // Three genuinely stale orders created first (oldest).
+    // Three genuinely stale orders created first (oldest). Each order has its own
+    // account: one account holds at most MAX_OPEN_CRYPTO_ORDERS_PER_ACCOUNT pending
+    // orders (security sweep #18), and eight are needed here.
     for (let i = 0; i < 3; i += 1) {
       await svc.create({
         order_id: `ord_old_${i.toString()}`,
-        account_id: 'a',
+        account_id: `a_old_${i.toString()}`,
         product: 'p',
         price_cents: 100,
         price_currency: 'EUR',
@@ -694,7 +696,7 @@ describe('V-666.K expireOrder + sweepExpiredOrders', () => {
     for (let i = 0; i < 5; i += 1) {
       await svc.create({
         order_id: `ord_fresh_${i.toString()}`,
-        account_id: 'a',
+        account_id: `a_fresh_${i.toString()}`,
         product: 'p',
         price_cents: 100,
         price_currency: 'EUR',
@@ -1647,7 +1649,9 @@ describe('V-666.AC getPendingAgeHistogram', () => {
       now = NOW - ageMs;
       await svc.create({
         order_id: id,
-        account_id: 'acc',
+        // One account per order: an account holds at most
+        // MAX_OPEN_CRYPTO_ORDERS_PER_ACCOUNT pending orders (security sweep #18).
+        account_id: `acc_${id}`,
         product: 'team_growth',
         price_cents: 14900,
         price_currency: currency ?? 'EUR',
@@ -1918,7 +1922,9 @@ describe('V-666.AM listForAdminPage — cursor pagination', () => {
       now = 1_000 + i;
       await svc.create({
         order_id: `ord_${i.toString().padStart(3, '0')}`,
-        account_id: 'acc',
+        // One account per order: an account holds at most
+        // MAX_OPEN_CRYPTO_ORDERS_PER_ACCOUNT pending orders (security sweep #18).
+        account_id: `acc_${i.toString()}`,
         product: 'team_growth',
         price_cents: 14900,
         price_currency: 'EUR',
@@ -2999,6 +3005,10 @@ describe('V-725 createIdempotent body fingerprint across a restart (repo-served 
       upsert: () => Promise.resolve(),
       getById: (id: string) => Promise.resolve(id === 'ord_legacy' ? existing : null),
       insertWithIdempotencyKey: () =>
+        Promise.resolve({ order: existing, replayed: true, storedFingerprint: null }),
+      // Security sweep #18 — the service writes a keyed order through the capped
+      // insert; the stored key replays exactly as insertWithIdempotencyKey does.
+      insertWithIdempotencyKeyUnderOrderLimits: () =>
         Promise.resolve({ order: existing, replayed: true, storedFingerprint: null }),
       withOrderLock: () => Promise.resolve(null),
       listExpiredPending: () => Promise.resolve([]),

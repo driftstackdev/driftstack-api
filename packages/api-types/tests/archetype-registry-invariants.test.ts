@@ -103,6 +103,9 @@ describe('the archetype registry keeps its shape', () => {
     // 2026-09-24: available 95 -> 88 and planned 9 -> 16. Seven Safari 26.2 /
     // 26.0.1 profiles are held while their canvas fidelity is verified (the
     // production canvas resolvers have no atlas for those bands yet).
+    // 2026-09-25: available 88 -> 91 and planned 16 -> 13. The iPhone 14, 14 Pro
+    // and 15 Safari 26.2 profiles are available again: the fork now renders their
+    // canvas band against the device. The A19-class 26.2 profiles stay held.
     const byStatus = ARCHETYPE_REGISTRY.reduce<Record<string, number>>((acc, a) => {
       acc[a.status] = (acc[a.status] ?? 0) + 1;
       return acc;
@@ -110,8 +113,8 @@ describe('the archetype registry keeps its shape', () => {
     expect(ARCHETYPE_REGISTRY.length, 'registry size changed').toBe(106);
     expect(byStatus, 'the status mix changed').toEqual({
       launch: 1,
-      available: 88,
-      planned: 16,
+      available: 91,
+      planned: 13,
       reference: 1,
     });
   });

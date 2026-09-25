@@ -309,6 +309,7 @@ function makeRecord(over: Partial<AgentSessionRecord> = {}): AgentSessionRecord 
     proxyId: null,
     stopOnExitIpChange: false,
     firstExitIp: null,
+    profileSaveBackRefused: false,
     status: 'active',
     transcript: [],
     tokenBudgetTotal: 100_000,

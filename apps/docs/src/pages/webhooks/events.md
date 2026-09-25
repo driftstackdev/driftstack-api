@@ -319,11 +319,14 @@ Driftstack does not retry the save later. `reason` is one of
 exceeded the 256 MiB cap), `upload_failed`, `degenerate_dump` (the
 saved state was empty or malformed and would have replaced a known-good
 earlier copy — the earlier copy is kept, so this one is reassuring
-rather than data loss), or `superseded` (a newer profile write won and
+rather than data loss), `superseded` (a newer profile write won and
 this older save was safely refused; the next restore uses the newer state,
-so this is benign and not data loss). Any other failure is reported as
-`upload_failed`. If you rely on saved profile state, subscribe and alert
-on it.
+so this is benign and not data loss), or `profile_not_loaded` (the saved
+profile could not be loaded when the session started, so the session ran
+without it and its changes were not saved over it — the saved profile is
+kept as it was, and the next session that uses it starts from it). Any
+other failure is reported as `upload_failed`. If you rely on saved
+profile state, subscribe and alert on it.
 
 ```json
 {

@@ -633,9 +633,17 @@ describe('dispatchSessionAssignOnCreate', () => {
       get: () => Promise.resolve({ archetype: DISPATCH.archetype }),
       getProfileDek: () => Promise.resolve(dek),
     } as unknown as ProfilesService;
+    // 0143 — without R2 nothing is restored, so the refusal of this session's
+    // save-back must be recordable before a DEK is handed out.
+    const agentSessions = new InMemoryAgentSessionsRepo();
+    const created = await agentSessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+      profileId: 'prof_1',
+    });
     await dispatchSessionAssignOnCreate({
       ownerTier: 'api_builder',
-      sessionId: 'agt_p1',
+      sessionId: created.id,
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
       livekitSecretEncryptionKey: KEY,
@@ -643,10 +651,12 @@ describe('dispatchSessionAssignOnCreate', () => {
       accountId: 'acc_1',
       profileId: 'prof_1',
       profilesService,
+      agentSessions,
       logger: logger(),
     });
     const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
     expect(frame.profile).toMatchObject({ profile_id: 'prof_1', dek: dek.toString('base64') });
+    expect((await agentSessions.get(created.id))?.profileSaveBackRefused).toBe(true);
   });
 
   it('with R2 wired, the profile block carries restore (GET) + save-back (PUT) URLs (buildAssignProfileBlock)', async () => {
@@ -703,9 +713,15 @@ describe('dispatchSessionAssignOnCreate', () => {
       presignGet: vi.fn().mockResolvedValue('https://r2/get'),
       presignPut: vi.fn().mockRejectedValue(new Error('r2 down')),
     } as unknown as R2;
+    const agentSessions = new InMemoryAgentSessionsRepo();
+    const created = await agentSessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+      profileId: 'prof_1',
+    });
     await dispatchSessionAssignOnCreate({
       ownerTier: 'api_builder',
-      sessionId: 'agt_p4',
+      sessionId: created.id,
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
       livekitSecretEncryptionKey: KEY,
@@ -714,6 +730,7 @@ describe('dispatchSessionAssignOnCreate', () => {
       profileId: 'prof_1',
       profilesService,
       r2,
+      agentSessions,
       logger: logger(),
     });
     // The dispatch STILL fired (session runs), with a DEK-only profile — no
@@ -721,6 +738,9 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(sent).toHaveLength(1);
     const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
     expect(frame.profile).toEqual({ profile_id: 'prof_1', dek: dek.toString('base64') });
+    // 0143 — and the session's save-back is refused, on the ownership claim, so
+    // its empty profile can never replace the stored one.
+    expect((await agentSessions.get(created.id))?.profileSaveBackRefused).toBe(true);
   });
 
   it('omits the profile block when getProfileDek returns null (no DEK) — stateless assign', async () => {
@@ -828,10 +848,17 @@ describe('dispatchSessionAssignOnCreate', () => {
       get: () => Promise.reject(new Error('db down')),
       getProfileDek: () => Promise.resolve(dek),
     } as unknown as ProfilesService;
+    // 0143 — a repo to record the no-R2 save-back refusal, so the DEK still rides.
+    const agentSessions = new InMemoryAgentSessionsRepo();
+    const created = await agentSessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+      profileId: 'prof_1',
+    });
     await expect(
       dispatchSessionAssignOnCreate({
         ownerTier: 'api_builder',
-        sessionId: 'agt_arch3',
+        sessionId: created.id,
         fleetControlRegistry: registry,
         fleetNodesRepo: repoReturning(macWithLivekit()),
         livekitSecretEncryptionKey: KEY,
@@ -839,6 +866,7 @@ describe('dispatchSessionAssignOnCreate', () => {
         accountId: 'acc_1',
         profileId: 'prof_1',
         profilesService,
+        agentSessions,
         logger: log,
       }),
     ).resolves.toBeUndefined();

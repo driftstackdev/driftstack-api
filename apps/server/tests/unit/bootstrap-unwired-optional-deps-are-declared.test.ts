@@ -105,6 +105,12 @@ const DECLARED: Record<string, string> = {
   'WebhookDeliveryWorker.now': 'Clock injection seam; the default is the real clock.',
   'WebhookDeliveryWorker.deliveryTimeoutMs': 'Test seam; the default is the production timeout.',
   'WebhookDeliveryWorker.idleSleepMs': 'Test seam; the poller cadence is set by its scheduler.',
+  'ProfileBlobOrphanReaper.opts':
+    'Test seam for the grace window and the per-pass delete cap. The defaults, ' +
+    'PROFILE_BLOB_ORPHAN_GRACE_MS (6h) and PROFILE_BLOB_ORPHAN_MAX_DELETES_PER_RUN, ' +
+    'ARE the production behaviour; the grace is asserted above the save-back ' +
+    'upload TTL against the constant the mint site uses, so a production override ' +
+    'would be the thing to justify, not its absence.',
 };
 
 function walk(dir: string, out: string[] = []): string[] {

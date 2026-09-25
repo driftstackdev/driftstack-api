@@ -78,6 +78,9 @@ describe('the retention purge reports what it did, and what it never ran', () =>
       // Security sweep E-23 (2026-09-24): a terminated account's public avatar.
       'avatars/skipped=1',
       'byok/skipped=1',
+      // 2026-09-25: sealed profile blobs no profile owns (moved here from an
+      // in-process timer that a deploy restarted before it ever fired).
+      'profile_blob_orphans/skipped=1',
       'profiles/skipped=1',
       'proxy_secrets/skipped=1',
       'recipes/skipped=1',

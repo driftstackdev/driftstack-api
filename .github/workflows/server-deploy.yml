@@ -1,17 +1,18 @@
 # V-278 — Tag-triggered production deploy for the API server.
 #
 # Sister workflow to .github/workflows/deploy.yml. Where deploy.yml
-# auto-deploys to staging on every main merge + gates production on
-# approval, this workflow gives the founder an explicit-release
-# trigger via git tag — `git tag server-v0.2.1 && git push origin
-# server-v0.2.1` cuts a production-only deploy with no main-merge
-# coupling.
+# deploys every main commit whose CI passed, staging first and then
+# production with no approval step, this workflow gives the founder an
+# explicit-release trigger via git tag — `git tag server-v0.2.1 &&
+# git push origin server-v0.2.1` cuts a production-only deploy with no
+# main-merge coupling.
 #
 # Use either workflow:
-#   - deploy.yml   — push-on-main; staging auto + manual-approval prod.
+#   - deploy.yml   — CI passed on main; staging, then production;
+#                     no approval step.
 #                     Continuous-delivery shape; appropriate for the
-#                     Q4-2026/Q1-2027 launch period when builds are
-#                     vetted via the manual prod-approval gate.
+#                     Q4-2026/Q1-2027 launch period, when a build is
+#                     vetted by the full CI suite passing on it.
 #   - server-deploy.yml — tag-on-server-v*; production-only.
 #                     Explicit-release shape; appropriate post-launch
 #                     when production cuts should be deliberate cuts

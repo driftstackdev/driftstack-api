@@ -20,9 +20,10 @@ propagate, NOT that prod is down. Last successful auto-deploy:
 
 ## What's already in place (no founder action needed)
 
-- `.github/workflows/deploy.yml` — push-on-main pipeline:
-  source-map-upload → deploy-staging → deploy-production
-  (manual-approval gate via the `production` GH Environment).
+- `.github/workflows/deploy.yml` — push-on-main pipeline, run once
+  CI passes on the pushed commit: ci-gate → source-map-upload →
+  deploy-staging → deploy-production (no approval step: production
+  follows once staging has deployed the same commit).
 - `scripts/deploy-bridge.sh` — host-side SSH-driven deploy:
   clones GitHub at the target SHA, builds in `/tmp`, atomic
   swaps artefacts into `/opt/driftstack/api`, applies pending
@@ -98,8 +99,9 @@ gh secret list -R driftstackdev/driftstack-api | grep HETZNER_DEPLOY_SSH_KEY
 
 ### 5. Re-fire the deploy workflow
 
-The next push to `main` auto-triggers the workflow. To deploy
-the current HEAD without an additional commit:
+The next push to `main` triggers the workflow once CI passes on
+it. To deploy the current HEAD without an additional commit (the
+run deploys main's tip, and only if CI has passed on it):
 
 ```sh
 gh workflow run Deploy --ref main --repo driftstackdev/driftstack-api
@@ -111,10 +113,9 @@ Monitor:
 gh run watch --repo driftstackdev/driftstack-api
 ```
 
-Expected: source-map-upload + deploy-staging both succeed
-(staging deploys auto); deploy-production stays in
-"Awaiting approval" — approve via the GH Actions UI on the
-workflow page (or `gh run approve <run-id>`).
+Expected: ci-gate, source-map-upload, deploy-staging and
+deploy-production all succeed, in that order, with no approval
+step.
 
 ### 6. Verify the deploy landed
 
@@ -149,9 +150,13 @@ Reverts to `/opt/driftstack/api/.last-good-sha`.
 - **`/health` 200 but `/version` SHA still old** — deploy-bridge
   reverted post-restart. Check the GH Actions log for the bridge
   output; usually a drizzle migration-immutability check failure.
-- **deploy-production stays in "Awaiting approval"** —
-  production GH Environment's "Required reviewers" expects your
-  account. Approve via GH UI or `gh run approve <run-id>`.
+- **deploy-production shows as skipped** — staging did not deploy
+  this commit in this run: its forward check found that staging
+  already runs a newer commit (a notice, not a failure), and that
+  newer commit's own run takes production forward. Compare
+  `curl -s https://staging.driftstack.dev/version` with the run's
+  commit. (If deploy-staging FAILED instead, the run is red, its log
+  says why, and the deploy-failure issue has a comment.)
 
 ## Related docs
 

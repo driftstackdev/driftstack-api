@@ -29,6 +29,10 @@
 
 import type { AccountTier } from '@driftstack/api-types';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
+import {
+  subscriptionWasNotPaid,
+  type SubscriptionPaymentReading,
+} from './subscription-payment-state.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Provider (Stripe SDK boundary)
@@ -71,17 +75,31 @@ export interface BillingProvider {
 
   /**
    * Live-billing audit #1 — cancel a subscription NOW, for an account being
-   * terminated. Prorated: Stripe credits the unused part of the period already
-   * paid for to the Stripe customer's balance (`prorate=true`, `invoice_now=true`
-   * on `DELETE /v1/subscriptions/:id`). It never refunds: whether a refund is
-   * owed under the Terms (14.5) is a person's decision, and the termination
-   * alerts staff so they can make it.
+   * terminated. Prorated by default: Stripe credits the unused part of the period
+   * already paid for to the Stripe customer's balance (`prorate=true`,
+   * `invoice_now=true` on `DELETE /v1/subscriptions/:id`). `prorate: false` cancels
+   * with neither — the caller passes it for a subscription that was not paid
+   * ({@link subscriptionWasNotPaid}), whose current period nobody paid for, so there
+   * is nothing to credit. It never refunds: whether
+   * a refund is owed under the Terms (14.5) is a person's decision, and the
+   * termination alerts staff so they can make it.
    *
    * Optional because a provider may not implement it yet. BillingService then
    * refuses to report a termination as clean while a subscription is still
    * collecting — see {@link BillingService.cancelCollectionForAccount}.
    */
   cancelSubscriptionNow?(args: { subscriptionId: string; prorate?: boolean }): Promise<void>;
+
+  /**
+   * Owner decision of 2026-09-24 — what the billing provider holds NOW about whether a
+   * subscription was paid, read just before a termination cancels it, so the cancel is
+   * prorated only for a paid one (see {@link subscriptionWasNotPaid}). Optional: without
+   * it, and when the read fails, the stored mirror status decides. A reading that is
+   * `partlyUnread` still decides, from what it holds.
+   */
+  readSubscriptionPaymentState?(args: {
+    subscriptionId: string;
+  }): Promise<SubscriptionPaymentReading>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -147,6 +165,18 @@ export interface LiveBilling {
  * which were done and which were not, so the caller can record both.
  */
 export class SubscriptionCollectionError extends Error {
+  /**
+   * For a cancellation: the ids in `done` cancelled WITHOUT proration (not paid, decision
+   * of 2026-09-24), so a termination that partly failed still records which of the
+   * subscriptions it did cancel were given no credit. Empty for a pause or a resume.
+   */
+  readonly doneWithoutProration: readonly string[];
+  /**
+   * For a cancellation: the ids whose payment state could not be read from the provider
+   * in full, so the stored status (or what part of it was read) decided whether they
+   * were paid. Empty for a pause or a resume.
+   */
+  readonly paymentStateUnread: readonly string[];
   constructor(
     readonly action: 'pause' | 'resume' | 'cancel',
     /** Stripe subscription ids the change reached. */
@@ -154,10 +184,19 @@ export class SubscriptionCollectionError extends Error {
     /** Stripe subscription ids it did not reach. */
     readonly failed: readonly string[],
     message: string,
-    options?: { cause?: unknown },
+    options?: {
+      cause?: unknown;
+      doneWithoutProration?: readonly string[];
+      paymentStateUnread?: readonly string[];
+    },
   ) {
-    super(message, options);
+    super(
+      message,
+      options !== undefined && 'cause' in options ? { cause: options.cause } : undefined,
+    );
     this.name = 'SubscriptionCollectionError';
+    this.doneWithoutProration = options?.doneWithoutProration ?? [];
+    this.paymentStateUnread = options?.paymentStateUnread ?? [];
   }
 }
 
@@ -384,16 +423,34 @@ export class BillingService {
 
   /**
    * Live-billing audit #1 — for an account being TERMINATED: cancel every subscription
-   * still collecting, now, prorated (see {@link BillingProvider.cancelSubscriptionNow}).
+   * still collecting, now (see {@link BillingProvider.cancelSubscriptionNow}). Owner
+   * decision of 2026-09-24: a subscription that was not paid ({@link subscriptionWasNotPaid},
+   * read from the provider just before its cancel) is cancelled WITHOUT proration and
+   * without a final invoice, so no credit is given for a period nobody paid for; a paid
+   * one is cancelled prorated, so its unused paid time is credited.
+   *
+   * When the provider cannot say (it has no reader, or the read fails), the stored
+   * status decides; when it can say only in part (the latest invoice could not be
+   * read), what it did read decides. Either way the id is reported in
+   * `paymentStateUnread` so the termination can record it. A failed read never stops
+   * the cancel: a subscription left charging a terminated customer is the worse outcome.
+   *
    * Resolves with the Stripe subscription ids cancelled — empty when nothing was
-   * collecting, which is a normal outcome. Throws {@link SubscriptionCollectionError} when
-   * any was NOT cancelled, including when the provider cannot cancel at all: a
+   * collecting, which is a normal outcome — the subset cancelled without proration, and
+   * the ids whose payment state could not be read. Throws {@link SubscriptionCollectionError}
+   * when any was NOT cancelled, including when the provider cannot cancel at all: a
    * subscription left charging a terminated customer must never read as a clean
    * termination.
    */
-  async cancelCollectionForAccount(accountId: string): Promise<{ cancelled: string[] }> {
+  async cancelCollectionForAccount(accountId: string): Promise<{
+    cancelled: string[];
+    cancelledWithoutProration: string[];
+    paymentStateUnread: string[];
+  }> {
     const subs = await this.repo.findCollectingSubscriptions(accountId);
-    if (subs.length === 0) return { cancelled: [] };
+    if (subs.length === 0) {
+      return { cancelled: [], cancelledWithoutProration: [], paymentStateUnread: [] };
+    }
     const provider = this.provider;
     if (provider.cancelSubscriptionNow === undefined) {
       throw new SubscriptionCollectionError(
@@ -403,10 +460,49 @@ export class BillingService {
         'this billing provider cannot cancel a subscription, so the terminated account may still be charged',
       );
     }
-    const cancelled = await this.applyToEach('cancel', subs, (subscriptionId) =>
-      provider.cancelSubscriptionNow!({ subscriptionId }),
-    );
-    return { cancelled };
+    const unpaid = new Set<string>();
+    const unread: string[] = [];
+    let cancelled: string[];
+    try {
+      cancelled = await this.applyToEach('cancel', subs, async (subscriptionId, sub) => {
+        const notPaid = await this.wasNotPaid(sub, unread);
+        if (notPaid) unpaid.add(subscriptionId);
+        await provider.cancelSubscriptionNow!({ subscriptionId, prorate: !notPaid });
+      });
+    } catch (err) {
+      // Some were cancelled and some were not: say which of the cancelled ones were
+      // given no credit, as the clean outcome below does.
+      if (!(err instanceof SubscriptionCollectionError)) throw err;
+      throw new SubscriptionCollectionError(err.action, err.done, err.failed, err.message, {
+        cause: err.cause,
+        doneWithoutProration: err.done.filter((id) => unpaid.has(id)),
+        paymentStateUnread: unread,
+      });
+    }
+    return {
+      cancelled,
+      cancelledWithoutProration: cancelled.filter((id) => unpaid.has(id)),
+      paymentStateUnread: unread,
+    };
+  }
+
+  /**
+   * Owner decision of 2026-09-24 — whether `sub` was not paid, from what the provider
+   * holds now, or from the stored status when the provider cannot say. A failed read,
+   * or one that is `partlyUnread`, adds the id to `unread`.
+   */
+  private async wasNotPaid(sub: SubscriptionMirror, unread: string[]): Promise<boolean> {
+    const read = this.provider.readSubscriptionPaymentState?.bind(this.provider);
+    if (read === undefined) return subscriptionWasNotPaid({ status: sub.status });
+    let reading: SubscriptionPaymentReading;
+    try {
+      reading = await read({ subscriptionId: sub.stripeSubscriptionId });
+    } catch {
+      unread.push(sub.stripeSubscriptionId);
+      return subscriptionWasNotPaid({ status: sub.status });
+    }
+    if (reading.partlyUnread === true) unread.push(sub.stripeSubscriptionId);
+    return subscriptionWasNotPaid(reading);
   }
 
   /**
@@ -433,14 +529,14 @@ export class BillingService {
   private async applyToEach(
     action: 'pause' | 'resume' | 'cancel',
     subs: readonly SubscriptionMirror[],
-    apply: (subscriptionId: string) => Promise<void>,
+    apply: (subscriptionId: string, sub: SubscriptionMirror) => Promise<void>,
   ): Promise<string[]> {
     const done: string[] = [];
     const failed: string[] = [];
     let firstError: unknown = null;
     for (const sub of subs) {
       try {
-        await apply(sub.stripeSubscriptionId);
+        await apply(sub.stripeSubscriptionId, sub);
         done.push(sub.stripeSubscriptionId);
       } catch (err) {
         failed.push(sub.stripeSubscriptionId);

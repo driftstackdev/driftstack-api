@@ -246,14 +246,14 @@ describe('W365.A marketing-site /security page parity', () => {
   // honest replacements: Dependabot-only (weekly, CI-gated,
   // patch-only auto-merge per .github/dependabot.yml +
   // dependabot-auto-merge.yml) and the real deploy controls
-  // (lockfile-pinned installs, staging-first + manual prod approval,
+  // (lockfile-pinned installs, staging-first + CI-gated production,
   // post-deploy health-check with automatic rollback, public
   // /version SHA endpoint — deploy.yml / server-deploy.yml
   // V-549.A/B / app.ts V-195).
   // 2026-09-15 plain-language pass: the framework list, the tool name
   // (Dependabot) and the deploy-pipeline vocabulary left the customer
   // page; the same controls are pinned in customer words.
-  it('supply-chain section pinned: stable stack / automatic dependency updates (no Renovate) / tested, approved, reversible releases', () => {
+  it('supply-chain section pinned: stable stack / automatic dependency updates (no Renovate) / tested, reversible API releases that claim no approval step and no CI gate the web apps lack', () => {
     expect(body).toMatch(
       /small, stable set of well-known components\s+\(Node\.js, TypeScript, Postgres, Redis\) that rarely changes/,
     );
@@ -272,9 +272,27 @@ describe('W365.A marketing-site /security page parity', () => {
     expect(body).not.toMatch(/SBOM, in the standard/);
     // The honest deploy controls pinned.
     expect(body).toMatch(/Every software component is fixed to an exact version/);
+    // 2026-09-25: a release does NOT wait for anyone's approval. The API
+    // server's production deploys only after CI passes on the same commit and
+    // staging has taken that commit (.github/workflows/deploy.yml), so that is
+    // what the card says. The earlier "being explicitly approved" described a
+    // gate that never existed.
+    //
+    // And the card names the API server: only deploy.yml waits for CI. The web
+    // apps (dashboard, this site, docs, status, errors, admin) each deploy on a
+    // push to main through their own deploy-*.yml, with no CI gate and no test
+    // copy, so an unscoped "a release reaches production only after..." would
+    // claim a control they do not have.
     expect(body).toMatch(
-      /reaches production only after running on a test copy\s+first and being explicitly approved/,
+      /<h3 class="text-base font-medium text-tk-ink">API releases are tested and reversible<\/h3>/,
     );
+    expect(body).toMatch(
+      /A\s+release of our API server reaches production only after the\s+full automated test suite passes on it and it has run on a\s+test copy first\./,
+    );
+    expect(body).not.toMatch(/A\s+release reaches production only after/);
+    expect(body).not.toMatch(/>Releases are tested/);
+    expect(body).not.toMatch(/explicitly approved/i);
+    expect(body).not.toMatch(/tested, approved, and reversible/i);
     expect(body).toMatch(/automatically rolled back if\s+that check fails/);
     expect(body).toMatch(
       /anyone can see exactly which version\s+is running at <code class="font-mono">api\.driftstack\.dev\/version<\/code>/,

@@ -38,12 +38,15 @@ function read(p: string): string {
 describe('W541.A /.github/workflows/ci.yml content parity', () => {
   const body = read(LIB);
 
-  it("Top-level trigger + concurrency framing pinned: 'name: CI' + 'on: push: branches: [main] + pull_request: branches: [main]' + 'concurrency: group: ${{ github.workflow }}-${{ github.ref }} + cancel-in-progress: true' — pinned so the main-branch-push + main-PR + per-ref-cancel-in-progress (newer push cancels older run on same ref) commitment survives (drift to dropping cancel-in-progress would queue stale runs and exhaust runner minutes)", () => {
+  it("Top-level trigger + concurrency framing pinned: 'name: CI' + 'on: push: branches: [main] + pull_request: branches: [main]' + a concurrency block that cancels a pull request's superseded run and never a run on main — pinned so the main-branch-push + main-PR commitment survives, and so a burst of pushes to main cannot cancel the green CI run production waits on (2026-09-25; before, every run of a burst but the last was cancelled and production stayed behind with no alert)", () => {
     expect(body).toMatch(/^name: CI$/m);
     expect(body).toMatch(/on:\s*\n\s*push:\s*\n\s*branches: \[main\]/);
     expect(body).toMatch(/pull_request:\s*\n\s*branches: \[main\]/);
     expect(body).toMatch(
-      /concurrency:\s*\n\s*group: \$\{\{ github\.workflow \}\}-\$\{\{ github\.ref \}\}\s*\n\s*cancel-in-progress: true/,
+      /#\s+A newer push supersedes a pull request's run, so that run is cancelled\. On\s*\n\s*#\s+main it is not/,
+    );
+    expect(body).toMatch(
+      /group: \$\{\{ github\.workflow \}\}-\$\{\{ github\.ref == 'refs\/heads\/main' && format\('main-\{0\}', github\.run_id\) \|\| github\.ref \}\}\s*\n\s*cancel-in-progress: \$\{\{ github\.ref != 'refs\/heads\/main' \}\}/,
     );
   });
 

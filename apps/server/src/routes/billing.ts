@@ -23,17 +23,26 @@ import { readIdempotencyKey } from '../lib/idempotency-key.js';
 // pointing at attacker.com and share the checkout link with a colleague
 // who'd land on the phishing site after entering their card.
 //
-// Allowlist: by default the Driftstack cloud dashboard origin and
-// `app.driftstack.local` (e2e). Per-customer enterprise allowlists are
-// out of scope for the launch posture; customers needing a custom URL
-// get a clear "contact support" error.
+// Allowlist: the Driftstack cloud dashboard origin, plus — only outside
+// production — the dashboard dev server and `app.driftstack.local` (e2e).
+// Per-customer enterprise allowlists are out of scope for the launch
+// posture; customers needing a custom URL get a clear "contact support"
+// error.
 //
 // The allowlist is hardcoded rather than env-driven because it
 // anchors the security guarantee — a typo in env config would silently
 // re-introduce the open-redirect. Founder edits this list when a
 // legitimate origin needs to be added (paired with PR review).
-const ALLOWED_RETURN_ORIGINS: readonly string[] = [
-  'https://app.driftstack.io',
+const ALLOWED_RETURN_ORIGINS: readonly string[] = ['https://app.driftstack.io'];
+
+// Security sweep #31 — two plain-HTTP origins for local development and the e2e
+// suite. They were on the list in every environment, so a production checkout
+// could send the payer, after entering their card, over cleartext to whichever
+// machine answers for `app.driftstack.local` (mDNS) on the payer's network. The
+// routes admit them only when the server is told it is not in production
+// (BillingRoutesDeps.allowDevelopmentReturnOrigins, from NODE_ENV); left unset,
+// production's list is the one above.
+const DEVELOPMENT_RETURN_ORIGINS: readonly string[] = [
   'http://localhost:5173', // dashboard dev server
   'http://app.driftstack.local', // e2e fixture
 ];
@@ -43,14 +52,18 @@ const ALLOWED_RETURN_ORIGINS: readonly string[] = [
  * Returns the URL string when valid; throws BadRequestError otherwise.
  * Defensive parsing: malformed URLs reject (not silently accepted).
  */
-function validateReturnUrl(url: string, label: 'success_url' | 'cancel_url'): string {
+function validateReturnUrl(
+  url: string,
+  label: 'success_url' | 'cancel_url',
+  allowedOrigins: readonly string[],
+): string {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
     throw new BadRequestError(`${label} is not a valid URL.`);
   }
-  if (!ALLOWED_RETURN_ORIGINS.includes(parsed.origin)) {
+  if (!allowedOrigins.includes(parsed.origin)) {
     throw new BadRequestError(
       `${label} origin "${parsed.origin}" is not on the allowlist. Contact support if you need a custom origin allowlisted.`,
     );
@@ -96,10 +109,20 @@ function publicSubscription(s: SubscriptionMirror): Record<string, unknown> {
 
 export interface BillingRoutesDeps {
   service: BillingService;
+  /**
+   * Security sweep #31 — also accept the plain-HTTP development and e2e return
+   * origins (DEVELOPMENT_RETURN_ORIGINS). True only when the server is NOT running
+   * in production; omitted, the production allowlist applies.
+   */
+  allowDevelopmentReturnOrigins?: boolean;
 }
 
 export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesDeps): void {
   const { service } = deps;
+  const returnOrigins: readonly string[] =
+    deps.allowDevelopmentReturnOrigins === true
+      ? [...ALLOWED_RETURN_ORIGINS, ...DEVELOPMENT_RETURN_ORIGINS]
+      : ALLOWED_RETURN_ORIGINS;
 
   app.post(
     '/v1/billing/checkout-session',
@@ -130,11 +153,11 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
       // V-248 — gate customer-supplied return URLs against the allowlist.
       const successUrl =
         parsed.data.success_url !== undefined
-          ? validateReturnUrl(parsed.data.success_url, 'success_url')
+          ? validateReturnUrl(parsed.data.success_url, 'success_url', returnOrigins)
           : undefined;
       const cancelUrl =
         parsed.data.cancel_url !== undefined
-          ? validateReturnUrl(parsed.data.cancel_url, 'cancel_url')
+          ? validateReturnUrl(parsed.data.cancel_url, 'cancel_url', returnOrigins)
           : undefined;
       const result = await service.createCheckoutSession({
         accountId: ctx.account.id,

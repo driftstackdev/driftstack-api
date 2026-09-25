@@ -17,8 +17,8 @@
 //   link with a colleague who'd land on the phishing site after
 //   entering their card'.
 //
-//   ALLOWED_RETURN_ORIGINS — 3 entries (prod dashboard +
-//   localhost:5173 dev + app.driftstack.local e2e).
+//   ALLOWED_RETURN_ORIGINS — the prod dashboard; DEVELOPMENT_RETURN_ORIGINS
+//   (localhost:5173 dev + app.driftstack.local e2e) only outside production.
 //
 //   Hardcoded-not-env rationale — 'The allowlist is hardcoded rather
 //   than env-driven because it anchors the security guarantee — a
@@ -86,11 +86,15 @@ describe('W1044 routes/billing V-082 + V-248 cross-source invariant', () => {
     expect(p).toMatch(/who'd land on the phishing site after entering their card\./);
   });
 
-  it("CRITICAL ALLOWED_RETURN_ORIGINS — 3 entries (https://app.driftstack.io / http://localhost:5173 / http://app.driftstack.local). The 3-entry list balances 'prod + dev + e2e' against attack surface.", () => {
+  it('CRITICAL ALLOWED_RETURN_ORIGINS — the production dashboard (https://app.driftstack.io) alone; the dev and e2e origins (http://localhost:5173 / http://app.driftstack.local) are DEVELOPMENT_RETURN_ORIGINS, admitted only outside production (security sweep #31). A plain-HTTP origin on the production list would send a payer over cleartext after entering their card.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing.ts'));
-    expect(p).toMatch(/'https:\/\/app\.driftstack\.io',/);
+    expect(p).toMatch(
+      /const ALLOWED_RETURN_ORIGINS: readonly string\[\] = \['https:\/\/app\.driftstack\.io'\];/,
+    );
+    expect(p).toMatch(/const DEVELOPMENT_RETURN_ORIGINS: readonly string\[\] = \[/);
     expect(p).toMatch(/'http:\/\/localhost:5173', \/\/ dashboard dev server/);
     expect(p).toMatch(/'http:\/\/app\.driftstack\.local', \/\/ e2e fixture/);
+    expect(p).toMatch(/deps\.allowDevelopmentReturnOrigins === true/);
   });
 
   it("CRITICAL hardcoded-not-env rationale — 'The allowlist is hardcoded rather than env-driven because it anchors the security guarantee — a typo in env config would silently re-introduce the open-redirect'. The hardcoded design is the load-bearing choice.", () => {

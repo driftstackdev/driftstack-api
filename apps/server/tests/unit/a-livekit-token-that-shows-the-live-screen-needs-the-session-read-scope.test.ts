@@ -85,6 +85,7 @@ function session(id: string, controlKeyEncryptionKey: string): AgentSessionRecor
     proxyId: null,
     stopOnExitIpChange: false,
     firstExitIp: null,
+    profileSaveBackRefused: false,
     status: 'active',
     transcript: [],
     tokenBudgetTotal: 100_000,

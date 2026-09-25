@@ -189,9 +189,11 @@ status, then `bash scripts/deploy-bridge.sh prod`.
   it deploys a commit only after CI passes on it, staging first, and
   never to an environment that already runs a newer commit (a skip
   with a notice, not a failure). A revert therefore waits for its CI
-  run. CI on main cancels a run when a newer push lands, and a
-  cancelled run deploys nothing and raises nothing, so during a burst
-  of pushes production stays where it is until a CI run finishes.
+  run. CI never cancels a run on main, so during a burst of pushes
+  each commit deploys as its own CI run goes green, in the order the
+  runs finish; a run that finishes after a newer commit went live is
+  skipped. A red or cancelled CI run deploys nothing and raises the
+  deploy-failure issue; re-run CI on that commit to deploy it.
   When an environment's `/version` is down or reports `unknown`,
   only the current tip of main deploys automatically; any other
   commit is refused and goes out by hand, staging first:

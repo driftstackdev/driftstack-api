@@ -1002,6 +1002,20 @@
       "when": 1786665600030,
       "tag": "0142_agent_session_control_key_minter",
       "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "7",
+      "when": 1786665600031,
+      "tag": "0143_agent_session_profile_save_back_refused",
+      "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1786665600032,
+      "tag": "0144_crypto_order_payment_mint_claim",
+      "breakpoints": true
     }
   ]
 }

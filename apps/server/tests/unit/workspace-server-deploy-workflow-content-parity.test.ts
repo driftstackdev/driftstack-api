@@ -34,27 +34,34 @@ function read(p: string): string {
 describe('W542.B /.github/workflows/server-deploy.yml content parity', () => {
   const body = read(LIB);
 
-  it("V-278 anchor + sister-to-deploy.yml framing pinned: '# V-278 — Tag-triggered production deploy for the API server.' + 'Sister workflow to .github/workflows/deploy.yml. Where deploy.yml auto-deploys to staging on every main merge + gates production on approval, this workflow gives the founder an explicit-release trigger via git tag — `git tag server-v0.2.1 && git push origin server-v0.2.1` cuts a production-only deploy with no main-merge coupling.' + '# Use either workflow:' + 'deploy.yml   — push-on-main; staging auto + manual-approval prod.' + 'Continuous-delivery shape; appropriate for the Q4-2026/Q1-2027 launch period when builds are vetted via the manual prod-approval gate.' + 'server-deploy.yml — tag-on-server-v*; production-only.' + 'Explicit-release shape; appropriate post-launch when production cuts should be deliberate cuts of a tagged release, not \"whatever's on main.\"' — pinned so the V-278 + sister-to-deploy.yml + Q4-2026/Q1-2027-launch-period-CD-shape + post-launch-tag-explicit-release-shape + git-tag-server-v0.2.1-example commitment survives", () => {
-    expect(body).toMatch(/# V-278 — Tag-triggered production deploy for the API server\./);
-    expect(body).toMatch(/# Sister workflow to \.github\/workflows\/deploy\.yml\./);
-    expect(body).toMatch(
-      /Where deploy\.yml\s*\n#\s*auto-deploys to staging on every main merge \+ gates production on/,
+  // 2026-09-25. This header used to say deploy.yml "gates production on
+  // approval" and ran "staging auto + manual-approval prod", with builds "vetted
+  // via the manual prod-approval gate". No approval step exists: the production
+  // environment has no protection rules, and deploy.yml deploys a commit to
+  // staging and then production once CI passes on it (see the note above its
+  // deploy-production job). The pin locks the true description and refuses the
+  // approval claim. The header is read as prose (comment markers and line
+  // breaks folded), so rewrapping it does not break the pin.
+  it("V-278 anchor + sister-to-deploy.yml framing pinned: '# V-278 — Tag-triggered production deploy for the API server.' + 'Sister workflow to .github/workflows/deploy.yml. Where deploy.yml deploys every main commit whose CI passed, staging first and then production with no approval step, this workflow gives the founder an explicit-release trigger via git tag — `git tag server-v0.2.1 && git push origin server-v0.2.1` cuts a production-only deploy with no main-merge coupling.' + 'Use either workflow:' + 'deploy.yml — CI passed on main; staging, then production; no approval step. Continuous-delivery shape; appropriate for the Q4-2026/Q1-2027 launch period, when a build is vetted by the full CI suite passing on it.' + 'server-deploy.yml — tag-on-server-v*; production-only. Explicit-release shape; appropriate post-launch when production cuts should be deliberate cuts of a tagged release, not \"whatever's on main.\"' — pinned so the V-278 + sister-to-deploy.yml + Q4-2026/Q1-2027-launch-period-CD-shape + post-launch-tag-explicit-release-shape + git-tag-server-v0.2.1-example commitment survives, and no production approval step is claimed", () => {
+    expect(body).toMatch(/^# V-278 — Tag-triggered production deploy for the API server\.$/m);
+    const header = body.slice(0, body.indexOf('\nname:'));
+    const prose = header
+      .split('\n')
+      .map((l) => l.replace(/^#\s?/, ''))
+      .join(' ')
+      .replace(/\s+/g, ' ');
+    expect(prose).toContain(
+      'Sister workflow to .github/workflows/deploy.yml. Where deploy.yml deploys every main commit whose CI passed, staging first and then production with no approval step, this workflow gives the founder an explicit-release trigger via git tag — `git tag server-v0.2.1 && git push origin server-v0.2.1` cuts a production-only deploy with no main-merge coupling.',
     );
-    expect(body).toMatch(/# approval, this workflow gives the founder an explicit-release/);
-    expect(body).toMatch(/# trigger via git tag — `git tag server-v0\.2\.1 && git push origin/);
-    expect(body).toMatch(/# server-v0\.2\.1` cuts a production-only deploy with no main-merge/);
-    expect(body).toMatch(/# coupling\./);
-    expect(body).toMatch(/# Use either workflow:/);
-    expect(body).toMatch(
-      /#\s+- deploy\.yml\s+— push-on-main; staging auto \+ manual-approval prod\./,
+    expect(prose).toContain('Use either workflow:');
+    expect(prose).toContain(
+      '- deploy.yml — CI passed on main; staging, then production; no approval step. Continuous-delivery shape; appropriate for the Q4-2026/Q1-2027 launch period, when a build is vetted by the full CI suite passing on it.',
     );
-    expect(body).toMatch(/#\s+Continuous-delivery shape; appropriate for the/);
-    expect(body).toMatch(/#\s+Q4-2026\/Q1-2027 launch period when builds are/);
-    expect(body).toMatch(/#\s+vetted via the manual prod-approval gate\./);
-    expect(body).toMatch(/#\s+- server-deploy\.yml — tag-on-server-v\*; production-only\./);
-    expect(body).toMatch(/#\s+Explicit-release shape; appropriate post-launch/);
-    expect(body).toMatch(/#\s+when production cuts should be deliberate cuts/);
-    expect(body).toMatch(/#\s+of a tagged release, not "whatever's on main\."/);
+    expect(prose).toContain(
+      '- server-deploy.yml — tag-on-server-v*; production-only. Explicit-release shape; appropriate post-launch when production cuts should be deliberate cuts of a tagged release, not "whatever\'s on main."',
+    );
+    // The approval step that never existed stays out of the description.
+    expect(prose).not.toMatch(/manual-approval|prod-approval|gates production on approval/i);
   });
 
   it("Trigger + concurrency framing pinned: 'name: Server release deploy (tag)' + 'on: push: tags: - server-v*' + 'workflow_dispatch: inputs: tag: description: \"Tag to deploy (e.g. server-v0.2.1). Must already exist.\" + required: true + type: string' + 'concurrency: group: server-deploy-${{ github.ref }} + cancel-in-progress: false' — pinned so the server-v* tag-trigger + workflow_dispatch-with-required-tag-input + cancel-in-progress: FALSE (let in-flight deploys finish) commitment survives (drift to widening tag pattern past 'server-v*' would let arbitrary tags trigger production)", () => {

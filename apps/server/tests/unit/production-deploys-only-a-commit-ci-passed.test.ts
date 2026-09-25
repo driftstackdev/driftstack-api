@@ -40,6 +40,8 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
+import { evaluate } from './_helpers/github-expression.js';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const DEPLOY_TEXT = readFileSync(resolve(REPO_ROOT, '.github/workflows/deploy.yml'), 'utf8');
@@ -82,109 +84,6 @@ const BASE_URL: Record<(typeof DEPLOY_JOBS)[number], string> = {
   'deploy-production': 'https://api.driftstack.dev',
 };
 
-/**
- * A small evaluator for the GitHub Actions expressions this workflow uses:
- * string/number/boolean/null literals, context paths (`github.event.x.y`), `==`,
- * `!=`, `!`, `&&`, `||`, parentheses and `format()`. Semantics follow GitHub's:
- * `&&`/`||` return an operand rather than a boolean, and string equality ignores
- * case. Anything else throws, so an expression this cannot read fails the test
- * instead of being evaluated wrongly.
- */
-function evaluate(source: string, ctx: Record<string, unknown>): unknown {
-  const m = /^\s*\$\{\{([\s\S]*)\}\}\s*$/.exec(source);
-  const text = m ? m[1]! : source;
-  const tokens: string[] = [];
-  const re = /\s*('(?:[^']|'')*'|==|!=|&&|\|\||[()!,]|[A-Za-z_][A-Za-z0-9_.-]*|\d+)/y;
-  let at = 0;
-  while (at < text.length) {
-    if (/^\s*$/.test(text.slice(at))) break;
-    re.lastIndex = at;
-    const t = re.exec(text);
-    if (!t) throw new Error(`cannot read expression at: ${text.slice(at, at + 30)}`);
-    tokens.push(t[1]!);
-    at = re.lastIndex;
-  }
-  let i = 0;
-  const peek = (): string | undefined => tokens[i];
-  const take = (want?: string): string => {
-    const t = tokens[i++];
-    if (t === undefined || (want !== undefined && t !== want)) {
-      throw new Error(`expected ${want ?? 'a token'}, got ${t ?? 'the end'}`);
-    }
-    return t;
-  };
-  const truthy = (v: unknown): boolean => v !== false && v !== 0 && v !== '' && v != null;
-  const equal = (a: unknown, b: unknown): boolean =>
-    typeof a === 'string' && typeof b === 'string'
-      ? a.toLowerCase() === b.toLowerCase()
-      : (a ?? null) === (b ?? null);
-  const lookup = (path: string): unknown =>
-    path
-      .split('.')
-      .reduce<unknown>(
-        (v, k) => (v !== null && typeof v === 'object' ? (v as Record<string, unknown>)[k] : null),
-        ctx,
-      ) ?? null;
-  const primary = (): unknown => {
-    const t = take();
-    if (t === '(') {
-      const v = or();
-      take(')');
-      return v;
-    }
-    if (t === '!') return !truthy(primary());
-    if (t.startsWith("'")) return t.slice(1, -1).replace(/''/g, "'");
-    if (/^\d+$/.test(t)) return Number(t);
-    if (t === 'true' || t === 'false') return t === 'true';
-    if (t === 'null') return null;
-    if (t === 'format' && peek() === '(') {
-      take('(');
-      const args: unknown[] = [or()];
-      while (peek() === ',') {
-        take(',');
-        args.push(or());
-      }
-      take(')');
-      const text = (v: unknown): string =>
-        typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? `${v}` : '';
-      return text(args[0]).replace(/\{(\d+)\}/g, (_, n: string) => text(args[Number(n) + 1]));
-    }
-    if (/^[A-Za-z_]/.test(t)) return lookup(t);
-    throw new Error(`unexpected token ${t}`);
-  };
-  const comparison = (): unknown => {
-    const left = primary();
-    const op = peek();
-    if (op === '==' || op === '!=') {
-      take();
-      const right = primary();
-      return op === '==' ? equal(left, right) : !equal(left, right);
-    }
-    return left;
-  };
-  const and = (): unknown => {
-    let v = comparison();
-    while (peek() === '&&') {
-      take();
-      const r = comparison();
-      v = truthy(v) ? r : v;
-    }
-    return v;
-  };
-  const or = (): unknown => {
-    let v = and();
-    while (peek() === '||') {
-      take();
-      const r = and();
-      v = truthy(v) ? v : r;
-    }
-    return v;
-  };
-  const value = or();
-  if (i !== tokens.length) throw new Error(`unread tokens from: ${tokens.slice(i).join(' ')}`);
-  return value;
-}
-
 describe('production deploys only a commit CI passed', () => {
   it('CRITICAL the workflow runs when CI COMPLETES on main, not on the push itself', () => {
     expect(Object.keys(deploy.on).sort()).toEqual(['workflow_dispatch', 'workflow_run']);
@@ -214,11 +113,14 @@ describe('production deploys only a commit CI passed', () => {
     const script = pick?.run ?? '';
     expect(pick?.env?.RUN_SHA).toBe('${{ github.event.workflow_run.head_sha }}');
     expect(pick?.env?.RUN_CONCLUSION).toBe('${{ github.event.workflow_run.conclusion }}');
-    // success proceeds; a superseded (cancelled) run deploys nothing quietly;
-    // anything else FAILS, so a red CI on main raises the deploy-failure alert
-    // instead of leaving production silently behind.
+    // success proceeds; a skipped run (nothing ran) deploys nothing quietly;
+    // anything else FAILS — a cancelled run included, since 2026-09-25 — so a
+    // red or cancelled CI on main raises the deploy-failure alert instead of
+    // leaving production silently behind.
     expect(script).toMatch(/case "\$RUN_CONCLUSION" in\s*\n\s*success\) ;;/);
-    expect(script).toMatch(/cancelled\|skipped\)[\s\S]*?deploy=false[\s\S]*?exit 0/);
+    expect(script).toMatch(/\n\s*skipped\)[\s\S]*?deploy=false[\s\S]*?exit 0/);
+    expect(script).not.toMatch(/cancelled\|skipped\)/);
+    expect(script).toMatch(/\n\s*cancelled\)[\s\S]*?::error::[^\n]*\n\s*exit 1/);
     expect(script).toMatch(/\*\)[\s\S]*?::error::CI concluded[^\n]*\n\s*exit 1/);
     // A dispatch deploys main only.
     expect(script).toMatch(/"\$DISPATCH_REF" != "refs\/heads\/main"/);
@@ -351,7 +253,7 @@ describe('production deploys only a commit CI passed', () => {
       },
       { name: 'red CI on main', github: runEvent({ conclusion: 'failure' }), deploys: false },
       {
-        name: 'cancelled (superseded) CI on main',
+        name: 'cancelled CI on main',
         github: runEvent({ conclusion: 'cancelled' }),
         deploys: false,
       },
@@ -535,10 +437,47 @@ describe('the gate and forward-only steps, executed', { timeout: 30_000 }, () =>
     }
   });
 
-  it('a cancelled (superseded) CI run deploys nothing and does not fail', () => {
+  // CI's own concurrency no longer cancels a run on main (ci.yml gives each run
+  // there a group of its own), so a cancelled run on main was stopped some other
+  // way: by hand, or a job cut off at its timeout-minutes. Its commit never
+  // deploys, and when it was the last push production stays behind. Passing
+  // quietly here was the silence item 2 of the 2026-09-25 sweep set out to end,
+  // so the gate FAILS and notify-on-failure raises the deploy-failure issue.
+  it('CRITICAL a cancelled CI run on main FAILS the gate (so the alert fires), names no commit, and says production stays where it is', () => {
     const r = gate(run({ RUN_CONCLUSION: 'cancelled' }));
-    expect(r.status).toBe(0);
+    expect(r.status, r.text).toBe(1);
+    expect(r.outputs.deploy).toBeUndefined();
+    expect(r.outputs.sha).toBeUndefined();
+    expect(r.log, 'refused before asking the API anything').toBe('');
+    expect(r.text).toMatch(/::error::CI on a{40} was cancelled/);
+    expect(r.text).toMatch(/production stays on the commit it runs/i);
+  });
+
+  it('a skipped CI run (no job ran) deploys nothing and does not fail', () => {
+    const r = gate(run({ RUN_CONCLUSION: 'skipped' }));
+    expect(r.status, r.text).toBe(0);
     expect(r.outputs).toEqual({ deploy: 'false' });
+  });
+
+  it('CRITICAL the workflow and the runbook say a cancelled run raises the alert, and nothing still says it raises nothing', () => {
+    const flat = (t: string): string => t.replace(/\s*\n\s*#?\s*/g, ' ');
+    expect(flat(DEPLOY_TEXT)).toContain(
+      'A red or cancelled CI run deploys nothing and raises the deploy-failure issue',
+    );
+    const runbook = flat(
+      readFileSync(resolve(REPO_ROOT, 'docs/runbooks/deploy-bridge.md'), 'utf8'),
+    );
+    expect(runbook).toContain(
+      'A red or cancelled CI run deploys nothing and raises the deploy-failure issue',
+    );
+    for (const [name, text] of [
+      ['deploy.yml', flat(DEPLOY_TEXT)],
+      ['deploy-bridge.md', runbook],
+    ] as const) {
+      expect(text, name).not.toMatch(
+        /cancelled (?:one|run) deploys nothing(?: and raises nothing)?\./i,
+      );
+    }
   });
 
   it('CRITICAL the event alone is not trusted: no successful run on record for the commit refuses — and so does an answer that is not a number', () => {

@@ -2707,6 +2707,14 @@ export const agentSessions = pgTable(
     // comparison survives a control-plane restart (the in-memory capability
     // store does not). NULL until the first observation / on non-policy rows.
     firstExitIp: text('first_exit_ip'),
+    // Migration 0143 — this session may not save its profile back. Set at
+    // dispatch, on the same active-only UPDATE that claims the session for its
+    // device, whenever the device could not be given the profile's stored state
+    // (restore/save-back URLs not minted, profile key not unwrapped, no private
+    // storage). Such a session starts from an EMPTY profile, so its teardown save
+    // would replace the customer's stored profile; the profileSaved consumer
+    // refuses it and tells the customer. Never cleared. false on every other row.
+    profileSaveBackRefused: boolean('profile_save_back_refused').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -3077,6 +3085,19 @@ export const cryptoOrders = pgTable(
     // existed, and for orders created without an Idempotency-Key — NULL means
     // "unknown", never "matched".
     idempotencyBodyFingerprint: text('idempotency_body_fingerprint'),
+    // Security sweep #18 (residual) — the payment mint claim (migration 0142).
+    // `payment_mint_claimed_at` is when a checkout last claimed the right to create
+    // this order's NowPayments payment, written under the order's row lock before
+    // the provider is called: while it is fresh no other server mints for the
+    // order, and once it is older than the provider timeout plus a margin with no
+    // payment bound, one checkout may claim and mint again. `payment_mints` counts
+    // those claims — the provider payments created for the order — so an account's
+    // daily mint budget can be counted. Internal; never returned to customers.
+    paymentMintClaimedAt: timestamp('payment_mint_claimed_at', {
+      withTimezone: true,
+      mode: 'date',
+    }),
+    paymentMints: integer('payment_mints').notNull().default(0),
     status: text('status')
       .notNull()
       .$type<'pending' | 'confirming' | 'paid' | 'failed' | 'partial' | 'cancelled'>(),

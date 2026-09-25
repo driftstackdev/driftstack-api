@@ -445,11 +445,20 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     expect(pMeter?.style.width).toBe('0%');
   });
 
-  it('?subscribed=<tier> (the post-checkout Stripe landing) greets the new subscription in the banner', async () => {
+  it('?subscribed=<tier> (the post-checkout Stripe landing) greets the new subscription in the banner once billing reports it active', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       url: 'https://app.driftstack.io/?subscribed=team_manual',
-      route: makeRouter({ me: { name: 'A', tier: 'team_manual' } }),
+      route: makeRouter({
+        me: { name: 'A', tier: 'team_manual' },
+        billing: {
+          subscription: {
+            tier: 'team_manual',
+            status: 'active',
+            current_period_end: '2026-06-01T00:00:00Z',
+          },
+        },
+      }),
     });
     win = window;
     await flush();

@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AccountDeletionPurgeSweeperService } from '../../src/services/account-deletion-purge-sweeper.js';
 import type { BYOKAnthropicService } from '../../src/services/byok-anthropic.js';
+import { MetricsRegistry, METRIC_NAMES } from '../../src/services/metrics-registry.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NOW = new Date('2026-07-31T00:00:00Z');
@@ -98,9 +99,16 @@ function profileArmFailing(calls: string[]) {
   };
 }
 
-/** A repo whose BYOK query would throw if it were ever reached. */
+/**
+ * A repo whose BYOK query throws if it is ever reached, and records that it was.
+ * The throw alone no longer fails a tick: a throwing candidate query is now
+ * contained to its own arm (reported failed, the rest still run). So the record
+ * is what the never-queried arm below checks.
+ */
+const byokQueries: Date[] = [];
 const byokRepoNeverCalled = {
-  findDeletedAccountIdsWithByokKeyBefore: (): Promise<string[]> => {
+  findDeletedAccountIdsWithByokKeyBefore: (cutoff: Date): Promise<string[]> => {
+    byokQueries.push(cutoff);
     throw new Error('BYOK candidate query must not run when the service is unwired');
   },
 };
@@ -126,13 +134,14 @@ describe('no purge arm can be disabled by another arm being unavailable', () => 
   });
 
   it('CRITICAL an unwired BYOK service does not even QUERY for candidates. Fetching a candidate list it cannot act on would burn a query per tick and, worse, would report accounts as "found" that nothing will ever purge.', async () => {
+    byokQueries.length = 0;
     const sweeper = new AccountDeletionPurgeSweeperService({
       repo: byokRepoNeverCalled,
       profiles: profileArm([]),
     });
 
-    // byokRepoNeverCalled throws on contact, so reaching it fails this outright.
     await expect(sweeper.tickOnce(NOW)).resolves.toMatchObject({ purged: 0 });
+    expect(byokQueries, 'the BYOK candidate query ran with no BYOK service wired').toEqual([]);
   });
 
   it('CRITICAL with proxy and profile arms absent, the BYOK arm still runs. The independence has to hold in every direction, not just the one that broke.', async () => {
@@ -299,6 +308,131 @@ describe('no purge arm can be disabled by another arm being unavailable', () => 
       // And the avatar images nothing points at, which no pointer-driven arm can
       // find; a count of their own for the same reason.
       avatarOrphansReaped: 0,
+      // 2026-09-25 — sealed profile blobs no profile owns, which no row-driven
+      // arm can find; moved onto this daily tick from an in-process timer.
+      profileBlobOrphansReaped: 0,
+    });
+  });
+
+  // The BYOK and proxy-secret arms each start with a CANDIDATE query, and those
+  // two queries sat outside any try: every later arm is wrapped per arm, but a
+  // throw from either candidate query rejected the whole tick. The scheduled job
+  // catches that and re-arms for tomorrow, so nothing crashed — but every arm
+  // after it (profiles, receipts, sessions, recipes, both avatar arms and the
+  // profile-blob orphan sweep) was skipped with no metric of its own, and the
+  // failing arm reported nothing either. One broken query took every other
+  // erasure promise down with it, every day it kept failing.
+  describe('a throwing CANDIDATE query is contained to its own arm', () => {
+    function registry(): MetricsRegistry {
+      const m = new MetricsRegistry();
+      m.registerCounter(METRIC_NAMES.retentionPurgeTotal, 'test', ['arm', 'outcome']);
+      return m;
+    }
+    const outcomes = (m: MetricsRegistry, arm: string): string[] =>
+      m
+        .render()
+        .split('\n')
+        .filter((l) => l.startsWith(METRIC_NAMES.retentionPurgeTotal) && l.includes(`arm="${arm}"`))
+        .map((l) => /outcome="([^"]+)"/.exec(l)?.[1] ?? '?')
+        .sort();
+
+    /** Every arm after the proxy arm, each recording that it ran. */
+    function laterArms(calls: string[]) {
+      return {
+        profiles: profileArm(calls),
+        turnReceipts: turnReceiptArm(calls),
+        agentSessions: agentSessionArm(calls),
+        recipes: {
+          purgeForTerminatedAccountsBefore: (): Promise<number> => {
+            calls.push('recipes');
+            return Promise.resolve(1);
+          },
+        },
+        avatars: {
+          findTerminatedAccountIdsWithAvatarBefore: (): Promise<string[]> => {
+            calls.push('avatars');
+            return Promise.resolve([]);
+          },
+          deleteAvatarObjects: (): Promise<void> => Promise.resolve(),
+          clearAvatarKey: (): Promise<void> => Promise.resolve(),
+        },
+        avatarOrphans: {
+          reapOrphanedAvatars: () => {
+            calls.push('avatar_orphans');
+            return Promise.resolve({ scanned: 0, reaped: 0, failed: 0 });
+          },
+        },
+        profileBlobOrphans: {
+          reapOrphanedProfileBlobs: () => {
+            calls.push('profile_blob_orphans');
+            return Promise.resolve({ scanned: 1, reaped: 1, failed: 0, capped: false });
+          },
+        },
+      };
+    }
+    const EVERY_LATER_ARM = [
+      'snapshots',
+      'profiles',
+      'turn_receipts',
+      'agent_sessions',
+      'recipes',
+      'avatars',
+      'avatar_orphans',
+      'profile_blob_orphans',
+    ];
+
+    it('CRITICAL a throwing BYOK candidate query: the tick resolves, BYOK reports failed and logs, and the proxy arm and every arm after it still run', async () => {
+      const calls: string[] = [];
+      const proxies: string[] = [];
+      const errors: string[] = [];
+      const m = registry();
+      const sweeper = new AccountDeletionPurgeSweeperService({
+        repo: {
+          findDeletedAccountIdsWithByokKeyBefore: () => Promise.reject(new Error('db down')),
+        },
+        byok: byokArm([]).byok,
+        proxySecrets: proxyArm(proxies),
+        ...laterArms(calls),
+        metrics: m,
+        logger: {
+          info: () => {},
+          warn: () => {},
+          error: (_o: Record<string, unknown>, msg: string) => errors.push(msg),
+        } as unknown as ConstructorParameters<
+          typeof AccountDeletionPurgeSweeperService
+        >[0]['logger'],
+      });
+
+      const result = await sweeper.tickOnce(NOW);
+
+      expect(result.purged).toBe(0);
+      expect(outcomes(m, 'byok')).toEqual(['failed']);
+      expect(errors.join('\n')).toMatch(/BYOK/);
+      expect(proxies, 'the proxy arm still ran').toEqual(['acc_proxy']);
+      expect(calls, 'every later arm still ran').toEqual(EVERY_LATER_ARM);
+      expect(result.profileBlobOrphansReaped).toBe(1);
+      expect(outcomes(m, 'profile_blob_orphans')).toEqual(['purged']);
+    });
+
+    it('CRITICAL a throwing proxy-secret candidate query: the tick resolves, the proxy arm reports failed, and every arm after it still runs', async () => {
+      const calls: string[] = [];
+      const m = registry();
+      const sweeper = new AccountDeletionPurgeSweeperService({
+        repo: byokRepoNeverCalled,
+        proxySecrets: {
+          findDeletedAccountIdsWithProxySecretsBefore: () => Promise.reject(new Error('db down')),
+          clearProxySecretsForAccount: () => Promise.resolve(0),
+        },
+        ...laterArms(calls),
+        metrics: m,
+      });
+
+      const result = await sweeper.tickOnce(NOW);
+
+      expect(result.proxySecretsPurged).toBe(0);
+      expect(outcomes(m, 'proxy_secrets')).toEqual(['failed']);
+      expect(calls, 'every later arm still ran').toEqual(EVERY_LATER_ARM);
+      expect(result.profileBlobOrphansReaped).toBe(1);
     });
   });
 

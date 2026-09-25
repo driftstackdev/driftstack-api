@@ -202,6 +202,28 @@ export interface AvatarOrphanReap {
   reapOrphanedAvatars(now: Date): Promise<AvatarOrphanReapResult>;
 }
 
+/**
+ * #158 — sealed profile blobs NO profile owns: a session's late save-back PUT
+ * re-created one after its profile was purged, or a purge's own blob delete
+ * failed. Nothing selects those through a row, so a pass lists the private
+ * bucket. Built in bootstrap by ProfileBlobOrphanReaper.
+ */
+export interface ProfileBlobOrphanReapResult {
+  /** Objects listed under the sealed-profile prefix. */
+  readonly scanned: number;
+  /** Objects deleted this pass. */
+  readonly reaped: number;
+  /** Deletes that failed; those objects stay for the next pass. */
+  readonly failed: number;
+  /** The pass reached its per-run delete cap with an orphan still undeleted; the next pass takes it. */
+  readonly capped: boolean;
+}
+
+export interface ProfileBlobOrphanReap {
+  /** One pass; rejects when the bucket cannot be listed or ownership cannot be read. */
+  reapOrphanedProfileBlobs(now: Date): Promise<ProfileBlobOrphanReapResult>;
+}
+
 export interface AccountDeletionPurgeSweeperDeps {
   readonly repo: AccountDeletionPurgeRepo;
   /**
@@ -274,6 +296,14 @@ export interface AccountDeletionPurgeSweeperDeps {
    * means skipped.
    */
   readonly avatarOrphans?: AvatarOrphanReap;
+  /**
+   * #158 — sealed profile blobs no profile owns, on the PRIVATE bucket. Like the
+   * avatar orphans it is not about terminated accounts only; it rides this tick
+   * because the tick is scheduled in the database and survives restarts, which
+   * the in-process six-hour timer it replaces did not. Absent (no private
+   * bucket, so no sealed blobs) means skipped.
+   */
+  readonly profileBlobOrphans?: ProfileBlobOrphanReap;
   /** Days after deletedAt before the purge fires. Defaults to 30 (privacy-policy.md §9). */
   readonly retentionDays?: number;
   readonly logger?: Logger;
@@ -302,6 +332,8 @@ export interface AccountDeletionPurgeResult {
   readonly avatarsPurged: number;
   /** Avatar objects no account points at, deleted from the public bucket this tick. */
   readonly avatarOrphansReaped: number;
+  /** Sealed profile blobs no profile owns, deleted from the private bucket this tick. */
+  readonly profileBlobOrphansReaped: number;
 }
 
 export class AccountDeletionPurgeSweeperService {
@@ -314,11 +346,6 @@ export class AccountDeletionPurgeSweeperService {
   async tickOnce(now: Date): Promise<AccountDeletionPurgeResult> {
     const cutoff = new Date(now.getTime() - this.retentionMs);
     const byok = this.deps.byok;
-    // Skip the query entirely rather than fetching candidates we cannot act on.
-    const ids =
-      byok === undefined || byok === null
-        ? []
-        : await this.deps.repo.findDeletedAccountIdsWithByokKeyBefore(cutoff);
     const metrics = this.deps.metrics;
     const count = (arm: string, outcome: string): void => {
       // Never let telemetry break the erasure. `inc` throws on an unregistered
@@ -336,6 +363,23 @@ export class AccountDeletionPurgeSweeperService {
     // unwired promise visible: without it a sweeper missing an arm and a
     // sweeper with nothing to purge produce identical (empty) telemetry.
     if (byok === undefined || byok === null) count('byok', 'skipped');
+    // The candidate query is contained to this arm like every per-account clear
+    // below. Outside a try, a throw here rejected the whole tick: the job re-arms,
+    // but every later arm (proxy secrets through the profile-blob orphan sweep)
+    // was skipped for the day with no metric of its own.
+    let ids: string[] = [];
+    if (byok !== undefined && byok !== null) {
+      // Skip the query entirely rather than fetching candidates we cannot act on.
+      try {
+        ids = await this.deps.repo.findDeletedAccountIdsWithByokKeyBefore(cutoff);
+      } catch (err) {
+        count('byok', 'failed');
+        this.deps.logger?.error?.(
+          { component: 'account-deletion-purge', err },
+          'failed to list deleted accounts holding a BYOK Anthropic key (will retry next sweep)',
+        );
+      }
+    }
     let purged = 0;
     for (const accountId of ids) {
       try {
@@ -356,8 +400,17 @@ export class AccountDeletionPurgeSweeperService {
     let proxySecretsPurged = 0;
     if (this.deps.proxySecrets === undefined) count('proxy_secrets', 'skipped');
     if (this.deps.proxySecrets !== undefined) {
-      const proxyIds =
-        await this.deps.proxySecrets.findDeletedAccountIdsWithProxySecretsBefore(cutoff);
+      // Contained for the same reason as the BYOK candidate query above.
+      let proxyIds: string[] = [];
+      try {
+        proxyIds = await this.deps.proxySecrets.findDeletedAccountIdsWithProxySecretsBefore(cutoff);
+      } catch (err) {
+        count('proxy_secrets', 'failed');
+        this.deps.logger?.error?.(
+          { component: 'account-deletion-purge', err },
+          'failed to list deleted accounts holding proxy secrets (will retry next sweep)',
+        );
+      }
       for (const accountId of proxyIds) {
         try {
           await this.deps.proxySecrets.clearProxySecretsForAccount(accountId);
@@ -546,6 +599,39 @@ export class AccountDeletionPurgeSweeperService {
       }
     }
 
+    // After the profiles arm, so a profile it purged whose blob delete failed is
+    // picked up in the same pass. See ProfileBlobOrphanReaper for what it keeps:
+    // a blob younger than its grace, and any blob whose profile row still exists,
+    // trashed included.
+    let profileBlobOrphansReaped = 0;
+    const profileBlobOrphans = this.deps.profileBlobOrphans;
+    if (profileBlobOrphans === undefined) {
+      count('profile_blob_orphans', 'skipped');
+    } else {
+      try {
+        const pass = await profileBlobOrphans.reapOrphanedProfileBlobs(now);
+        profileBlobOrphansReaped = pass.reaped;
+        count('profile_blob_orphans', pass.failed > 0 ? 'failed' : 'purged');
+        if (pass.failed > 0) {
+          this.deps.logger?.error?.(
+            { component: 'account-deletion-purge', ...pass },
+            'some unowned sealed profile blobs could not be deleted from the private bucket (will retry next sweep)',
+          );
+        } else {
+          this.deps.logger?.info?.(
+            { component: 'account-deletion-purge', ...pass },
+            'unowned sealed profile blobs swept from the private bucket',
+          );
+        }
+      } catch (err) {
+        count('profile_blob_orphans', 'failed');
+        this.deps.logger?.error?.(
+          { component: 'account-deletion-purge', err },
+          'failed to sweep unowned sealed profile blobs — needs list permission on the private bucket? (will retry next sweep)',
+        );
+      }
+    }
+
     return {
       purged,
       proxySecretsPurged,
@@ -556,6 +642,7 @@ export class AccountDeletionPurgeSweeperService {
       agentSessionsPurged,
       avatarsPurged,
       avatarOrphansReaped,
+      profileBlobOrphansReaped,
     };
   }
 }

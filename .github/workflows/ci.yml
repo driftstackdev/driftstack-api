@@ -7,8 +7,20 @@ on:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push supersedes a pull request's run, so that run is cancelled. On
+  # main it is not: production deploys only a commit whose own CI run went green
+  # (.github/workflows/deploy.yml), so a run cancelled on main is a commit that
+  # never deploys. When every run on main shared one cancelling group, a burst of
+  # pushes cancelled every run but the last: production stayed behind with no
+  # alert, and a red last run deployed nothing at all.
+  #
+  # Each run on main therefore gets a group of its own. Turning cancel-in-progress
+  # off is not enough by itself: a group also keeps at most ONE pending run, and a
+  # newer arrival cancels it, so a shared group would still lose the middle commit
+  # of any burst of three. Runs on main that finish out of order are safe: a deploy
+  # never moves an environment to an older commit (scripts/deploy-is-forward.mjs).
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('main-{0}', github.run_id) || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build-test:

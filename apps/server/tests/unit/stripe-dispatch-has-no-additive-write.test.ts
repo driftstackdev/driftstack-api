@@ -78,6 +78,10 @@ const DISPATCH_PATH_FILES = [
   // rather than argue about.
   'lib/report-unlinkable-invoice.ts',
   'db/subscription-status-sets.ts',
+  // Imported for a value: the one definition of a subscription that was not paid
+  // (owner decision of 2026-09-24), which chooses the prorate flag of a replaced
+  // subscription's cancel. Pure, and scanned all the same.
+  'services/subscription-payment-state.ts',
   // Reached from the subscription and paid-invoice handlers while AI credits are
   // switched on: each ends by refreshing the account's monthly credits. A grant
   // is an INSERT, which this line detector cannot see at all, so what makes it

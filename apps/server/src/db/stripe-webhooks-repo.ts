@@ -2,7 +2,21 @@
 // ledger + subscription mirror writes + account tier / trial-pack
 // mutations triggered by inbound Stripe events.
 
-import { and, asc, desc, eq, gt, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  lte,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { AccountTier } from '@driftstack/api-types';
 import {
   PAST_DUE_GRACE_DAYS,
@@ -150,6 +164,7 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
         status: subscriptions.status,
         createdAt: subscriptions.createdAt,
         pastDueSince: subscriptions.pastDueSince,
+        updatedAt: subscriptions.updatedAt,
       })
       .from(subscriptions)
       .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId))
@@ -519,14 +534,13 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
       // no entitlement rows this loop is a no-op and appliedTier === the Stripe
       // candidate (byte-identical to the prior behaviour). "Unexpired" is judged
       // when this runs, never at an earlier event time — see cryptoTermRunningAt.
+      // Security sweep #28 — and only a term that has STARTED counts (see
+      // cryptoTermHoldsThePlanAt): a stacked term runs after the one before it.
       const entRows = await tx
         .select({ tier: cryptoEntitlements.tier })
         .from(cryptoEntitlements)
         .where(
-          and(
-            eq(cryptoEntitlements.accountId, args.accountId),
-            gt(cryptoEntitlements.expiresAt, cryptoTermRunningAt(args.at)),
-          ),
+          and(eq(cryptoEntitlements.accountId, args.accountId), cryptoTermHoldsThePlanAt(args.at)),
         );
       let appliedTier = stripeCandidate;
       for (const r of entRows) {
@@ -586,15 +600,13 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
       // C1 — also rank in the account's UNEXPIRED crypto entitlements, so an
       // active/trialing upsert on a LOWER Stripe sub never wipes a higher
       // crypto-paid tier. No rows → the loop is a no-op (identical to before).
-      // "Unexpired" is judged when this runs — see cryptoTermRunningAt.
+      // "Unexpired" is judged when this runs — see cryptoTermRunningAt — and only
+      // a term that has started counts (security sweep #28).
       const entRows = await tx
         .select({ tier: cryptoEntitlements.tier })
         .from(cryptoEntitlements)
         .where(
-          and(
-            eq(cryptoEntitlements.accountId, args.accountId),
-            gt(cryptoEntitlements.expiresAt, cryptoTermRunningAt(args.at)),
-          ),
+          and(eq(cryptoEntitlements.accountId, args.accountId), cryptoTermHoldsThePlanAt(args.at)),
         );
       for (const r of entRows) {
         if (appliedTier === null || tierActivationRank(r.tier) > tierActivationRank(appliedTier)) {
@@ -713,27 +725,121 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
   async revokeCryptoEntitlementByOrderId(args: {
     orderId: string;
     at: Date;
-  }): Promise<{ revoked: boolean }> {
+    ifMissing?: { accountId: string; tier: AccountTier };
+  }): Promise<{ revoked: boolean; recordedEnded?: boolean }> {
     // C3 — refund/chargeback clawback: expire the still-valid entitlement this
     // order granted so the best-remaining reconcile no longer floors the tier on
     // it. Bring expires_at forward to `at` (the refund moment) ONLY when the row
     // is still unexpired (expires_at > at) — so a replayed refund IPN finds the
-    // row already expired, matches 0 rows, and returns revoked:false (idempotent,
-    // no second downgrade/emit). expired_processed_at is deliberately left NULL:
-    // the account tier is reconciled immediately by the activator, but leaving it
-    // unprocessed lets the 15-min expiry sweeper also pick the row up as a
-    // belt-and-braces backstop should the immediate reconcile have failed.
-    const result = await this.database.db
-      .update(cryptoEntitlements)
-      .set({ expiresAt: args.at, updatedAt: sql`now()` })
-      .where(
-        and(
-          eq(cryptoEntitlements.orderId, args.orderId),
-          gt(cryptoEntitlements.expiresAt, args.at),
-        ),
-      )
-      .returning({ id: cryptoEntitlements.id });
-    return { revoked: result.length > 0 };
+    // row already expired, matches nothing, and returns revoked:false (idempotent,
+    // no second downgrade/emit, and no second re-stack). expired_processed_at is
+    // deliberately left NULL: the account tier is reconciled immediately by the
+    // activator, but leaving it unprocessed lets the 15-min expiry sweeper also
+    // pick the row up as a belt-and-braces backstop should the immediate
+    // reconcile have failed.
+    //
+    // One transaction, holding the account row first — the lock order of
+    // activateCryptoEntitlement, which stacks a new term off the latest one — so
+    // a purchase landing during a refund stacks off the re-stacked chain.
+    return this.database.db.transaction(async (tx) => {
+      const owner = await tx
+        .select({ accountId: cryptoEntitlements.accountId })
+        .from(cryptoEntitlements)
+        .where(eq(cryptoEntitlements.orderId, args.orderId))
+        .limit(1);
+      const accountId = owner[0]?.accountId ?? args.ifMissing?.accountId ?? null;
+      if (accountId === null) return { revoked: false };
+      const account = await tx
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(eq(accounts.id, accountId))
+        .for('update')
+        .limit(1);
+      if (account[0] === undefined) return { revoked: false };
+
+      const found = await tx
+        .select({
+          id: cryptoEntitlements.id,
+          tier: cryptoEntitlements.tier,
+          startsAt: cryptoEntitlements.startsAt,
+          expiresAt: cryptoEntitlements.expiresAt,
+        })
+        .from(cryptoEntitlements)
+        .where(eq(cryptoEntitlements.orderId, args.orderId))
+        .for('update')
+        .limit(1);
+      const term = found[0];
+
+      if (term === undefined) {
+        // Security sweep #29 — the refund arrived before this order's entitlement
+        // existed (its activation failed or has not run). Record an entitlement
+        // that has already ended, so the paid-order reconciler (which picks paid
+        // orders with NO entitlement) and a late activation (idempotent on the
+        // order id) both find one and grant nothing. Marked processed: there is no
+        // expiry for the sweeper to act on.
+        if (args.ifMissing === undefined) return { revoked: false };
+        const recorded = await tx
+          .insert(cryptoEntitlements)
+          .values({
+            accountId,
+            orderId: args.orderId,
+            tier: args.ifMissing.tier,
+            startsAt: args.at,
+            expiresAt: args.at,
+            expiredProcessedAt: args.at,
+          })
+          .onConflictDoNothing({ target: cryptoEntitlements.orderId })
+          .returning({ id: cryptoEntitlements.id });
+        return { revoked: false, recordedEnded: recorded.length > 0 };
+      }
+      if (term.expiresAt.getTime() <= args.at.getTime()) return { revoked: false };
+
+      // Security sweep #28 — what the refunded term had left: from the refund (or
+      // its own start, when it had not started) to its end. Every later term of
+      // the same tier was stacked after it (it starts at or after the refunded
+      // term's end), so each moves back by exactly that, and one payment never
+      // buys more than one term. Each is SET to its new window, computed from the
+      // row read under the lock — never an in-place subtraction, so the same
+      // refund applied again lands on the same windows.
+      const unusedMs =
+        term.expiresAt.getTime() - Math.max(term.startsAt.getTime(), args.at.getTime());
+      const later = await tx
+        .select({
+          id: cryptoEntitlements.id,
+          startsAt: cryptoEntitlements.startsAt,
+          expiresAt: cryptoEntitlements.expiresAt,
+        })
+        .from(cryptoEntitlements)
+        .where(
+          and(
+            eq(cryptoEntitlements.accountId, accountId),
+            eq(cryptoEntitlements.tier, term.tier),
+            ne(cryptoEntitlements.id, term.id),
+            gte(cryptoEntitlements.startsAt, term.expiresAt),
+          ),
+        )
+        .orderBy(asc(cryptoEntitlements.startsAt), asc(cryptoEntitlements.id))
+        .for('update');
+      await tx
+        .update(cryptoEntitlements)
+        .set({
+          startsAt: new Date(Math.min(term.startsAt.getTime(), args.at.getTime())),
+          expiresAt: args.at,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(cryptoEntitlements.id, term.id));
+      for (const next of later) {
+        await tx
+          .update(cryptoEntitlements)
+          .set({
+            startsAt: new Date(next.startsAt.getTime() - unusedMs),
+            expiresAt: new Date(next.expiresAt.getTime() - unusedMs),
+            updatedAt: sql`now()`,
+          })
+          .where(eq(cryptoEntitlements.id, next.id));
+      }
+      return { revoked: true };
+    });
   }
 
   async listExpiredUnprocessedCryptoEntitlements(args: {
@@ -842,6 +948,22 @@ function pastDueGraceEndedBy(asOf: Date): SQL {
  */
 function cryptoTermRunningAt(at: Date): SQL {
   return sql`GREATEST(now(), ${at.toISOString()}::timestamptz)`;
+}
+
+/**
+ * The crypto terms that hold the account's plan when a recompute runs at `at`:
+ * started and not ended, both judged at cryptoTermRunningAt. Security sweep #28 —
+ * the start counts too. A same-tier repurchase is stacked to begin when the
+ * running term ends; counting it before then let it stand in for the term before
+ * it, so a refund of that earlier term took nothing away.
+ */
+function cryptoTermHoldsThePlanAt(at: Date): SQL {
+  return (
+    and(
+      lte(cryptoEntitlements.startsAt, cryptoTermRunningAt(at)),
+      gt(cryptoEntitlements.expiresAt, cryptoTermRunningAt(at)),
+    ) ?? sql`false`
+  );
 }
 
 /**

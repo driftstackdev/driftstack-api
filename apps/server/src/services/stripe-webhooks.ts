@@ -52,6 +52,7 @@ import {
 } from '../lib/stripe-billing-facts.js';
 import type { AccountLifecycleService } from './account-lifecycle.js';
 import type { AuthCache } from './auth-cache.js';
+import { subscriptionWasNotPaid } from './subscription-payment-state.js';
 import { refreshCreditsAfter, type CreditsRefresher } from './credit-grants.js';
 import {
   isCreditReversalAwaitingPayment,
@@ -368,11 +369,24 @@ export interface StripeWebhooksRepo {
    * up as a backstop. Returns `{ revoked }` (true iff a row was updated) so the
    * caller can gate the immediate best-remaining reconcile + emit on a real
    * revocation and no-op on a replay.
+   *
+   * Security sweep #28 — in the same transaction, every LATER same-tier term of
+   * the account (one stacked after the refunded one, so starting at or after its
+   * end) moves back by what the refunded term had left, so one payment never
+   * buys more than one term. The revoked row's window becomes
+   * [min(starts_at, at), at].
+   *
+   * Security sweep #29 — `ifMissing`: when the order has NO entitlement at all
+   * (its activation failed, or has not run yet), record an already-ended one for
+   * it, so neither the paid-order reconciler nor a late activation can grant a
+   * term for a refunded payment. `revoked` stays false: no access was taken away.
+   * Returns `recordedEnded: true` when it did that.
    */
   revokeCryptoEntitlementByOrderId(args: {
     orderId: string;
     at: Date;
-  }): Promise<{ revoked: boolean }>;
+    ifMissing?: { accountId: string; tier: AccountTier };
+  }): Promise<{ revoked: boolean; recordedEnded?: boolean }>;
   /**
    * C1 — sweeper read: entitlements past expiry that the sweeper hasn't yet
    * processed (expired_processed_at IS NULL). Ordered by expires_at, capped.
@@ -416,6 +430,12 @@ export interface StoredSubscription {
   createdAt: Date;
   /** When its current past_due spell began; null when it is not past_due (or it began before 0141). */
   pastDueSince: Date | null;
+  /**
+   * The event time of the update the row holds (the recency guard's `updated_at`).
+   * Security sweep #30: a row whose status and event time are an incoming event's
+   * own was written by an earlier delivery of that event.
+   */
+  updatedAt: Date;
 }
 
 export interface StripeWebhooksServiceConfig {
@@ -861,7 +881,17 @@ export class StripeWebhooksService {
     // touch the account tier (which would revert the customer to the stale
     // tier until the next in-order event). Ack as handled (idempotent, no
     // Stripe retry) but mutate nothing further.
+    //
+    // Security sweep #30 — except the recompute a stale move out of the plan still
+    // owes: see staleMoveOutOfThePlan. It takes the plan away (never grants one), so
+    // it cannot revert the customer to a stale tier.
     if (!applied) {
+      if (staleMoveOutOfThePlan(event, stored, accountId, status)) {
+        await this.recomputeAfterLeavingThePlan(event, accountId, at);
+        this.logEvent(event, `subscription ${status} (stale event — its owed recompute run)`);
+        await this.refreshCredits(accountId);
+        return 'handled';
+      }
       this.logEvent(event, `subscription ${status} (stale event — skipped)`);
       return 'handled';
     }
@@ -923,7 +953,34 @@ export class StripeWebhooksService {
           stripeEventId: event.id,
         });
       }
-    } else if (status === 'past_due' || status === 'unpaid' || status === 'paused') {
+    } else if (
+      status === 'past_due' ||
+      status === 'unpaid' ||
+      status === 'paused' ||
+      ((status === 'canceled' || status === 'incomplete_expired') &&
+        (storedHeldThePlan(stored) || redeliveredMoveOutOfThePlan(event, stored, status, at)))
+    ) {
+      // Security sweep #30 — `canceled` and `incomplete_expired` are terminal: an
+      // update that lands in one recomputes the tier here, exactly as
+      // handleSubscriptionDeleted does. The downgrade used to live only in the
+      // `deleted` handler, and a `deleted` whose delivery failed was skipped as
+      // stale once Stripe had sent a later `updated` for the same cancelled
+      // subscription (a metadata or cancellation_details edit), so nothing ever
+      // took the plan away.
+      //
+      // Both recompute only when the stored row still held the plan, so only the
+      // update that moves a subscription out of a paying status takes anything
+      // away. A later edit to a subscription already cancelled grants nothing and
+      // takes nothing: a recompute there would rewrite a plan staff set after the
+      // cancellation (with no subscription or crypto term paying for it) to free.
+      // Stripe moves a subscription to `incomplete_expired` from `incomplete`,
+      // when its first payment never succeeded, so that status held nothing.
+      //
+      // The stored row is read before this event's upsert, so a REDELIVERY of the
+      // update that did take the plan away (its first delivery upserted the row and
+      // then failed on a transient error, before or in the recompute) reads its own
+      // write, already terminal. It recomputes too: see redeliveredMoveOutOfThePlan.
+      //
       // C7 — `paused` (a trial that ended with no payment method attached,
       // trial_settings end_behavior='pause') is downgraded alongside the
       // dunning states: the customer has never paid and Stripe will never
@@ -956,28 +1013,13 @@ export class StripeWebhooksService {
       // grace is over, a later event lands here and takes it away, and the
       // past-due sweep does so when no event comes. `unpaid` and `paused` still
       // downgrade at once, as `deleted` does.
-      const downgradeTier = this.config.cancelDowngradeTier ?? 'free';
+      //
       // Recompute from the account's remaining active subscriptions (and a
       // past_due one inside its grace) — a past_due on a SUPERSEDED
       // subscription must not downgrade an account that still holds another
       // active subscription (an account can hold multiple subscription rows;
       // re-checkout is allowed while past_due).
-      const { previousTier, appliedTier } = await this.repo.downgradeAccountTierToBestRemaining({
-        accountId,
-        fallbackTier: downgradeTier,
-        at,
-      });
-      if (previousTier !== appliedTier) await this.invalidateAuthCache(accountId);
-      if (this.accountLifecycle !== null && previousTier !== appliedTier) {
-        await this.accountLifecycle.emit(accountId, {
-          kind: 'subscription.tier_changed',
-          fromTier: previousTier,
-          toTier: appliedTier,
-          effectiveAt: at,
-          stripeEventType: event.type,
-          stripeEventId: event.id,
-        });
-      }
+      await this.recomputeAfterLeavingThePlan(event, accountId, at);
     }
 
     this.logEvent(event, `subscription ${status}`);
@@ -1028,16 +1070,47 @@ export class StripeWebhooksService {
     // Stale cancel (a newer event already moved the row past this one) —
     // skip the downgrade so the customer keeps the tier the latest event
     // granted. Ack handled; mutate nothing further.
+    //
+    // Security sweep #30 — unless the row the newer event left is itself
+    // cancelled. A cancelled subscription never comes back, so this deletion
+    // cannot revert a tier any later event granted, and reaching here means the
+    // ledger never recorded it: its first delivery failed before or in the
+    // recompute (a deadlock, say) and a later edit of the cancelled
+    // subscription was processed before Stripe's retry. The recompute is owed.
     if (!applied) {
+      const stored = await this.repo.findSubscription(stripeSubscriptionId);
+      if (stored !== null && stored.accountId === accountId && stored.status === 'canceled') {
+        await this.recomputeAfterLeavingThePlan(event, accountId, at);
+        this.logEvent(event, 'subscription canceled (stale event — its owed recompute run)');
+        return 'handled';
+      }
       this.logEvent(event, 'subscription canceled (stale event — skipped)');
       return 'handled';
     }
-    const downgradeTier = this.config.cancelDowngradeTier ?? 'free';
     // Recompute from the account's remaining active subscriptions — a cancel of
     // a SUPERSEDED subscription must not downgrade an account that still holds
     // another active subscription (the recency guard above is per-subscription-
     // row, not per-account, so it doesn't catch a stale sub's cancel landing
     // after a newer sub is active).
+    await this.recomputeAfterLeavingThePlan(event, accountId, at);
+
+    this.logEvent(event, 'subscription canceled');
+    return 'handled';
+  }
+
+  /**
+   * Recompute the account's plan after one of its subscriptions left a status that
+   * held it (cancelled, expired, dunning, paused): the best it still holds — another
+   * active subscription, a past_due one inside its grace, a crypto term — or
+   * `cancelDowngradeTier` (free) when none. Invalidates the cached account and
+   * dispatches `subscription.tier_changed` on a real change only.
+   */
+  private async recomputeAfterLeavingThePlan(
+    event: StripeEvent,
+    accountId: string,
+    at: Date,
+  ): Promise<void> {
+    const downgradeTier = this.config.cancelDowngradeTier ?? 'free';
     const { previousTier, appliedTier } = await this.repo.downgradeAccountTierToBestRemaining({
       accountId,
       fallbackTier: downgradeTier,
@@ -1055,9 +1128,6 @@ export class StripeWebhooksService {
         stripeEventId: event.id,
       });
     }
-
-    this.logEvent(event, 'subscription canceled');
-    return 'handled';
   }
 
   /**
@@ -1599,7 +1669,9 @@ export class StripeWebhooksService {
           notCancelled.push(s.stripeSubscriptionId);
           continue;
         }
-        const unpaid = s.status === 'past_due';
+        // Owner decision of 2026-09-24 — the one definition of "not paid", on the
+        // status the mirror holds (a past_due subscription, here).
+        const unpaid = subscriptionWasNotPaid({ status: s.status });
         try {
           await canceller.cancelSubscriptionNow({
             subscriptionId: s.stripeSubscriptionId,
@@ -2099,6 +2171,84 @@ const STATUS_VALUES = [
   'paused',
 ] as const;
 type LocalStatus = (typeof STATUS_VALUES)[number];
+
+/**
+ * Security sweep #30 — the stored mirror row was in a status that grants its plan
+ * (see the active/trialing branch and the past_due grace in the recompute).
+ */
+function storedHeldThePlan(stored: { status: string } | null): boolean {
+  return (
+    stored !== null &&
+    (stored.status === 'active' || stored.status === 'trialing' || stored.status === 'past_due')
+  );
+}
+
+/**
+ * Security sweep #30 — this event is a REDELIVERY of the update that moved the
+ * subscription out of a status that held the plan, so its recompute is still owed.
+ *
+ * The stored row is this update's own earlier write when it carries the update's
+ * status and event time: the first delivery upserted it and then failed on a
+ * transient error, so no processed-event row was written and Stripe sent it again.
+ * That alone is not enough, because an edit to an already-cancelled subscription
+ * (metadata, cancellation_details) is redelivered the same way; Stripe's
+ * `previous_attributes` tells the two apart. It names `status` only when this
+ * update changed it, so an edit that did not change it recomputes nothing. When
+ * the event carries no `previous_attributes`, the move is taken as this update's.
+ * A later, different edit has a later event time and never matches.
+ */
+function redeliveredMoveOutOfThePlan(
+  event: StripeEvent,
+  stored: StoredSubscription | null,
+  status: string,
+  at: Date,
+): boolean {
+  if (stored === null || stored.status !== status) return false;
+  if (stored.updatedAt.getTime() !== at.getTime()) return false;
+  return movedOutOfAPlanHoldingStatus(event) ?? true;
+}
+
+/**
+ * Security sweep #30 — this STALE update (older than the stored row, so the recency
+ * guard wrote nothing) is the one that moved the subscription out of a status that
+ * held the plan into the terminal status the row still holds, so its recompute is
+ * still owed. Reaching the handler means the ledger never recorded it: its first
+ * delivery failed before or in the recompute, and a later edit of the cancelled
+ * subscription (metadata, cancellation_details) was processed before Stripe's retry.
+ * That later edit, finding the row already terminal, rightly recomputed nothing.
+ *
+ * A terminal subscription never comes back, so the recompute cannot undo a plan a
+ * later event of this subscription granted. It needs Stripe's own word that this
+ * update changed the status (`previous_attributes.status`): a stale edit that did not
+ * change it, or one that does not say, recomputes nothing.
+ */
+function staleMoveOutOfThePlan(
+  event: StripeEvent,
+  stored: StoredSubscription | null,
+  accountId: string,
+  status: string,
+): boolean {
+  if (status !== 'canceled' && status !== 'incomplete_expired') return false;
+  if (stored === null || stored.accountId !== accountId || stored.status !== status) return false;
+  return movedOutOfAPlanHoldingStatus(event) === true;
+}
+
+/**
+ * Whether this update moved the subscription out of a status that held the plan, by
+ * Stripe's `data.previous_attributes` (sent on `*.updated` events: the fields the
+ * update changed, with their values before it; the parsed shape leaves it open). It
+ * names `status` only when the update changed it. Undefined when the event carries
+ * no `previous_attributes`.
+ */
+function movedOutOfAPlanHoldingStatus(event: StripeEvent): boolean | undefined {
+  const previous: unknown = (event.data as { previous_attributes?: unknown }).previous_attributes;
+  if (previous === undefined || previous === null || typeof previous !== 'object') {
+    return undefined;
+  }
+  if (!('status' in previous)) return false;
+  const before: unknown = (previous as { status?: unknown }).status;
+  return typeof before === 'string' && storedHeldThePlan({ status: before });
+}
 
 function stripeStatusToLocal(s: string): LocalStatus {
   return (STATUS_VALUES as readonly string[]).includes(s) ? (s as LocalStatus) : 'incomplete';

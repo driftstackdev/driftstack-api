@@ -104,9 +104,11 @@ export interface BillingCollectionPauser {
   pauseCollectionForAccount(accountId: string): Promise<'paused' | 'no_subscription'>;
   resumeCollectionForAccount(accountId: string): Promise<'resumed' | 'no_subscription'>;
   /**
-   * Live-billing audit #1 — cancel every subscription still collecting, at once and
-   * prorated, for an account being TERMINATED. Resolves with the Stripe subscription ids
-   * cancelled (empty when nothing was collecting); rejects when any was not, carrying
+   * Live-billing audit #1 — cancel every subscription still collecting, at once, for an
+   * account being TERMINATED: a paid one prorated, one that was not paid without
+   * proration (owner decision of 2026-09-24; subscription-payment-state.ts). Resolves with the Stripe
+   * subscription ids cancelled (empty when nothing was collecting) and, when the pauser
+   * knows it, the subset cancelled without proration; rejects when any was not, carrying
    * `done` / `failed` id lists when it knows them (BillingService's
    * SubscriptionCollectionError).
    *
@@ -114,7 +116,12 @@ export interface BillingCollectionPauser {
    * it makes every termination record `billing_cancel` as failed and alert staff — a
    * subscription that may still be charging is never skipped in silence.
    */
-  cancelCollectionForAccount?(accountId: string): Promise<{ cancelled: string[] }>;
+  cancelCollectionForAccount?(accountId: string): Promise<{
+    cancelled: string[];
+    cancelledWithoutProration?: string[];
+    /** Ids whose payment state could not be read, so their stored status decided. */
+    paymentStateUnread?: string[];
+  }>;
   /**
    * Live-billing audit #6 — what the account is still paying for. When present, an admin
    * tier change is refused while a Stripe subscription is collecting or a crypto term has
@@ -482,8 +489,13 @@ export class AccountsAdminService {
   }
 
   /**
-   * Cancel every subscription still collecting, at once and prorated — the unused part of
-   * the period becomes a credit on the Stripe customer; nothing is refunded automatically.
+   * Cancel every subscription still collecting, at once. A paid one is prorated — the
+   * unused part of the period becomes a credit on the Stripe customer; one that was not
+   * paid is not (owner decision of 2026-09-24: past due or unpaid, its latest invoice
+   * not paid, or collection paused without billing and no paid invoice for the period —
+   * nothing is credited and no final invoice is raised). A subscription paid for its
+   * current period is prorated even when the account was suspended part-way through it.
+   * Nothing is refunded automatically.
    * Records what happened in the audit payload, logs it WITH the account, and alerts staff
    * WITHOUT it: a cancellation so they can refund under the Terms (14.5) if one is owed, a
    * failure so they cancel by hand. A failure is rethrown for `reclaim` to record as
@@ -495,19 +507,31 @@ export class AccountsAdminService {
     auditRecord: Record<string, unknown> | undefined,
   ): Promise<void> {
     let cancelled: string[];
+    let cancelledWithoutProration: string[];
+    let paymentStateUnread: string[];
     try {
       if (billing.cancelCollectionForAccount === undefined) {
         throw new Error(
           'no subscription canceller is wired, so a subscription of this terminated account may still be charging',
         );
       }
-      ({ cancelled } = await billing.cancelCollectionForAccount(accountId));
+      const outcome = await billing.cancelCollectionForAccount(accountId);
+      cancelled = outcome.cancelled;
+      cancelledWithoutProration = outcome.cancelledWithoutProration ?? [];
+      paymentStateUnread = outcome.paymentStateUnread ?? [];
     } catch (err) {
       const done = idsOf(err, 'done');
       const failed = idsOf(err, 'failed');
+      const doneWithoutProration = idsOf(err, 'doneWithoutProration');
+      const unread = idsOf(err, 'paymentStateUnread');
       if (auditRecord !== undefined) {
         auditRecord.stripe_subscriptions_cancelled = done;
         auditRecord.stripe_subscriptions_not_cancelled = failed.length > 0 ? failed : 'unknown';
+        // The no-credit record survives a partial failure too (decision of 2026-09-24).
+        if (doneWithoutProration.length > 0) {
+          auditRecord.stripe_subscriptions_cancelled_without_proration = doneWithoutProration;
+        }
+        if (unread.length > 0) auditRecord.stripe_subscriptions_payment_state_unread = unread;
       }
       this.alert({
         message:
@@ -521,8 +545,18 @@ export class AccountsAdminService {
       });
       throw err;
     }
-    if (auditRecord !== undefined) auditRecord.stripe_subscriptions_cancelled = cancelled;
+    if (auditRecord !== undefined) {
+      auditRecord.stripe_subscriptions_cancelled = cancelled;
+      if (cancelledWithoutProration.length > 0) {
+        auditRecord.stripe_subscriptions_cancelled_without_proration = cancelledWithoutProration;
+      }
+      // Whether these were paid was decided from the stored status: Stripe could not be read.
+      if (paymentStateUnread.length > 0) {
+        auditRecord.stripe_subscriptions_payment_state_unread = paymentStateUnread;
+      }
+    }
     if (cancelled.length === 0) return;
+    const allUnpaid = cancelledWithoutProration.length === cancelled.length;
     try {
       this.logger?.warn?.(
         {
@@ -530,22 +564,41 @@ export class AccountsAdminService {
           event: 'terminated_account_subscription_cancelled',
           account_id: accountId,
           stripe_subscription_ids: cancelled,
+          cancelled_without_proration: cancelledWithoutProration,
+          payment_state_unread: paymentStateUnread,
         },
-        'terminated account: Stripe subscription(s) cancelled at once, the unused period credited to the Stripe customer — check whether a refund is owed (Terms 14.5)',
+        allUnpaid
+          ? 'terminated account: unpaid Stripe subscription(s) cancelled at once, without proration — no credit given for the unpaid period'
+          : 'terminated account: Stripe subscription(s) cancelled at once, the unused paid period credited to the Stripe customer (an unpaid one without proration) — check whether a refund is owed (Terms 14.5)',
       );
     } catch {
       // Logging is best-effort and must not fail the admin action.
     }
+    const unreadNote =
+      paymentStateUnread.length > 0
+        ? ' Stripe could not be read in full for some of them, so whether they were paid was decided ' +
+          'from their stored status or from the part that could be read; check those in Stripe.'
+        : '';
     this.alert({
       message:
-        "A terminated account's Stripe subscription was cancelled at once, and the unused part of its " +
-        'period was credited to the Stripe customer. Nothing was refunded: check whether a refund is owed ' +
-        'under the Terms (14.5). The account is named in the server log ' +
-        '(terminated_account_subscription_cancelled).',
+        (allUnpaid
+          ? "A terminated account's unpaid Stripe subscription (past due, unpaid, with its latest invoice " +
+            'not paid, or paused without billing and not paid for the period) was cancelled at once, without ' +
+            'proration, so no credit was given for its unpaid period and any open or draft invoice was left ' +
+            'as it was. Decide in Stripe whether that invoice should be voided. The account is named in the server log ' +
+            '(terminated_account_subscription_cancelled).'
+          : "A terminated account's Stripe subscription was cancelled at once, and the unused part of its " +
+            'paid period was credited to the Stripe customer (an unpaid one, if any, without proration). ' +
+            'Nothing was refunded: check whether a refund is owed under the Terms (14.5). The account is ' +
+            'named in the server log (terminated_account_subscription_cancelled).') + unreadNote,
       level: 'warning',
       fingerprint: ['billing', 'terminated_account_subscription_cancelled'],
       tags: { kind: 'terminated_account_subscription_cancelled' },
-      extra: { cancelled: cancelled.length },
+      extra: {
+        cancelled: cancelled.length,
+        cancelled_without_proration: cancelledWithoutProration.length,
+        payment_state_unread: paymentStateUnread.length,
+      },
     });
   }
 
@@ -570,7 +623,10 @@ export class AccountsAdminService {
 }
 
 /** The subscription ids a SubscriptionCollectionError says were (not) reached; [] otherwise. */
-function idsOf(err: unknown, which: 'done' | 'failed'): string[] {
+function idsOf(
+  err: unknown,
+  which: 'done' | 'failed' | 'doneWithoutProration' | 'paymentStateUnread',
+): string[] {
   if (typeof err !== 'object' || err === null) return [];
   const ids = (err as Record<string, unknown>)[which];
   return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [];

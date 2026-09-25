@@ -403,7 +403,19 @@ describe('migration 0132 changes exactly three guards, and pins each one', () =>
     expect(journal.entries[at + 10]?.when).toBeGreaterThan(
       journal.entries[at + 9]?.when ?? Infinity,
     );
-    expect(journal.entries, 'and 0142 is the last one').toHaveLength(143);
+    // 0143 (a session that did not start from its profile's stored state may not
+    // save the profile back) follows 0142; its own guard pins its shape.
+    expect(journal.entries[at + 11]?.tag).toBe('0143_agent_session_profile_save_back_refused');
+    expect(journal.entries[at + 11]?.when).toBeGreaterThan(
+      journal.entries[at + 10]?.when ?? Infinity,
+    );
+    // 0144 (security sweep #18 residual — a crypto order records the claim to
+    // create its payment) follows 0143; its own guard pins its shape.
+    expect(journal.entries[at + 12]?.tag).toBe('0144_crypto_order_payment_mint_claim');
+    expect(journal.entries[at + 12]?.when).toBeGreaterThan(
+      journal.entries[at + 11]?.when ?? Infinity,
+    );
+    expect(journal.entries, 'and 0144 is the last one').toHaveLength(145);
   });
 
   it('CRITICAL schema.ts mirrors the CHECK and the index this migration adds, by name, and its prose names the trigger it installs and the guard it relaxes', () => {

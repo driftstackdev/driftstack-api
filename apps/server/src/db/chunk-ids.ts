@@ -17,8 +17,9 @@
 //   subscriber purge    the V-295c3 90-day erasure of the email column on
 //                       unsubscribed rows — a privacy commitment that simply
 //                       stops being kept.
-//   orphan blob reaper  wrapped so it NEVER throws, so it would log and continue
-//                       having done nothing, forever.
+//   orphan blob reaper  the daily purge's profile_blob_orphans arm: its pass
+//                       would fail every day and reclaim nothing, while the
+//                       orphans it exists to remove kept accruing.
 //
 // In all three the sweep is what bounds the table, so the failure grows the very
 // backlog that triggers it.

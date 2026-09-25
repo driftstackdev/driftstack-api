@@ -14,18 +14,141 @@
 // claim flow). The CryptoOrder envelope uses string|null; we pass
 // through unchanged.
 
-import { and, asc, desc, eq, lte, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, lte, sql, sum } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { cryptoOrders } from './schema.js';
-import type {
-  CryptoOrder,
-  CryptoOrderEvent,
-  CryptoOrdersRepo,
-  CryptoOrderWebhookEvent,
+import {
+  UNPAID_CRYPTO_ORDER_STATUSES,
+  type CryptoOrder,
+  type CryptoOrderEvent,
+  type CryptoOrderLimits,
+  type CryptoOrderRefusal,
+  type CryptoOrdersRepo,
+  type CryptoOrderWebhookEvent,
+  type PaymentMintClaim,
+  type PaymentMintClaimTerms,
 } from '../services/crypto-orders.js';
 import { enqueueWebhookEventInTransaction } from './webhooks-repo.js';
 
 type Row = typeof cryptoOrders.$inferSelect;
+
+/** The columns an order row is written with (`upsert` and the capped inserts below). */
+function orderRowValues(order: CryptoOrder): {
+  orderId: string;
+  accountId: string | null;
+  product: string;
+  priceCents: number;
+  priceCurrency: string;
+  paymentId: string | null;
+  payAmount: number | null;
+  payCurrency: string | null;
+  status: CryptoOrder['status'];
+  customerNote: string | null;
+  internalNote: string | null;
+  events: CryptoOrderEvent[];
+  createdAt: Date;
+  updatedAt: Date;
+} {
+  return {
+    orderId: order.order_id,
+    accountId: order.account_id,
+    product: order.product,
+    priceCents: order.price_cents,
+    priceCurrency: order.price_currency,
+    paymentId: order.payment_id,
+    payAmount: order.pay_amount,
+    payCurrency: order.pay_currency,
+    status: order.status,
+    customerNote: order.customer_note,
+    internalNote: order.internal_note,
+    events: order.events,
+    createdAt: new Date(order.created_at),
+    updatedAt: new Date(order.updated_at),
+  };
+}
+
+/** What `upsert` rewrites when the order row already exists. */
+function orderUpsertSet(
+  values: ReturnType<typeof orderRowValues>,
+): Partial<ReturnType<typeof orderRowValues>> {
+  return {
+    accountId: values.accountId,
+    paymentId: values.paymentId,
+    payAmount: values.payAmount,
+    payCurrency: values.payCurrency,
+    status: values.status,
+    customerNote: values.customerNote,
+    internalNote: values.internalNote,
+    events: values.events,
+    updatedAt: values.updatedAt,
+  };
+}
+
+/**
+ * Security sweep #18 — the per-account transaction lock the open-order limit and the
+ * daily budget are counted and written under. Different accounts hash to different
+ * keys, so one account's checkouts never wait on another's.
+ */
+function openOrderLockKey(accountId: string): string {
+  return `crypto-order-open:${accountId}`;
+}
+
+type Tx = Parameters<Parameters<Database['db']['transaction']>[0]>[0];
+
+/**
+ * Security sweep #18 (residual) — the payments minted for the account's unpaid orders
+ * whose latest mint claim is at or after `since`, read under the account's lock. An
+ * order claimed again later is counted whole while its latest claim is in the window,
+ * which can only over-count.
+ */
+async function mintsSinceUnder(tx: Tx, accountId: string, since: number): Promise<number> {
+  const [minted] = await tx
+    .select({ n: sum(cryptoOrders.paymentMints) })
+    .from(cryptoOrders)
+    .where(
+      and(
+        eq(cryptoOrders.accountId, accountId),
+        inArray(cryptoOrders.status, [...UNPAID_CRYPTO_ORDER_STATUSES]),
+        gte(cryptoOrders.paymentMintClaimedAt, new Date(since)),
+      ),
+    );
+  return Number(minted?.n ?? 0);
+}
+
+/**
+ * Security sweep #18 — which of the account's limits a NEW order would break, read
+ * under the account's lock: the daily budget first (unpaid orders created since
+ * `startedSince` — when it is spent, cancelling an open order does not help, since a
+ * cancelled order keeps counting; paying one does, since a paid order never counts),
+ * and the daily mint budget with it (a new order could not be minted once that is
+ * spent), then the open-order limit. Null when the order may be written.
+ */
+async function refusalUnder(
+  tx: Tx,
+  accountId: string,
+  limits: CryptoOrderLimits,
+): Promise<CryptoOrderRefusal | null> {
+  const [started] = await tx
+    .select({ n: count() })
+    .from(cryptoOrders)
+    .where(
+      and(
+        eq(cryptoOrders.accountId, accountId),
+        inArray(cryptoOrders.status, [...UNPAID_CRYPTO_ORDER_STATUSES]),
+        gte(cryptoOrders.createdAt, new Date(limits.startedSince)),
+      ),
+    );
+  if ((started?.n ?? 0) >= limits.startedPerDay) return 'daily_budget';
+  if ((await mintsSinceUnder(tx, accountId, limits.startedSince)) >= limits.mintsPerDay) {
+    return 'mint_budget';
+  }
+  const [pending] = await tx
+    .select({ n: count() })
+    .from(cryptoOrders)
+    .where(and(eq(cryptoOrders.accountId, accountId), eq(cryptoOrders.status, 'pending')));
+  if ((pending?.n ?? 0) >= limits.open) return 'open_limit';
+  return null;
+}
 
 function rowToEnvelope(row: Row): CryptoOrder {
   return {
@@ -58,39 +181,11 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
   constructor(private readonly database: Database) {}
 
   async upsert(order: CryptoOrder): Promise<void> {
-    const values = {
-      orderId: order.order_id,
-      accountId: order.account_id,
-      product: order.product,
-      priceCents: order.price_cents,
-      priceCurrency: order.price_currency,
-      paymentId: order.payment_id,
-      payAmount: order.pay_amount,
-      payCurrency: order.pay_currency,
-      status: order.status,
-      customerNote: order.customer_note,
-      internalNote: order.internal_note,
-      events: order.events,
-      createdAt: new Date(order.created_at),
-      updatedAt: new Date(order.updated_at),
-    };
+    const values = orderRowValues(order);
     await this.database.db
       .insert(cryptoOrders)
       .values(values)
-      .onConflictDoUpdate({
-        target: cryptoOrders.orderId,
-        set: {
-          accountId: values.accountId,
-          paymentId: values.paymentId,
-          payAmount: values.payAmount,
-          payCurrency: values.payCurrency,
-          status: values.status,
-          customerNote: values.customerNote,
-          internalNote: values.internalNote,
-          events: values.events,
-          updatedAt: values.updatedAt,
-        },
-      });
+      .onConflictDoUpdate({ target: cryptoOrders.orderId, set: orderUpsertSet(values) });
   }
 
   async getById(orderId: string): Promise<CryptoOrder | null> {
@@ -342,5 +437,160 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
       .orderBy(asc(cryptoOrders.createdAt))
       .limit(opts.limit);
     return rows.map(rowToEnvelope);
+  }
+
+  /**
+   * Security sweep #18 — `upsert` a new pending order only while its account is under
+   * both limits (see `refusalUnder`). The counts and the write run in one transaction
+   * under a per-account advisory lock (the pattern of
+   * AccountProxiesRepo.createIfUnderLimit): a count read on its own, then a write,
+   * let thirty checkouts sent at once all pass a count of zero. Under READ
+   * COMMITTED each statement sees what the previous lock holder committed.
+   */
+  async insertPendingUnderOrderLimits(
+    order: CryptoOrder,
+    limits: CryptoOrderLimits,
+  ): Promise<'written' | CryptoOrderRefusal> {
+    const accountId = order.account_id;
+    if (accountId === null) {
+      await this.upsert(order);
+      return 'written';
+    }
+    return this.database.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${openOrderLockKey(accountId)}))`);
+      const refusal = await refusalUnder(tx, accountId, limits);
+      if (refusal !== null) return refusal;
+      const values = orderRowValues(order);
+      await tx
+        .insert(cryptoOrders)
+        .values(values)
+        .onConflictDoUpdate({ target: cryptoOrders.orderId, set: orderUpsertSet(values) });
+      return 'written' as const;
+    });
+  }
+
+  /**
+   * Security sweep #18 — `insertWithIdempotencyKey` under the same per-account lock
+   * and limits. Under the lock, a key already stored is replayed with its recorded
+   * fingerprint and never refused; otherwise the counts decide, and a new key over a
+   * limit returns `{ refused }` having written nothing — no row, so no stored key.
+   * Every key of an account is written under that account's lock, so the ON CONFLICT
+   * arm below is only a backstop.
+   */
+  async insertWithIdempotencyKeyUnderOrderLimits(
+    order: CryptoOrder,
+    scopedIdempotencyKey: string,
+    bodyFingerprint: string,
+    limits: CryptoOrderLimits,
+  ): Promise<
+    | { order: CryptoOrder; replayed: boolean; storedFingerprint: string | null }
+    | { refused: CryptoOrderRefusal }
+  > {
+    const accountId = order.account_id;
+    if (accountId === null) {
+      return this.insertWithIdempotencyKey(order, scopedIdempotencyKey, bodyFingerprint);
+    }
+    return this.database.db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${openOrderLockKey(accountId)}))`);
+      const storedForKey = async (): Promise<Row | undefined> =>
+        (
+          await tx
+            .select()
+            .from(cryptoOrders)
+            .where(eq(cryptoOrders.idempotencyKey, scopedIdempotencyKey))
+            .limit(1)
+        )[0];
+      const replay = (
+        row: Row,
+      ): { order: CryptoOrder; replayed: true; storedFingerprint: string | null } => ({
+        order: rowToEnvelope(row),
+        replayed: true,
+        storedFingerprint: row.idempotencyBodyFingerprint,
+      });
+      const stored = await storedForKey();
+      if (stored !== undefined) return replay(stored);
+      const refusal = await refusalUnder(tx, accountId, limits);
+      if (refusal !== null) return { refused: refusal };
+      const [inserted] = await tx
+        .insert(cryptoOrders)
+        .values({
+          ...orderRowValues(order),
+          idempotencyKey: scopedIdempotencyKey,
+          idempotencyBodyFingerprint: bodyFingerprint,
+        })
+        // The partial unique index needs the same predicate on the arbiter (C6,
+        // see insertWithIdempotencyKey).
+        .onConflictDoNothing({
+          target: cryptoOrders.idempotencyKey,
+          where: sql`${cryptoOrders.idempotencyKey} IS NOT NULL`,
+        })
+        .returning();
+      if (inserted !== undefined) {
+        return { order: rowToEnvelope(inserted), replayed: false, storedFingerprint: null };
+      }
+      const winner = await storedForKey();
+      if (winner !== undefined) return replay(winner);
+      throw new Error('crypto order insert conflicted on its idempotency key, and no row holds it');
+    });
+  }
+
+  /**
+   * Security sweep #18 (residual) — claim the right to mint the order's payment (see
+   * `CryptoOrdersRepo.claimPaymentMint`). One transaction: the account's advisory lock
+   * first (the lock new orders are admitted under, so the mint budget is counted and
+   * spent one claim at a time across servers), then the order's row lock, the lock
+   * `withOrderLock` takes, so the claim is decided against the same committed row a
+   * concurrent bind, cancel or IPN writes. Nothing takes these two locks in the other
+   * order. An order's account never changes (V-1649), so reading it before the locks
+   * is safe.
+   */
+  async claimPaymentMint(
+    orderId: string,
+    terms: PaymentMintClaimTerms,
+  ): Promise<PaymentMintClaim | null> {
+    return this.database.db.transaction(async (tx) => {
+      const [owner] = await tx
+        .select({ accountId: cryptoOrders.accountId })
+        .from(cryptoOrders)
+        .where(eq(cryptoOrders.orderId, orderId))
+        .limit(1);
+      if (owner === undefined) return null;
+      const accountId = owner.accountId;
+      if (accountId !== null) {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext(${openOrderLockKey(accountId)}))`,
+        );
+      }
+      const [row] = await tx
+        .select()
+        .from(cryptoOrders)
+        .where(eq(cryptoOrders.orderId, orderId))
+        .for('update')
+        .limit(1);
+      if (row === undefined) return null;
+      const order = rowToEnvelope(row);
+      if (order.payment_id !== null) return { kind: 'bound', order };
+      if (order.status !== 'pending') return { kind: 'not_pending', order };
+      if (
+        row.paymentMintClaimedAt !== null &&
+        row.paymentMintClaimedAt.getTime() >= terms.staleBefore
+      ) {
+        return { kind: 'in_progress', order };
+      }
+      if (
+        accountId !== null &&
+        (await mintsSinceUnder(tx, accountId, terms.mintsSince)) >= terms.mintsPerDay
+      ) {
+        return { kind: 'mint_budget', order };
+      }
+      await tx
+        .update(cryptoOrders)
+        .set({
+          paymentMintClaimedAt: new Date(terms.now),
+          paymentMints: sql`${cryptoOrders.paymentMints} + 1`,
+        })
+        .where(eq(cryptoOrders.orderId, orderId));
+      return { kind: 'claimed', order };
+    });
   }
 }

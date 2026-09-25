@@ -45,10 +45,11 @@
 // scrypt logN / sha256 cache keying / "control plane") left the page;
 // the parameter-level versions live on /trust/security-overview.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -214,8 +215,8 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
   // plain image build + `docker compose pull`). Locking the string
   // gave the false claim a "verified" feel — the pin now locks the
   // controls that actually exist: lockfile-pinned installs
-  // (package-lock.json + `npm ci` in ci.yml), staging-first + manual
-  // prod approval (deploy.yml), V-549.A pre-deploy smoke + V-549.B
+  // (package-lock.json + `npm ci` in ci.yml), staging-first + CI-gated
+  // production (deploy.yml), V-549.A pre-deploy smoke + V-549.B
   // post-deploy health-check with automatic rollback
   // (server-deploy.yml), and the public /version git-SHA endpoint
   // (apps/server/src/lib/app.ts V-195).
@@ -223,7 +224,7 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
     // 2026-09-15 plain-language pass: the framework roll-call, the
     // Dependabot name and the lockfile/CI/staging vocabulary left the
     // page; the controls themselves (stable stack, scanned + tested
-    // updates, patch-only auto-merge, test copy + explicit approval,
+    // updates, patch-only auto-merge, test copy + a passing test suite,
     // auto-rollback, public /version) are pinned in customer words.
     expect(body).toMatch(
       /We run on a small, stable set of well-known components\s+\(Node\.js, TypeScript, Postgres, Redis\) that rarely changes\./,
@@ -235,9 +236,20 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
       /Nothing\s+is accepted unless the full automated test suite passes; only\s+small bug-fix updates go in automatically, and anything\s+bigger waits for human review\./,
     );
     expect(body).toMatch(/Every software component is fixed to an exact version\./);
+    // 2026-09-25: no release waits for anyone's approval — the API server's
+    // production deploys only after CI passes on the same commit and staging
+    // took that commit (.github/workflows/deploy.yml). "Being explicitly
+    // approved" described a gate that never existed, so it is refused here,
+    // heading included. The claim names the API server because only its deploy
+    // waits for CI (the arm below proves it from the workflows).
     expect(body).toMatch(
-      /release reaches production only after running on a test copy\s+first and being explicitly approved\./,
+      /A\s+release of our API server reaches production only after the\s+full automated test suite passes on it and it has run on a\s+test copy first\./,
     );
+    expect(body).toMatch(/>API releases are tested and reversible</);
+    expect(body).not.toMatch(/A\s+release reaches production only after/);
+    expect(body).not.toMatch(/>Releases are tested/);
+    expect(body).not.toMatch(/explicitly approved/i);
+    expect(body).not.toMatch(/Releases are tested, approved/i);
     expect(body).toMatch(/automatically rolled back if\s+that check fails/);
     expect(body).toMatch(
       /anyone can see exactly which version\s+is running at <code class="font-mono">api\.driftstack\.dev\/version<\/code>/,
@@ -248,6 +260,44 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
     expect(body).not.toMatch(/CycloneDX format/);
     expect(body).not.toMatch(/SBOM, in the standard/);
     expect(body).not.toMatch(/container image\) is cryptographically signed/);
+  });
+
+  // 2026-09-25. The release card said "a release reaches production only after
+  // the full automated test suite passes on it and it has run on a test copy
+  // first". That holds for the API server alone. Every web app (dashboard, this
+  // site, docs, status, errors, admin) has its own deploy-*.yml that publishes on
+  // a push to main: no CI gate, no test copy. The "Supply chain" section around
+  // the card speaks of "everything we ship", so an unscoped sentence reads as
+  // covering them too. Read from the workflows, not from memory: if a web app's
+  // deploy is ever gated on CI, this arm fails and the card can widen its claim.
+  it('CRITICAL the release card claims a CI gate and a test copy for the API server only, because only the API server deploy waits for CI; every web-app deploy publishes on a push to main', () => {
+    const dir = resolve(REPO_ROOT, '.github/workflows');
+    const waitsForCi: string[] = [];
+    const onPush: string[] = [];
+    for (const f of readdirSync(dir)
+      .filter((n) => /^deploy.*\.ya?ml$/.test(n))
+      .sort()) {
+      const on = (parse(read(resolve(dir, f))) as { on?: Record<string, unknown> }).on ?? {};
+      if ('workflow_run' in on && !('push' in on)) waitsForCi.push(f);
+      if ('push' in on) onPush.push(f);
+    }
+    expect(waitsForCi, 'the deploys that run only after CI completes').toEqual(['deploy.yml']);
+    expect(onPush, 'the deploys that publish on a push, with no CI gate').toEqual([
+      'deploy-admin-panel.yml',
+      'deploy-customer-dashboard.yml',
+      'deploy-docs.yml',
+      'deploy-errors-site.yml',
+      'deploy-marketing.yml',
+      'deploy-status-site.yml',
+    ]);
+
+    const start = body.indexOf('>API releases are tested and reversible<');
+    expect(start, 'the release card').toBeGreaterThan(-1);
+    const card = body.slice(start, body.indexOf('</div>', start));
+    expect(card).toMatch(/A\s+release of our API server reaches production only after/);
+    // The rest of the card is the API server's too: health check, rollback,
+    // and the version endpoint are all api.driftstack.dev.
+    expect(card).toMatch(/api\.driftstack\.dev\/version/);
   });
 
   it("security@driftstack.dev contact framing pinned: 'Email security@driftstack.dev with the question. We answer everything in writing — no NDAs to read a one-paragraph answer about scrypt parameters or TLS cipher suites.' — pinned so the no-NDA-for-security-questions commitment survives (drift to dropping would create friction for security-team buyers; drift to a different email would orphan canonical contact)", () => {

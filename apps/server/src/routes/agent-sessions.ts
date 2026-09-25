@@ -970,7 +970,8 @@ export interface AgentSessionsRoutesDeps {
    * Private R2 (sealed-profile-blob bucket). When wired alongside a profile-
    * backed create, the dispatch builds the full profile block via
    * buildAssignProfileBlock (restore GET when a blob exists + save-back PUT).
-   * Absent → the dispatch falls back to a DEK-only block (no restore/persist).
+   * Absent → the dispatch falls back to a DEK-only block with no restore, and
+   * records the session's profile save-back as refused (migration 0143).
    */
   r2?: R2;
   /**
@@ -1092,13 +1093,15 @@ export const MANUAL_SESSION_MAX_DURATION_SECONDS = 14400;
  * The presigned save-back PUT is consumed at session TEARDOWN, so it must outlive
  * the whole session: the max manual duration plus a margin for teardown itself.
  *
- * ⛔ It is also the SAFETY HINGE of the R2 orphan reaper. That sweeper deletes a
- * `profiles/<uuid>.sealed` object older than its grace window whose uuid has no
- * profiles row, and its grace MUST exceed this TTL or an in-flight save-back is
- * reaped mid-flight and the customer's encrypted browser state is lost. The bound
- * is asserted in `profile-blob-orphan-sweeper.test.ts` — which used to retype
- * `14400 + 1800` as literals, so raising the duration above would have moved the
- * real TTL while the assertion went on checking the old one.
+ * ⛔ It is also the SAFETY HINGE of the R2 orphan reaper. That pass
+ * (services/profile-blob-orphan-reaper.ts) deletes a `profiles/<uuid>.sealed`
+ * object older than its grace window whose uuid has no profiles row, and its
+ * grace MUST exceed this TTL or an in-flight save-back is reaped mid-flight and
+ * the customer's encrypted browser state is lost. The bound is asserted in
+ * `a-profile-blob-no-profile-owns-is-swept-by-the-daily-purge.test.ts` against
+ * this constant; its predecessor once retyped `14400 + 1800` as literals, so
+ * raising the duration above would have moved the real TTL while the assertion
+ * went on checking the old one.
  */
 export const PROFILE_SAVE_BACK_TEARDOWN_MARGIN_SECONDS = 1800;
 export const PROFILE_SAVE_BACK_PUT_TTL_SECONDS =
@@ -1187,6 +1190,8 @@ export async function dispatchSessionAssignOnCreate(args: {
   // profile has a DEK, the assign carries a `profile` block so the harness
   // restores/persists the per-profile encrypted store. Absent → stateless
   // (today's path). The route threads these from the create body's profile_id.
+  // A profile-bound session that could not be given its stored state has its
+  // save-back refused (refuseProfileSaveBack below, migration 0143).
   accountId?: string;
   profileId?: string;
   profilesService?: ProfilesService;
@@ -1350,11 +1355,25 @@ export async function dispatchSessionAssignOnCreate(args: {
     // per-profile DEK so the harness can open/seal the encrypted store. With R2
     // wired, buildAssignProfileBlock adds the restore URL (presigned GET, ONLY
     // when a sealed blob already exists — fail-closed per the harness) + the save-back PUT
-    // URL. Without R2 → DEK-only (fresh, no restore/persist). getProfileDek is
+    // URL. Without R2 → DEK-only (fresh, no restore). getProfileDek is
     // null when the master key is unset or the profile has no DEK → stateless.
     let profile:
       | { profileId: string; dek: string; sealedBlobUrl?: string; sealedBlobPutUrl?: string }
       | undefined;
+    // ⛔ DATA-LOSS GUARD (migration 0143). A device handed a profile block
+    // WITHOUT the profile's stored state starts from an EMPTY profile — and the
+    // harness contract (SessionAssignProfileSchema: "a fresh profile ships
+    // neither blob + just saves on end") has it seal that empty state at
+    // teardown and send it back inline. The consumer used to write it to R2 over
+    // the customer's real stored profile. So save-back is REFUSED for this
+    // session unless buildAssignProfileBlock succeeded: that is the one path that
+    // either handed over the restore URL or confirmed nothing is stored yet (a
+    // first-ever profile, whose first save is how it gets any state at all).
+    // Every other profile-bound dispatch — URL mint failed, DEK unwrap failed, no
+    // DEK, no R2 (whether a blob exists cannot be known) — is refused. The flag
+    // rides the node-ownership claim below, so it is durable before the assign
+    // is sent and survives a restart before the save-back arrives.
+    let refuseProfileSaveBack = profileId !== undefined;
     // Fingerprint-correctness (2026-06-19) — a bound profile carries its OWN
     // archetype (chosen by the customer); the static sessionDispatch.archetype is
     // an operator-config default for stateless (no-profile) runs. The harness uses
@@ -1383,12 +1402,15 @@ export async function dispatchSessionAssignOnCreate(args: {
         // must NOT abort the dispatch (which would strand the session active-but-
         // never-dispatched — a phantom concurrency slot until the 12h reaper, and
         // the GUI spinning on "No frame yet"). Degrade to a DEK-less, stateless
-        // dispatch: the session still runs, it just can't open/seal the encrypted
-        // profile store this run. Mirrors the R2 url-mint degrade just below;
-        // distinct from the outer best-effort catch, which drops the dispatch.
+        // dispatch: the session still runs without the profile, and sends no
+        // profile block, so the device cannot seal a store this run. Save-back is
+        // refused for the session all the same (refuseProfileSaveBack stays
+        // true): a profileSaved frame that arrives for it anyway must not replace
+        // the stored profile. Distinct from the outer best-effort catch, which
+        // drops the dispatch.
         logger?.warn(
           { component: 'agent-session-dispatch', sessionId, profileId, err },
-          'profile DEK unwrap failed; dispatching DEK-less (stateless this run)',
+          'profile DEK unwrap failed; dispatching without the profile (save-back refused this run)',
         );
       }
       if (dek !== null) {
@@ -1405,23 +1427,44 @@ export async function dispatchSessionAssignOnCreate(args: {
             profile = await buildAssignProfileBlock(r2, profileId, dekBase64, {
               urlTtlSeconds: PROFILE_SAVE_BACK_PUT_TTL_SECONDS,
             });
+            // The device either restores the stored profile or there is none
+            // yet: its teardown save is the profile's real next state.
+            refuseProfileSaveBack = false;
           } catch (err) {
             // An R2 hiccup minting the restore/save-back URLs must NOT abort the
             // whole dispatch (which would leave the session created-but-never-
-            // dispatched). Degrade to a DEK-only (stateless) assign so the
-            // session still runs; it just won't restore/persist profile state
-            // this run. Distinct from the outer best-effort catch, which would
-            // drop the dispatch entirely.
+            // dispatched). Degrade to a DEK-only assign so the session still
+            // runs: it won't restore the profile's state, and it won't persist
+            // any this run. The device gets no save-back PUT URL (nothing was
+            // minted), so its only way to save is an inline profileSaved, which
+            // the consumer refuses for this session (refuseProfileSaveBack stays
+            // true) and reports to the customer. The DEK still rides so the
+            // device follows its normal profile teardown and SENDS that frame:
+            // without it the device sends nothing, and the customer would never
+            // learn this run's changes were not kept. Distinct from the outer
+            // best-effort catch, which would drop the dispatch entirely.
             logger?.warn(
               { component: 'agent-session-dispatch', sessionId, profileId, err },
-              'profile R2 url-mint failed; dispatching DEK-only (stateless this run)',
+              'profile R2 url-mint failed; dispatching without the stored profile (save-back refused this run)',
             );
             profile = { profileId, dek: dekBase64 };
           }
         } else {
+          // No private R2: nothing can be restored, and whether a stored blob
+          // exists cannot be known, so save-back stays refused for the session.
           profile = { profileId, dek: dekBase64 };
         }
       }
+    }
+    if (refuseProfileSaveBack && profile !== undefined && agentSessions === undefined) {
+      // Nowhere to record the refusal durably, so the consumer could not refuse
+      // the save: send the device no DEK at all. Without one it cannot seal a
+      // profile store, so there is nothing to save back.
+      logger?.warn(
+        { component: 'agent-session-dispatch', sessionId, profileId },
+        'profile save-back refusal cannot be recorded; dispatching without the profile',
+      );
+      profile = undefined;
     }
     // ARC A — when the create carried a validated proxy_id, dispatch through the
     // customer's proxy (owner-scoped unwrap + SSRF re-guard) instead of the
@@ -1580,7 +1623,15 @@ export async function dispatchSessionAssignOnCreate(args: {
         // a measured QUIC verdict back to the owned proxy. `proxyId` is the
         // validated per-session customer proxy (undefined → operator-default
         // egress, persisted as NULL).
-        persisted = await agentSessions.setNodeId(sessionId, dispatchedNodeId, proxyId ?? null);
+        //
+        // 0143 — a refused profile save-back rides the same claim: if it cannot
+        // be written, the claim fails too and no assign is sent, so a device
+        // never holds a profile it could save over without the refusal on record.
+        persisted = refuseProfileSaveBack
+          ? await agentSessions.setNodeId(sessionId, dispatchedNodeId, proxyId ?? null, {
+              refuseProfileSaveBack: true,
+            })
+          : await agentSessions.setNodeId(sessionId, dispatchedNodeId, proxyId ?? null);
       } catch (err) {
         logger?.warn(
           {

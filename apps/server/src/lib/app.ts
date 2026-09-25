@@ -780,6 +780,13 @@ export interface AppDeps {
    */
   dashboardOrigin?: string;
   /**
+   * Security sweep #31 — Stripe Checkout may also return to the plain-HTTP
+   * development and e2e origins (routes/billing.ts DEVELOPMENT_RETURN_ORIGINS).
+   * Bootstrap sets it only when NODE_ENV is not production; omitted, checkout
+   * returns only to the production dashboard.
+   */
+  allowDevelopmentReturnOrigins?: boolean;
+  /**
    * V-117: optional Sentry client. When provided, the app installs:
    *   - `wireSentryErrorHandler` (V-094) — onError hook captures
    *     exceptions with request context.
@@ -1620,7 +1627,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
   }
   if (deps.billingService !== undefined) {
-    registerBillingRoutes(app, { service: deps.billingService });
+    registerBillingRoutes(app, {
+      service: deps.billingService,
+      ...(deps.allowDevelopmentReturnOrigins === true
+        ? { allowDevelopmentReturnOrigins: true }
+        : {}),
+    });
   } else {
     // Slice 1119.2 — when Stripe env is missing, expose
     // 503 + FeatureUnavailable on /v1/billing/* instead of leaving

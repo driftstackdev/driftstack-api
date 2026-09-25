@@ -16,12 +16,13 @@
 # Two-environment flow (gated on CI since 2026-09-24, security sweep E-9):
 #   - Runs when the CI workflow COMPLETES on a push to main
 #     (workflow_run) and deploys exactly the commit that CI run tested.
-#     A red CI run deploys nothing and raises the deploy-failure issue;
-#     a cancelled one (superseded by a newer push) deploys nothing.
-#     CI cancels a superseded run on main, so during a burst of pushes
-#     production waits for the first CI run that finishes, with no alert
-#     while it waits; the tip deploys once the pushes stop for a CI run's
-#     length (about 15-25 minutes).
+#     A red or cancelled CI run deploys nothing and raises the deploy-failure
+#     issue.
+#     CI never cancels a run on main (ci.yml, 2026-09-25), so every commit
+#     of a burst of pushes gets its own CI result. Each green one deploys
+#     when its run finishes, in whatever order the runs finish; one that
+#     finishes after a newer commit went live is skipped (below), so each
+#     environment ends on the newest green commit.
 #   - Staging deploys first. Production follows only after staging
 #     deployed the same commit in the same run. No approval gate.
 #   - Neither environment is ever moved to a commit older than the one
@@ -81,8 +82,8 @@ concurrency:
   # to main in this repository (the ci-gate's own test, plus success), or a
   # dispatch. Every other CI completion (red, cancelled, a pull request, a fork
   # whose branch is called main) gets a group of its own, so it can neither
-  # wait behind a deploy nor take a pending deploy's place. A red run still runs
-  # its ci-gate, which fails and raises the deploy-failure issue.
+  # wait behind a deploy nor take a pending deploy's place. A red or cancelled
+  # run still runs its ci-gate, which fails and raises the deploy-failure issue.
   #
   # `queue: max` keeps every pending deploy instead of GitHub's default of one:
   # by default a newly queued run CANCELS the pending one, so a re-run of an old
@@ -137,11 +138,20 @@ jobs:
             SHA="$RUN_SHA"
             case "$RUN_CONCLUSION" in
               success) ;;
-              cancelled|skipped)
-                # CI on main cancels an in-flight run when a newer commit lands,
-                # so this commit was superseded; the newer one deploys when its
-                # own CI passes.
-                echo "::notice::CI on ${SHA} was ${RUN_CONCLUSION}; nothing to deploy."
+              cancelled)
+                # CI's own concurrency never cancels a run on main (ci.yml gives
+                # each run there a group of its own), so this run was stopped some
+                # other way: by hand, or a job cut off at its timeout-minutes. Its
+                # commit never deploys, and when it was the last push production
+                # stays behind until the next green run. That is a stall, and a
+                # stall nobody hears about is what notify-on-failure is for, so
+                # the gate FAILS rather than passing quietly.
+                echo "::error::CI on ${SHA} was cancelled, so this commit does not deploy; production stays on the commit it runs until CI passes on a newer one. Re-run CI on this commit to deploy it."
+                exit 1
+                ;;
+              skipped)
+                # No CI job ran, so there is no result to deploy on.
+                echo "::notice::CI on ${SHA} was skipped; nothing to deploy."
                 echo "deploy=false" >> "$GITHUB_OUTPUT"
                 exit 0
                 ;;
@@ -543,7 +553,8 @@ jobs:
   #
   # Since 2026-09-24 a red CI run on main fails the ci-gate job and lands here
   # too: production no longer advances past a red main, and a stall nobody hears
-  # about is the failure this job exists for.
+  # about is the failure this job exists for. Since 2026-09-25 so does a
+  # cancelled one.
   notify-on-failure:
     name: Open or update the deploy-failure issue
     needs: [ci-gate, source-map-upload, deploy-staging, deploy-production]

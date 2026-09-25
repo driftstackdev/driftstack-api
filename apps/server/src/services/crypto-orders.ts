@@ -14,7 +14,113 @@
 // told on-call to expect orders to vanish on every deploy.
 
 import { createHash as nodeCreateHash } from 'node:crypto';
+import { ConflictError } from '../lib/errors.js';
+import { NOWPAYMENTS_REQUEST_TIMEOUT_MS } from '../lib/nowpayments-api.js';
 import { logLostWebhookEvent } from './webhooks.js';
+
+/**
+ * Security sweep #18 — the most orders one account may hold waiting for payment
+ * (`pending`). Each new order mints a NowPayments payment, so without a bound one
+ * signed-in owner could spend the provider's API quota and fill the order table
+ * at the global rate limit. Paying, cancelling or the 24-hour expiry sweep frees
+ * a place. Orders with money in flight (confirming, partial) are not counted: a
+ * customer can neither cancel them nor create them without paying.
+ */
+export const MAX_OPEN_CRYPTO_ORDERS_PER_ACCOUNT = 5;
+
+/**
+ * Security sweep #18 (second pass) — the most orders one account may START in a
+ * trailing {@link CRYPTO_ORDER_START_WINDOW_MS} without paying for them: orders still
+ * `pending`, `cancelled` by the customer, or `failed` (expired, or the payment failed).
+ * The open-order limit alone did not bound the provider payments minted, because a
+ * cancel frees its place at once: thirty checkout → cancel cycles minted thirty.
+ *
+ * Why ten: one purchase needs one order, and an honest retry (the wrong coin or network,
+ * a quote that lapsed, a cancel to start again) needs a few more. Ten is twice the
+ * open-order limit, so a customer who does not cancel meets that limit first and this
+ * one never; the window matches the 24 hours an unpaid order stays open. A paid order
+ * (and one with money in flight: confirming, partial) never counts, so a customer who
+ * pays can keep buying.
+ */
+export const MAX_UNPAID_CRYPTO_ORDERS_STARTED_PER_DAY = 10;
+
+/** The trailing window {@link MAX_UNPAID_CRYPTO_ORDERS_STARTED_PER_DAY} is counted over. */
+export const CRYPTO_ORDER_START_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Security sweep #18 — the order statuses the daily budget counts: an order that
+ * minted a payment nobody paid. Paid orders and orders with money in flight are left out.
+ */
+export const UNPAID_CRYPTO_ORDER_STATUSES = ['pending', 'cancelled', 'failed'] as const;
+
+/**
+ * Security sweep #18 (residual) — the most NowPayments payments an account may create
+ * in a trailing {@link CRYPTO_ORDER_START_WINDOW_MS} for orders it has not paid for,
+ * counted per mint rather than per order: an order whose first payment could not be
+ * bound is minted again, and each mint counts. Equal to the order budget, so a
+ * customer whose every order mints once meets the order budget first and this never.
+ * It is the backstop behind the mint claim: whatever else goes wrong, one account
+ * cannot spend more of the provider's quota than this in a day.
+ */
+export const MAX_PAYMENT_MINTS_PER_DAY = MAX_UNPAID_CRYPTO_ORDERS_STARTED_PER_DAY;
+
+/**
+ * Security sweep #18 (residual) — how long a claim to mint an order's payment holds
+ * off every other checkout for that order, on any server. The holder calls
+ * NowPayments, which answers or is aborted within its request timeout, and then binds
+ * the payment to the order; the margin covers that write and clock skew between
+ * servers. A claim older than this with no payment bound belongs to a server that
+ * died or a payment that could not be bound, and one checkout may claim it again.
+ */
+export const PAYMENT_MINT_CLAIM_STALE_AFTER_MS = NOWPAYMENTS_REQUEST_TIMEOUT_MS + 20_000;
+
+/** The limits a NEW order is admitted under, checked in one step with its write. */
+export interface CryptoOrderLimits {
+  /** Most orders the account may hold waiting for payment (`pending`). */
+  open: number;
+  /** Most unpaid orders the account may have created at or after `startedSince`. */
+  startedPerDay: number;
+  /**
+   * Most payments the account may have minted since `startedSince` for orders it has
+   * not paid for. A new order is refused once they are spent, since it could not be
+   * minted.
+   */
+  mintsPerDay: number;
+  /** Epoch ms: the start of the trailing window both budgets are counted over. */
+  startedSince: number;
+}
+
+/**
+ * Security sweep #18 (residual) — the terms a payment mint is claimed under (see
+ * `CryptoOrdersRepo.claimPaymentMint`).
+ */
+export interface PaymentMintClaimTerms {
+  /** Epoch ms written as the claim time. */
+  now: number;
+  /** Epoch ms: a claim taken before this is stale and may be taken again. */
+  staleBefore: number;
+  /** Most mints the account may have claimed since `mintsSince` on unpaid orders. */
+  mintsPerDay: number;
+  /** Epoch ms: the start of the trailing window the mint budget is counted over. */
+  mintsSince: number;
+}
+
+/**
+ * The outcome of claiming the right to mint an order's payment, decided against the
+ * locked row:
+ *   · `claimed` — this caller alone may create one payment now, and must bind it;
+ *   · `bound` — a payment is already bound: answer with it, never mint another;
+ *   · `in_progress` — another checkout's claim is fresh: answer without minting;
+ *   · `not_pending` — the order is no longer waiting for payment: nothing to mint;
+ *   · `mint_budget` — the account's daily mint budget is spent: refuse.
+ * `order` is the locked snapshot.
+ */
+export type PaymentMintClaim =
+  | { kind: 'claimed' | 'bound' | 'in_progress' | 'not_pending'; order: CryptoOrder }
+  | { kind: 'mint_budget'; order: CryptoOrder };
+
+/** Why a new order (or a mint) was refused: the open-order limit, the daily order budget, or the daily mint budget. */
+export type CryptoOrderRefusal = 'open_limit' | 'daily_budget' | 'mint_budget';
 
 export type CryptoOrderStatus =
   | 'pending' // order created; awaiting payment
@@ -177,6 +283,50 @@ export interface CryptoOrdersRepo {
    * once the table holds more than `limit` rows.
    */
   listPendingOlderThan(opts: { olderThan: number; limit: number }): Promise<CryptoOrder[]>;
+  /**
+   * Security sweep #18 — write a NEW pending order (as `upsert` does) only while its
+   * account is under both {@link CryptoOrderLimits}: fewer than `open` orders waiting
+   * for payment, and fewer than `startedPerDay` unpaid orders created since
+   * `startedSince`. Returns `'written'`, or which limit refused it having written
+   * nothing (the daily budget is checked first: when it is spent, cancelling an open
+   * order does not help, since a cancelled order keeps counting; paying one does, since
+   * a paid order never counts). The counts and the write are ONE step
+   * for that account: the Drizzle repo takes a per-account transaction lock around
+   * them, so checkouts sent at once — on one server or several — cannot all pass one
+   * stale count. An order with no account is written without a limit.
+   */
+  insertPendingUnderOrderLimits(
+    order: CryptoOrder,
+    limits: CryptoOrderLimits,
+  ): Promise<'written' | CryptoOrderRefusal>;
+  /**
+   * Security sweep #18 — `insertWithIdempotencyKey` under the same per-account limits,
+   * in the same single step. A key already stored replays its order and is never
+   * refused, whichever server stored it; a NEW key over a limit returns `{ refused }`
+   * and stores nothing — no key, no row.
+   */
+  insertWithIdempotencyKeyUnderOrderLimits(
+    order: CryptoOrder,
+    scopedIdempotencyKey: string,
+    bodyFingerprint: string,
+    limits: CryptoOrderLimits,
+  ): Promise<
+    | { order: CryptoOrder; replayed: boolean; storedFingerprint: string | null }
+    | { refused: CryptoOrderRefusal }
+  >;
+  /**
+   * Security sweep #18 (residual) — claim the right to create the order's NowPayments
+   * payment, before the provider is called. Decided against the locked row, in this
+   * order: a bound payment (`bound`), an order no longer pending (`not_pending`), a
+   * claim taken at or after `staleBefore` (`in_progress`), the account's mint budget
+   * spent (`mint_budget`); otherwise the claim time is set to `now`, the order's mint
+   * count goes up by one, and the result is `claimed`. The Drizzle repo takes the
+   * account's lock (the one new orders are admitted under) and then the order's row
+   * lock, in one transaction, so concurrent claims on any number of servers admit one
+   * per order and never more than the budget per account. Null when the order does
+   * not exist.
+   */
+  claimPaymentMint(orderId: string, terms: PaymentMintClaimTerms): Promise<PaymentMintClaim | null>;
 }
 
 /** An event a locked order transition raises (see `withOrderLock`). */
@@ -205,6 +355,13 @@ export class InMemoryCryptoOrdersRepo implements CryptoOrdersRepo {
     scopedIdempotencyKey: string,
     bodyFingerprint: string,
   ): Promise<{ order: CryptoOrder; replayed: boolean; storedFingerprint: string | null }> {
+    return this.insertKeyed(order, scopedIdempotencyKey, bodyFingerprint);
+  }
+  private insertKeyed(
+    order: CryptoOrder,
+    scopedIdempotencyKey: string,
+    bodyFingerprint: string,
+  ): { order: CryptoOrder; replayed: boolean; storedFingerprint: string | null } {
     // Single-threaded JS → the check-and-insert is naturally atomic; mirrors
     // the DB impl's INSERT ... ON CONFLICT DO NOTHING contract. The real
     // cross-instance race lives only in the multi-connection Postgres path.
@@ -253,6 +410,94 @@ export class InMemoryCryptoOrdersRepo implements CryptoOrdersRepo {
       .filter((o) => o.status === 'pending' && o.created_at <= opts.olderThan)
       .sort((a, b) => a.created_at - b.created_at)
       .slice(0, opts.limit);
+  }
+  // Security sweep #18 — the counts and the write below run with no await between
+  // them, so concurrent callers cannot all pass one count (the Drizzle repo's
+  // per-account transaction lock does the same across servers).
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async insertPendingUnderOrderLimits(
+    order: CryptoOrder,
+    limits: CryptoOrderLimits,
+  ): Promise<'written' | CryptoOrderRefusal> {
+    const refusal = this.refusalUnder(order.account_id, limits);
+    if (refusal !== null) return refusal;
+    this.orders.set(order.order_id, order);
+    return 'written';
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async insertWithIdempotencyKeyUnderOrderLimits(
+    order: CryptoOrder,
+    scopedIdempotencyKey: string,
+    bodyFingerprint: string,
+    limits: CryptoOrderLimits,
+  ): Promise<
+    | { order: CryptoOrder; replayed: boolean; storedFingerprint: string | null }
+    | { refused: CryptoOrderRefusal }
+  > {
+    const storedId = this.byIdempotencyKey.get(scopedIdempotencyKey);
+    const keyIsStored = storedId !== undefined && this.orders.has(storedId);
+    if (!keyIsStored) {
+      const refusal = this.refusalUnder(order.account_id, limits);
+      if (refusal !== null) return { refused: refusal };
+    }
+    return this.insertKeyed(order, scopedIdempotencyKey, bodyFingerprint);
+  }
+  private refusalUnder(
+    accountId: string | null,
+    limits: CryptoOrderLimits,
+  ): CryptoOrderRefusal | null {
+    if (accountId === null) return null;
+    const unpaid: readonly CryptoOrderStatus[] = UNPAID_CRYPTO_ORDER_STATUSES;
+    let pending = 0;
+    let started = 0;
+    for (const o of this.orders.values()) {
+      if (o.account_id !== accountId) continue;
+      if (o.status === 'pending') pending += 1;
+      if (unpaid.includes(o.status) && o.created_at >= limits.startedSince) started += 1;
+    }
+    if (started >= limits.startedPerDay) return 'daily_budget';
+    if (this.mintsSince(accountId, limits.startedSince) >= limits.mintsPerDay) {
+      return 'mint_budget';
+    }
+    if (pending >= limits.open) return 'open_limit';
+    return null;
+  }
+  /** Mirrors `payment_mint_claimed_at` + `payment_mints` (migration 0142). */
+  private readonly mintClaims = new Map<string, { claimedAt: number; mints: number }>();
+  /** Mints claimed on the account's unpaid orders whose latest claim is at or after `since`. */
+  private mintsSince(accountId: string, since: number): number {
+    const unpaid: readonly CryptoOrderStatus[] = UNPAID_CRYPTO_ORDER_STATUSES;
+    let mints = 0;
+    for (const [orderId, claim] of this.mintClaims) {
+      const o = this.orders.get(orderId);
+      if (o === undefined || o.account_id !== accountId || !unpaid.includes(o.status)) continue;
+      if (claim.claimedAt >= since) mints += claim.mints;
+    }
+    return mints;
+  }
+  // Security sweep #18 (residual) — the decision and the write run with no await
+  // between them, as the Drizzle repo's account and row locks make them one step.
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async claimPaymentMint(
+    orderId: string,
+    terms: PaymentMintClaimTerms,
+  ): Promise<PaymentMintClaim | null> {
+    const order = this.orders.get(orderId);
+    if (order === undefined) return null;
+    if (order.payment_id !== null) return { kind: 'bound', order };
+    if (order.status !== 'pending') return { kind: 'not_pending', order };
+    const claim = this.mintClaims.get(orderId);
+    if (claim !== undefined && claim.claimedAt >= terms.staleBefore) {
+      return { kind: 'in_progress', order };
+    }
+    if (
+      order.account_id !== null &&
+      this.mintsSince(order.account_id, terms.mintsSince) >= terms.mintsPerDay
+    ) {
+      return { kind: 'mint_budget', order };
+    }
+    this.mintClaims.set(orderId, { claimedAt: terms.now, mints: (claim?.mints ?? 0) + 1 });
+    return { kind: 'claimed', order };
   }
 }
 
@@ -486,11 +731,16 @@ export interface CryptoOrderTierActivator {
    * refunded order's entitlement and reconciles the account tier to its best
    * remaining valid access (a live Stripe sub / another valid crypto entitlement
    * / free) — non-stranding, and idempotent on an IPN replay.
+   *
+   * Security sweep #29 — `product` is the order's purchased tier. When the order
+   * has no entitlement yet (its activation failed), the activator records an
+   * already-ended one for it, so the refunded payment can never be granted later.
    */
   revokeTierForRefundedOrder: (args: {
     account_id: string;
     order_id: string;
     at: Date;
+    product?: string;
   }) => Promise<{ revoked: boolean }>;
 }
 
@@ -524,7 +774,10 @@ export class CryptoOrdersService {
       created_at: now,
       updated_at: now,
     };
-    await this.opts.repo.upsert(order);
+    // Security sweep #18 — counted and written in one step, so checkouts sent at
+    // once cannot all pass the open-order limit or the daily budget together.
+    const admitted = await this.opts.repo.insertPendingUnderOrderLimits(order, orderLimitsAt(now));
+    if (admitted !== 'written') throw orderLimitError(admitted);
     return order;
   }
 
@@ -563,6 +816,34 @@ export class CryptoOrdersService {
       };
       return { updated, result: updated };
     });
+  }
+
+  /**
+   * Security sweep #18 (residual) — claim the right to create this order's NowPayments
+   * payment. Call it before the provider, and create a payment only on `claimed`
+   * (then bind it with {@link recordPaymentId}). Checkouts that repeat one
+   * Idempotency-Key while the first is still minting all replay a pending order with
+   * no payment bound; without a claim, each of them minted. Now one claims and the
+   * others see `in_progress` until its payment is bound (`bound`), or until the claim
+   * is older than {@link PAYMENT_MINT_CLAIM_STALE_AFTER_MS} with nothing bound, when
+   * exactly one may claim again. A claim past the account's
+   * {@link MAX_PAYMENT_MINTS_PER_DAY} is refused with the order limits' 409 problem
+   * (`limit: 10`, `field: payment_id`).
+   * Null when the order does not exist.
+   */
+  async claimPaymentMint(args: {
+    order_id: string;
+  }): Promise<Exclude<PaymentMintClaim, { kind: 'mint_budget' }> | null> {
+    const now = this.nowFn();
+    const claim = await this.opts.repo.claimPaymentMint(args.order_id, {
+      now,
+      staleBefore: now - PAYMENT_MINT_CLAIM_STALE_AFTER_MS,
+      mintsPerDay: MAX_PAYMENT_MINTS_PER_DAY,
+      mintsSince: now - CRYPTO_ORDER_START_WINDOW_MS,
+    });
+    if (claim === null) return null;
+    if (claim.kind === 'mint_budget') throw orderLimitError('mint_budget');
+    return { kind: claim.kind, order: claim.order };
   }
 
   /**
@@ -648,11 +929,26 @@ export class CryptoOrdersService {
         created_at: now,
         updated_at: now,
       };
-      return this.opts.repo.insertWithIdempotencyKey(candidate, scopeKey, fingerprint);
+      // Security sweep #18 — a NEW order counts against the open-order limit and the
+      // daily budget, in the same step as its write, and a refusal stores neither the
+      // key nor a row; a key already stored (by another instance, or before a
+      // restart) is a replay and is handed back rather than refused.
+      const written = await this.opts.repo.insertWithIdempotencyKeyUnderOrderLimits(
+        candidate,
+        scopeKey,
+        fingerprint,
+        orderLimitsAt(now),
+      );
+      if ('refused' in written) throw orderLimitError(written.refused);
+      return written;
     })();
     // Single-flight awaits the order (not the {order,replayed} envelope) so the
     // existing inflight-replay contract is unchanged.
     const orderPromise = createPromise.then((r) => r.order);
+    // A refused or failed create rejects this too. A concurrent same-key caller
+    // awaiting it receives that rejection; with none, it must not surface as an
+    // unhandled rejection — the caller below gets the error from createPromise.
+    void orderPromise.catch(() => undefined);
     this.idempotencyInflight.set(scopeKey, { promise: orderPromise, fingerprint });
     let result: { order: CryptoOrder; replayed: boolean; storedFingerprint: string | null };
     try {
@@ -1693,6 +1989,7 @@ export class CryptoOrdersService {
           account_id: outcome.order.account_id,
           order_id: outcome.order.order_id,
           at: new Date(this.nowFn()),
+          product: outcome.order.product,
         });
       } catch (err) {
         this.opts.logger?.error(
@@ -1855,6 +2152,52 @@ export class CryptoOrdersService {
  *  Falls back to updated_at for legacy rows with no recorded paid event. */
 function paidAtMs(order: CryptoOrder): number {
   return order.events.find((e) => e.status === 'paid')?.at ?? order.updated_at;
+}
+
+/** Security sweep #18 — the limits a new order created at `now` (epoch ms) is admitted under. */
+function orderLimitsAt(now: number): CryptoOrderLimits {
+  return {
+    open: MAX_OPEN_CRYPTO_ORDERS_PER_ACCOUNT,
+    startedPerDay: MAX_UNPAID_CRYPTO_ORDERS_STARTED_PER_DAY,
+    mintsPerDay: MAX_PAYMENT_MINTS_PER_DAY,
+    startedSince: now - CRYPTO_ORDER_START_WINDOW_MS,
+  };
+}
+
+/**
+ * Security sweep #18 — the refusal of a new order at MAX_OPEN_CRYPTO_ORDERS_PER_ACCOUNT,
+ * or at MAX_UNPAID_CRYPTO_ORDERS_STARTED_PER_DAY, or of a new order or a payment at
+ * MAX_PAYMENT_MINTS_PER_DAY. One 409 problem shape for all three. Says what the customer
+ * can do; `field` and `limit` let a client tell them apart, and this 409 from another.
+ */
+function orderLimitError(refusal: CryptoOrderRefusal): ConflictError {
+  if (refusal === 'mint_budget') {
+    return new ConflictError(
+      `${String(MAX_PAYMENT_MINTS_PER_DAY)} crypto payments have been created in the last 24 hours for orders you have not paid for. ` +
+        'Pay one of your open orders, or try again once the oldest of them is 24 hours old.',
+      {
+        resource: 'crypto_order',
+        field: 'payment_id',
+        limit: MAX_PAYMENT_MINTS_PER_DAY,
+      },
+    );
+  }
+  if (refusal === 'daily_budget') {
+    return new ConflictError(
+      `You have started ${String(MAX_UNPAID_CRYPTO_ORDERS_STARTED_PER_DAY)} crypto orders in the last 24 hours without paying for them. ` +
+        'Pay one of your open orders, or start a new one once the oldest of them is 24 hours old.',
+      {
+        resource: 'crypto_order',
+        field: 'created_at',
+        limit: MAX_UNPAID_CRYPTO_ORDERS_STARTED_PER_DAY,
+      },
+    );
+  }
+  return new ConflictError(
+    `You already have ${String(MAX_OPEN_CRYPTO_ORDERS_PER_ACCOUNT)} crypto orders waiting for payment. ` +
+      'Pay or cancel one of them before starting another; an unpaid order closes by itself after 24 hours.',
+    { resource: 'crypto_order', field: 'status', limit: MAX_OPEN_CRYPTO_ORDERS_PER_ACCOUNT },
+  );
 }
 
 /** The `crypto.order.paid` payload — one shape whether queued in the lock or after it. */

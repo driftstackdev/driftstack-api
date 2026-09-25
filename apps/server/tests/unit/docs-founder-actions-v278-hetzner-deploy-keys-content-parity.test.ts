@@ -17,7 +17,14 @@
 //   • Rollback: auto-revert via revert-bridge.sh + manual revert
 //     pointer to /opt/driftstack/api/.last-good-sha.
 //   • Troubleshooting: 4 bullets (hard-gate error, ssh permission,
-//     /health 200 but /version stale, awaiting approval).
+//     /health 200 but /version stale, deploy-production skipped).
+//
+// 2026-09-25 — the runbook described a production approval step: an
+// "Awaiting approval" state to clear with `gh run approve`, and a "Required
+// reviewers" setting on the production environment. None exists. The
+// production environment has no protection rules, and deploy.yml deploys a
+// commit to staging and then production once CI passes on it. The approval
+// wording is refused below and the true flow pinned.
 //   • Related docs cross-refs.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -35,6 +42,8 @@ function read(p: string): string {
 
 describe('W544.C /docs/founder-actions/v278-hetzner-deploy-keys.md content parity', () => {
   const body = read(LIB);
+  /** The prose with its line breaks folded, so rewrapping a paragraph is not drift. */
+  const flat = body.replace(/\s+/g, ' ');
 
   it("Header + key-rotation framing pinned: 'V-278 — Hetzner deploy keys + secrets (founder ops action)' + 'rotate the SSH key + repopulate the `HETZNER_DEPLOY_SSH_KEY` repo secret so the deploy workflow stops no-opping'", () => {
     expect(body).toMatch(/# V-278 — Hetzner deploy keys \+ secrets \(founder ops action\)/);
@@ -56,6 +65,9 @@ describe('W544.C /docs/founder-actions/v278-hetzner-deploy-keys.md content parit
   it("'What's already in place' inventory pinned: 4-piece (deploy.yml push-on-main pipeline + scripts/deploy-bridge.sh SSH-driven + scripts/post-deploy-verify.mjs 20-invariant + prod CPX32 staging CPX22 systemd units) — pinned so the inventory of pre-existing-infrastructure can't drift apart from the actual files", () => {
     expect(body).toMatch(/## What's already in place \(no founder action needed\)/);
     expect(body).toMatch(/`\.github\/workflows\/deploy\.yml` — push-on-main pipeline/);
+    expect(flat).toContain(
+      'push-on-main pipeline, run once CI passes on the pushed commit: ci-gate → source-map-upload → deploy-staging → deploy-production (no approval step: production follows once staging has deployed the same commit).',
+    );
     expect(body).toMatch(/`scripts\/deploy-bridge\.sh` — host-side SSH-driven deploy/);
     expect(body).toMatch(/`scripts\/post-deploy-verify\.mjs` — 20-invariant post-deploy/);
     expect(body).toMatch(/`root@128\.140\.37\.74` \(CPX32\)/);
@@ -92,14 +104,24 @@ describe('W544.C /docs/founder-actions/v278-hetzner-deploy-keys.md content parit
     expect(body).toMatch(/Reverts to `\/opt\/driftstack\/api\/\.last-good-sha`/);
   });
 
-  it('Troubleshooting 4-bullet pinned: hard-gate-error (81d65fef anchor) + SSH-permission-denied + /health-200-but-/version-stale (drizzle migration-immutability) + deploy-production-Awaiting-approval — pinned so each failure mode the runbook covers stays present (drift to dropping any would leave operators stuck without a recovery path)', () => {
+  it('Troubleshooting 4-bullet pinned: hard-gate-error (81d65fef anchor) + SSH-permission-denied + /health-200-but-/version-stale (drizzle migration-immutability) + deploy-production-skipped (staging already newer) — pinned so each failure mode the runbook covers stays present (drift to dropping any would leave operators stuck without a recovery path)', () => {
     expect(body).toMatch(/## Troubleshooting/);
     expect(body).toMatch(/`::error::HETZNER_DEPLOY_SSH_KEY repo secret is unset`/);
     expect(body).toMatch(/the loud-gate fix from commit `81d65fef` working as designed/);
     expect(body).toMatch(/SSH permission denied/);
     expect(body).toMatch(/`\/health` 200 but `\/version` SHA still old/);
     expect(body).toMatch(/usually a drizzle migration-immutability check failure/);
-    expect(body).toMatch(/deploy-production stays in "Awaiting approval"/);
+    expect(body).toMatch(/\*\*deploy-production shows as skipped\*\*/);
+    expect(body).toMatch(/already runs a newer commit/);
+  });
+
+  it('CRITICAL no production approval step is described, because none exists: the run is expected to go through staging and production unattended', () => {
+    expect(body).not.toMatch(
+      /Awaiting approval|gh run approve|Required reviewers|manual-approval/i,
+    );
+    expect(flat).toContain(
+      'Expected: ci-gate, source-map-upload, deploy-staging and deploy-production all succeed, in that order, with no approval step.',
+    );
   });
 
   it('file exists at canonical path', () => {

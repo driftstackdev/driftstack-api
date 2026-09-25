@@ -10,10 +10,10 @@
 //   • Trial-pack framing: self-serve from onboarding (Workstream F)
 //     before tier selection.
 //   • V-248 / V-246-P1-001 allowlist framing pinned: open-redirect
-//     attack surface rationale ("attacker.com phishing site"); 3-
-//     origin hardcoded list (cloud dashboard + localhost dev +
-//     app.driftstack.local e2e); enterprise allowlists out-of-scope
-//     for launch.
+//     attack surface rationale ("attacker.com phishing site"); hardcoded
+//     list: the cloud dashboard, plus localhost dev + app.driftstack.local
+//     e2e only outside production (security sweep #31); enterprise
+//     allowlists out-of-scope for launch.
 //   • Hardcoded-allowlist rationale: anchors security guarantee; env
 //     typo would silently re-introduce open-redirect.
 //   • validateReturnUrl: defensive parse (malformed URL = reject) +
@@ -69,7 +69,7 @@ describe('W418.C apps/server/src/routes/billing.ts content parity', () => {
       /Customer-supplied success_url \+ cancel_url are passed through to\s*\/\/\s*Stripe Checkout; without validation, a customer could craft a URL\s*\/\/\s*pointing at attacker\.com and share the checkout link with a colleague\s*\/\/\s*who'd land on the phishing site after entering their card\./,
     );
     expect(body).toMatch(
-      /Allowlist: by default the Driftstack cloud dashboard origin and\s*\/\/\s*`app\.driftstack\.local` \(e2e\)\. Per-customer enterprise allowlists are\s*\/\/\s*out of scope for the launch posture; customers needing a custom URL\s*\/\/\s*get a clear "contact support" error\./,
+      /Allowlist: the Driftstack cloud dashboard origin, plus — only outside\s*\/\/\s*production — the dashboard dev server and `app\.driftstack\.local` \(e2e\)\.\s*\/\/\s*Per-customer enterprise allowlists are out of scope for the launch\s*\/\/\s*posture; customers needing a custom URL get a clear "contact support"\s*\/\/\s*error\./,
     );
   });
 
@@ -79,15 +79,21 @@ describe('W418.C apps/server/src/routes/billing.ts content parity', () => {
     );
   });
 
-  it('ALLOWED_RETURN_ORIGINS: readonly 3-origin tuple (https://app.driftstack.io + http://localhost:5173 + http://app.driftstack.local)', () => {
+  it('ALLOWED_RETURN_ORIGINS: the production dashboard alone (https://app.driftstack.io); the plain-HTTP dev + e2e origins (http://localhost:5173 + http://app.driftstack.local) are a separate list admitted only outside production (security sweep #31)', () => {
     expect(body).toMatch(
-      /const ALLOWED_RETURN_ORIGINS: readonly string\[\] = \[\s*'https:\/\/app\.driftstack\.io',\s*'http:\/\/localhost:5173',\s*\/\/\s*dashboard dev server\s*'http:\/\/app\.driftstack\.local',\s*\/\/\s*e2e fixture\s*\];/,
+      /const ALLOWED_RETURN_ORIGINS: readonly string\[\] = \['https:\/\/app\.driftstack\.io'\];/,
+    );
+    expect(body).toMatch(
+      /const DEVELOPMENT_RETURN_ORIGINS: readonly string\[\] = \[\s*'http:\/\/localhost:5173',\s*\/\/\s*dashboard dev server\s*'http:\/\/app\.driftstack\.local',\s*\/\/\s*e2e fixture\s*\];/,
+    );
+    expect(body).toMatch(
+      /const returnOrigins: readonly string\[\] =\s*deps\.allowDevelopmentReturnOrigins === true\s*\? \[\.\.\.ALLOWED_RETURN_ORIGINS, \.\.\.DEVELOPMENT_RETURN_ORIGINS\]\s*: ALLOWED_RETURN_ORIGINS;/,
     );
   });
 
   it('validateReturnUrl: defensive new URL parse (malformed → BadRequestError "not a valid URL"); origin allowlist match → "not on the allowlist" hint', () => {
     expect(body).toMatch(
-      /function validateReturnUrl\(url: string, label: 'success_url' \| 'cancel_url'\): string \{\s*let parsed: URL;\s*try \{\s*parsed = new URL\(url\);\s*\} catch \{\s*throw new BadRequestError\(`\$\{label\} is not a valid URL\.`\);\s*\}\s*if \(!ALLOWED_RETURN_ORIGINS\.includes\(parsed\.origin\)\) \{\s*throw new BadRequestError\(\s*`\$\{label\} origin "\$\{parsed\.origin\}" is not on the allowlist\. Contact support if you need a custom origin allowlisted\.`,\s*\);/,
+      /function validateReturnUrl\(\s*url: string,\s*label: 'success_url' \| 'cancel_url',\s*allowedOrigins: readonly string\[\],\s*\): string \{\s*let parsed: URL;\s*try \{\s*parsed = new URL\(url\);\s*\} catch \{\s*throw new BadRequestError\(`\$\{label\} is not a valid URL\.`\);\s*\}\s*if \(!allowedOrigins\.includes\(parsed\.origin\)\) \{\s*throw new BadRequestError\(\s*`\$\{label\} origin "\$\{parsed\.origin\}" is not on the allowlist\. Contact support if you need a custom origin allowlisted\.`,\s*\);/,
     );
   });
 
@@ -132,7 +138,7 @@ describe('W418.C apps/server/src/routes/billing.ts content parity', () => {
     );
     expect(body).toMatch(/\/\/ V-248 — gate customer-supplied return URLs against the allowlist\./);
     expect(body).toMatch(
-      /const successUrl =\s*parsed\.data\.success_url !== undefined\s*\? validateReturnUrl\(parsed\.data\.success_url, 'success_url'\)\s*: undefined;\s*const cancelUrl =\s*parsed\.data\.cancel_url !== undefined\s*\? validateReturnUrl\(parsed\.data\.cancel_url, 'cancel_url'\)\s*: undefined;/,
+      /const successUrl =\s*parsed\.data\.success_url !== undefined\s*\? validateReturnUrl\(parsed\.data\.success_url, 'success_url', returnOrigins\)\s*: undefined;\s*const cancelUrl =\s*parsed\.data\.cancel_url !== undefined\s*\? validateReturnUrl\(parsed\.data\.cancel_url, 'cancel_url', returnOrigins\)\s*: undefined;/,
     );
     expect(body).toMatch(
       /const result = await service\.createCheckoutSession\(\{\s*accountId: ctx\.account\.id,\s*tier: parsed\.data\.tier,\s*billingPeriod: parsed\.data\.billing_period,\s*\.\.\.\(idempotency\.kind === 'valid' \? \{ idempotencyKey: idempotency\.key \} : \{\}\),\s*\.\.\.\(successUrl !== undefined \? \{ successUrl \} : \{\}\),\s*\.\.\.\(cancelUrl !== undefined \? \{ cancelUrl \} : \{\}\),\s*\}\);/,

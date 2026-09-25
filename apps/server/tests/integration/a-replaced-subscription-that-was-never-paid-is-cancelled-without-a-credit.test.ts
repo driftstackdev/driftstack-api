@@ -12,8 +12,9 @@
 // Stripe would actually receive.
 //
 // A subscription that WAS paid keeps the prorated cancel (the customer is owed the
-// unused time), and so does the termination path (commit 75e986a14), which calls
-// the provider without saying otherwise.
+// unused time). A provider call that says nothing about payment still prorates;
+// account termination now says so per subscription (decision of 2026-09-24, see
+// terminating-an-account-cancels-a-past-due-subscription-without-a-credit.test.ts).
 
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
@@ -192,7 +193,7 @@ describe('a replaced subscription that was never paid is cancelled without a cre
     expect(call.url.searchParams.get('invoice_now')).toBe('true');
   });
 
-  it('control: the termination path (commit 75e986a14) still cancels prorated — the provider call without an answer about payment keeps its meaning', async () => {
+  it('control: a provider cancel that says nothing about payment still cancels prorated', async () => {
     const h = harness();
     await h.provider.cancelSubscriptionNow({ subscriptionId: 'sub_terminated' });
     expect(h.calls).toHaveLength(1);

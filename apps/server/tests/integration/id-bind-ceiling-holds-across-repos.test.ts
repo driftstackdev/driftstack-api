@@ -16,9 +16,9 @@
 //                             already written.
 //   purgeEmails               the V-295c3 90-day erasure of the email column on
 //                             unsubscribed rows — a privacy commitment.
-//   findExistingProfileIds    the orphan-blob reaper, which is wrapped to NEVER
-//                             throw, so it would log and continue having reaped
-//                             nothing.
+//   findExistingProfileIds    the orphan-blob reaper: its pass would fail every
+//                             day, reaping nothing, while the orphans it exists
+//                             to remove kept accruing.
 //
 // Each arm passes ids that do not exist. Binding is what breaks, not matching,
 // so this needs no seeded rows and stays fast.

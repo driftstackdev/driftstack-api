@@ -16,11 +16,26 @@
 // Returns a synchronous void handler (handleInbound is sync): the R2 write is
 // fire-and-forget off the receive loop. A write failure is logged, never thrown
 // (a crashing receive loop would tear down every session on the node).
+//
+// ⛔ A session that did not start from the profile's stored state never saves
+// over it (migration 0143). When dispatch could not hand the device that state
+// it records `profile_save_back_refused` on the session row; such a session
+// started from an EMPTY profile, so its save would replace the customer's
+// stored cookies, logins and site data with nothing. Both shapes are refused:
+// nothing is written, last_saved_at is not stamped, one WARN names the session
+// and profile, and the customer gets `session.profile_save_failed` with reason
+// `profile_not_loaded`.
 
 import type { ProfileSaved } from '../schemas/harness-control-protocol.js';
 import { profileSealedBlobKey, type R2 } from '../lib/r2.js';
 import type { Logger } from '../lib/logger.js';
 import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
+import {
+  PROFILE_NOT_LOADED_REASON,
+  profileNotLoadedEventData,
+  type ProfileSaveFailedRelayWebhooks,
+} from './profile-save-failed-relay.js';
+import { logLostWebhookEvent } from './webhooks.js';
 
 /**
  * Cross-account ownership guard for the profileSaved persist (defense-in-depth).
@@ -34,9 +49,16 @@ import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
  */
 export interface ProfileSavedOwnershipDeps {
   agentSessions: {
-    get(
-      id: string,
-    ): Promise<{ accountId: string; nodeId: string | null; profileId: string | null } | null>;
+    /** `profileSaveBackRefused` (0143) is the dispatch-time refusal: the
+     *  session never started from the profile's stored state. The real repo
+     *  always returns it; the consumer admits a save only on an explicit
+     *  `false`, so a read that omits it refuses (fails closed). */
+    get(id: string): Promise<{
+      accountId: string;
+      nodeId: string | null;
+      profileId: string | null;
+      profileSaveBackRefused?: boolean;
+    } | null>;
   };
   profiles: {
     findById(args: { id: string; accountId: string }): Promise<unknown>;
@@ -50,6 +72,13 @@ export interface ProfileSavedOwnershipDeps {
       sizeBytes?: number;
     }): Promise<void>;
   };
+  /**
+   * 0143 — how a refused save-back reaches the customer: the same
+   * `session.profile_save_failed` webhook a device-reported failure produces.
+   * REQUIRED for the reason `ownership` is: an optional notice is one a future
+   * caller omits, and the refusal then happens in silence.
+   */
+  webhooks: ProfileSaveFailedRelayWebhooks;
 }
 
 /**
@@ -63,6 +92,9 @@ export interface ProfileSavedOwnershipDeps {
  * (V-2140): it was optional, and a caller that omitted it got the pre-guard
  * behaviour — an authenticated node could overwrite any profile's sealed blob.
  * Production always passed it; the door existed for the next caller.
+ *
+ * It is also REFUSED (and reported to the customer) for a session whose
+ * save-back was refused at dispatch (migration 0143) — see the file header.
  */
 export function makeProfileSavedPersister(
   r2: R2,
@@ -151,6 +183,45 @@ export function makeProfileSavedPersister(
               },
               'profileSaved refused: profile not owned by the session account (cross-account write blocked)',
             );
+            return;
+          }
+          // 0143 — the session never started from this profile's stored state
+          // (dispatch could not hand it over), so it began EMPTY: its save would
+          // replace the customer's stored profile with that. Refuse both shapes.
+          // Inline: write nothing. stored:true: no PUT URL was minted for such a
+          // session, so a contract-following device cannot send it — a PUT
+          // through some other URL for this profile is still never recorded as
+          // this session's save. `!== false` fails closed on a row read that
+          // does not carry the flag.
+          if (session.profileSaveBackRefused !== false) {
+            logger.warn(
+              {
+                component: 'profile-store',
+                sessionId: frame.sessionId,
+                profileId: frame.profile_id,
+                shape: sealedBlob !== undefined ? 'inline' : 'stored',
+                reason: PROFILE_NOT_LOADED_REASON,
+              },
+              'profileSaved refused: the session did not start from the stored profile, so its save would replace it',
+            );
+            try {
+              await ownership.webhooks.enqueueEvent(
+                session.accountId,
+                'session.profile_save_failed',
+                profileNotLoadedEventData({
+                  sessionId: frame.sessionId,
+                  profileId: frame.profile_id,
+                }),
+              );
+            } catch (err) {
+              logLostWebhookEvent(logger, {
+                component: 'profile-store',
+                accountId: session.accountId,
+                eventType: 'session.profile_save_failed',
+                err,
+                context: { session_id: frame.sessionId, profile_id: frame.profile_id },
+              });
+            }
             return;
           }
           ownerAccountId = session.accountId;

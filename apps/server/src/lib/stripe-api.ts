@@ -247,7 +247,9 @@ export class StripeApiClient {
    * was never paid (past_due): prorating it credits "unused time" of a period the
    * customer did not pay for. It then sends `prorate=false&invoice_now=false`, so
    * nothing is credited and no final invoice is raised; the open invoice is left
-   * as Stripe holds it. Omitted, it is `true` — the termination path's meaning.
+   * as Stripe holds it. Both callers pass it for a past_due subscription: the
+   * replaced-subscription cancel and, since 2026-09-24, account termination.
+   * Omitted, it is `true`.
    */
   async cancelSubscription(args: {
     subscriptionId: string;
