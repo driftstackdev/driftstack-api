@@ -131,8 +131,8 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     );
   });
 
-  it('iOS apple-touch-icon points at the raster /apple-touch-icon.png (iOS requires a PNG; SVG favicon alone = blank home-screen icon)', () => {
-    expect(body).toMatch(/<link rel="apple-touch-icon" href="\/apple-touch-icon\.png" \/>/);
+  it('iOS apple-touch-icon points at the raster /apple-touch-icon-2.png (iOS requires a PNG; SVG favicon alone = blank home-screen icon). A new name, not an in-place rewrite: /*.png is immutable at the edge for a year, and the old name held the violet mark', () => {
+    expect(body).toMatch(/<link rel="apple-touch-icon" href="\/apple-touch-icon-2\.png" \/>/);
   });
 
   it('visitor mode toggle (S13 2026-07-03): pre-paint whitelisted ds_theme_mode script + [data-theme-toggle] delegated wiring + theme-color sync — plain-code is:inline bodies only', () => {

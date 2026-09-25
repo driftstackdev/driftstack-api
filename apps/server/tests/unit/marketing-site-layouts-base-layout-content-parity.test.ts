@@ -109,8 +109,8 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
     expect(body).toMatch(/href="\/driftstack-mark\.svg(\?v=\d+)?"/);
   });
 
-  it('iOS apple-touch-icon points at the raster /apple-touch-icon.png — an SVG favicon alone leaves a blank/generic icon when driftstack.io is added to an iPhone home screen (iOS requires a PNG); on-brand for an iPhone-focused product', () => {
-    expect(body).toMatch(/<link rel="apple-touch-icon" href="\/apple-touch-icon\.png" \/>/);
+  it('iOS apple-touch-icon points at the raster /apple-touch-icon-2.png (a new name, because /*.png is immutable at the edge for a year and the old name held the violet mark) — an SVG favicon alone leaves a blank/generic icon when driftstack.io is added to an iPhone home screen (iOS requires a PNG); on-brand for an iPhone-focused product', () => {
+    expect(body).toMatch(/<link rel="apple-touch-icon" href="\/apple-touch-icon-2\.png" \/>/);
   });
 
   it('visitor mode toggle pinned (S13 2026-07-03): a pre-paint is:inline script in <head> applies the WHITELISTED saved mode (ds_theme_mode, light|dark only — marketing does NOT expose the accent axis, and deliberately ignores prefers-color-scheme) + a body-end delegated listener wires every [data-theme-toggle] button and keeps the theme-color meta in sync. Both scripts are PLAIN CODE — the template-literal-in-expression-container form ships a dead no-op string (2026-07-02 bug class)', () => {
