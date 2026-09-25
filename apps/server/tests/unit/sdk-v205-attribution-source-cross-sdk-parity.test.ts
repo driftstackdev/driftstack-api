@@ -140,13 +140,15 @@ describe('W842 cross-SDK V-205 attribution source check', () => {
     expect(hook).toMatch(/V-211 anonymity\s+— ZERO founder framing/);
   });
 
-  // ─── AGENTS.md mentions both rules ────────────────────────────
+  // ─── The hook states the rule in plain English ───────────────
 
-  it('CRITICAL AGENTS.md documents the no-AI-tooling-attribution rule (matching V-205). Drift would let onboarding contributors miss the policy. The rule is stated in plain English (not via V-NNN reference) so contributors understand it without needing to look up the V-anchor.', () => {
-    const agents = read(resolve(REPO_ROOT, 'AGENTS.md'));
-    expect(agents).toMatch(/third-party tooling attribution trailer/);
-    expect(agents).toMatch(/co-authored-by/i);
-    expect(agents).toMatch(/tooling is not part of commit metadata/);
+  it('CRITICAL the commit-msg hook states the no-tooling-attribution rule (V-205) in plain English, not only as a V-NNN reference, so a contributor who hits a rejection understands it without looking up the V-anchor. (This read an untracked contributor-notes file before; the hook is the tracked place the rule is both stated and enforced.)', () => {
+    const hook = read(resolve(REPO_ROOT, 'scripts/git-hooks/commit-msg'));
+    expect(hook).toMatch(
+      /Driftstack-only commit attribution\. ZERO third-\s*\n#\s+party tooling trailers/,
+    );
+    expect(hook).toMatch(/ZERO "Generated with" footers, ZERO robot\s*\n#\s+emoji markers/);
+    expect(hook).toMatch(/fix: {5}remove the offending line\(s\) from your commit/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.13b (v2-#8) — heartbeat tracker tests.
+// Arc 4 phase 2.B, slice 8.13b (v2-#8) — heartbeat tracker tests.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -11,7 +11,7 @@ const T_PLUS_29S = new Date(T0.getTime() + 29_000);
 const T_PLUS_30S = new Date(T0.getTime() + 30_000);
 const T_PLUS_31S = new Date(T0.getTime() + 31_000);
 
-describe('Arc 4 Wave 2.B sub-slice 8.13b InMemoryPairModeHeartbeatTracker', () => {
+describe('Arc 4 phase 2.B, slice 8.13b InMemoryPairModeHeartbeatTracker', () => {
   it('recordHeartbeat stores the timestamp; getLastHeartbeatAt round-trips', () => {
     const t = new InMemoryPairModeHeartbeatTracker();
     t.recordHeartbeat({ sessionId: 'agt_x', at: T0 });

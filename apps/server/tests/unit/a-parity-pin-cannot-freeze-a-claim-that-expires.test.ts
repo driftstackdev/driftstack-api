@@ -68,6 +68,12 @@ const HAND_MAINTAINED_COUNT =
  * MEASURED 2026-08-17 with a CORRECT extractor. May only fall; raising either is
  * the bug this file is about.
  *
+ * Ratcheted 75 → 67 (futureTense) and 89 → 82 (handMaintainedCount) when the
+ * pins on the internal design notes were retired with those notes (they moved to
+ * the private repository). Eight of the retired docs-internal-* parity files froze
+ * a future-tense promise and seven froze a hand-maintained count; both sets were
+ * re-measured against HEAD in the same change.
+ *
  * Ratcheted 76 → 75 (futureTense) by V-841, which retired the byok-rotation pin's
  * frozen "deferred to a follow-up" wiring claim. Measured in the same breath as
  * the pin edit rather than discovered by the next full run — the first time in
@@ -131,7 +137,7 @@ const HAND_MAINTAINED_COUNT =
  * that were both broken — the comparison measured nothing and agreed with itself.
  * The fixture case below is what actually caught it.
  */
-const CEILINGS = { futureTense: 75, handMaintainedCount: 89 } as const;
+const CEILINGS = { futureTense: 67, handMaintainedCount: 82 } as const;
 
 function parityPinFiles(): string[] {
   return readdirSync(UNIT_DIR)

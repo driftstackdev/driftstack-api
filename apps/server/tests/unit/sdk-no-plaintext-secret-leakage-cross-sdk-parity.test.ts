@@ -6,8 +6,8 @@
 // ds_live_demo / ds_test_fakefake...) are allowed.
 //
 // Defense against accidental commits of real keys — the
-// V-credential-handling memory rule + AGENTS.md trust pattern says
-// LIVE-mode secrets NEVER pass through agent chat / source / PR
+// V-credential-handling rule + the project's trust pattern says
+// LIVE-mode secrets NEVER pass through chat / source / PR
 // artifacts. This test is a structural backstop.
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -138,7 +138,7 @@ describe('W840 cross-SDK no plaintext-secret leakage', () => {
 
   // ─── SDK runtime source scan ─────────────────────────────────
 
-  it('CRITICAL no SDK runtime source contains real-looking plaintext secrets (sk_live_ / pk_live_ / whsec_<32hex> / ds_live_<24chars> / GitHub PAT / AWS access key). Only placeholder/ellipsis values allowed. Defense against accidental commits of real keys per credential-handling memory rule + AGENTS.md trust pattern.', () => {
+  it('CRITICAL no SDK runtime source contains real-looking plaintext secrets (sk_live_ / pk_live_ / whsec_<32hex> / ds_live_<24chars> / GitHub PAT / AWS access key). Only placeholder/ellipsis values allowed. Defense against accidental commits of real keys per the credential-handling rule and trust pattern.', () => {
     for (const f of sdkProductionFiles()) {
       const p = read(f);
       const rel = relative(REPO_ROOT, f);

@@ -226,7 +226,7 @@ describe('W786 docs reference/ triplet content parity', () => {
     expect(p).toMatch(/\| `enterprise`\s+\| 60,000\s+\| 1,000\s+\| 600\s+\| 10/);
   });
 
-  it("CRITICAL 429 response shape + Retry-After header framing pinned. S36 2026-07-07 (fable-truth-audit): 'capped at 10s' — the real default cap in all three SDKs (TS maxDelayMs 10_000, Python max_delay_ms 10_000, Go MaxDelay 10s); the old 30s claim matched no SDK.", () => {
+  it("CRITICAL 429 response shape + Retry-After header framing pinned. S36 2026-07-07 (truth audit): 'capped at 10s' — the real default cap in all three SDKs (TS maxDelayMs 10_000, Python max_delay_ms 10_000, Go MaxDelay 10s); the old 30s claim matched no SDK.", () => {
     const p = read(RL);
 
     expect(p).toMatch(/"type": "https:\/\/errors\.driftstack\.dev\/rate-limited"/);
@@ -362,7 +362,7 @@ describe('W786 docs reference/ triplet content parity', () => {
     );
   });
 
-  it("CRITICAL 4-key-pattern ascii-table pinned. read / read:sessions / write / account_owner — each row demonstrates the implication chain. S36 2026-07-07 (fable-truth-audit): the write row's old 'can do: read, write' claim was FALSE — neither scope-predicate site (lib/errors-helpers.ts hasScope, services/auth.ts requireScope) lets `write` satisfy `read` or any `read:X`; only exact match, `read`, or `account_owner` do.", () => {
+  it("CRITICAL 4-key-pattern ascii-table pinned. read / read:sessions / write / account_owner — each row demonstrates the implication chain. S36 2026-07-07 (truth audit): the write row's old 'can do: read, write' claim was FALSE — neither scope-predicate site (lib/errors-helpers.ts hasScope, services/auth.ts requireScope) lets `write` satisfy `read` or any `read:X`; only exact match, `read`, or `account_owner` do.", () => {
     const p = read(SCP);
 
     expect(p).toMatch(/key with: read\s+→ can do: read, plus every read:\*/);

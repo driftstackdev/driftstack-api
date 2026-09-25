@@ -204,7 +204,7 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     }
   });
 
-  it("CRITICAL S35 2026-07-07 (fable-frontend-audit) — fmtIso() FUTURE-timestamp branch pinned in the executable copy. A rotated key's grace expiry (expires_at = now+24h) used to hit the floor()d day math and render 'grace ends -1 days ago' for the whole grace window; future values now render 'in <1h' / 'in Nh' / 'in N days'. Drift back to past-only math resurrects the negative-days display.", () => {
+  it("CRITICAL S35 2026-07-07 (frontend audit) — fmtIso() FUTURE-timestamp branch pinned in the executable copy. A rotated key's grace expiry (expires_at = now+24h) used to hit the floor()d day math and render 'grace ends -1 days ago' for the whole grace window; future values now render 'in <1h' / 'in Nh' / 'in N days'. Drift back to past-only math resurrects the negative-days display.", () => {
     const p = read(PAGE);
 
     for (const phrase of [

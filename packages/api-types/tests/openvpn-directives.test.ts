@@ -402,7 +402,7 @@ describe('lowerOpenvpnScriptSecurity', () => {
   });
 });
 
-// The upload-side mirror of the node's external-file-reference reject (A3
+// The upload-side mirror of the node's external-file-reference reject (harness
 // `8a03a3929`). A config that references ca/cert/key FILES the isolated session
 // dir won't contain parses fine and dies late in openvpn as a generic "Options
 // error"; caught at upload it names the directive. These arms pin the rule to
@@ -451,7 +451,7 @@ describe('findUnresolvableOpenvpnFileReferences', () => {
     expect(findUnresolvableOpenvpnFileReferences(both)).toEqual([]);
   });
 
-  it('CRITICAL CASE-SENSITIVE, matching the node parser (A3 diff): `CA ca.crt` (uppercase directive) is NOT flagged — openvpn rejects that LOUD at startup, a different class from the silent file-not-found we guard; and an uppercase `<CA>` block does NOT satisfy `ca ca.crt`, so the file reference IS still flagged (the accept-something-broken miss the cross-language diff caught).', () => {
+  it('CRITICAL CASE-SENSITIVE, matching the node parser (harness diff): `CA ca.crt` (uppercase directive) is NOT flagged — openvpn rejects that LOUD at startup, a different class from the silent file-not-found we guard; and an uppercase `<CA>` block does NOT satisfy `ca ca.crt`, so the file reference IS still flagged (the accept-something-broken miss the cross-language diff caught).', () => {
     // uppercase keyword → left to openvpn's loud "unrecognized option" reject
     expect(findUnresolvableOpenvpnFileReferences('client\nCA ca.crt\n')).toEqual([]);
     expect(findUnresolvableOpenvpnFileReferences('client\n--CA ca.crt\n')).toEqual([]);

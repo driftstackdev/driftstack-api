@@ -137,7 +137,7 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
       // Postgres only matches this ON CONFLICT when the arbiter carries the
       // SAME predicate. Without the `where`, real Postgres raises 42P10 ("no
       // unique or exclusion constraint matching the ON CONFLICT specification")
-      // and every idempotent crypto checkout 500s. (Fable audit-2 2026-07-08,
+      // and every idempotent crypto checkout 500s. (Audit-2 2026-07-08,
       // C6 — invisible to the pglite/in-memory tests, only real PG enforces it.)
       .onConflictDoNothing({
         target: cryptoOrders.idempotencyKey,

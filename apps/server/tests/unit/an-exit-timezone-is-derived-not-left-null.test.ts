@@ -87,7 +87,7 @@ describe('an unknown exit stays UNKNOWN', () => {
   });
 });
 
-// ── The full-ISO-3166 expansion (2026-09-09) — closing A3's ~19% of sessions ──
+// ── The full-ISO-3166 expansion (2026-09-09) — closing the measured ~19% of sessions ──
 // that fell to the harness archetype (Europe/Istanbul) because their KNOWN exit
 // country had no entry in the original 65.
 describe('the country table covers the world with real, valid zones', () => {

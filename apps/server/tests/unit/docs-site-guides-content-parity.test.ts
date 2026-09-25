@@ -126,7 +126,7 @@ describe('W603 apps/docs/guides pages content parity', () => {
     );
     expect(body).toMatch(/^## Concurrency$/m);
     expect(body).toMatch(
-      // S31 2026-07-07 (fable-truth-audit) — concurrency 429s carry no Retry-After.
+      // S31 2026-07-07 (truth audit) — concurrency 429s carry no Retry-After.
       /`429 Too Many Requests` on `sessions\.create\(\)`, with `current_sessions` and `limit` in the problem body/,
     );
     expect(body).toMatch(/\| Free\s+\| 1\s+\|/);

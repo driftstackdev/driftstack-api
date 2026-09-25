@@ -10,8 +10,8 @@
 // harness result back into the typed `IntentResult` surfaced on the
 // /v1/agent-sessions/{id}/message turn result. `summary` (success) and `reason`
 // (failure) are the customer-facing copy — derived here from the harness
-// outputData (shapes per docs/internal/harness-intent-contract.md) and the
-// A3-locked error codes. captureId is intentionally NOT set: the harness returns
+// outputData (shapes per the internal harness intent contract notes) and the
+// harness-locked error codes. captureId is intentionally NOT set: the harness returns
 // screenshot/source inline in outputData, and minting a stored captureId is a
 // (later) storage-side concern, not a pure mapping — success still carries a
 // descriptive summary.
@@ -256,7 +256,7 @@ function summarize(intent: AgentIntent, outputData: unknown): string {
     case 'scroll': {
       // W173 — surface the harness's distance clamp, mirroring the existing
       // `capped`/`timeout_capped` flags. The harness emits `distance_capped` in
-      // outputData (always present, A3 bus W219 / harness 84b85529): `true` ONLY
+      // outputData (always present, W219 / harness 84b85529): `true` ONLY
       // when the requested distance_px exceeded the 15000px UPPER clamp and was
       // capped to 15000 — i.e. the customer asked to scroll FARTHER than allowed.
       // A negative/non-finite request clamps to 0 with `distance_capped:false`
@@ -317,7 +317,7 @@ function summarizeCapture(intent: Extract<AgentIntent, { kind: 'capture' }>): st
 // never names how that was found out.
 
 /**
- * The prefix A3's click refusal ALWAYS carries while the dedicated code is not
+ * The prefix the harness's click refusal ALWAYS carries while the dedicated code is not
  * yet emitted (the legacy form: `intent_webdriver_failed` + this message). A
  * refusal, not an ambiguous failure: the device checked BEFORE tapping, so the
  * click provably did not happen.
@@ -409,7 +409,7 @@ export function elementCoveredResult(
 
 /**
  * A tap the device REFUSED before touching the page (click `require_unoccluded`,
- * A3 V-3358; and send_keys' focus tap, V-3360, where it also typed nothing),
+ * V-3358; and send_keys' focus tap, V-3360, where it also typed nothing),
  * and why.
  *
  *  covered     something else is at the tap point — every occlusion reason,
@@ -542,8 +542,8 @@ export function targetUnverifiedResult(
 }
 
 // ── failure reason ────────────────────────────────────────────────────
-// Base copy per A3-locked error code + the harness's own message when present.
-// The harness is internal infra (A3 controls these strings); the message for
+// Base copy per harness-locked error code + the harness's own message when present.
+// The harness is internal infra (it controls these strings); the message for
 // e.g. intent_missing_parameter names the param, and webdriver errors name the
 // failing selector/url — both actionable + non-secret. Cap the appended message
 // so an unexpectedly long harness string can't bloat the row.
@@ -560,7 +560,7 @@ const ERROR_BASE: Record<HarnessErrorCode, string> = {
   intent_dispatch_error: 'the action could not be dispatched',
   intent_deadline_exceeded:
     'the action exceeded its whole-intent deadline and the browser session was terminated — start a new session; do not retry against this session',
-  // A1 `driftstack@16a94d0e5` — this code now has TWO harness emitters with
+  // `driftstack@16a94d0e5` — this code now has TWO harness emitters with
   // DIFFERENT node state: exit-unconfirmed keeps a process-lifetime same-id
   // tombstone and discards the in-progress profile, while lost-captured-browser
   // installs no tombstone, discards no profile and ends no session. The old
@@ -569,7 +569,7 @@ const ERROR_BASE: Record<HarnessErrorCode, string> = {
   // the guidance is unchanged and only the unprovable mechanism is dropped.
   intent_deadline_cleanup_unconfirmed:
     'the action exceeded its whole-intent deadline and browser cleanup could not be confirmed — start a new session and do not retry against this session',
-  // A3 W227 — the harness caps inline result output at 8 MiB; an over-cap
+  // W227 — the harness caps inline result output at 8 MiB; an over-cap
   // result is a terminal client error (narrow the selector / paginate).
   result_too_large: 'the result was too large to return — narrow the selector or paginate',
   session_paused: 'the browser session is paused — resume it before retrying this action',
@@ -637,7 +637,7 @@ function diagnose(intent: AgentIntent, code: HarnessErrorCode | undefined): Fail
       // rather than looping.
       return { category: 'element_not_found', retryable: true };
     case 'intent_page_load_failed':
-      // A3 #8 — the navigate reached the browser and the load ERRORED (proxy /
+      // Harness finding #8 — the navigate reached the browser and the load ERRORED (proxy /
       // DNS / TLS / HTTP). RETRYABLE: a load has no side effect to double-apply,
       // so replaying the SAME url is safe, and the session stays usable — retry
       // the URL, do NOT re-establish the session (that is what the old

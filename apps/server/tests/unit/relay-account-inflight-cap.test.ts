@@ -266,7 +266,7 @@ describe('per-account concurrent-relay cap (shared across cookies/set, history, 
       'error',
     );
 
-    // …while account 2 (a separate accountId) relays fine. A2 echoes ok.
+    // …while account 2 (a separate accountId) relays fine; its node echoes ok.
     const conn2 = fx.fleetControlRegistry.register('node-relay-iso-2', (data) => {
       const f = JSON.parse(data) as { type?: string; requestId?: string; sessionId?: string };
       if (f.type === 'setCookies') {

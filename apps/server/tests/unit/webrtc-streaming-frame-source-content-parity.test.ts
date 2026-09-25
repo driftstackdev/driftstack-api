@@ -1,17 +1,17 @@
 // W459.C — drift guard for packages/webrtc-streaming/src/frame-source.ts.
-// V-531 FrameSource cross-agent contract + MockFrameSource. Drift
-// here either drops the cross-agent compatibility framing
+// V-531 FrameSource cross-repo contract + MockFrameSource. Drift
+// here either drops the cross-repo compatibility framing
 // ('changes to this interface require a coordinated change to the
-// WebKit-fork implementation in the same wave' — silent divergence
+// WebKit-fork implementation in the same release' — silent divergence
 // across the IPC boundary) or breaks the consumer-driven pull-rate
 // framing (source emits multiple frames per pull, breaking the
 // throttle the pipeline depends on).
 //
-//   • V-531 framing pinned + cross-agent contract framing
+//   • V-531 framing pinned + cross-repo contract framing
 //     ('contract between this repo (driftstack-api control plane)
-//     and the WebKit fork (Agent 1's scope)').
-//   • IPC envelope doc reference at docs/internal/v531-cross-agent-
-//     contract.md.
+//     and the WebKit fork (a separate repo)').
+//   • IPC envelope doc reference (the internal V-531 fork contract
+//     notes).
 //   • FramePixelFormat: 4-value union (I420 + NV12 + BGRA + RGBA).
 //   • VideoFrame: 6-field (timestampMicros 'matches WebRTC's
 //     RTCRtpScriptTransformer timestamp resolution' + width + height
@@ -22,10 +22,10 @@
 //     targetHeight + preferredPixelFormat 'Implementations may fall
 //     back').
 //   • FrameSource framing pinned: 2-impl enumeration (MockFrameSource
-//     + WkWebViewFrameSource 'WebKit fork; Agent 1 scope') +
-//     cross-agent compatibility constraint 'changes to this interface
+//     + WkWebViewFrameSource 'WebKit fork; separate repo') +
+//     cross-repo compatibility constraint 'changes to this interface
 //     require a coordinated change to the WebKit-fork implementation
-//     in the same wave'.
+//     in the same release'.
 //   • FrameSource interface: 4 methods (start + pullNextFrame
 //     consumer-driven-pull-rate framing 'source emits at most one
 //     frame per pull regardless of how many frames the underlying
@@ -63,16 +63,16 @@ function read(p: string): string {
 describe('W459.C packages/webrtc-streaming/src/frame-source.ts content parity', () => {
   const body = read(LIB);
 
-  it("V-531 framing pinned: 'V-531 — frame source interface (cross-agent contract).' + 'This is the contract between this repo (driftstack-api control plane) and the WebKit fork (Agent 1's scope). The WebKit fork implements WkWebViewFrameSource on the harness side — extracting frames from a WKWebView's surface — and ships them across the IPC boundary to the control plane's encode pipeline (see encode-pipeline.ts).'", () => {
-    expect(body).toMatch(/\/\/ V-531 — frame source interface \(cross-agent contract\)\./);
+  it("V-531 framing pinned: 'V-531 — frame source interface (cross-repo contract).' + 'This is the contract between this repo (driftstack-api control plane) and the WebKit fork (a separate repo). The WebKit fork implements WkWebViewFrameSource on the harness side — extracting frames from a WKWebView's surface — and ships them across the IPC boundary to the control plane's encode pipeline (see encode-pipeline.ts).'", () => {
+    expect(body).toMatch(/\/\/ V-531 — frame source interface \(cross-repo contract\)\./);
     expect(body).toMatch(
-      /\/\/ This is the contract between this repo \(driftstack-api control plane\) and\s*\/\/ the WebKit fork \(Agent 1's scope\)\. The WebKit fork implements\s*\/\/ `WkWebViewFrameSource` on the harness side — extracting frames from a\s*\/\/ WKWebView's surface — and ships them across the IPC boundary to the\s*\/\/ control plane's encode pipeline \(see `encode-pipeline\.ts`\)\./,
+      /\/\/ This is the contract between this repo \(driftstack-api control plane\) and\s*\/\/ the WebKit fork \(a separate repo\)\. The WebKit fork implements\s*\/\/ `WkWebViewFrameSource` on the harness side — extracting frames from a\s*\/\/ WKWebView's surface — and ships them across the IPC boundary to the\s*\/\/ control plane's encode pipeline \(see `encode-pipeline\.ts`\)\./,
     );
   });
 
-  it("IPC envelope doc reference framing pinned: 'Document at docs/internal/v531-cross-agent-contract.md describes the IPC envelope; this file is the language-level interface the server-side pipeline depends on.'", () => {
+  it("IPC envelope doc reference framing pinned: 'The internal V-531 fork contract notes describe the IPC envelope; this file is the language-level interface the server-side pipeline depends on.'", () => {
     expect(body).toMatch(
-      /\/\/ Document at `docs\/internal\/v531-cross-agent-contract\.md` describes the\s*\/\/ IPC envelope; this file is the language-level interface the server-side\s*\/\/ pipeline depends on\./,
+      /\/\/ The internal V-531 fork contract notes describe the\s*\/\/ IPC envelope; this file is the language-level interface the server-side\s*\/\/ pipeline depends on\./,
     );
   });
 
@@ -100,12 +100,12 @@ describe('W459.C packages/webrtc-streaming/src/frame-source.ts content parity', 
     );
   });
 
-  it("FrameSource framing pinned: 2-impl enumeration (MockFrameSource for solo testing + WkWebViewFrameSource 'WebKit fork; Agent 1 scope — real frames from a WKWebView surface via the IPC envelope') + cross-agent compatibility constraint 'changes to this interface require a coordinated change to the WebKit-fork implementation in the same wave'", () => {
+  it("FrameSource framing pinned: 2-impl enumeration (MockFrameSource for solo testing + WkWebViewFrameSource 'WebKit fork; separate repo — real frames from a WKWebView surface via the IPC envelope') + cross-repo compatibility constraint 'changes to this interface require a coordinated change to the WebKit-fork implementation in the same release'", () => {
     expect(body).toMatch(
-      /\*\s*1\. `MockFrameSource` \(this file\) — synthetic frames for solo testing\.\s*\*\s*2\. `WkWebViewFrameSource` \(WebKit fork; Agent 1 scope\) — real frames\s*\*\s*from a WKWebView surface via the IPC envelope in V-531 cross-agent\s*\*\s*contract doc\./,
+      /\*\s*1\. `MockFrameSource` \(this file\) — synthetic frames for solo testing\.\s*\*\s*2\. `WkWebViewFrameSource` \(WebKit fork; separate repo\) — real frames\s*\*\s*from a WKWebView surface via the IPC envelope in V-531 cross-repo\s*\*\s*contract doc\./,
     );
     expect(body).toMatch(
-      /\*\s*Cross-agent compatibility constraint: the interface contract here MUST\s*\*\s*match the IPC envelope shape\. Changes to this interface require a\s*\*\s*coordinated change to the WebKit-fork implementation in the same wave\./,
+      /\*\s*Cross-repo compatibility constraint: the interface contract here MUST\s*\*\s*match the IPC envelope shape\. Changes to this interface require a\s*\*\s*coordinated change to the WebKit-fork implementation in the same release\./,
     );
   });
 

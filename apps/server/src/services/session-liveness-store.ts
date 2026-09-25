@@ -1,10 +1,10 @@
-// In-memory latest-worker-liveness-per-AGENT-session store (A2 W2679 re-base;
-// A3 driftstack f52699c37).
+// In-memory latest-worker-liveness-per-AGENT-session store (W2679 re-base;
+// harness driftstack f52699c37).
 //
 // The harness emits Heartbeat.activeSessionStates — a {agentSessionId → state}
 // map of the sessions a node is actually driving right now (active /
 // provisioning / idle / terminating) — keyed by the sessionAssign.sessionId
-// (== the agt_ agent-session id, A3 W1254; the same id pageState uses). The
+// (== the agt_ agent-session id, W1254; the same id pageState uses). The
 // fleet-control-registry's onHeartbeat consumer feeds every beat here; the
 // agent-sessions read shape's `liveness` field reads it so the GUI can tell a
 // genuinely-running session from a `status='active'` row whose worker crashed

@@ -81,7 +81,7 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
     // v2-#8 added PairMode{Conflict,StateInvalidTransition} (409
     // pair-mode contention). ProxyValidationFailed (422) is the
     // per-session proxy-config validation failure. ProfileInUse (409)
-    // is the A3-#7 single-active-session-per-profile guard.
+    // is the harness-finding-#7 single-active-session-per-profile guard.
     const types: Record<string, string> = {
       BadRequest: 'bad-request',
       Unauthorized: 'unauthorized',

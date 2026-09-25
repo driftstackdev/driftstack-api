@@ -96,7 +96,7 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     expect(p).not.toMatch(/admin's audit trail/);
   });
 
-  it("CRITICAL bucket-reference table + single-bucket framing pinned. S36 2026-07-07 (fable-truth-audit): the old 'consumes from BOTH buckets' wording was FALSE — POST /v1/sessions registers exactly one rate-limit preHandler, app.rateLimit('sessions:create') (routes/sessions.ts), and the middleware consumes only the single named bucket; `global` is never drained by session-create. Doc now states the each-call-drains-exactly-one-bucket reality.", () => {
+  it("CRITICAL bucket-reference table + single-bucket framing pinned. S36 2026-07-07 (truth audit): the old 'consumes from BOTH buckets' wording was FALSE — POST /v1/sessions registers exactly one rate-limit preHandler, app.rateLimit('sessions:create') (routes/sessions.ts), and the middleware consumes only the single named bucket; `global` is never drained by session-create. Doc now states the each-call-drains-exactly-one-bucket reality.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
@@ -188,7 +188,7 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     expect(p).toMatch(/x-ratelimit-bucket/);
   });
 
-  it('CRITICAL Retry-After + exponential-backoff-capped-10s framing pinned. S36 2026-07-07 (fable-truth-audit): all three SDKs cap retry backoff (incl. the honoured Retry-After hint) at 10 seconds — TS maxDelayMs: 10_000 (sdk-typescript/src/retry.ts), Python max_delay_ms 10_000 (retry.py), Go MaxDelay 10s (retry.go); the old 30s claim matched no SDK.', () => {
+  it('CRITICAL Retry-After + exponential-backoff-capped-10s framing pinned. S36 2026-07-07 (truth audit): all three SDKs cap retry backoff (incl. the honoured Retry-After hint) at 10 seconds — TS maxDelayMs: 10_000 (sdk-typescript/src/retry.ts), Python max_delay_ms 10_000 (retry.py), Go MaxDelay 10s (retry.go); the old 30s claim matched no SDK.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(

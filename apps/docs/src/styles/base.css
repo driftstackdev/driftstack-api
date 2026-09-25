@@ -58,8 +58,8 @@
   --shadow-inset-divider: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-/* Fleet token namespace (2026-06-12 rework — see
-   docs/internal/2026-06-12-design-system-spec.md). Resolves to the
+/* Fleet token namespace (2026-06-12 rework — see the internal
+   2026-06-12 design-system spec). Resolves to the
    two-axis CSS custom properties below, so tk-* classes flip with
    <html data-mode>/<html data-accent>. `@theme inline` makes the
    utilities reference the mode-scoped vars directly (bg-tk-surface →
@@ -276,7 +276,7 @@
 }
 
 /* ── Fleet design-system token layer (2026-06-12 rework; token contract per
-   docs/internal/2026-06-12-design-system-spec.md). Two independent axes on
+   the internal 2026-06-12 design-system spec). Two independent axes on
    <html>: data-mode (light|dark) × data-accent (violet|oxblood|teal). Fleet
    markup consumes these via the `tk` utility namespace. The shipped default
    is dark+oxblood ("Fleet Mission Control — Dark + Red", founder-locked

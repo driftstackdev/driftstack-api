@@ -2,8 +2,8 @@
 //
 // The customer used to be shown opaque harness prose, and the contract doc
 // described tokens no code produced. This module is the CP half of the fix agreed
-// with A3: the harness emits a closed token set in the result's `error` field, and
-// the sentence is derived HERE so A3 can reword their side freely without changing
+// with the harness side: the harness emits a closed token set in the result's `error` field, and
+// the sentence is derived HERE so the harness can reword its side freely without changing
 // what a customer reads. Same shape as agent-intent-result's copy derivation.
 //
 // ⛔ THE DISTINCTIONS ARE THE POINT, not the wording:

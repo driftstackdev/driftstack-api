@@ -12,9 +12,9 @@
 //   `human-driving` / `handback-pending` / `handback-queued` → unreachable
 //   after 30s without a heartbeat the sweep silently returns it to `ai-driving`
 //
-// This is a KNOWN cross-agent gap, not a plain bug: the harness has no control-plane
+// This is a KNOWN cross-repo gap, not a plain bug: the harness has no control-plane
 // surface to fire the missing transitions, and the future contract is already specified in
-// `docs/internal/cross-agent-control-plane-contract.md`. So the fix was documentation —
+// the internal harness control-plane contract notes. So the fix was documentation —
 // caveats on the three SDK quickstarts and the API reference, which all promised the
 // handback half as ordinary behaviour.
 //

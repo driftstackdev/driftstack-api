@@ -18,7 +18,7 @@ function read(p: string): string {
 describe('W596.A packages/behavioural-simulation/src/touch.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-530.A framing + synthetic-persona model + NO-collected-user-behaviour AGENTS.md scope rationale + sub-slice B/C/D deferral pinned', () => {
+  it('V-530.A framing + synthetic-persona model + NO-collected-user-behaviour project-scope rationale + sub-slice B/C/D deferral pinned', () => {
     expect(body).toMatch(/\/\/ V-530\.A — per-element-class touch event distributions\./);
     expect(body).toMatch(
       /First module of the Phase 3 real implementation\. Slots in behind the same/,
@@ -30,7 +30,7 @@ describe('W596.A packages/behavioural-simulation/src/touch.ts content parity', (
     expect(body).toMatch(
       /\/\/ model — NOT from any collected user behaviour\. The library carries no/,
     );
-    expect(body).toMatch(/\/\/ behavioural training data per AGENTS\.md scope\./);
+    expect(body).toMatch(/\/\/ behavioural training data per the project's scope\./);
     expect(body).toMatch(/\/\/ Sub-slices deferred:/);
     expect(body).toMatch(/\/\/\s+- V-530\.B \(W16\) — scroll velocity profiles with decay\./);
     expect(body).toMatch(

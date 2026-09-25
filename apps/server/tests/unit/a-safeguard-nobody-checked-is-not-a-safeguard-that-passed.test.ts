@@ -1,5 +1,5 @@
 // The safeguard verdict used to FAIL OPEN, and everyone involved believed the
-// opposite — including both agents who built the two halves.
+// opposite — including the authors of both halves.
 //
 // The node omits a safeguard layer it never checked, rather than reporting it
 // false. That is the right call at the source: absent means unmeasured, not

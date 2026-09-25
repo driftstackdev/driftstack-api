@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.20.c (v2-#8) — docs action-catalog drift guard.
+// Arc 4 phase 2.B, slice 8.20.c (v2-#8) — docs action-catalog drift guard.
 //
 // Pins apps/docs/src/pages/api/audit-log.md's "Action catalog" table
 // against AccountAuditActionSchema so any new action added to the
@@ -16,7 +16,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const DOCS_AUDIT_PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/api/audit-log.md');
 
-describe('Arc 4 Wave 2.B sub-slice 8.20.c docs audit-log action catalog completeness', () => {
+describe('Arc 4 phase 2.B, slice 8.20.c docs audit-log action catalog completeness', () => {
   const body = readFileSync(DOCS_AUDIT_PAGE, 'utf8');
 
   it('every AccountAuditAction enum value has a row in the docs action catalog', () => {

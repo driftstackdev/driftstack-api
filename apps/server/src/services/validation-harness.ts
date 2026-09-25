@@ -7,7 +7,7 @@
 // in the RecaptureService implementation — this service is just the
 // scheduler + ledger.
 //
-// Cross-repo dep: when Agent 1's V-203 Phase 2A vendor probes land,
+// Cross-repo dep: when the device side's V-203 Phase 2A vendor probes land,
 // the production RecaptureService can wire vendor-probe execution
 // behind the same triggerRecapture interface. Until then, the mock
 // from packages/recapture-automation is the dispatch target.

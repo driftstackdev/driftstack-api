@@ -14,7 +14,7 @@
 //     unlimited contract.
 //   • SessionRecord: 13 fields + 5-status union ('creating' |
 //     'ready' | 'busy' | 'destroyed' | 'errored') + migration 0045
-//     egressCapabilities JSONB (cross-agent contract 7d5992d9).
+//     egressCapabilities JSONB (cross-repo contract 7d5992d9).
 //   • SessionEventInput.type: 9-literal union covering full
 //     lifecycle (created → navigated/interacted/gui_input/waited/
 //     state_captured/screenshot_captured → destroyed/errored).
@@ -109,7 +109,7 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     // The atomic insert-if-under-cap (TOCTOU fix) is part of the contract.
     // Reflow-robust: prettier collapses this signature to one line (no
     // trailing comma), so match space-or-newline + an optional trailing comma.
-    // A3 finding #7 (W2979/W2980) — gained the optional `opts.profileId` arg for
+    // Finding #7 (W2979/W2980) — gained the optional `opts.profileId` arg for
     // the single-active-session-per-profile guard.
     expect(body).toMatch(
       /insertSessionIfUnderLimit\(\s*input: NewSessionInput,\s*limit: number,\s*opts\?: \{ profileId\?: string \},?\s*\): Promise<SessionRecord \| null>;/,

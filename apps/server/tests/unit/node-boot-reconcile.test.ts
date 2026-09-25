@@ -40,7 +40,7 @@ function reconcile(deps: {
   });
 }
 
-describe('reconcileNodeBootChange (CP bootId consumer, A2 W2813 + W2821 re-sweep)', () => {
+describe('reconcileNodeBootChange (CP bootId consumer, W2813 + W2821 re-sweep)', () => {
   it('no-op when bootId is absent on the wire (older node)', async () => {
     const agentSessions = sessionsStub();
     const map = new Map<string, string>();

@@ -38,7 +38,7 @@
  *
  *  ⭐ COVERAGE (2026-09-09): originally 65 curated countries, which left ~19% of
  *  live sessions falling through to the harness archetype (Europe/Istanbul)
- *  because their KNOWN exit country had no entry — measured by A3 across 78
+ *  because their KNOWN exit country had no entry — measured on the device across 78
  *  geo-resolving sessions. That is a free timezone-vs-IP mismatch, one of the
  *  cheapest fingerprint tells there is (Intl.DateTimeFormat().resolvedOptions()
  *  .timeZone needs no permission and every detector cross-checks it). Expanded

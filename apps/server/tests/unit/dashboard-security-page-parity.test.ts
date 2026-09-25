@@ -89,7 +89,7 @@ describe('W759-security dashboard /security page V-079 + V-353h + V-355 + V-216 
     );
   });
 
-  it('CRITICAL S35 2026-07-07 (fable-frontend-audit) — the mfa-recovery reveal panel is a DIRECT child of the mfa region, NOT nested inside data-section="mfa-enroll". setMfaState() hides mfa-enroll for enrolled users, so a nested panel made regenerated codes INVISIBLE while the server had already invalidated every old code (lockout risk). The 6-space indent pins region-level placement; the 8-space nested form must never come back.', () => {
+  it('CRITICAL S35 2026-07-07 (frontend audit) — the mfa-recovery reveal panel is a DIRECT child of the mfa region, NOT nested inside data-section="mfa-enroll". setMfaState() hides mfa-enroll for enrolled users, so a nested panel made regenerated codes INVISIBLE while the server had already invalidated every old code (lockout risk). The 6-space indent pins region-level placement; the 8-space nested form must never come back.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/MUST stay a direct child of the mfa region/);
@@ -103,7 +103,7 @@ describe('W759-security dashboard /security page V-079 + V-353h + V-355 + V-216 
     );
   });
 
-  it("CRITICAL S35 2026-07-07 (fable-frontend-audit) — enroll start has an in-flight + shown-QR guard. Every unguarded click minted a NEW pending TOTP secret server-side (last write wins), so a double-click could leave the customer scanning a stale QR. Disabled on click ('Generating secret…'), inert after the QR renders ('Secret generated — scan the QR below'), fixed-copy failure, re-enabled only on error.", () => {
+  it("CRITICAL S35 2026-07-07 (frontend audit) — enroll start has an in-flight + shown-QR guard. Every unguarded click minted a NEW pending TOTP secret server-side (last write wins), so a double-click could leave the customer scanning a stale QR. Disabled on click ('Generating secret…'), inert after the QR renders ('Secret generated — scan the QR below'), fixed-copy failure, re-enabled only on error.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/if \(mfaStart && mfaStart\.disabled\) return;/);

@@ -11,7 +11,7 @@
 //   • V-333b PlaywrightDriver pending — DRIVER=playwright +
 //     PLAYWRIGHT_BROWSER=webkit/chromium/firefox.
 //   • DRIVER=webkit returns DriverNotIntegratedError until WebKit
-//     fork (Agent 1 repo) lands production driver.
+//     fork (separate repo) lands production driver.
 //   • PUBLIC_API_BASE_URL defaults http://localhost:3000.
 //   • GUI self-hosted default base http://localhost:3000 (matches dev API;
 //     first-run wizard.
@@ -79,7 +79,7 @@ describe('W557.B /docs/runbooks/self-hosted-mac-local.md content parity', () => 
     expect(body).toMatch(/Astro apps in dev — they pick up the local API automatically\./);
   });
 
-  it("V-333b Playwright + DRIVER=webkit-NotIntegratedError framing pinned: '## Switch to the real browser path (V-333b — shipped)' + 'DRIVER=playwright' + 'PLAYWRIGHT_BROWSER=webkit  # or 'chromium' / 'firefox'' + 'Restart the API server. Sessions now spawn a real browser visible on the Mac desktop.' + 'Until V-333b ships, `DRIVER=webkit` returns `DriverNotIntegratedError` per design — the WebKit fork (Agent 1 repo) lands the production driver separately.' — pinned so the V-333b-pending + DRIVER=playwright-PLAYWRIGHT_BROWSER + 3-browser-options + DRIVER=webkit-NotIntegratedError + Agent-1-repo-separately commitment survives", () => {
+  it("V-333b Playwright + DRIVER=webkit-NotIntegratedError framing pinned: '## Switch to the real browser path (V-333b — shipped)' + 'DRIVER=playwright' + 'PLAYWRIGHT_BROWSER=webkit  # or 'chromium' / 'firefox'' + 'Restart the API server. Sessions now spawn a real browser visible on the Mac desktop.' + 'Until V-333b ships, `DRIVER=webkit` returns `DriverNotIntegratedError` per design — the WebKit fork (separate repo) lands the production driver separately.' — pinned so the V-333b-pending + DRIVER=playwright-PLAYWRIGHT_BROWSER + 3-browser-options + DRIVER=webkit-NotIntegratedError + fork-repo-separately commitment survives", () => {
     // V-866 — this section read "pending" and "once the PlaywrightDriver
     // lands" after it landed: PlaywrightDriver is a real 270-line Driver at
     // apps/server/src/drivers/playwright.ts and DRIVER=playwright is
@@ -106,8 +106,8 @@ describe('W557.B /docs/runbooks/self-hosted-mac-local.md content parity', () => 
     expect(body, 'and it is decoupled from V-333b').toMatch(
       /conditional on V-333b, which has shipped/,
     );
-    expect(body, 'the Agent-1-fork attribution survives the rewrap').toMatch(
-      /is the fork in the Agent 1 repo and lands separately\./,
+    expect(body, 'the fork attribution survives the rewrap').toMatch(
+      /is in the WebKit fork's own repo and lands separately\./,
     );
   });
 

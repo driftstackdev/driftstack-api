@@ -17,7 +17,7 @@
 // server error stops being retried at all until they upgrade.
 //
 // Closing the split itself is a semantics decision about SDK retry behaviour,
-// raised on the bus rather than taken here. What this file does is remove the
+// recorded as an open decision (D-2026-08-24-03) rather than taken here. What this file does is remove the
 // way in: a new problem type must be added to all three SDKs, or this fails.
 //
 // The roster is read from `PROBLEM_TYPES` in api-types rather than restated, so

@@ -1,5 +1,5 @@
 // 2026-06-19 — unit tests for the worker-CONNECTED orphan auto-close helper
-// (closeAgentSessionOnTerminalStatus, A3 W2682).
+// (closeAgentSessionOnTerminalStatus, W2682).
 //
 // Pins: a terminal sessionStatus frame closes the matching ACTIVE row with the
 // frame's clean snake_case reason; idempotent on a duplicate frame; a no-op on
@@ -96,7 +96,7 @@ describe('a memory reading that was never taken must not be logged as one', () =
   });
 });
 
-describe('closeAgentSessionOnTerminalStatus (A3 W2682)', () => {
+describe('closeAgentSessionOnTerminalStatus (W2682)', () => {
   it('closes an ACTIVE row with the frame reason on a terminal frame', async () => {
     const repo = new InMemoryAgentSessionsRepo();
     const created = await repo.create({ accountId: 'acct_1', tokenBudgetTotal: 1000 });

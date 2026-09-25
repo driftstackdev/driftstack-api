@@ -32,7 +32,11 @@ import { z } from 'zod';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import { callerCanAccessAgentSession } from './agent-sessions.js';
 import { NotFoundError, ValidationError } from '../lib/errors.js';
-import { GUI_CONTROL_KEY_HEADER, validateGuiControlKey } from '../lib/agent-session-control-key.js';
+import {
+  GUI_CONTROL_KEY_HEADER,
+  requireLiveGuiControlKeyMinter,
+  validateGuiControlKey,
+} from '../lib/agent-session-control-key.js';
 import { consumeEffectiveOwnerRateLimit } from '../middleware/rate-limit.js';
 
 const AGENT_SESSION_ID_RE = /^agt_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -116,6 +120,17 @@ export function registerAgentSessionsTransportReportRoute(
         nowMs,
       });
       if (result.authorized) {
+        // Security sweep #2 — and its minter still holds (else 401 + cleared).
+        await requireLiveGuiControlKeyMinter({
+          session,
+          authority: agentSessionsRepo,
+          nowMs,
+          onClearError: (err) =>
+            req.log.warn(
+              { component: 'gui-control-key', session_id: sessionId, err },
+              'refused control key could not be cleared; it stays refused',
+            ),
+        });
         req.guiControlKeyAuthorized = true;
         // rateLimit() keys off request.account (absent here); charge the owner.
         req.guiControlKeyRateLimitAccountId = result.ownerAccountId;

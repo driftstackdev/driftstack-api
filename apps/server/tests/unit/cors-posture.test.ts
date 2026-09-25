@@ -4,7 +4,7 @@
 // corsPostureWarning() returns a non-secret diagnostic for that exact
 // combination; assertCorsPosture() refuses boot there and allows every
 // legitimate pair (dev/test escape hatch, or locked-down production). See
-// docs/internal/2026-05-31-permissive-cors-in-prod.md.
+// the internal permissive-CORS-in-production notes (2026-05-31).
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';

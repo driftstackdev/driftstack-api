@@ -311,7 +311,7 @@ export interface StripeWebhooksRepo {
     at: Date;
   }): Promise<{ previousTier: AccountTier | null; appliedTier: AccountTier }>;
   /**
-   * Fable last-hours audit 2026-07-07 (C4) — the active/trialing counterpart
+   * Last-hours audit 2026-07-07 (C4) — the active/trialing counterpart
    * of downgradeAccountTierToBestRemaining. After an active/trialing upsert,
    * set the account tier to the HIGHEST-RANKED active/trialing subscription
    * (by tierActivationRank), NOT blindly the event's own tier. An account can
@@ -892,7 +892,7 @@ export class StripeWebhooksService {
     // plan of the price, or — for a price the configuration no longer names —
     // the plan the mirror row held (live-billing audit #11).
     if (tier !== undefined && (status === 'active' || status === 'trialing')) {
-      // Fable last-hours audit 2026-07-07 (C4) — set the account to its BEST
+      // Last-hours audit 2026-07-07 (C4) — set the account to its BEST
       // active/trialing entitlement, not blindly this event's tier. The sub
       // was already mirrored active by the upsert above, so the reconcile sees
       // it; for a single-active-subscription account best-active === this

@@ -1,13 +1,13 @@
 // N-COOKIE-ERROR-CONTRACT — the customer reads OUR sentence, never the harness's.
 //
 // The cookie result `reason` a customer sees was opaque harness prose, and the
-// contract doc described tokens no code produced. Owner delegated the call to A2:
-// a closed token set carried in the EXISTING `error` field, with the customer
-// sentence derived control-plane side so A3 can reword freely.
+// contract doc described tokens no code produced. Owner delegated the call to the
+// server: a closed token set carried in the EXISTING `error` field, with the customer
+// sentence derived control-plane side so the harness can reword freely.
 //
-// ⛔ THE NEAR-MISS IS PINNED HERE ON PURPOSE. A2 proposed `unavailable` for the
+// ⛔ THE NEAR-MISS IS PINNED HERE ON PURPOSE. The server first proposed `unavailable` for the
 // missing-extension case, inferred from the stderr prose at that emit site. The
-// wire token is `unsupported`; A3 caught it. Had it shipped, the one condition a
+// wire token is `unsupported`; the harness side caught it. Had it shipped, the one condition a
 // customer on an extension-less box actually hits would have coerced to the
 // fallback and told them nothing. So an arm asserts `unavailable` is NOT a member
 // and coerces — if someone "restores" it, that arm says why it was wrong.
@@ -94,7 +94,7 @@ describe('a cookie error is a token, not harness prose', () => {
     expect(cookieErrorToken('some prose nobody registered')).toBe('unknown');
   });
   it('CRITICAL the token mapper is called ONLY from the two cookie routes', () => {
-    // ⛔ A3 flagged this hazard and it is real. `unknown or inactive session` is
+    // ⛔ The harness side flagged this hazard and it is real. `unknown or inactive session` is
     // ALSO emitted by navigateHistoryResult, the tab-activation path, and three
     // upload/download sites — none of which have a token contract, and two of
     // which we agreed to leave as prose. Applying this mapper there would rewrite

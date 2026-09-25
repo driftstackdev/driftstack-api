@@ -131,7 +131,7 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).toMatch(/`data` is the PNG \*\*base64-encoded\*\*/);
     expect(p).toMatch(/Buffer\.from\(shot\.data, 'base64'\)/);
     expect(p).toMatch(
-      // S31 2026-07-07 (fable-truth-audit) — no idle timeout exists on any tier; only the
+      // S31 2026-07-07 (truth audit) — no idle timeout exists on any tier; only the
       // free-tier 20-minute duration cap auto-stops sessions.
       /`client\.sessions\.destroy\(\)` released the concurrent slot\. Only free-tier sessions stop on their own \(at the 20-minute cap\)/,
     );

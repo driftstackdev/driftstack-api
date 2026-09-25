@@ -26,7 +26,7 @@
 //     for new iOS minor versions. Out of scope for V-179
 //     implementation; the interface is the seam so a future
 //     Apple-release-notes scraper / RSS watcher can drop in.';
-//     today-fallback framing 'when Agent 1 notices a new iOS
+//     today-fallback framing 'when the fork notices a new iOS
 //     version, founder triggers recapture manually'.
 //   • IosVersionWatcher: 3 methods (getLastSeenVersion 'Stored
 //     externally (filesystem JSON, key/value store) — implementations
@@ -100,12 +100,12 @@ describe('W457.B packages/recapture-automation/src/interfaces.ts content parity'
     );
   });
 
-  it("IosVersionWatcher framing pinned: 'Detection layer — watches for new iOS minor versions. Out of scope for V-179 implementation; the interface is the seam so a future Apple-release-notes scraper / RSS watcher can drop in.' + today-fallback framing 'when Agent 1 notices a new iOS version, founder triggers recapture manually via RecaptureService.triggerRecapture().'", () => {
+  it("IosVersionWatcher framing pinned: 'Detection layer — watches for new iOS minor versions. Out of scope for V-179 implementation; the interface is the seam so a future Apple-release-notes scraper / RSS watcher can drop in.' + today-fallback framing 'when the fork notices a new iOS version, founder triggers recapture manually via RecaptureService.triggerRecapture().'", () => {
     expect(body).toMatch(
       /\* Detection layer — watches for new iOS minor versions\. Out of\s*\*\s*scope for V-179 implementation; the interface is the seam so a\s*\*\s*future Apple-release-notes scraper \/ RSS watcher can drop in\./,
     );
     expect(body).toMatch(
-      /\* Today: when Agent 1 notices a new iOS version, founder triggers\s*\*\s*recapture manually via `RecaptureService\.triggerRecapture\(\)`\./,
+      /\* Today: when the fork notices a new iOS version, founder triggers\s*\*\s*recapture manually via `RecaptureService\.triggerRecapture\(\)`\./,
     );
   });
 

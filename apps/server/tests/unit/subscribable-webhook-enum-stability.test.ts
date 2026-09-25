@@ -12,7 +12,7 @@
 // Eight shipped: session.completed, session.failed, api_key.revoked, the
 // Arc 5 EGRESS eg.7 addition session.egress_capability_changed plus
 // the V-666 crypto-order pair (crypto.order.paid + crypto.order.failed)
-// wired end-to-end 2026-05-22 plus W393 + A3 W1364.
+// wired end-to-end 2026-05-22 plus W393 + W1364.
 
 import { describe, expect, it } from 'vitest';
 import { SubscribableWebhookEventTypeSchema } from '@driftstack/api-types';
@@ -37,7 +37,7 @@ describe('W250.C SubscribableWebhookEventTypeSchema stability', () => {
       'crypto.order.failed',
       // W393 challenge-handling — subscribable challenge alerts.
       'session.challenge_detected',
-      // A3 W1364 — profile save-back failure (stale-restore warning).
+      // W1364 — profile save-back failure (stale-restore warning).
       'session.profile_save_failed',
     ]) {
       expect(live.has(evt), `missing event ${evt}`).toBe(true);
@@ -60,7 +60,7 @@ describe('W250.C SubscribableWebhookEventTypeSchema stability', () => {
 
   it('exposes exactly the documented number of live events', () => {
     // Eight emitted customer events (3 core + Arc 5 EGRESS eg.7 + V-666
-    // crypto.order.paid/failed + W393 session.challenge_detected + A3 W1364
+    // crypto.order.paid/failed + W393 session.challenge_detected + W1364
     // session.profile_save_failed). Increment if/when the schema grows; this
     // is intentionally tight so a silent enum addition fails CI.
     expect(live.size).toBe(8);

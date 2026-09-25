@@ -1,7 +1,7 @@
 // Step A — dispatchSessionAssignOnCreate: session-create dispatches a
 // sessionAssign to the connected fleet node (local fleet-demo). Pins: no-op
 // when the fleet-CP wiring is absent (prod); dispatch-on-create only if the
-// node is connected (A3 W298 at-most-once, no queue); the assign carries a
+// node is connected (W298 at-most-once, no queue); the assign carries a
 // PUBLISHER token (canPublish:true) — distinct from the customer's subscriber
 // token; best-effort (a decrypt/mint failure never throws).
 
@@ -158,7 +158,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(frame.initialUrl).toBe(DISPATCH.initialUrl);
   });
 
-  it('geolocation override rides the dispatched assign when passed (A3 contract 2026-07-01)', async () => {
+  it('geolocation override rides the dispatched assign when passed (harness contract 2026-07-01)', async () => {
     const sent: string[] = [];
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
@@ -195,7 +195,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(frame.geolocation).toBeUndefined();
   });
 
-  it('idleTimeoutSeconds (manual-session knob, A3 W2813) rides the assign when passed', async () => {
+  it('idleTimeoutSeconds (manual-session knob, W2813) rides the assign when passed', async () => {
     const sent: string[] = [];
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
@@ -1058,7 +1058,10 @@ describe('dispatchSessionAssignOnCreate', () => {
     } as unknown as AccountProxiesService;
   }
 
-  it('emits exit_identity from the cache; quic_ok=true when the resolved socks5 is UDP-verified', async () => {
+  // Owner item 9 — quic_ok is a MEASUREMENT: true only when a stored reading of the
+  // proxy confirmed QUIC (an-exit-identity-reports-quic-only-when-it-was-measured
+  // .test.ts). A configured `udp_capable` flag and "a VPN tunnels UDP" are not.
+  it('emits exit_identity from the cache; quic_ok=false when the socks5 is only CONFIGURED as UDP-capable (configuration is not a measurement)', async () => {
     const sent: string[] = [];
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
@@ -1092,7 +1095,7 @@ describe('dispatchSessionAssignOnCreate', () => {
       region: 'California',
       city: 'San Jose',
       timezone: 'America/Los_Angeles',
-      quic_ok: true,
+      quic_ok: false,
     });
     // probed_at is a valid ISO string the panel can show.
     expect(Number.isNaN(Date.parse((frame.exit_identity as { probed_at: string }).probed_at))).toBe(
@@ -1131,7 +1134,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect((frame.exit_identity as Record<string, unknown>).quic_ok).toBe(false);
   });
 
-  it('quic_ok=true for a resolved VPN wire (full IP tunnel carries UDP/QUIC)', async () => {
+  it('quic_ok=false for a resolved VPN wire nobody measured (a tunnel carrying UDP is an expectation, not a check)', async () => {
     const sent: string[] = [];
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
@@ -1160,7 +1163,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     });
 
     const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
-    expect((frame.exit_identity as Record<string, unknown>).quic_ok).toBe(true);
+    expect((frame.exit_identity as Record<string, unknown>).quic_ok).toBe(false);
   });
 
   it('omits exit_identity on a cache MISS (probe saw none / cold after restart) — box keeps default behaviour', async () => {
@@ -1541,7 +1544,7 @@ describe('dispatchSessionEndOnClose', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  it('node not connected — QUEUES the sessionEnd + re-dispatches it on reconnect (founder bug, A3 W2859)', async () => {
+  it('node not connected — QUEUES the sessionEnd + re-dispatches it on reconnect (founder bug, W2859)', async () => {
     const registry = new FleetControlRegistry(); // node not connected at close time
     const log = logger();
     await dispatchSessionEndOnClose({

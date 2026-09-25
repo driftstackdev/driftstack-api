@@ -90,7 +90,7 @@ describe('W819 cross-SDK client constructor parity', () => {
 
   // ─── 15-required-resource-accessor set ────────────────────────
 
-  it('CRITICAL every required resource accessor exists on each SDK client. Drift to dropping any would orphan a documented customer surface. Wave 1119: EGRESS (egress, all 3 SDKs at commit b4c27598) + AI-CHAT (agentSessions, all 3 SDKs at the AI-D slice) + AI-B4 RECIPES (recipes, all 3 SDKs at this Q.5.d cross-SDK lift). V-1093: the title stated a roster size, which was accurate about the list and silent about the surface — the list was a resource short of what the clients carry, and a stated size reads as coverage.', () => {
+  it('CRITICAL every required resource accessor exists on each SDK client. Drift to dropping any would orphan a documented customer surface. Slices 1119.x: EGRESS (egress, all 3 SDKs at commit b4c27598) + AI-CHAT (agentSessions, all 3 SDKs at the AI-D slice) + AI-B4 RECIPES (recipes, all 3 SDKs at this Q.5.d cross-SDK lift). V-1093: the title stated a roster size, which was accurate about the list and silent about the surface — the list was a resource short of what the clients carry, and a stated size reads as coverage.', () => {
     const ts = read(TS);
     const py = read(PY);
     const go = read(GO);

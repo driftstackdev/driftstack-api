@@ -21,7 +21,7 @@
 // on.
 //
 // Keys are namespaced by the random code the service generates, so this never
-// flushes and cannot disturb another agent's index.
+// flushes and cannot disturb a concurrent run's data.
 
 import { randomBytes } from 'node:crypto';
 import { Redis } from 'ioredis';

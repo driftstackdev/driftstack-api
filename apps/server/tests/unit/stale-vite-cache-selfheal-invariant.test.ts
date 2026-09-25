@@ -3,9 +3,9 @@
 // A vite cache entry can embed an absolute path under the OS temp root, which
 // macOS reaps on a schedule and on reboot. When that happens vitest fails to
 // COLLECT the affected files rather than failing a test, and the suite silently
-// shrinks — A3 measured a drop from 26,400 tests to 645, reported as collection
+// shrinks — one measured run dropped from 26,400 tests to 645, reported as collection
 // errors with no hint that a cache was the cause. It has cost time in at least
-// two agents' runs, which is why it is now healed automatically rather than
+// two separate runs, which is why it is now healed automatically rather than
 // rediscovered.
 //
 // Two properties are pinned, and the second matters as much as the first:

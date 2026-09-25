@@ -8,13 +8,13 @@ import type { SocksProxyConfig, InlineVpnProxyWire } from '@driftstack/api-types
 // header) is the mechanical @fastify/websocket plumbing on top of this; this
 // module owns the logic, so it's unit-testable now against a mock socket.
 //
-// Routing model (A3 bus W121, control-plane-owns): one connection per fleet
+// Routing model (W121, control-plane-owns): one connection per fleet
 // NODE, keyed by nodeId (== JWT iss=sub). The harness sends NO register frame;
 // the control plane routes IntentDispatch to a node via its own session→node
 // assignment, looking up the node's connection here. Each connection owns an
 // IntentDispatchCorrelator (its in-flight dispatches + timeouts).
 //
-// Wire envelope (A3 W122): inbound frames are the flat HarnessOutbound
+// Wire envelope (W122): inbound frames are the flat HarnessOutbound
 // discriminated union `{type, …}`. We route the two we consume — `intentResult`
 // → the correlator's onResultFrame; the errored `sessionStatus`
 // (detail "intent_dispatch_no_session: …") → onSessionError (fast-fail) — and
@@ -154,17 +154,17 @@ export class FleetControlConnection {
    *  of cookiesCorrelator; owned here like above. */
   readonly setCookiesCorrelator: SetCookiesRequestCorrelator;
 
-  /** Live egress swap (A3 P-17) — correlates POST /:id/egress against
+  /** Live egress swap (P-17) — correlates POST /:id/egress against
    *  setEgressResult over this node's socket, keyed by requestId. */
   readonly setEgressCorrelator: SetEgressRequestCorrelator;
-  /** Sim back/forward (A3 W2870) — correlates POST /:id/history steps (navigateHistory
+  /** Sim back/forward (W2870) — correlates POST /:id/history steps (navigateHistory
    *  → navigateHistoryResult) over this node's socket, keyed by requestId. The sibling
    *  of setCookiesCorrelator; owned here like above. */
   readonly navigateHistoryCorrelator: NavigateHistoryRequestCorrelator;
-  /** File-control (A3 W2851) — correlates POST /:id/files uploads (uploadFile →
+  /** File-control (W2851) — correlates POST /:id/files uploads (uploadFile →
    *  uploadResult) over this node's socket, keyed by requestId. Owned like above. */
   readonly uploadCorrelator: UploadRequestCorrelator;
-  /** File-control (A3 W2856) — correlates GET /:id/downloads list + fetch
+  /** File-control (W2856) — correlates GET /:id/downloads list + fetch
    *  (listDownloads→downloadsList, fetchDownload→downloadData) over this node's
    *  socket, keyed by requestId. Owned like above. */
   readonly downloadCorrelator: DownloadRequestCorrelator;
@@ -341,7 +341,7 @@ export class FleetControlConnection {
   }
 
   /**
-   * File-control (A3 W2856) — LIST the files in this session's download jail over
+   * File-control (W2856) — LIST the files in this session's download jail over
    * the node's live WSS. Sends a `listDownloads` (correlated by `requestId`) and
    * awaits the matching `downloadsList`; resolves a uniform DownloadOutcome and
    * NEVER rejects. `requestId` is caller-minted (route uuid) so the key stays testable.
@@ -359,7 +359,7 @@ export class FleetControlConnection {
   }
 
   /**
-   * File-control (A3 W2856) — FETCH one jailed file's bytes (base64) by basename over
+   * File-control (W2856) — FETCH one jailed file's bytes (base64) by basename over
    * the node's live WSS. Sends a `fetchDownload` (correlated by `requestId`) and
    * awaits the matching `downloadData`; resolves a uniform DownloadOutcome and NEVER
    * rejects. The harness re-sanitizes `name` to a basename + jail-confines it.
@@ -375,7 +375,7 @@ export class FleetControlConnection {
   }
 
   /**
-   * File-control (A3 W2851) — relay a customer's file bytes (base64) into the
+   * File-control (W2851) — relay a customer's file bytes (base64) into the
    * session's isolated upload jail over the node's live WSS. Sends an `uploadFile`
    * (correlated by `requestId`) and awaits the matching `uploadResult`; resolves a
    * uniform UploadOutcome (ok / error / timeout) and NEVER rejects. `requestId` is
@@ -431,7 +431,7 @@ export class FleetControlConnection {
   }
 
   /**
-   * Live egress swap (A3 P-17) — move a RUNNING session onto a different exit.
+   * Live egress swap (P-17) — move a RUNNING session onto a different exit.
    * Awaits a uniform SetEgressOutcome and NEVER rejects, so the route maps each
    * case to a response. `requestId` is caller-generated (the route mints a uuid).
    *
@@ -487,7 +487,7 @@ export class FleetControlConnection {
   }
 
   /**
-   * Sim back/forward (A3 W2870) — step the running session's WebKit back-forward
+   * Sim back/forward (W2870) — step the running session's WebKit back-forward
    * list one entry in `direction` over the node's live WSS. The sibling of
    * setCookies: sends a `navigateHistory` (correlated by `requestId`) and awaits the
    * matching `navigateHistoryResult`; resolves a uniform NavigateHistoryOutcome (ok /
@@ -495,7 +495,7 @@ export class FleetControlConnection {
    * `requestId` is caller-generated (the route mints a uuid) so the key stays testable.
    * `tabId` (optional, after `timeoutMs` to avoid shifting existing positional
    * callers) forwards which tab's back-forward list to step — gated-inert until
-   * A3's harness reads it, same as navigateHistory itself already is.
+   * the harness reads it, same as navigateHistory itself already is.
    */
   navigateHistory(
     requestId: string,
@@ -555,7 +555,7 @@ export class FleetControlConnection {
    * drain / restart) to THIS node (fire-and-forget, same framing as the others).
    * The connection IS the node, so the command needs no node id. Build the
    * envelope with serializeControlCommand; the harness routes it to
-   * beginDrain/cordon/restart (A2-A3-BUS W2203; harness receiver per W2197).
+   * beginDrain/cordon/restart (W2203; harness receiver per W2197).
    */
   sendControlCommand(command: ControlCommand): void {
     // T-1 — track the scheduling gate locally so out-of-session dispatch (the
@@ -685,12 +685,12 @@ export class FleetControlConnection {
           // settle only a waiter registered on this exact authenticated socket.
           this.sessionReadinessCorrelator.onSessionStatus(frame);
           // Fast-fail the in-flight dispatch when the harness reports the session
-          // isn't established (A3 W106). onSessionError itself filters on the
+          // isn't established (W106). onSessionError itself filters on the
           // intent_dispatch_no_session detail prefix.
           if (frame.status === 'errored' && frame.detail !== undefined) {
             this.correlator.onSessionError(frame.sessionId, frame.detail);
           }
-          // Worker-CONNECTED orphan auto-close (A3 W2682): a TERMINAL frame
+          // Worker-CONNECTED orphan auto-close (W2682): a TERMINAL frame
           // (status ∈ {ended, errored}) means the worker tore the session down —
           // close the matching agent_sessions row so the slot frees in seconds
           // instead of lingering until the worker-disconnect reaper / 12h
@@ -757,7 +757,7 @@ export class FleetControlConnection {
           }
           break;
         case 'profileSaved':
-          // Profile-backed session ended (A3 W417): persist the customer's saved
+          // Profile-backed session ended (W417): persist the customer's saved
           // sealed store. Fire-and-forget off the receive loop (the handler does
           // the R2 write + error-logs internally); absent handler (no R2 / stateless
           // deploy) → ignored. MUST-DELIVER on the harness side, so a dropped frame
@@ -774,7 +774,7 @@ export class FleetControlConnection {
           this.onChallengeDetected?.(frame, this.nodeId);
           break;
         case 'pageState':
-          // Page lifecycle on an agent-initiated navigate (A3 W1240/W1254):
+          // Page lifecycle on an agent-initiated navigate (W1240/W1254):
           // loading → loaded | errored, keyed by the AGENT session id. The
           // consumer stores the latest per session so GET /v1/agent-sessions/
           // :id/page-state serves the GUI loading-bar/error-overlay. Absent
@@ -784,7 +784,7 @@ export class FleetControlConnection {
           this.onPageState?.(frame, this.nodeId);
           break;
         case 'profileSaveFailed':
-          // Profile save-back failed at session teardown (A3 W1364): relay to
+          // Profile save-back failed at session teardown (W1364): relay to
           // the customer as session.profile_save_failed so persisted-state
           // reliance is informed (terminal — no retry path; session itself
           // stays SUCCEEDED). Absent consumer (stateless deploy) → ignored,
@@ -810,7 +810,7 @@ export class FleetControlConnection {
           this.setCookiesCorrelator.onResultFrame(frame);
           break;
         case 'setEgressResult':
-          // Live egress swap (A3 P-17) — settles the pending POST /:id/egress
+          // Live egress swap (P-17) — settles the pending POST /:id/egress
           // request keyed by requestId. Self-contained request/reply like
           // setCookiesResult: no injected consumer; the awaiting route holds the
           // promise via this connection's set-egress correlator. An unknown/stale
@@ -818,7 +818,7 @@ export class FleetControlConnection {
           this.setEgressCorrelator.onResultFrame(frame);
           break;
         case 'navigateHistoryResult':
-          // Sim back/forward (A3 W2870) — settles the pending POST /:id/history request
+          // Sim back/forward (W2870) — settles the pending POST /:id/history request
           // keyed by requestId (the harness echoes it). Self-contained request/reply
           // like setCookiesResult/uploadResult: no injected consumer; the awaiting route
           // holds the promise via the connection's navigate-history correlator. An
@@ -826,7 +826,7 @@ export class FleetControlConnection {
           this.navigateHistoryCorrelator.onResultFrame(frame);
           break;
         case 'uploadResult':
-          // File-control (A3 W2851) — settles the pending POST /:id/files request
+          // File-control (W2851) — settles the pending POST /:id/files request
           // keyed by requestId (the harness echoes it). Self-contained request/reply
           // like cookiesResult: no injected consumer; the awaiting route holds the
           // promise via the connection's upload correlator. Unknown id → no-op.
@@ -834,7 +834,7 @@ export class FleetControlConnection {
           break;
         case 'downloadsList':
         case 'downloadData':
-          // File-control (A3 W2856) — settles the pending GET /:id/downloads list
+          // File-control (W2856) — settles the pending GET /:id/downloads list
           // OR fetch request keyed by requestId (the harness echoes it). One
           // correlator handles both: the frame `type` discriminates the outcome.
           // Self-contained request/reply like cookiesResult/uploadResult; unknown
@@ -1020,7 +1020,7 @@ export class FleetControlConnection {
           this.onNetworkRequests?.(frame, this.nodeId);
           break;
         //
-        // FORWARD-GUARD (A3 bus W1859): an `errorEvent` (summary/detail) and an
+        // FORWARD-GUARD (W1859): an `errorEvent` (summary/detail) and an
         // errored `sessionStatus.detail` can carry the Mac fleet NODE's real IP on
         // an egress-leak diagnostic — detail like "proxied=<customer-proxy-exit>
         // direct=<node-ip>", where `direct=` is the node's own IP (the value the
@@ -1116,7 +1116,7 @@ export class FleetControlRegistry {
   /** Shared by node id across reconnects; a reconnect cannot reset parse tokens. */
   private readonly inboundFrameBudget = new FleetInboundFrameBudget();
   /**
-   * Pending-teardown queue (founder bug, A3 W2859) — sessions whose close couldn't
+   * Pending-teardown queue (founder bug, W2859) — sessions whose close couldn't
    * reach the box because its control-WSS was down/flapping. `dispatchSessionEndOnClose`
    * records them here when the node has no live connection; `register()` drains +
    * re-dispatches `sessionEnd` on the node's next (re)connect, so a WSS blip can't
@@ -1164,7 +1164,7 @@ export class FleetControlRegistry {
     private readonly onNodeRegistered?: (nodeId: string) => void,
     private readonly onNodeDisconnected?: (nodeId: string) => void,
     /**
-     * Worker-CONNECTED orphan auto-close (A3 W2682) — invoked when any node
+     * Worker-CONNECTED orphan auto-close (W2682) — invoked when any node
      * reports a TERMINAL `sessionStatus` frame (status ∈ {ended, errored}).
      * Threaded into every connection this registry creates; the connection only
      * calls it for terminal frames. Omitted (no consumer wired / stateless
@@ -1246,7 +1246,7 @@ export class FleetControlRegistry {
     } catch {
       /* swallow — registration must not fail on a reaper-hook error */
     }
-    // Pending-teardown drain (founder bug, A3 W2859): re-dispatch sessionEnd for any
+    // Pending-teardown drain (founder bug, W2859): re-dispatch sessionEnd for any
     // session whose close couldn't reach the box while this node's WSS was down. The
     // node is connected again now, so the teardown lands + the box frees the slot /
     // kills the orphaned browser. Remove each id only AFTER its send returns. A send

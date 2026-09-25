@@ -17,7 +17,7 @@
 //
 // `now` is injected, so refill is exercised by arithmetic rather than sleeping —
 // no timing assumptions and no flake. Keys are per-test UUIDs, so this never
-// flushes and cannot disturb another agent's index.
+// flushes and cannot disturb a concurrent run's data.
 
 import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';

@@ -1,6 +1,6 @@
 // Cross-source pin for the OVPN "unresolvable external file reference" rule.
 //
-// TWO implementations enforce this rule — A3's Swift parse-time reject
+// TWO implementations enforce this rule — the harness's Swift parse-time reject
 // (harness ProxyChain VPNProxyConfig :: openvpnExternalFileReference) and this
 // repo's TS upload-time reject (findUnresolvableOpenvpnFileReferences). They were
 // built to one stated rule and reported to "agree by construction". They did not:
@@ -10,7 +10,7 @@
 // until they drift, and nothing was measuring it.
 //
 // THIS is the measurement. The shared fixture (canonical in
-// driftstack/operations/contracts/openvpn-file-reference-fixtures.json, A3
+// driftstack/operations/contracts/openvpn-file-reference-fixtures.json,
 // 031fcfae4) carries the rows + the rule PARAMETERS as data. Both suites read it;
 // a drift on EITHER side reds BOTH. Add a row there, never only in one language's
 // tests.
@@ -40,7 +40,7 @@ const CANON = resolve(
 );
 
 // The rows that encode MEASURED defects — floored BY NAME so the pin cannot be
-// neutered by deleting the cases that make it load-bearing (A3's floor set;
+// neutered by deleting the cases that make it load-bearing (the harness's floor set;
 // `crlf_config_must_still_split` over the happy-path `bare_ca` deliberately —
 // floor the defect, not the case every impl passes by accident).
 const REQUIRED_ROWS = [
@@ -99,14 +99,14 @@ describe('OVPN file-reference shared contract (cross-source pin with node 8a03a3
     expect(contract.case_sensitive).toBe(true);
     expect(contract.double_dash_strip_min_length).toBe(3);
     expect(contract.token_separators).toEqual([' ', '\t']);
-    // ⚠️ HONEST LABELLING (measured 2026-09-08, A2+A3). The contract also declares
+    // ⚠️ HONEST LABELLING (measured 2026-09-08, on both sides). The contract also declares
     // `comment_prefixes: ['#', ';']`, but no fixture exercises it and this block does
     // not assert it against a constant — on purpose. The comment guard is SUBSUMED by
     // token-equality: `# ca ca.crt` tokenises to ['#','ca','ca.crt'], so tokens[0] is
     // '#', never the directive 'ca', and the line is accepted with OR without the guard.
     // Proven by mutation: deleting the `startsWith('#')/startsWith(';')` branch from
-    // findUnresolvableOpenvpnFileReferences leaves this whole suite GREEN (A3 measured
-    // the same on the Swift parser). So the two `*_commented_reference_is_inert` rows
+    // findUnresolvableOpenvpnFileReferences leaves this whole suite GREEN (the same was
+    // measured on the Swift parser). So the two `*_commented_reference_is_inert` rows
     // pin the accept-OUTCOME (a restructure that REJECTED a commented line would red
     // them) but pass via subsumption — they do NOT protect the `comment_prefixes`
     // parameter or the guard. Do not read "18 rows, all passing" as covering comment
@@ -178,7 +178,7 @@ describe('OVPN file-reference shared contract (cross-source pin with node 8a03a3
       return;
     }
     // Assert CONTENT, not presence: a guard that degrades to existsSync reports a
-    // parity it is no longer measuring (A3, learned the hard way today).
+    // parity it is no longer measuring (learned the hard way).
     const mirrorBytes = readFileSync(MIRROR);
     const canonBytes = readFileSync(CANON);
     expect(

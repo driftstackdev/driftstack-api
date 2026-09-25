@@ -1,4 +1,4 @@
-// File-control (A3 W2856) — unit tests for the file-DOWNLOAD correlator + the
+// File-control (W2856) — unit tests for the file-DOWNLOAD correlator + the
 // FleetControlConnection download list/fetch request/reply path (the sibling of the
 // upload tests). One correlator handles BOTH ops: the reply frame `type`
 // discriminates which outcome to settle. Pins: a listDownloads/fetchDownload goes
@@ -202,7 +202,7 @@ describe('DownloadRequestCorrelator', () => {
   });
 });
 
-describe('FleetControlConnection downloads (A3 W2856)', () => {
+describe('FleetControlConnection downloads (W2856)', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 

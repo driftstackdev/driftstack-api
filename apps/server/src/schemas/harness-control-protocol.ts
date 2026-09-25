@@ -7,28 +7,28 @@
 // THIS file is the lower-level transport contract the AgentExecutor uses to
 // drive a session's harness node over the control-plane WebSocket.
 //
-// Canonical source: driftstack/docs/internal/harness-intent-contract.md
-// (Agent-3, grounded in harness IntentExecutor.swift). Mirror exactly —
-// any divergence is a server↔harness wire bug. The cross-agent contract
-// mirror lives at docs/internal/cross-agent-control-plane-contract.md.
+// Canonical source: the harness intent contract in the internal design notes
+// (grounded in harness IntentExecutor.swift). Mirror exactly —
+// any divergence is a server↔harness wire bug. The harness contract is
+// mirrored in the internal control-plane contract notes.
 //
 // Transport: the server sends ONE ControlInbound.intentDispatch(IntentDispatch)
 // per intent over the control-plane WSS (`/v1/fleet/events`, V-820); the
 // harness routes by `intentName` and returns a HarnessOutbound.IntentResult.
 //
-// ⚠️ Drive-bridge gate (ORCHESTRATOR item 9): the harness→fork WebDriver
+// ⚠️ Drive-bridge gate (item 9): the harness→fork WebDriver
 // drive path isn't wired on Mac yet (cocoa WD server, founder Option-1
 // sign-off pending). Dispatched intents REACH the harness now; end-to-end
 // execution against the fork goes live when item 9 lands. The control-path
 // schema + wiring is safe to build now.
 //
-// Wire codec (RESOLVED 2026-06-05 by Agent-3): IntentDispatch.inputParams and
+// Wire codec (RESOLVED 2026-06-05 by the harness): IntentDispatch.inputParams and
 // IntentResult.outputData are Swift `Data` and cross the wire as a BASE64
 // STRING of the UTF-8 JSON (Swift Codable's default `Data` encoding). So both
 // are typed `z.string()` here — the base64 envelope. The decoded LOGICAL
 // payload is the per-intent params object (above) / per-intent result JSON;
 // encode/decode lives in `harness-control-codec.ts` (serializeIntentDispatch /
-// parseIntentResult). Envelope keys are camelCase (also A3-confirmed).
+// parseIntentResult). Envelope keys are camelCase (also confirmed against the harness).
 
 import { z } from 'zod';
 
@@ -247,7 +247,7 @@ export const HarnessLocatorStrategySchema = z.enum([
 const WaitAfterSchema = z.number().nonnegative().optional();
 
 /**
- * `require_unoccluded` — A3 V-3358, 2026-09-18. The device runs its occlusion
+ * `require_unoccluded` — V-3358, 2026-09-18. The device runs its occlusion
  * test at the ACTUAL tap point (after the click's own scroll, the persona
  * jitter and its clamp to the element) and REFUSES a covered tap before any
  * touch is posted — "element occluded at the tap point: <reason>". Optional
@@ -285,7 +285,7 @@ export const ClickParamsSchema = z.union([
 
 /**
  * Why a click sent with `require_unoccluded: true` was refused — the text after
- * the device's fixed message prefix (A3 V-3358). A CLOSED set, so the handling
+ * the device's fixed message prefix (V-3358). A CLOSED set, so the handling
  * of each is a switch the compiler checks. The first four are perceive's own
  * occlusion reasons (one shared verdict function on the device); two are new:
  *   target_not_resolved          the element went away between the look and
@@ -310,7 +310,7 @@ export const SendKeysParamsSchema = z
     text: z.string().max(HARNESS_SEND_KEYS_MAX_CHARS),
     sensitive: z.boolean().optional(),
     /**
-     * A3 V-3360 (harness 7795de230, 2026-09-18): typing begins with a tap on
+     * V-3360 (harness 7795de230, 2026-09-18): typing begins with a tap on
      * the field to focus it, and this runs click's own check on THAT tap — the
      * same refusal message and reasons, and a refused focus tap types nothing.
      * Optional because it is opt-in per step: absent, the dispatch is
@@ -388,7 +388,7 @@ export const ScreenshotParamsSchema = z
   .strict();
 export const GetPageSourceParamsSchema = NoParamsSchema;
 /**
- * `selector` / `strategy` — A3 2026-09-18: perceive ONE element, resolved by
+ * `selector` / `strategy` — 2026-09-18: perceive ONE element, resolved by
  * click's own code path, with its hit test at the tap point. Without `selector`
  * the device answers exactly as before, so both fields are optional and an
  * older device that has never heard of them is still sent a valid frame by
@@ -600,7 +600,7 @@ const SendKeysResultSchema = z
     truncated: z.boolean(),
     behavioral: z.boolean(),
     /**
-     * A3 V-3360 — true ONLY when a focus tap was made AND checked. The device
+     * V-3360 — true ONLY when a focus tap was made AND checked. The device
      * of that build always sends it; an older one never does, so it is
      * optional. ⚠️ FALSE IS NOT "VERIFIED": the native path with no persona
      * focuses the field by script and makes no tap at all, so there it is
@@ -695,7 +695,7 @@ const PerceiveBoundsSchema = z
   .strict();
 
 /**
- * Why the element under the tap point is not the target (A3 2026-09-18). A
+ * Why the element under the tap point is not the target (2026-09-18). A
  * CLOSED set, so the executor's handling of each is a switch the compiler checks:
  *   hit_is_not_target_or_descendant    something else is on top of it (an
  *                                      ANCESTOR hit counts: the target itself
@@ -730,7 +730,7 @@ const PerceiveElementSchema = z
     label: z.string(),
     selector: z.string(),
     bounds: PerceiveBoundsSchema,
-    // ── A3 2026-09-18, perceive-by-selector only. Every one OPTIONAL: an older
+    // ── 2026-09-18, perceive-by-selector only. Every one OPTIONAL: an older
     // device never sends them, and the page-list answer never carries them.
     // Validated when present, because the executor decides whether to TAP on
     // them — a drifted shape must fail the frame, not be read as "clear".
@@ -743,7 +743,7 @@ const PerceiveElementSchema = z
     occluded: z.boolean().optional(),
     occlusion_reason: z.enum(HARNESS_PERCEIVE_OCCLUSION_REASONS).nullable().optional(),
     /**
-     * A3 V-3360 (harness 7795de230) — the device's single tap verdict now has
+     * V-3360 (harness 7795de230) — the device's single tap verdict now has
      * an OWN-LABEL rule: a hit on one of the target's own `<label>`s, or on a
      * non-interactive descendant of it, is clear (HTML forwards that tap to the
      * control), with `occluded: false` and this true. Always present from that
@@ -910,12 +910,12 @@ export const HARNESS_INTENT_RESULT_SCHEMAS: Record<HarnessIntentName, z.ZodTypeA
   login: LoginResultSchema,
 };
 
-// ── Wire envelope (A3 bus W122, commit 2a5639dc) ──────────────────────
+// ── Wire envelope (W122, commit 2a5639dc) ─────────────────────────────
 // Both directions are a FLAT tagged union keyed on `type` (camelCase =
 // the Swift enum case names): `{ "type": "<variant>", <payload fields flat…> }`.
 // NO `_0` nesting (the prior Swift synthesized-Codable artifact — killed). Maps
 // 1:1 to a Zod union of typed objects. `inputParams`/`outputData` are the
-// BASE64 string of the UTF-8 JSON payload (A3-confirmed).
+// BASE64 string of the UTF-8 JSON payload (confirmed against the harness).
 //   ControlInbound (server ENCODES → harness): sessionAssign / intentDispatch /
 //     sessionEnd / ping.
 //   HarnessOutbound (server DECODES ← harness): heartbeat / sessionStatus /
@@ -935,14 +935,14 @@ export type IntentDispatch = z.infer<typeof IntentDispatchSchema>;
 
 // ── ControlInbound.sessionAssign (server → harness) ───────────────────
 // EG-API-1.6 — assigns a session (+ its egress + persona + transport + caps) to
-// the connected fleet node. Shape empirically pinned by A3's round-trip decode
-// test (bus W136, harness commit dc9e0a49). Build it with serializeSessionAssign()
-// in harness-control-codec.ts. Wire notes (A3 W136 shape, W138 optionality):
+// the connected fleet node. Shape empirically pinned by the harness round-trip decode
+// test (W136, harness commit dc9e0a49). Build it with serializeSessionAssign()
+// in harness-control-codec.ts. Wire notes (W136 shape, W138 optionality):
 //   - sessionId / archetype / behaviorProfile are REQUIRED (archetype +
 //     behaviorProfile have no safe default — a wrong fingerprint / inert behaviour
 //     would be a silent detection tell).
 //   - transportMode (dash-cased, W118) / idleTimeoutSeconds / maxDurationSeconds are
-//     OPTIONAL (A3 W138, harness commit e18de82f): omit → harness defaults
+//     OPTIONAL (W138, harness commit e18de82f): omit → harness defaults
 //     (h2-and-h3 / 300s idle / 1800s max). The minimal valid assign is
 //     { type, sessionId, archetype, behaviorProfile }.
 //   - inlineProxyConfig is a BASE64 string of the UTF-8 JSON SocksProxyConfig
@@ -960,9 +960,9 @@ export const SessionAssignLivekitSchema = z
   })
   .strict();
 
-// Profile-backed sessions (A3 W177/W417): an optional `profile` block restores
+// Profile-backed sessions (W177/W417): an optional `profile` block restores
 // an encrypted per-profile store into the fork on assign + saves it on end.
-// snake_case wire keys mirror the livekit block convention (A3's ProfileInfo
+// snake_case wire keys mirror the livekit block convention (the harness ProfileInfo
 // CodingKeys: profile_id/dek/sealed_blob/sealed_blob_url/sealed_blob_put_url).
 // `dek` rides JIT like the livekit token (KMS->TMK->DEK server-side, harness
 // never stores it). `sealed_blob` inline (<=256KB) OR `sealed_blob_url` presigned
@@ -979,7 +979,7 @@ export const SessionAssignProfileSchema = z
   })
   .strict();
 
-// Per-session geolocation OVERRIDE (A3 bus verdict 2026-07-01, doc-146→07/47).
+// Per-session geolocation OVERRIDE (harness verdict 2026-07-01, doc-146→07/47).
 // The harness ALREADY derives lat/lon from the proxy-exit IP by default
 // (EgressProbeResult.proxiedLoc → DRIFTSTACK_GEO_* env → the fork's
 // WebGeolocationManagerProxy provider), so navigator.geolocation follows the
@@ -998,17 +998,26 @@ export const SessionAssignGeolocationSchema = z
   })
   .strict();
 
-// #128 new-tab IP panel (A2↔A3 bus 2026-07-06). The box serves the new-tab page
-// LOCALLY (no proxy hop → instant, reliable even when the proxy can't reach
-// driftstack.io/newtab) and renders the IP/geo/tz/QUIC panel from THIS block —
-// the CP-probed exit identity, authoritative because it's what the world sees
-// through the customer's proxy — instead of a proxied /cdn-cgi/trace fetch that
-// Cloudflare challenges. snake_case wire keys mirror the livekit/profile block
-// convention (A3 matches this decoder byte-for-byte). Absent ⇒ box keeps today's
-// behaviour (no local panel data / falls back). `country` is ISO-3166 alpha-2 or
-// 'XX' (unknown); region/city/timezone are best-effort (null when the geo lookup
-// can't resolve them); `quic_ok` is the CP UDP/QUIC pre-detection for the proxy
-// (drives the panel's "HTTP/3" indicator); `probed_at` is ISO8601 freshness.
+// #128 exit identity (server↔harness decision 2026-07-06). ⛔ Corrected 2026-09-24:
+// this block does NOT feed the new-tab page a customer sees. The box's local panel
+// only answers the OLD sentinel `https://driftstack.dev/newtab`
+// (webkit-driftstack DriftstackNetworkLoader.mm `driftstackIsNewTabSentinel`),
+// and the app opens `https://driftstack.io/newtab/` (apps/gui-client
+// SimulatorWindow.tsx NEW_TAB_URL, settings.ts default start page), which loads
+// THROUGH the customer's proxy and measures in the page itself: exit IP and
+// location from the same-origin /cdn-cgi/trace and /v1/egress/echo, time zone,
+// language, WebRTC, and the HTTP version of the page's own loads
+// (apps/marketing-site/src/pages/newtab.astro). The block is still decoded by the
+// box and reaches only that .dev-only panel. snake_case wire keys mirror the
+// livekit/profile block convention (the harness matches this decoder
+// byte-for-byte). Absent ⇒ the box keeps today's behaviour. `country` is
+// ISO-3166 alpha-2 or 'XX' (unknown); region/city/timezone are best-effort (null
+// when the geo lookup can't resolve them); `quic_ok` is true only when a stored
+// MEASUREMENT of the proxy confirmed QUIC (its Test's relay check, or a live
+// session that negotiated HTTP/3) and false otherwise, never measured included —
+// "not confirmed", never "confirmed absent"; it is never the configured
+// `udp_capable` flag (routes/agent-sessions.ts `measuredQuicOk`); `probed_at` is
+// ISO8601 freshness.
 // T-11 (live-geo spoofing): `lat`/`lon` are the exit COORDINATES the fork answers
 // navigator.geolocation from. OPTIONAL and range-bounded — ABSENT (never 0,0) when
 // the CF edge could not resolve them, so a missing coordinate stays distinguishable
@@ -1057,17 +1066,17 @@ export const SessionAssignSchema = z
   .object({
     type: z.literal('sessionAssign'),
     sessionId: z.string().min(1),
-    // archetype + behaviorProfile stay REQUIRED (A3 W138): no safe default — a
+    // archetype + behaviorProfile stay REQUIRED (W138): no safe default — a
     // wrong-fingerprint or inert-behaviour fallback would be a silent detection tell.
     archetype: z.string().min(1),
     behaviorProfile: z.string().min(1),
-    // A3 W138 (harness commit e18de82f) made these OPTIONAL on the wire: omit →
+    // W138 (harness commit e18de82f) made these OPTIONAL on the wire: omit →
     // harness defaults (transportMode→h2-and-h3, idle→300s, max→1800s). We mirror
     // the canonical optional contract; serializeSessionAssign omits when not given.
     transportMode: z.enum(['h2-only', 'h2-and-h3']).optional(),
     idleTimeoutSeconds: z.number().int().positive().optional(),
     maxDurationSeconds: z.number().int().positive().optional(),
-    // A3 W137: proxyConfigId is INFORMATIONAL to the harness (no DB to resolve a
+    // W137: proxyConfigId is INFORMATIONAL to the harness (no DB to resolve a
     // saved-proxy id). The egress path acts on inlineProxyConfig ONLY — so when a
     // session uses a saved proxy, the emission wiring MUST resolve it server-side
     // into inlineProxyConfig; proxyConfigId may ride along for tracing, but sending
@@ -1102,7 +1111,7 @@ export type SessionAssignExitIdentity = z.infer<typeof SessionAssignExitIdentity
 // The trivial teardown envelope (W122 ControlInbound set: sessionAssign /
 // intentDispatch / sessionEnd / ping). Sent when an agent-session is closed so
 // the harness tears the session down (fork + proxy + capture) and frees its
-// concurrency slot — A3 W420 confirms the harness drains/teardowns at the
+// concurrency slot — W420 confirms the harness drains/teardowns at the
 // `sessionEnd` site. Keyed by sessionId alone (the universal envelope field the
 // harness already decodes); no other field — a teardown needs only which session.
 export const SessionEndSchema = z
@@ -1114,7 +1123,7 @@ export const SessionEndSchema = z
 export type SessionEnd = z.infer<typeof SessionEndSchema>;
 
 // ── ControlInbound.pauseSession / resumeSession (server → harness; W393) ───
-// Challenge-handling controls (A3 W725). The harness AUTO-pauses on
+// Challenge-handling controls (W725). The harness AUTO-pauses on
 // detect_challenge (self-contained, immediate); these are the EXPLICIT CP
 // triggers: pauseSession = manual override; resumeSession = recovery once the
 // customer resolves the challenge (re-enables action intents). Pause halts
@@ -1143,7 +1152,7 @@ export type ResumeSession = z.infer<typeof ResumeSessionSchema>;
 // NODE-level operator control for the admin Fleet panel (drain/cordon/restart).
 // Unlike the session-scoped frames above, this targets the NODE — it's sent over
 // that node's own authenticated WSS connection (the connection IS the node), so
-// no node id rides the frame. A2's chosen control-signal path (A2-A3-BUS W2203:
+// no node id rides the frame. The chosen control-signal path (W2203:
 // a command frame over the existing WSS, NOT an out-of-band SSH hook — keeps
 // control on the one authenticated channel). The harness routes each command:
 //   cordon   → refuse new assigns, keep active sessions (sets the cordoned bit)
@@ -1170,14 +1179,14 @@ export const HARNESS_ERROR_CODES = [
   'intent_session_not_established',
   'intent_not_implemented',
   'intent_missing_parameter',
-  // A3 W135 (commit dae8a50d) — distinct from intent_missing_parameter: the param
+  // W135 (commit dae8a50d) — distinct from intent_missing_parameter: the param
   // was PRESENT but invalid (e.g. the harness-side navigate scheme backstop
   // rejecting a non-http(s) url that slipped past the server filter — a hit here
   // is observable as a security event). Must be in the decode enum or an
   // intentResult carrying it fails IntentResultEnvelopeSchema → the correlator
   // silently drops the frame → the dispatch hangs to its timeout.
   'intent_invalid_parameter',
-  // A3 `113d99ab4` (harness) — a selector that is VALID but matches nothing.
+  // Harness `113d99ab4` — a selector that is VALID but matches nothing.
   // Split out of intent_invalid_parameter, which conflated two failures wanting
   // opposite handling: an invalid selector is a planning fault and must not be
   // replayed, while an element that is simply not there yet is page state and IS
@@ -1185,15 +1194,15 @@ export const HARNESS_ERROR_CODES = [
   // recoverable half, and the word "parameter" sent two rounds of investigation
   // at the selector when the cause was elsewhere.
   //
-  // ⚠️ ORDERING: this decode entry ships BEFORE the harness emits the code. A3
-  // gates emission behind DRIFTSTACK_INTENT_ELEMENT_NOT_FOUND_CODE and keeps the
+  // ⚠️ ORDERING: this decode entry ships BEFORE the harness emits the code. The
+  // harness gates emission behind DRIFTSTACK_INTENT_ELEMENT_NOT_FOUND_CODE and keeps the
   // old code with a byte-identical message prefix until then, because an unknown
   // code fails IntentResultEnvelopeSchema → the correlator drops the frame → the
   // dispatch hangs to its timeout (same trap as intent_invalid_parameter and
   // result_too_large above).
   'intent_element_not_found',
   'intent_webdriver_failed',
-  // A3 #8 — navigate resolved on a load that ERRORED (proxy / DNS / TLS / HTTP
+  // Harness #8 — navigate resolved on a load that ERRORED (proxy / DNS / TLS / HTTP
   // failure) yet returned success, so the step read "✓ navigated" on a page that
   // never loaded. This code lets the harness report the load failure honestly.
   // Maps to the public `page_load_failed` category, RETRYABLE: replaying the SAME
@@ -1201,7 +1210,7 @@ export const HARNESS_ERROR_CODES = [
   // re-establish the session.
   //
   // ⚠️ ORDERING (same trap as intent_element_not_found above): this decode entry
-  // ships BEFORE the harness emits the code. A3 gates emission behind
+  // ships BEFORE the harness emits the code. The harness gates emission behind
   // DRIFTSTACK_INTENT_PAGE_LOAD_FAILED_CODE and keeps the old code with a
   // byte-identical message prefix until then, because an unknown code fails
   // IntentResultEnvelopeSchema → the correlator drops the frame → the dispatch
@@ -1217,7 +1226,7 @@ export const HARNESS_ERROR_CODES = [
   // failed. The exact session stays fail-closed/tombstoned and callers must
   // start a new session; this must not degrade to retryable dispatch_error.
   'intent_deadline_cleanup_unconfirmed',
-  // A3 W227 (harness f711840f) — inline outputData is capped at 8 MiB harness-side;
+  // W227 (harness f711840f) — inline outputData is capped at 8 MiB harness-side;
   // an over-cap result FAILS with this code (no outputData) rather than returning a
   // corrupt/truncated DOM/base64. Must be in the decode enum or the carrying
   // intentResult fails IntentResultEnvelopeSchema → the correlator drops the frame →
@@ -1225,14 +1234,14 @@ export const HARNESS_ERROR_CODES = [
   'result_too_large',
   'session_paused',
   'session_intent_in_flight',
-  // A3 2026-09-18 — click { require_unoccluded: true } refuses a tap whose
+  // 2026-09-18 — click { require_unoccluded: true } refuses a tap whose
   // (jittered) tap point would land on something other than the target. The
   // click was NOT performed, so it maps to the public `element_covered`
   // category: not retryable as the same step (the cover is still there), but
   // re-plannable (nothing happened, so the loop may look again and dismiss it).
   //
   // ⚠️ ORDERING (same trap as intent_element_not_found above): this decode entry
-  // ships BEFORE the harness emits the code. A3 emits it only once we say our
+  // ships BEFORE the harness emits the code. The harness emits it only once we say our
   // schema knows it, and until then refuses with intent_webdriver_failed and a
   // message that ALWAYS starts "element occluded at the tap point:" — which the
   // result mapper reads as the same category — because an unknown code fails
@@ -1291,9 +1300,9 @@ export type IntentResultEnvelope = z.infer<typeof IntentResultEnvelopeSchema>;
 
 // ── HarnessOutbound.sessionStatus (harness → server) ──────────────────
 // The router fast-fails an in-flight dispatch on the errored variant whose
-// `detail` is `intent_dispatch_no_session: <intentName>` (A3 W106).
+// `detail` is `intent_dispatch_no_session: <intentName>` (W106).
 //
-// Terminal close (A3 W2682): the worker emits a terminal frame whose `status`
+// Terminal close (W2682): the worker emits a terminal frame whose `status`
 // is EXACTLY `ended` (idle_timeout / max_duration / customer_closed /
 // node_drain) or `errored` (egress_lost / session_resource_overuse /
 // browser_crashed / node_shutting_down / reaped_during_provisioning), carrying
@@ -1312,7 +1321,7 @@ export const SessionStatusSchema = z.object({
   // Bounded like every sibling `detail` in this file (.max(4096)) — a node
   // (already JWT-authed) must not be able to inject an unbounded string here.
   detail: z.string().max(4096).optional(),
-  // A3 W2682 — clean snake_case close reason on a terminal frame (e.g.
+  // W2682 — clean snake_case close reason on a terminal frame (e.g.
   // idle_timeout / max_duration / browser_crashed). Optional: non-terminal
   // status frames omit it, and a provisioning-failure errored frame carries
   // `reason: nil` (cause in detail). The terminal-close consumer falls back to
@@ -1362,7 +1371,7 @@ export const SessionStatusSchema = z.object({
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 
 /**
- * Worker-CONNECTED orphan auto-close (A3 W2682) — the EXACT terminal-status
+ * Worker-CONNECTED orphan auto-close (W2682) — the EXACT terminal-status
  * vocabulary the worker emits on a SessionStatus teardown frame: `ended`
  * (clean: idle_timeout / max_duration / customer_closed / node_drain) and
  * `errored` (failure: egress_lost / session_resource_overuse / browser_crashed
@@ -1372,11 +1381,11 @@ export type SessionStatus = z.infer<typeof SessionStatusSchema>;
  */
 export const TERMINAL_SESSION_STATUSES = new Set<string>(['ended', 'errored']);
 
-// ── HarnessOutbound payloads pinned (A3 bus W124) ─────────────────────
+// ── HarnessOutbound payloads pinned (W124) ────────────────────────────
 // Field-sets locked by the harness `testHarnessOutboundPayloadShapesPinned`
 // test. Typed as plain objects (unknown keys STRIPPED, not .strict()-rejected):
 // these are DECODE-side, so tolerating a future additive harness field is safer
-// than rejecting the whole frame — A3 flags any change on the bus regardless.
+// than rejecting the whole frame — the harness flags any change regardless.
 // intentResult + sessionStatus (above) are the consumed variants; these three
 // are accepted + currently ignored by the router (liveness/egress/error
 // telemetry — wired when a consumer needs them).
@@ -1397,38 +1406,38 @@ const HeartbeatPayloadSchema = z.object({
   cpuPercent: HeartbeatPercentSchema,
   memoryPercent: HeartbeatPercentSchema,
   activeSessionCount: z.number().int().nonnegative().max(HARNESS_HEARTBEAT_MAX_CONCURRENT),
-  // Fleet-admin-panel telemetry (file-48 §A5; A3 W2189/W2197/W2199*). All
+  // Fleet-admin-panel telemetry (file-48 §A5; W2189/W2197/W2199*). All
   // OPTIONAL + omit-when-nil on the producer (ControlClient.swift Heartbeat),
   // so an older/quieter node's beat is byte-identical and these are simply
   // absent. DECLARED here (was silently .strip()ped) so the values survive
   // decode for the panel's resource columns, scheduler placement, and
   // staleness/uptime/drain signals. Field names mirror the Swift Codable 1:1.
-  /** Configured session capacity — the running/max denominator (A3-1). */
+  /** Configured session capacity — the running/max denominator (harness item 1). */
   maxConcurrent: z.number().int().nonnegative().max(HARNESS_HEARTBEAT_MAX_CONCURRENT).optional(),
-  /** Daemon uptime (s, monotonic from process start) — uptime + silent-restart detection (A3-3). */
+  /** Daemon uptime (s, monotonic from process start) — uptime + silent-restart detection (harness item 3). */
   uptimeSeconds: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   /**
-   * Per-PROCESS boot identity (A3 W2827 — `ProcessInfo.processInfo.globallyUniqueString`,
+   * Per-PROCESS boot identity (W2827 — `ProcessInfo.processInfo.globallyUniqueString`,
    * captured once per daemon process). A CHANGE for a node across beats = the daemon
    * RESTARTED (its prior in-memory sessions are gone) vs an unchanged value across a
-   * connection gap = a mere reconnect. The CP's bootId consumer (A2 W2813) uses a change
+   * connection gap = a mere reconnect. The CP's bootId consumer (W2813) uses a change
    * to expire that node's previously-assigned sessions the new boot does NOT reaffirm.
    * OPTIONAL + omit-when-nil on the producer; DECLARED here (was silently .strip()ped)
    * so the consumer can read it.
    */
   bootId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
-  /** "draining" when shedding (SIGUSR1 / scheduled restart), else absent = serving (A3-2). */
+  /** "draining" when shedding (SIGUSR1 / scheduled restart), else absent = serving (harness item 2). */
   drainState: z.literal('draining').optional(),
-  /** Rolling-1h session-outcome tally (reason→count); A2 owns success/crash categorization (A3-5). */
+  /** Rolling-1h session-outcome tally (reason→count); the server owns success/crash categorization (harness item 5). */
   sessionOutcomeCounts: HeartbeatOutcomeCountsSchema.optional(),
   /**
    * Per-session worker-liveness map (agentSessionId → lifecycle state) — the
-   * re-base source for open-session liveness (A2 W2679, A3 driftstack f52699c37).
+   * re-base source for open-session liveness (W2679, harness f52699c37).
    * OPTIONAL + omit-when-nil on the producer (ControlClient.swift Heartbeat), so
    * an older/quieter node's beat is byte-identical and this is simply absent.
    * DECLARED here (was silently .strip()ped) so the SessionLivenessStore can read
    * the real worker state — `activeSessionCount` is the scalar count of these.
-   * Keyed by the sessionAssign.sessionId (== the agt_ agent-session id, A3 W1254).
+   * Keyed by the sessionAssign.sessionId (== the agt_ agent-session id, W1254).
    */
   activeSessionStates: z
     .record(
@@ -1460,7 +1469,7 @@ const HeartbeatPayloadSchema = z.object({
   lastErrorSummary: z.string().min(1).max(HARNESS_ERROR_SUMMARY_MAX_LENGTH).optional(),
   /** Epoch-ms of that fault. */
   lastErrorAtMs: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
-  // Host-health (A3-4) — proactive-placement signals; gated on the worker via
+  // Host-health (harness item 4) — proactive-placement signals; gated on the worker via
   // DRIFTSTACK_HEARTBEAT_HOST_HEALTH (flipped on, W2197).
   /** nominal | fair | serious | critical. */
   thermalState: z.enum(['nominal', 'fair', 'serious', 'critical']).optional(),
@@ -1470,14 +1479,14 @@ const HeartbeatPayloadSchema = z.object({
   busiestCorePercent: HeartbeatPercentSchema.optional(),
   /** Session-storage volume free % (disk-full drift / data-dir write-failure tell). */
   diskFreePercent: HeartbeatPercentSchema.optional(),
-  /** Harness build identity (e.g. git sha) — "Harness version" column (A3 W2189). */
+  /** Harness build identity (e.g. git sha) — "Harness version" column (W2189). */
   harnessVersion: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
   /**
-   * A3 2026-09-19 ~18:45Z (device `88d2d0da2`) — the MEASURED identity of the
+   * 2026-09-19 ~18:45Z (device `88d2d0da2`) — the MEASURED identity of the
    * running automation executable: `shasum -a 256 <binary> | cut -c1-12`.
    *
    * ⛔ IT EXISTS BECAUSE `harnessVersion` ABOVE IS DECLARED. That value comes
-   * from the node's env, typed at deploy, and A3 OBSERVED it naming a commit the
+   * from the node's env, typed at deploy, and it was OBSERVED naming a commit the
    * binary was not built from. A declared string cannot detect its own staleness;
    * a digest of the bytes that are actually executing cannot go stale, and two
    * different builds never share one.
@@ -1498,7 +1507,7 @@ const HeartbeatPayloadSchema = z.object({
    */
   harnessBinarySha256: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional().catch(undefined),
   /**
-   * A3 2026-09-19 ~19:10Z (device `4410edcd9`) — `wc:<12hex>,wk:<12hex>,jsc:<12hex>`:
+   * 2026-09-19 ~19:10Z (device `4410edcd9`) — `wc:<12hex>,wk:<12hex>,jsc:<12hex>`:
    * the MEASURED sha256 prefixes of WebCore, WebKit and JavaScriptCore at the fork's
    * spawn path, with the literal `absent` for a framework that is not there.
    *
@@ -1508,10 +1517,10 @@ const HeartbeatPayloadSchema = z.object({
    * redeploy under a live session is exactly that disagreement, which is why the
    * drift report flags it rather than assuming one of them is wrong.
    *
-   * The declared `webkitForkBuild` on the capability report names a checkout A3
-   * measured at 20 commits behind the real build, so it has the same staleness
+   * The declared `webkitForkBuild` on the capability report names a checkout that
+   * was measured at 20 commits behind the real build, so it has the same staleness
    * problem `harnessVersion` has. Per-framework parts are what make the answer
-   * actionable: A3 measured the box's JavaScriptCore five days older than its
+   * actionable: the box's JavaScriptCore was measured five days older than its
    * WebCore, and one combined digest could only have said "something moved".
    *
    * Same leniency + decoder contract as `harnessBinarySha256` above.
@@ -1679,7 +1688,7 @@ export const CapabilityReportPayloadSchema = z.object({
   archetypeId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   webkitForkBuild: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
   /**
-   * A3 2026-09-19 ~19:10Z — the MEASURED twin of `webkitForkBuild` above, same
+   * 2026-09-19 ~19:10Z — the MEASURED twin of `webkitForkBuild` above, same
    * `wc:<12hex>,wk:<12hex>,jsc:<12hex>` string as on the heartbeat, but read at
    * the moment THIS session was spawned: the frameworks it is actually running.
    *
@@ -1799,7 +1808,7 @@ export const CapabilityReportPayloadSchema = z.object({
   /** ISO-8601 instant the box observed the exit identity above. */
   observedAt: z.string().min(1).max(64).optional().catch(undefined),
   /**
-   * Per-session streaming degradation counters (A3 B-9, harness half
+   * Per-session streaming degradation counters (B-9, harness half
    * `d92f331ff` + `bc0b5a3ea`, gated on `DRIFTSTACK_STREAMING_HEALTH_REPORT=1`).
    *
    * These reached NOBODY before this field: each landed in the node's own
@@ -1821,7 +1830,7 @@ export const CapabilityReportPayloadSchema = z.object({
    * nobody has measured reads as a dead stream; a zero `inputStalls` for the
    * same session reads as a clean one. Both are claims made from no evidence,
    * which is the same defect as `safeguards_passed` returning true off an empty
-   * array. A3 pins nil harness-side so a refactor that "helpfully" defaults
+   * array. The harness pins nil on its side so a refactor that "helpfully" defaults
    * these to zero fails there rather than in the GUI.
    *
    * ⭐ Render `videoFpsMin`, not the mean: stutter is a MINIMUM problem, and a
@@ -1862,7 +1871,7 @@ export const CapabilityReportSchema = CapabilityReportPayloadSchema.transform((f
 });
 export type CapabilityReport = z.infer<typeof CapabilityReportSchema>;
 
-// ── HarnessOutbound.profileSaved (harness → server; A3 W417) ──────────
+// ── HarnessOutbound.profileSaved (harness → server; W417) ─────────────
 // Emitted on session end for PROFILE-BACKED sessions only. Two shapes:
 //   inline (small): { type, sessionId, profile_id, sealed_blob }
 //   large (presigned-PUT): { type, sessionId, profile_id, stored: true }
@@ -1888,7 +1897,7 @@ export const ProfileSavedSchema = z
       )
       .optional(),
     stored: z.literal(true).optional(),
-    // doc-150 item 5 (A3 emit) — byte size of the sealed store the harness just
+    // doc-150 item 5 (harness emit) — byte size of the sealed store the harness just
     // saved (the LZFSE + AES-GCM-256 blob, before/independent of the inline-vs-
     // presigned transport). Optional/forward-compat: a pre-emit harness omits it
     // and the consumer leaves size_bytes NULL. The save-back persists it (plus
@@ -1907,10 +1916,10 @@ export const ProfileSavedSchema = z
     }
   });
 
-// ── HarnessOutbound.challengeDetected (harness → server; W393, A3 W717) ──
+// ── HarnessOutbound.challengeDetected (harness → server; W393, W717) ──
 // Emitted when the harness ChallengeDetector flags a bot-check (DataDome /
 // Arkose / PerimeterX / AWS-WAF / GeeTest / … — 14 types). The harness
-// auto-pauses the session (A3 W725) and emits this; the server relays it as the
+// auto-pauses the session (W725) and emits this; the server relays it as the
 // customer-facing `session.challenge_detected` (transcript SSE + webhook event).
 // challengeId = the harness-minted per-detection id the customer's resumeSession
 // references once the challenge is solved (response correlation). Plain object
@@ -1932,16 +1941,16 @@ export const ChallengeDetectedSchema = z.object({
 });
 export type ChallengeDetected = z.infer<typeof ChallengeDetectedSchema>;
 
-// ── HarnessOutbound.profileSaveFailed (harness → server; A3 W1364 / A2 decision 2026-06-12) ──
+// ── HarnessOutbound.profileSaveFailed (harness → server; W1364 / decision 2026-06-12) ──
 // Emitted on session TEARDOWN when a profile-backed session's save-back fails
 // on any leg (serialize / seal / >256MiB / presigned-PUT) — the asymmetry fix:
 // restore-failure was customer-visible (errored session) while save-failure was
 // ops-stderr-only, so a customer relying on persisted state couldn't distinguish
 // "saved" from "silently lost" until a stale NEXT-session restore. The session
-// itself stays SUCCEEDED (this is an event, not a state change — A3 W966
+// itself stays SUCCEEDED (this is an event, not a state change — W966
 // posture). TERMINAL by contract: the harness's internal one-shot PUT retry is
 // exhausted before this emits, the outbound queue retries FRAMES not blobs, and
-// teardown is one-shot — so there is deliberately NO will_retry field (A3
+// teardown is one-shot — so there is deliberately NO will_retry field (the harness
 // confirmed it would always be false; add it back as an optional field if a
 // save-retry path ever exists). `detail` is a short scrubbed ops-grade string
 // (no secrets/paths). Relayed as the customer-facing
@@ -1951,7 +1960,7 @@ export const ProfileSaveFailedSchema = z.object({
   type: z.literal('profileSaveFailed'),
   sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   profile_id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
-  // `degenerate_dump` (A3 W2977/W2979, harness 2def1d39b2): the data-loss guard
+  // `degenerate_dump` (W2977/W2979, harness 2def1d39b2): the data-loss guard
   // DELIBERATELY skipped the save-back because a torn/empty fork dump would have
   // overwritten a known-good prior blob — the prior is PRESERVED (reassuring, NOT
   // data loss). Accept it so the strict enum doesn't reject the whole webhook.
@@ -1979,11 +1988,11 @@ export const ProfileSaveFailedSchema = z.object({
 });
 export type ProfileSaveFailed = z.infer<typeof ProfileSaveFailedSchema>;
 
-// ── HarnessOutbound.pageState (harness → server; A3 W1238/W1240) ──
+// ── HarnessOutbound.pageState (harness → server; W1238/W1240) ──
 // Emitted on an AGENT-INITIATED navigate: loading → loaded | errored. Intended
 // to drive the GUI loading-bar / error-overlay (W615/W616). `error.kind` is
-// net|timeout ONLY (tls/dns/http-distinct + http_status need an A1 nav-error
-// channel — A3 W1222); ⛔ STALE (2026-08-26 — see the `http_status` field below):
+// net|timeout ONLY (tls/dns/http-distinct + http_status need a fork nav-error
+// channel — W1222); ⛔ STALE (2026-08-26 — see the `http_status` field below):
 // this said the harness ALWAYS sends null. It does not: the fork emits a real
 // status and the deployed binary carries it. Kept as the record of a past belief
 // and marked so it cannot be quoted as current fact. Recognized + typed here so the frame is no longer
@@ -1991,12 +2000,12 @@ export type ProfileSaveFailed = z.infer<typeof ProfileSaveFailedSchema>;
 // (map → the session's REST page_state) is GATED on the agent↔driver session
 // coupling: the harness emits pageState for the ControlPlaneAgentExecutor
 // (agent / agt_) session, while GET /v1/sessions/:id/state.page_state is the
-// DRIVER (ses_) session's `driver.getState`. Wiring pending A3 keying confirm
-// (A2 bus W650). Plain object (lenient forward-compat), like the sibling frames.
+// DRIVER (ses_) session's `driver.getState`. Wiring pending the harness keying
+// confirm (W650). Plain object (lenient forward-compat), like the sibling frames.
 export const PageStateFrameSchema = z.object({
   type: z.literal('pageState'),
   sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
-  // A3 W2845 — `stalled` added alongside loading/loaded/errored: the harness
+  // W2845 — `stalled` added alongside loading/loaded/errored: the harness
   // `sweepStreamingHealth` watchdog detected a frozen-but-alive renderer (hung JS
   // / compositor deadlock — NOT a crash, so no crash-marker; the LiveKit pump
   // re-feeds the last frame forever so the stream still reports `live`). The
@@ -2007,14 +2016,14 @@ export const PageStateFrameSchema = z.object({
   // no-publisher overlay (that's 'never published'). Distinct from `errored` (a
   // hard page error) and `loading` (a navigation in flight).
   state: z.enum(['loading', 'loaded', 'errored', 'stalled']),
-  // A3 W2730 (authoritative wire spec — Swift encodeIfPresent → nil keys are
+  // W2730 (authoritative wire spec — Swift encodeIfPresent → nil keys are
   // OMITTED, not null): `url` is absent on reload, `error` only on 'errored', and
   // ⛔ STALE (2026-08-26 — see the field below): `http_status` is NEVER emitted.
   // It is emitted now, and treating that sentence as current is what kept the
   // failed-page-load frames being dropped in production for weeks. The previous REQUIRED url / error /
   // error.http_status therefore failed safeParse on EVERY real frame → it was
   // silently dropped → the page-state store stayed empty → no live URL in the
-  // GUI. All three are now optional; `kind` is lenient (A3 emits net|timeout;
+  // GUI. All three are now optional; `kind` is lenient (the harness emits net|timeout;
   // earlier docs listed http|tls|dns) so a frame is never dropped.
   //
   // `title` is accepted on ALL states (loading/loaded/stalled/errored), not just
@@ -2023,7 +2032,7 @@ export const PageStateFrameSchema = z.object({
   // self-heal the address-bar title from it. Top-level + optional, so it's never
   // required and a frame that omits it still validates.
   //
-  // `tabId` (forward-compat plumbing — A3 contract pending, Q1 channel) lets the
+  // `tabId` (forward-compat plumbing — harness contract pending, Q1 channel) lets the
   // box attribute a frame to a specific tab so the GUI can key live page-state
   // per tab instead of per session. Optional → backward-compatible (frames
   // without it validate + are carried as null downstream); the store stays a
@@ -2080,9 +2089,9 @@ export type PageStateFrame = z.infer<typeof PageStateFrameSchema>;
 // Per-request network-log entries for the DevTools-style "Network" pane in the
 // simulator: which requests a session made and — the point of the feature — the
 // negotiated wire protocol (HTTP/1.1 = 'h1', HTTP/2 = 'h2', HTTP/3 = 'h3') each
-// used. The fork (A3) emits these; the control plane RECEIVES them, RINGS the
+// used. The fork emits these; the control plane RECEIVES them, RINGS the
 // latest per agent session, and SERVES them at GET /v1/agent-sessions/:id/
-// network. A3's emitter lands later, so the ring is legitimately EMPTY in
+// network. The device-side emitter lands later, so the ring is legitimately EMPTY in
 // production today and the GUI shows an honest empty state — never a fabricated
 // row.
 //
@@ -2112,7 +2121,7 @@ export const NetworkRequestEntrySchema = z.object({
   // timestamp cannot land far in the future.
   started_at: z.number().min(0).max(4102444800000),
   // ⛔ WHAT `started_at` IS A TIMESTAMP OF. The fork's resource-load hook
-  // (A3, 2026-09-12) fires once per resource load, AFTER completion, and
+  // (2026-09-12) fires once per resource load, AFTER completion, and
   // carries no timestamp — so in v1 the HARNESS stamps `started_at` at parse,
   // which is receive time and therefore approximately COMPLETION, not the
   // request's fetchStart. The two differ by the whole load duration.
@@ -2137,7 +2146,7 @@ export const NetworkRequestsFrameSchema = z.object({
   sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   tabId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
   // ⛔ Entries are validated PER-ENTRY in the relay, NOT here, and that is
-  // deliberate (T-16, A1+A3 2026-09-08). `protocol` is a CLOSED enum, and empty/
+  // deliberate (T-16, 2026-09-08). `protocol` is a CLOSED enum, and empty/
   // unrecognised protocol is the NORMAL steady state for a real page — error
   // completions, cache hits, and pre-negotiation failures all legitimately carry
   // protocol:"". If `entries` were `z.array(NetworkRequestEntrySchema)`, ONE such
@@ -2154,9 +2163,9 @@ export const NetworkRequestsFrameSchema = z.object({
 });
 export type NetworkRequestsFrame = z.infer<typeof NetworkRequestsFrameSchema>;
 
-// ── Cookies PULL (A2 W2816 / founder #48 "see all cookies, live") ─────
+// ── Cookies PULL (W2816 / founder #48 "see all cookies, live") ────────
 // CP→node REQUEST (`serializeCookiesRequest`): GET /v1/agent-sessions/:id/cookies
-// issues this over the node's LIVE control WSS, keyed by `requestId`; A3's harness
+// issues this over the node's LIVE control WSS, keyed by `requestId`; the harness
 // `getAllCookies` WD-extension (pending) returns the full jar via the `cookiesResult`
 // below. NOT in HarnessOutbound (that's node→CP); this is CP→node like controlCommand.
 export const CookiesRequestSchema = z
@@ -2208,7 +2217,7 @@ export type Cookie = z.infer<typeof CookieSchema>;
 // pending request. Plain object (lenient forward-compat), like the sibling frames.
 /**
  * N-COOKIE-ERROR-CONTRACT — the closed token set a cookie result may carry in its
- * `error` field, authoritative list read off A3's emit sites 2026-09-06.
+ * `error` field, authoritative list read off the harness emit sites 2026-09-06.
  *
  * The customer used to see opaque harness PROSE here, and the contract doc
  * described tokens no code produced. The tokens ride in the EXISTING `error`
@@ -2220,9 +2229,9 @@ export type Cookie = z.infer<typeof CookieSchema>;
  * will never succeed. It needs different customer copy from `write_failed` for
  * exactly that reason — "try again" is wrong for one and right for the other.
  *
- * ⚠️ `unavailable` is NOT a member, and the near-miss is worth recording: A2
- * inferred it from the stderr prose at that emit site ("setCookies unavailable —
- * fork cookie-import ext absent"). A3 caught it. Had it shipped, the one condition
+ * ⚠️ `unavailable` is NOT a member, and the near-miss is worth recording: it was
+ * inferred from the stderr prose at that emit site ("setCookies unavailable —
+ * fork cookie-import ext absent"). The harness side caught it. Had it shipped, the one condition
  * a customer on an extension-less box actually hits would have coerced to the
  * fallback and told them nothing.
  */
@@ -2238,7 +2247,7 @@ export const CookieErrorTokenSchema = z.enum(COOKIE_ERROR_TOKENS).catch('unknown
 export type CookieErrorToken = (typeof COOKIE_ERROR_TOKENS)[number];
 
 /**
- * Rollback defence. These were A3's emitted strings before the cookie handlers
+ * Rollback defence. These were the harness's emitted strings before the cookie handlers
  * were tokenised, mapped to the tokens they became.
  *
  * ⚠️ NO LONGER LOAD-BEARING, and the comment that said so is corrected rather than
@@ -2319,7 +2328,7 @@ export type CookiesResult = z.infer<typeof CookiesResultSchema>;
 // CP→node REQUEST (`serializeSetCookies`): POST /v1/agent-sessions/:id/cookies/set
 // relays a customer's exported jar (the EXACT CookieSchema shape the PULL/Export
 // emits — a cookies.json round-trips 1:1) over the node's LIVE control WSS, keyed by
-// `requestId`; A3's harness `setCookies` WD-extension (pending) writes each cookie
+// `requestId`; the harness `setCookies` WD-extension (pending) writes each cookie
 // into the session's WKWebsiteDataStore.httpCookieStore and replies with the
 // `setCookiesResult` below. NOT in HarnessOutbound (that's node→CP); this is CP→node
 // like cookiesRequest / uploadFile. `cookies` REUSES CookieSchema verbatim (the
@@ -2346,11 +2355,11 @@ export const SetCookiesResultSchema = z.object({
 });
 export type SetCookiesResult = z.infer<typeof SetCookiesResultSchema>;
 
-// ── History NAVIGATION (sim browser back/forward — A3 W2870) ──────────
+// ── History NAVIGATION (sim browser back/forward — W2870) ─────────────
 // CP→node REQUEST (`serializeNavigateHistory`): POST /v1/agent-sessions/:id/history
 // drives the running session's WebKit back-forward list one step in `direction` over
 // the node's LIVE control WSS (navigateHistory → navigateHistoryResult), keyed by
-// `requestId`; A3's harness `navigateHistory` WD-extension (pending) calls goBack/
+// `requestId`; the harness `navigateHistory` WD-extension (pending) calls goBack/
 // goForward and replies with the `navigateHistoryResult` below. NOT in HarnessOutbound
 // (that's node→CP); this is CP→node like cookiesRequest / setCookies / uploadFile.
 // `direction` is the closed enum ['back','forward'] (the only two history steps).
@@ -2360,12 +2369,12 @@ export const NavigateHistoryRequestSchema = z
     requestId: z.string().min(1),
     sessionId: z.string().min(1),
     direction: z.enum(['back', 'forward']),
-    // `tabId` (forward-compat plumbing — A3 harness contract pending, mirrors
+    // `tabId` (forward-compat plumbing — harness contract pending, mirrors
     // PageStateFrame.tabId above): lets the CP tell the box WHICH tab's
     // back-forward list to step, instead of always the foreground tab. Optional
     // → backward-compatible (a step without it targets the session's current
     // tab, today's only behavior). Ships gated-inert like navigateHistory
-    // itself already does: until A3's harness reads this field, it's ignored.
+    // itself already does: until the harness reads this field, it's ignored.
     tabId: z.string().optional(),
   })
   .strict();
@@ -2384,7 +2393,7 @@ export const NavigateHistoryResultSchema = z.object({
 });
 export type NavigateHistoryResult = z.infer<typeof NavigateHistoryResultSchema>;
 
-// ── File UPLOAD (A3 W2851 / founder "control files") ──────────────────
+// ── File UPLOAD (W2851 / founder "control files") ─────────────────────
 // CP→node REQUEST (`serializeUploadFile`): POST /v1/agent-sessions/:id/files relays
 // the customer's file bytes (base64) over the node's LIVE control WSS, keyed by
 // `requestId`; the harness writes them into the per-session 0o700 upload jail
@@ -2426,7 +2435,7 @@ export const UploadResultSchema = z.object({
 });
 export type UploadResult = z.infer<typeof UploadResultSchema>;
 
-// ── File DOWNLOAD (A3 W2856 / founder "control files") ────────────────
+// ── File DOWNLOAD (W2856 / founder "control files") ───────────────────
 // Poll model (mirrors cookies — no push event). A page's download-delegate writes
 // files strictly inside the per-session 0o700 download jail (DRIFTSTACK_DOWNLOAD_DIR,
 // never ~/Downloads); these list + fetch them, keyed by `requestId`. CP→node REQUESTS
@@ -2506,7 +2515,7 @@ export type DownloadDataResult = z.infer<typeof DownloadDataResultSchema>;
 export const TRIM_PROFILE_SCOPES = ['cache', 'cookies', 'history', 'all'] as const;
 export type TrimProfileScope = (typeof TRIM_PROFILE_SCOPES)[number];
 // CP→node REQUEST (`serializeTrimProfile`): POST /v1/profiles/:id/trim issues this
-// over ANY healthy node's LIVE control WSS, keyed by `requestId`; A3's harness opens
+// over ANY healthy node's LIVE control WSS, keyed by `requestId`; the harness opens
 // the sealed blob with `dek`, drops the re-fetchable cache subtrees (NetworkCache /
 // MediaCache + per-origin CacheStorage / ServiceWorkers) from `opaqueStorage` while
 // KEEPING cookies / localStorage / IndexedDB / openTabs, re-seals under the SAME dek,
@@ -2521,7 +2530,7 @@ export type TrimProfileScope = (typeof TRIM_PROFILE_SCOPES)[number];
 // SessionAssign.ProfileInfo.dek). One of `sealed_blob` (inline ≤256KB) / `sealed_blob_url`
 // (presigned GET) supplies the input; `sealed_blob_put_url` (REQUIRED) is where the node
 // PUTs the trimmed blob back.
-// Wire keys mirror the SessionAssign.ProfileInfo convention exactly (A3's Swift
+// Wire keys mirror the SessionAssign.ProfileInfo convention exactly (the harness Swift
 // Codable decoder is the source of truth): the envelope fields `type` + `requestId`
 // stay camelCase like every other CP→node request frame, but the profile-payload
 // fields are snake_case (`profile_id`, `dek`, `sealed_blob`, `sealed_blob_url`,
@@ -2548,7 +2557,7 @@ export const TrimProfileRequestSchema = z
 export type TrimProfileRequest = z.infer<typeof TrimProfileRequestSchema>;
 
 // node→CP RESULT: echoes `requestId` + `profileId`. SUCCESS → `ok:true` +
-// `newSizeBytes` (the re-sealed trimmed byte count, which A2 persists as the new
+// `newSizeBytes` (the re-sealed trimmed byte count, which the server persists as the new
 // size_bytes) + `bytesReclaimed` (oldSealed.count - newSizeBytes, for the "freed N
 // MB" UI). FAILURE (open / seal / PUT) → `error` set + `ok` absent/false, and the CP
 // fast-fails the pending request WITHOUT updating the row. Plain object (lenient
@@ -2571,7 +2580,7 @@ export const TrimProfileResultSchema = z.object({
 });
 export type TrimProfileResult = z.infer<typeof TrimProfileResultSchema>;
 
-// ── Live EGRESS swap (A3 P-17) ────────────────────────────────────────
+// ── Live EGRESS swap (P-17) ───────────────────────────────────────────
 // CP→node REQUEST (`serializeSetEgress`): swaps the exit a RUNNING session
 // browses through, over the node's LIVE control WSS (setEgress → setEgressResult),
 // keyed by `requestId`. Today `proxy_id` is create-only and baked into
@@ -2647,7 +2656,7 @@ export type SetEgressResult = z.infer<typeof SetEgressResultSchema>;
 // CP→node REQUEST (`serializeProbeEgress`): measures a proxy's reachability /
 // latency / QUIC FROM a fleet Mac — the machine that will run the profile — not
 // from the customer's laptop or the control plane, over ANY connected node's LIVE
-// control WSS, keyed by `requestId`. A3's harness dials the proxy carried in
+// control WSS, keyed by `requestId`. The harness dials the proxy carried in
 // `inlineProxyConfig`, routes to `target`, measures the egress, and replies with
 // the `probeEgressResult` below. NOT in HarnessOutbound (that's node→CP); this is
 // CP→node like setEgress / cookiesRequest.
@@ -2661,7 +2670,7 @@ export type SetEgressResult = z.infer<typeof SetEgressResultSchema>;
 // ⛔ NODE-SCOPED, and `.strict()` is what keeps it that way. This op measures an
 // exit WITHOUT a live session, so it must never be turned into a session op that
 // touches live egress. An object carrying a `sessionId` key therefore FAILS to
-// parse (A3 binding constraint #2): the extra key is REJECTED rather than
+// parse (harness binding constraint #2): the extra key is REJECTED rather than
 // stripped, so a mis-built frame is refused at the boundary instead of silently
 // becoming a session-scoped mutation.
 export const ProbeEgressFrameSchema = z
@@ -2916,15 +2925,15 @@ export function probeReachedVerdict(frame: Pick<ProbeEgressResult, 'ok' | 'statu
 // routed where a consumer is wired (profileSaved consumer = step (d);
 // challengeDetected relay → session.challenge_detected W393; pageState →
 // SessionPageStateStore W650; networkRequests → SessionNetworkLogStore T-9;
-// profileSaveFailed relay → session.profile_save_failed, A3 W1364). cookiesResult
+// profileSaveFailed relay → session.profile_save_failed, W1364). cookiesResult
 // (founder #48) is correlated by `requestId` inside the connection's
 // CookiesRequestCorrelator — it settles a pending GET /:id/cookies request.
-// uploadResult (A3 W2851, file-control) is likewise correlated by `requestId`
+// uploadResult (W2851, file-control) is likewise correlated by `requestId`
 // inside the connection's UploadRequestCorrelator — it settles a pending POST
 // /:id/files request. setCookiesResult (cookie-import) is the write-twin of
 // cookiesResult — correlated by `requestId` inside the connection's
 // SetCookiesRequestCorrelator, settling a pending POST /:id/cookies/set.
-// navigateHistoryResult (sim back/forward, A3 W2870) is likewise the write-twin of
+// navigateHistoryResult (sim back/forward, W2870) is likewise the write-twin of
 // setCookiesResult — correlated by `requestId` inside the connection's
 // NavigateHistoryRequestCorrelator, settling a pending POST /:id/history.
 // trimResult (doc-150 §8.3, profile storage eviction) is the OUT-OF-SESSION sibling

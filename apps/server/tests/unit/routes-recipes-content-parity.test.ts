@@ -1,6 +1,6 @@
 // Drift guard for apps/server/src/routes/recipes.ts. Pins AI-B4
 // POST /v1/recipes — write-only at v1.0, read/list/execute/delete
-// are v1.1 D2/D3 scope. Activation-gate pattern matches Wave 1119+:
+// are v1.1 D2/D3 scope. Activation-gate pattern matches Slice 1119.2+:
 // when both recipesRepo + agentSessionsRepo are wired, the real
 // registrar runs; when omitted, 503 FeatureUnavailable surfaces a
 // machine-readable signal to SDK + dashboard.
@@ -33,9 +33,9 @@ describe('routes/recipes content parity', () => {
     expect(body).toMatch(/EXECUTION stays v1\.1 \(gated on the harness-wired AgentExecutor\)\./);
   });
 
-  it('Activation-gate Wave 1119+ framing pinned: \'when both recipesRepo + agentSessionsRepo are wired in AppDeps, registerRecipesRoutes runs. When omitted, registerRecipesDisabledRoutes surfaces 503 FeatureUnavailable so SDK + dashboard get a machine-readable "not yet enabled" signal vs 404.\' — pinned so the dual-dep + 503-vs-404 + machine-readable-signal contract all stay documented', () => {
+  it('Activation-gate Slice 1119.2+ framing pinned: \'when both recipesRepo + agentSessionsRepo are wired in AppDeps, registerRecipesRoutes runs. When omitted, registerRecipesDisabledRoutes surfaces 503 FeatureUnavailable so SDK + dashboard get a machine-readable "not yet enabled" signal vs 404.\' — pinned so the dual-dep + 503-vs-404 + machine-readable-signal contract all stay documented', () => {
     expect(body).toMatch(
-      /\/\/ Activation gate matches the rest of Wave 1119\+: when both\s*\/\/ recipesRepo \+ agentSessionsRepo are wired in AppDeps,\s*\/\/ registerRecipesRoutes runs\. When omitted, registerRecipesDisabledRoutes\s*\/\/ surfaces 503 FeatureUnavailable so SDK \+ dashboard get a machine-\s*\/\/ readable "not yet enabled" signal vs 404\./,
+      /\/\/ Activation gate matches the rest of Slice 1119\.2\+: when both\s*\/\/ recipesRepo \+ agentSessionsRepo are wired in AppDeps,\s*\/\/ registerRecipesRoutes runs\. When omitted, registerRecipesDisabledRoutes\s*\/\/ surfaces 503 FeatureUnavailable so SDK \+ dashboard get a machine-\s*\/\/ readable "not yet enabled" signal vs 404\./,
     );
   });
 

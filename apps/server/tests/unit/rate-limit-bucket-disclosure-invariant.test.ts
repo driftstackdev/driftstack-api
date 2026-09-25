@@ -1,4 +1,4 @@
-// Rate-limit bucket DISCLOSURE invariant (A2, 2026-07-31).
+// Rate-limit bucket DISCLOSURE invariant (2026-07-31).
 //
 // `rate-limit-bucket-cross-source-invariant` pins the bucket-key ROSTER across
 // schemas. It does not pin which ROUTES consume each bucket, and that gap let a
@@ -6,7 +6,7 @@
 // claimed `sessions:create` was consumed by "`POST /v1/sessions` only" when
 // `POST /v1/profiles/:id/launch` draws on it too (both carry
 // `app.rateLimit('sessions:create')` in routes/sessions.ts), and
-// `guides/concurrency.md` carried a retired dual-bucket fiction. A3 found both
+// `guides/concurrency.md` carried a retired dual-bucket fiction. Both were found
 // while correcting the reference page; neither guard caught them.
 //
 // A customer sizing an integration against "only POST /v1/sessions" budgets the

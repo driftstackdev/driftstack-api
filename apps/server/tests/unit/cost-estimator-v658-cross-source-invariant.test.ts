@@ -5,8 +5,8 @@
 //   V-658 anchor — 'V-658 — cost estimator (V-541.B foundation)'.
 //
 //   Service intro framing — 'Pure functions that implement the cost-
-//   to-serve formula sketched in docs/internal/v541-cost-monitoring-
-//   design.md. The downstream service (V-541.B) wires these against
+//   to-serve formula sketched in the internal V-541 cost-monitoring
+//   design. The downstream service (V-541.B) wires these against
 //   the sessions + usage_records tables and persists the result into
 //   cost_snapshots; this module has zero DB dependencies so it can
 //   be tested + tuned independently'.
@@ -92,10 +92,10 @@ describe('W958 V-658 cost-estimator cross-source invariant', () => {
     expect(p).toMatch(/V-658 — cost estimator \(V-541\.B foundation\)/);
   });
 
-  it("CRITICAL pure-functions framing — 'Pure functions that implement the cost-to-serve formula sketched in docs/internal/v541-cost-monitoring-design.md. The downstream service (V-541.B) wires these against the sessions + usage_records tables and persists the result into cost_snapshots; this module has zero DB dependencies so it can be tested + tuned independently'. The zero-DB pure-functions design is the V-658 testability contract.", () => {
+  it("CRITICAL pure-functions framing — 'Pure functions that implement the cost-to-serve formula sketched in the internal V-541 cost-monitoring design. The downstream service (V-541.B) wires these against the sessions + usage_records tables and persists the result into cost_snapshots; this module has zero DB dependencies so it can be tested + tuned independently'. The zero-DB pure-functions design is the V-658 testability contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/cost-estimator.ts'));
     expect(p).toMatch(/Pure functions that implement the cost-to-serve formula sketched in/);
-    expect(p).toMatch(/`docs\/internal\/v541-cost-monitoring-design\.md`\. The downstream/);
+    expect(p).toMatch(/the internal V-541 cost-monitoring design\. The downstream/);
     expect(p).toMatch(/service \(V-541\.B\) wires these against the `sessions` \+ `usage_records`/);
     expect(p).toMatch(/tables and persists the result into `cost_snapshots`; this module/);
     expect(p).toMatch(/has zero DB dependencies so it can be tested \+ tuned independently\./);

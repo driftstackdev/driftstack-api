@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { SearchRequestSchema, SearchResponseSchema } from '@driftstack/api-types';
 import {
@@ -17,10 +14,6 @@ import {
   DISPATCH_TIMEOUT_SLACK_MS,
   dispatchTimeoutMs,
 } from '../../src/services/harness-dispatch-correlator.js';
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const CONTRACT = resolve(REPO_ROOT, 'docs/internal/cross-agent-control-plane-contract.md');
 
 describe('direct-search control-plane contract', () => {
   it('shares the exact 10,000-character query admission bound', () => {
@@ -73,17 +66,5 @@ describe('direct-search control-plane contract', () => {
     expect(DRIVER_SEARCH_DURATION_MAX_MS).toBe(HARNESS_SEARCH_PRODUCER_DEADLINE_MS);
     expect(DISPATCH_TIMEOUT_SLACK_MS).toBe(15_000);
     expect(dispatchTimeoutMs('search')).toBe(615_000);
-  });
-
-  it('records the non-activation posture and fill_form public-surface exclusion', () => {
-    const body = readFileSync(CONTRACT, 'utf8');
-    expect(body).toMatch(
-      /Search now targets the same \*\*600,000ms producer wall \+ 15,000ms delivery slack = 615,000ms\s*correlation\*\*/,
-    );
-    expect(body).toMatch(/exact zero-submit truncation terminal/);
-    expect(body).toMatch(/every shipped driver is non-real and returns 503 before lookup\/claim/);
-    expect(body).toMatch(
-      /`fill_form`\s*remains an internal harness intent with no public session route or SDK method/,
-    );
   });
 });

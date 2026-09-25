@@ -165,8 +165,8 @@ const VERIFIED_UNDOCUMENTED: Record<string, string> = {
     "{ kind: 'takeover-pending'; requestedByClientId; requestedAt }, and the " +
     'published schema is z.object({ kind }).passthrough(), which permits extra ' +
     'keys. So the docs are right and the SPEC is loose — it flattens a ' +
-    'discriminated union to its common member. Raised on the A2 bus rather ' +
-    'than restructured here, since pair-mode is A3-s active surface (V-757).',
+    'discriminated union to its common member. Raised separately rather ' +
+    'than restructured here, since pair-mode is under active harness work (V-757).',
   'pair_mode_state.requestedAt':
     'Same union member and the same passthrough schema as the entry above.',
 };

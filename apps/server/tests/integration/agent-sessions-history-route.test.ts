@@ -1,4 +1,4 @@
-// Sim back/forward (A3 W2870) — integration tests for POST /v1/agent-sessions/:id/history
+// Sim back/forward (W2870) — integration tests for POST /v1/agent-sessions/:id/history
 // (the sibling of POST /:id/cookies/set). Pins the discriminated body contract the GUI
 // relies on (200 in every relay case, never an HTTP error for an expected-inert state),
 // the gated 503, ownership 404, the malformed-body 422, and the live round-trip through
@@ -125,7 +125,7 @@ describe('POST /v1/agent-sessions/:id/history (wired)', () => {
     await fx.agentSessionsRepo!.setNodeId(id, nodeId);
     let relayedDirection: unknown = null;
     // Register a node whose socket synchronously echoes a navigateHistoryResult ok:true
-    // for the navigateHistory the route sends — exactly what A3's harness will do live.
+    // for the navigateHistory the route sends — exactly what the harness will do live.
     const conn = fx.fleetControlRegistry.register(nodeId, (data) => {
       const frame = JSON.parse(data) as {
         type?: string;
@@ -202,7 +202,7 @@ describe('POST /v1/agent-sessions/:id/history (wired)', () => {
     const id = await createSession(fx);
     const nodeId = 'node-history-silent';
     await fx.agentSessionsRepo!.setNodeId(id, nodeId);
-    // A node that ACKs nothing (A3's navigateHistory extension not yet present) — short
+    // A node that ACKs nothing (the harness's navigateHistory extension not yet present) — short
     // timeout injected so the test doesn't wait the full 10s.
     fx.fleetControlRegistry.register(nodeId, () => {});
     const conn = fx.fleetControlRegistry.get(nodeId)!;

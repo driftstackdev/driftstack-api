@@ -2,7 +2,7 @@
 // device and the real loop.
 //
 // The look before a tap never scrolls, so a control below the fold reads
-// "outside the viewport" and, until click `require_unoccluded` (A3 V-3358), was
+// "outside the viewport" and, until click `require_unoccluded` (V-3358), was
 // tapped unchecked: the click scrolled it into view and tapped whatever the
 // scroll had put on top — a sticky offer bar, a chat button. Two things are
 // pinned here that the executor-level test cannot pin:
@@ -253,7 +253,7 @@ function clickedIds(device: FakeDevice): string[] {
   return device.events().flatMap((e) => (e.kind === 'clicked' ? [e.id] : []));
 }
 
-describe('the fake device models click require_unoccluded as A3 describes it', () => {
+describe('the fake device models click require_unoccluded as the harness describes it', () => {
   it('a cover that ARRIVES WITH THE SCROLL: the look said off-screen; the checked click is refused, word for word, and nothing is touched', async () => {
     const device = deviceOn(CHECKOUT);
     const refused = await click(device, '#place-order', true);
@@ -712,7 +712,7 @@ describe('⛔ on a device that predates the own-label verdict, a styled checkbox
   });
 });
 
-describe('the fake device models send_keys require_unoccluded as A3 V-3360 describes it', () => {
+describe('the fake device models send_keys require_unoccluded as the harness describes it (V-3360)', () => {
   it('a field covered once its focus tap scrolls to it: refused word for word, and NOTHING is typed', async () => {
     const device = deviceOn(SIGNUP);
     const refused = await typeInto(device, '#email', 'me@example.test', true);

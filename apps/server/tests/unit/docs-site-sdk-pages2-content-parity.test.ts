@@ -125,7 +125,7 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     expect(body).toMatch(
       /\| transport \(network \/ parse \/ timeout\) \| `TransportError`\s+\| `TransportError`\s+\| `\*TransportError`\s+\| yes\s+\|/,
     );
-    // S36 2026-07-07 (fable-truth-audit): Go exports no DriftstackError base
+    // S36 2026-07-07 (truth audit): Go exports no DriftstackError base
     // type (the embedded base is the unexported apiError) — the doc now says
     // so instead of naming a type customers can't reference.
     expect(body).toMatch(/All extend `DriftstackError` in TypeScript and Python\./);
@@ -139,7 +139,7 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     expect(body).toMatch(/if \(err instanceof RateLimitError\) \{/);
     expect(body).toMatch(/await sleep\(\(err\.retryAfterSeconds \?\? 1\) \* 1000\);/);
     expect(body).toMatch(/The default retry policy \(3 retries, exponential backoff with full/);
-    // S36 2026-07-07 (fable-truth-audit): InternalError joined the documented
+    // S36 2026-07-07 (truth audit): InternalError joined the documented
     // default-retryable set (it was always auto-retried by all three SDKs).
     expect(body).toMatch(/jitter, honours `Retry-After`\) handles `TransportError`,/);
     expect(body).toMatch(/`RateLimitError`, and `InternalError` \(5xx `internal`\)/);

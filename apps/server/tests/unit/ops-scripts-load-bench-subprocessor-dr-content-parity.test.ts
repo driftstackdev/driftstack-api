@@ -170,7 +170,7 @@ describe('W808 ops scripts content parity', () => {
     expect(p).toMatch(/silent drift between\s*\n\/\/ the two is a compliance bug/);
   });
 
-  it("CRITICAL check-subprocessor-mirror.mjs 2-path pair pinned — apps/marketing-site/src/data/sub-processors.ts + docs/legal/dpa.md. The dpa.md filename matches the 'legal filename convention' memory rule (short slug, not long-form).", () => {
+  it('CRITICAL check-subprocessor-mirror.mjs 2-path pair pinned — apps/marketing-site/src/data/sub-processors.ts + docs/legal/dpa.md. The dpa.md filename matches the legal filename convention (short slug, not long-form).', () => {
     const p = read(SUBPROC);
     expect(p).toMatch(
       /PUBLIC_LIST_PATH = join\(REPO_ROOT, 'apps\/marketing-site\/src\/data\/sub-processors\.ts'\)/,

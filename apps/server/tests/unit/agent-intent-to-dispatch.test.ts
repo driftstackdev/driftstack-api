@@ -325,7 +325,7 @@ describe('agentIntentToDispatch — typed unsupported', () => {
     expect(r.reason).toMatch(/swipe has no harness intent/);
   });
 
-  it('interact:press → press_key { key } (A3-W1221 harness handler live; the DOM KeyboardEvent.key rides in value)', () => {
+  it('interact:press → press_key { key } (W1221 harness handler live; the DOM KeyboardEvent.key rides in value)', () => {
     const r = agentIntentToDispatch({ kind: 'interact', action: 'press', value: 'Enter' });
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('narrow');
@@ -634,7 +634,7 @@ describe('agentIntentToDispatch — produced params satisfy the harness contract
 });
 
 describe('P-3 — the generated wait predicate names nobody and outlives nothing', () => {
-  // Three properties, all A2-only, all found by auditing what this module SHIPS
+  // Three properties, all server-side only, all found by auditing what this module SHIPS
   // rather than what it returns. The predicate is a source string evaluated on a
   // customer's page, so every character of it is product surface.
 
@@ -716,7 +716,7 @@ describe('P-3 — the generated wait predicate names nobody and outlives nothing
   });
 
   it('CRITICAL selector_visible reaches into open shadow roots, as the native wait does', () => {
-    // A3 supplied the native template while answering whether this predicate could
+    // The harness supplied the native template when asked whether this predicate could
     // be dropped: it is `!!deepQuerySelector(sel)`, which pierces shadow roots.
     // A plain `document.querySelector` does not, so the two waits disagreed about
     // whether the same selector matched.

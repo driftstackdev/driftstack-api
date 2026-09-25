@@ -250,7 +250,7 @@ describe('W790 status-site src content parity bundle', () => {
     expect(p, 'the retired cap must not come back').not.toMatch(/emails per incident maximum/i);
   });
 
-  it('CRITICAL subscribe 202+400+429 status-code branches pinned. 202=confirmation-sent, 400=invalid-email, 429=rate-limit-by-IP. Drift to dropping any would lose customer-facing recoverability. Wave 1119 / Slice 1119.3 C1: 202 branch swaps the form for a dedicated confirm pane with sender hint + spam-folder fallback + "subscribe another address" affordance (replaces the prior single setStatus line). 400 + 429 still surface inline status text.', () => {
+  it('CRITICAL subscribe 202+400+429 status-code branches pinned. 202=confirmation-sent, 400=invalid-email, 429=rate-limit-by-IP. Drift to dropping any would lose customer-facing recoverability. Slice 1119.3 C1: 202 branch swaps the form for a dedicated confirm pane with sender hint + spam-folder fallback + "subscribe another address" affordance (replaces the prior single setStatus line). 400 + 429 still surface inline status text.', () => {
     const p = read(PAGE_SUB);
 
     expect(p).toMatch(/if \(res\.status === 202\) \{/);
@@ -306,7 +306,7 @@ describe('W790 status-site src content parity bundle', () => {
     expect(p).toMatch(/No open incidents and no resolved incidents in the last 90 days\./);
   });
 
-  it('Wave 1119 / Slice 1119.4 B4 — month-grouping presentation polish: humanized month label (humanizeMonth + MONTH_LABELS lookup, e.g. "May 2026" not "2026-05"); per-month incident-count chip (pluralizeIncidents — singular handled); render as <details> blocks with the newest month open-by-default + older months collapsed (so 90 days does not dump as one wall of cards); group-open chevron rotates via Tailwind group-open: utility.', () => {
+  it('Slice 1119.4 B4 — month-grouping presentation polish: humanized month label (humanizeMonth + MONTH_LABELS lookup, e.g. "May 2026" not "2026-05"); per-month incident-count chip (pluralizeIncidents — singular handled); render as <details> blocks with the newest month open-by-default + older months collapsed (so 90 days does not dump as one wall of cards); group-open chevron rotates via Tailwind group-open: utility.', () => {
     const p = read(PAGE_HIST);
 
     // Human-readable month + count helpers.

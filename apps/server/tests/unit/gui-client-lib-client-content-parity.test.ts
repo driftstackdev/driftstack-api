@@ -58,24 +58,29 @@ describe('W461.C apps/gui-client/src/lib/client.ts content parity', () => {
     expect(body).toContain('effectiveAccount: string | null = null,');
     expect(body).toContain('onUnauthorized?: () => void,');
     expect(body).toContain('if (apiKey === null || apiKey.length === 0) return null;');
-    expect(body).toContain("baseUrl: baseUrl.replace(/\\/+$/, ''),");
+    // 2026-09-24 — the stripped base is computed once and shared with the
+    // key-refusal report, so it is pinned at both ends.
+    expect(body).toContain("const base = baseUrl.replace(/\\/+$/, '');");
+    expect(body).toContain('baseUrl: base,');
     expect(body).toContain('fetch: authFetch,');
-    // authFetch is a pure pass-through over loggingFetch that NOTIFIES on 401.
-    expect(body).toContain('loggingFetch(input, init)');
-    expect(body).toMatch(/if \(res\.status === 401\) onUnauthorized\?\.\(\);/);
+    // authFetch is a pure pass-through over apiFetch that NOTIFIES on 401.
+    expect(body).toContain('apiFetch(input, init)');
+    expect(body).toMatch(/if \(res\.status === 401\) \{\s*onUnauthorized\?\.\(\);/);
     expect(body).toContain('...(effectiveAccount !== null ? { effectiveAccount } : {}),');
   });
 
-  it("W609 loggingFetch — Dev Logs productivity seam: non-ok responses record('error', ['[api] <method> <url> → <status>']) + network failures record + rethrow; successes NOT logged (the 2-fps frame poll would flood the 500-entry ring in ~4 min). Pinned so the panel keeps showing API failures (the founder-reported empty-Dev-Logs-during-error case)", () => {
+  it("W609 apiFetch — Dev Logs productivity seam, 2026-09-24 levels: a 5xx the server answered records ERROR, a 4xx records WARN ('[api] <method> <url> → <status>'); a server that does not answer is logged once when it stops and once when it answers again (noteApiUnreachable / noteApiAnswered), with ONE error only when the outage outlasts the ride-out; a network failure is rethrown once the read gives up; successes NOT logged (a poll would flood the 500-entry ring). Pinned so the panel keeps showing API failures (the founder-reported empty-Dev-Logs-during-error case) without the per-retry ERROR spray a production restart produced", () => {
     expect(body).toMatch(/import \{ record \} from '\.\/log-buffer';/);
     expect(body).toMatch(
-      /function loggingFetch\(input: RequestInfo \| URL, init\?: RequestInit\): Promise<Response> \{/,
+      /async function apiFetch\(input: RequestInfo \| URL, init\?: RequestInit\): Promise<Response> \{/,
     );
     expect(body).toMatch(
-      /if \(!res\.ok\) record\('error', \[`\[api\] \$\{method\} \$\{url\} → \$\{res\.status\} \$\{res\.statusText\}`\]\);/,
+      /record\(res\.status >= 500 \? 'error' : 'warn', \[\s*`\[api\] \$\{method\} \$\{url\} → \$\{String\(res\.status\)\} \$\{res\.statusText\}`/,
     );
+    expect(body).toMatch(/record\('info', \[\s*`\[api\] \$\{hostOf\(origin\)\} is not answering/);
+    expect(body).toMatch(/record\('info', \[`\[api\] \$\{hostOf\(origin\)\} is answering again/);
     expect(body).toMatch(
-      /record\('error', \[`\[api\] \$\{method\} \$\{url\} → network failure: \$\{String\(err\)\}`\]\);/,
+      /record\('error', \[\s*`\[api\] \$\{hostOf\(origin\)\} has not answered for/,
     );
     expect(body).toMatch(/throw err;/);
   });

@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.20.d (v2-#8) — docs/api/agent-sessions.md
+// Arc 4 phase 2.B, slice 8.20.d (v2-#8) — docs/api/agent-sessions.md
 // content parity. Pins the new docs page against the source-of-truth
 // surface so renames break CI:
 //
@@ -23,7 +23,7 @@ const DOCS_PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/api/agent-sessions.md'
 const ROUTE_FILE = resolve(REPO_ROOT, 'apps/server/src/routes/agent-sessions.ts');
 const SPEC = resolve(REPO_ROOT, 'packages/sdk-python/openapi.json');
 
-describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', () => {
+describe('Arc 4 phase 2.B, slice 8.20.d docs/api/agent-sessions.md parity', () => {
   it('docs page file exists at the expected path', () => {
     expect(existsSync(DOCS_PAGE)).toBe(true);
   });
@@ -56,8 +56,8 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
 
   it('every endpoint in the docs page maps to a real handler in the route source', () => {
     // Documented endpoints reference handlers on the server side; the
-    // /takeover + /handback handlers are the Wave 2.A surface; /mode +
-    // /input-event are the Wave 29-NNN ARC 3 Slice 3 + Slice 4 surfaces.
+    // /takeover + /handback handlers are the phase 2.A surface; /mode +
+    // /input-event are the ARC 3 Slice 3 + Slice 4 surfaces.
     // This guard catches renames + drops on both ends.
     const paths = [
       '/v1/agent-sessions',
@@ -167,7 +167,7 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
     expect(body).toMatch(/heartbeat/i);
   });
 
-  // Arc 4 Wave 2.B sub-slice 8.20.d.2 — drift guard for the docs vs
+  // Arc 4 phase 2.B, slice 8.20.d.2 — drift guard for the docs vs
   // PAIR_MODE_HEARTBEAT_TTL_MS constant. If a future change to the
   // sweep TTL bumps the constant from 30_000 to anything else, this
   // guard fails so the docs page MUST be updated in lock-step (or the

@@ -4,8 +4,8 @@
 // interface; migration 0107 adds its internal monotonic authority epoch
 // without widening the public AgentSession record.
 //
-// Design source of truth: `docs/internal/ai-chat-agent-layer-design.md`
-// (in-repo) + Wave 1119+ founder verdict moving AI-CHAT from v1.1 → v1.0
+// Design source of truth: the internal AI-chat agent-layer design notes
+// + the 2026-05-16 founder verdict moving AI-CHAT from v1.1 → v1.0
 // launch arc (per the V-361 framing comment in agent-decomposer.ts).
 //
 // The authority epoch is intentionally internal: callers capture it through a
@@ -15,6 +15,10 @@
 import { isDeepStrictEqual } from 'node:util';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import { ProfileInUseError } from '../lib/errors.js';
+import type {
+  GuiControlKeyMinter,
+  GuiControlKeyMinterAuthority,
+} from '../lib/agent-session-control-key.js';
 import type { TranscriptEntry } from './agent-decomposer.js';
 import { projectProfileActivity, type ProfileActivity } from './profile-activity.js';
 import { z } from 'zod';
@@ -166,6 +170,13 @@ export interface AgentSessionRecord {
    * MFA_ENCRYPTION_KEY env value.
    */
   guiControlKeyCiphertext: Buffer | null;
+  /**
+   * 0142 (security sweep #2) — who minted the stored gui_control_key. Every use
+   * of the key re-checks this principal live; null (no key, or a key minted
+   * before 0142) is refused. Optional so hand-built test records keep compiling;
+   * absent reads as null — the refusing side.
+   */
+  guiControlKeyMintedBy?: GuiControlKeyMinter | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -270,7 +281,7 @@ export interface AgentSessionsRepo {
    * at/over `cap` — the caller surfaces the standard 429 ConcurrencyLimitError.
    * Mirrors SessionsRepo.insertSessionIfUnderLimit.
    *
-   * A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard. When
+   * Finding #7 (W2979/W2980) — single-active-session-per-profile guard. When
    * `args.profileId` is set, the same atomic transaction ALSO takes a per-profile
    * advisory lock + refuses a second bind against a NON-TERMINAL (status !=
    * 'closed') session for the same profile + account, throwing ProfileInUseError
@@ -452,9 +463,9 @@ export interface AgentSessionsRepo {
   closeActiveByNode(nodeId: string, reason: string): Promise<number>;
 
   /**
-   * Node-restart variant of {@link closeActiveByNode} (A2 W2813 bootId consumer):
+   * Node-restart variant of {@link closeActiveByNode} (W2813 bootId consumer):
    * close a node's still-active sessions EXCEPT those whose id is in `keepIds`.
-   * Used when a daemon's `bootId` changes (it restarted, A3 W2827): its prior
+   * Used when a daemon's `bootId` changes (it restarted, W2827): its prior
    * in-memory sessions are gone, so the CP closes the ones it still holds active
    * for that node — but NOT any the restarted boot REAFFIRMS in its heartbeat
    * `activeSessionStates` (a session freshly assigned to the new boot, which the
@@ -513,7 +524,7 @@ export interface AgentSessionsRepo {
   ): Promise<AgentSessionRecord | null>;
 
   /**
-   * Slice 3 (Wave 29-NNN ARC 3) — top-level operational-mode setter.
+   * Slice 3 (ARC 3) — top-level operational-mode setter.
    * Atomic write of `mode` + `pair_mode_state` so the row never
    * surfaces with `mode='pair'` + `pair_mode_state=NULL` (or
    * `mode!='pair'` + non-null pair_mode_state). Caller passes the
@@ -538,6 +549,9 @@ export interface AgentSessionsRepo {
    * gui_control_key blob + its 24h-TTL expiry timestamp. Called by
    * the route layer at first-fetch (auto-mint) or rotation. Pass
    * null for both args to clear.
+   *
+   * 0142 — records NO minter (and drops the previous key's), so every control-key
+   * gate refuses a key written here. The mint route uses setGuiControlKeyIfActive.
    */
   setGuiControlKey(args: {
     id: string;
@@ -547,13 +561,33 @@ export interface AgentSessionsRepo {
 
   /** Persist a GUI control credential only while the session remains active.
    * Missing or terminal rows return null so callers never disclose plaintext
-   * for a key that lost a concurrent close. */
+   * for a key that lost a concurrent close. 0142 — `mintedBy` is written with the
+   * key and replaces the stored minter; omitted → none, which every gate refuses. */
   setGuiControlKeyIfActive(args: {
     id: string;
     ciphertext: Buffer | null;
     expiresAt: Date | null;
+    mintedBy?: GuiControlKeyMinter | null;
   }): Promise<AgentSessionRecord | null>;
+
+  /**
+   * Security sweep #2 — whether the principal that minted a control key may still
+   * act on the owner's session, read from the live credential, membership and
+   * account rows. See {@link GuiControlKeyMinterAuthority}.
+   */
+  isGuiControlKeyMinterLive: GuiControlKeyMinterAuthority['isGuiControlKeyMinterLive'];
+
+  /** Clear the stored key and its minter while the ciphertext is unchanged. */
+  clearGuiControlKeyIfUnchanged: GuiControlKeyMinterAuthority['clearGuiControlKeyIfUnchanged'];
 }
+
+/**
+ * The in-memory repository's stand-in for the live minter read the Drizzle
+ * repository runs against the credential, membership and account tables. The
+ * in-memory repository holds none of those, so whoever builds it (the integration
+ * test app) supplies the check from its own credential stores.
+ */
+export type GuiControlKeyMinterCheck = GuiControlKeyMinterAuthority['isGuiControlKeyMinterLive'];
 
 /**
  * In-memory implementation for tests + dev mode. Production wires the
@@ -569,6 +603,8 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
   private records = new Map<string, AgentSessionRecord>();
   private authorityRevisions = new Map<string, number>();
   private counter = 0;
+  /** Where {@link isGuiControlKeyMinterLive} reads the credential stores from. */
+  private minterCheck: GuiControlKeyMinterCheck | null = null;
 
   constructor(private readonly clock: () => Date = () => new Date()) {}
 
@@ -611,6 +647,7 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       lastErrorEvent: null,
       guiControlKeyExpiresAt: null,
       guiControlKeyCiphertext: null,
+      guiControlKeyMintedBy: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -626,7 +663,7 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     // Single-threaded JS: the count + create below run without interleaving, so
     // this is naturally atomic (the Drizzle impl does the real serialisation).
     //
-    // A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard,
+    // Finding #7 (W2979/W2980) — single-active-session-per-profile guard,
     // mirroring the Drizzle impl: when args.profileId is set, refuse a second
     // bind against a NON-TERMINAL (status != 'closed') session for the same
     // profile + account by throwing ProfileInUseError(activeSessionId). A create
@@ -884,6 +921,7 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       ...rec,
       guiControlKeyCiphertext: args.ciphertext,
       guiControlKeyExpiresAt: args.expiresAt,
+      guiControlKeyMintedBy: null,
       updatedAt: this.clock(),
     };
     this.records.set(args.id, updated);
@@ -894,6 +932,7 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     id: string;
     ciphertext: Buffer | null;
     expiresAt: Date | null;
+    mintedBy?: GuiControlKeyMinter | null;
   }): Promise<AgentSessionRecord | null> {
     const rec = this.records.get(args.id);
     if (rec === undefined || rec.status !== 'active') return Promise.resolve(null);
@@ -901,10 +940,48 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       ...rec,
       guiControlKeyCiphertext: args.ciphertext,
       guiControlKeyExpiresAt: args.expiresAt,
+      guiControlKeyMintedBy: args.mintedBy ?? null,
       updatedAt: this.clock(),
     };
     this.records.set(args.id, updated);
     return Promise.resolve(updated);
+  }
+
+  /**
+   * Wire the live minter read (the integration test app passes one built over its
+   * in-memory credential stores). Unset → no minter is ever live, so every control
+   * key is refused: the refusing side, as a missing authority is on the gates.
+   */
+  setGuiControlKeyMinterCheck(check: GuiControlKeyMinterCheck | null): void {
+    this.minterCheck = check;
+  }
+
+  isGuiControlKeyMinterLive(args: {
+    minter: GuiControlKeyMinter;
+    ownerAccountId: string;
+    now: Date;
+  }): Promise<boolean> {
+    if (this.minterCheck === null) return Promise.resolve(false);
+    return this.minterCheck(args);
+  }
+
+  clearGuiControlKeyIfUnchanged(args: { id: string; ciphertext: Buffer }): Promise<boolean> {
+    const rec = this.records.get(args.id);
+    if (
+      rec === undefined ||
+      rec.guiControlKeyCiphertext === null ||
+      !rec.guiControlKeyCiphertext.equals(args.ciphertext)
+    ) {
+      return Promise.resolve(false);
+    }
+    this.records.set(args.id, {
+      ...rec,
+      guiControlKeyCiphertext: null,
+      guiControlKeyExpiresAt: null,
+      guiControlKeyMintedBy: null,
+      updatedAt: this.clock(),
+    });
+    return Promise.resolve(true);
   }
 
   setPairModeState(id: string, state: unknown): Promise<AgentSessionRecord> {

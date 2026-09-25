@@ -24,7 +24,6 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const BUS = resolve(REPO_ROOT, 'apps/server/src/services/notification-event-bus.ts');
 const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/account-notifications.ts');
 const GUI = resolve(REPO_ROOT, 'apps/gui-client/src/lib/notifications.ts');
-const DOC = resolve(REPO_ROOT, 'docs/internal/driftstack-telemetry-event-schema-for-gui-panel.md');
 const API_DOC = resolve(REPO_ROOT, 'apps/docs/src/pages/api/account-notifications.md');
 
 function read(p: string): string {
@@ -84,13 +83,6 @@ describe('Notification v0 schema cross-source-invariant', () => {
     const body = read(ROUTE);
     expect(body).toMatch(/reply\.raw\.write\(`event: \$\{event\.kind\}\\n`\);/);
     expect(body).toMatch(/reply\.raw\.write\(`data: \$\{JSON\.stringify\(event\)\}\\n\\n`\);/);
-  });
-
-  it('internal design doc enumerates the same 4 kinds in the v0 union section + Future-publishers section', () => {
-    const body = read(DOC);
-    for (const kind of V0_KINDS) {
-      expect(body).toContain(`'${kind}'`);
-    }
   });
 
   it('public API docs page enumerates the same 4 kinds (h3 headings)', () => {

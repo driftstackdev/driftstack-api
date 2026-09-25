@@ -179,7 +179,7 @@ describe('docs layouts/DocLayout content parity', () => {
     expect(body).toMatch(/<article\s*data-pagefind-body\s*class="prose max-w-3xl/);
   });
 
-  it("S35 2026-07-07 (fable-frontend-audit) — TOC labels read the heading's FULL text pinned: clone the heading, remove the appended [data-anchor] '#' link, then read textContent. The old h.firstChild.textContent read truncated any heading that STARTS with inline code to just that first element (18 of 30 rail entries on /webhooks/events lost everything after the code span, including [LIVE]/[PLANNED] tags)", () => {
+  it("S35 2026-07-07 (frontend audit) — TOC labels read the heading's FULL text pinned: clone the heading, remove the appended [data-anchor] '#' link, then read textContent. The old h.firstChild.textContent read truncated any heading that STARTS with inline code to just that first element (18 of 30 rail entries on /webhooks/events lost everything after the code span, including [LIVE]/[PLANNED] tags)", () => {
     expect(body).toMatch(/var labelSource = h\.cloneNode\(true\);/);
     expect(body).toMatch(/labelSource\.querySelector\('\[data-anchor\]'\)/);
     expect(body).toMatch(
@@ -189,7 +189,7 @@ describe('docs layouts/DocLayout content parity', () => {
     expect(body).not.toMatch(/h\.firstChild \? h\.firstChild\.textContent/);
   });
 
-  it("S35 2026-07-07 (fable-frontend-audit) — scroll-spy re-sync pinned: the spy resolution is a callable resolveSpy() (IO callback + hashchange both use it), rail clicks setActive(h.id) directly after pushState (pushState fires no hashchange and an instant jump may cross no observed heading), and real hash navigations highlight the named heading when it's a rail entry, else re-run the positional spy", () => {
+  it("S35 2026-07-07 (frontend audit) — scroll-spy re-sync pinned: the spy resolution is a callable resolveSpy() (IO callback + hashchange both use it), rail clicks setActive(h.id) directly after pushState (pushState fires no hashchange and an instant jump may cross no observed heading), and real hash navigations highlight the named heading when it's a rail entry, else re-run the positional spy", () => {
     expect(body).toMatch(/function resolveSpy\(\) \{/);
     expect(body).toMatch(
       /history\.pushState\(null, '', '#' \+ h\.id\);[\s\S]{0,400}?setActive\(h\.id\);/,

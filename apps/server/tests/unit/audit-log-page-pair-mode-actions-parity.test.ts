@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.20.b (v2-#8) — dashboard audit log
+// Arc 4 phase 2.B, slice 8.20.b (v2-#8) — dashboard audit log
 // MUST surface the three pair-mode actions in both ACTION_LABEL
 // (label map) and FILTER_OPTIONS (filter dropdown). Otherwise the
 // customer sees the raw `agent_session.pair_mode.takeover` action
@@ -30,7 +30,7 @@ const PAIR_MODE_ACTIONS = [
   'agent_session.destroyed',
 ] as const;
 
-describe('Arc 4 Wave 2.B sub-slice 8.20.b pair-mode audit log surface parity', () => {
+describe('Arc 4 phase 2.B, slice 8.20.b pair-mode audit log surface parity', () => {
   const body = readFileSync(AUDIT_LOG_PAGE, 'utf8');
 
   it('every pair-mode action is declared in the AccountAuditActionSchema enum', () => {

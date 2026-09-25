@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.20.k (v2-#8) — cross-SDK
+// Arc 4 phase 2.B, slice 8.20.k (v2-#8) — cross-SDK
 // PairModeStateInvalidTransitionError typed-extension parity.
 //
 // All three SDKs MUST expose the `from` + `transition` extension
@@ -26,7 +26,7 @@ const TS_ERRORS = resolve(REPO_ROOT, 'packages/sdk-typescript/src/errors.ts');
 const PY_ERRORS = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/errors.py');
 const GO_ERRORS = resolve(REPO_ROOT, 'packages/sdk-go/errors.go');
 
-describe('Arc 4 Wave 2.B sub-slice 8.20.k cross-SDK PairModeStateInvalidTransitionError field parity', () => {
+describe('Arc 4 phase 2.B, slice 8.20.k cross-SDK PairModeStateInvalidTransitionError field parity', () => {
   it('TypeScript SDK exposes readonly from + transition', () => {
     const body = readFileSync(TS_ERRORS, 'utf8');
     const m = body.match(
@@ -71,7 +71,7 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.k cross-SDK PairModeStateInvalidTransiti
     expect(body).toMatch(/readonly from: string;[\s\S]*readonly transition: string;/);
   });
 
-  // Arc 4 Wave 2.B sub-slice 8.20.k.3 — extend the parity guard to
+  // Arc 4 phase 2.B, slice 8.20.k.3 — extend the parity guard to
   // cover the OTHER two typed-extension errors in the v2-#8 +
   // bundled-LLM surface so all three SDKs stay in lockstep.
   describe('PairModeConflictError.winnerClientId / WinnerClientID / winner_client_id', () => {

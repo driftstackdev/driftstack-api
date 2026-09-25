@@ -1,8 +1,8 @@
 // V-820 / network-architecture.md — fleet-node JWT verification.
 //
-// Foundation slice for the cross-agent mTLS endpoint
-// (`wss://fleet.driftstack.dev/v1/fleet/events`). Agent 1 is waiting
-// on Agent 2 to land the auth primitive; this is the autonomously-
+// Foundation slice for the cross-repo mTLS endpoint
+// (`wss://fleet.driftstack.dev/v1/fleet/events`). The device side is waiting
+// on the server to land the auth primitive; this is the self-contained,
 // safe piece (no SQL migration, no Cloudflare config — just the JWT
 // verification logic + interface).
 //

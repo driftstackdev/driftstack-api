@@ -173,7 +173,7 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
     );
     // Removal atomically drops the membership AND cancels the member's
     // OUTSTANDING invites in one transaction (TOCTOU fix 2026-07-10; also
-    // stops the re-join-via-pending-invite path from the Fable auth re-audit
+    // stops the re-join-via-pending-invite path from the auth re-audit
     // 2026-07-02). removeMemberWithInvites is the single atomic call — a
     // just-removed member can't resurrect their seat via an accept-in-flight.
     // V-726 — the same call now also revokes, in its transaction, the keys this

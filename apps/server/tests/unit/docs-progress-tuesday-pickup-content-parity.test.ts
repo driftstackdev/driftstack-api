@@ -3,11 +3,11 @@
 // Drift here either re-orders the priority queue 1-9, drops a
 // founder-direction-required item (V-413 + account-deletion +
 // per-tier-gating + Stripe-keys + NowPayments + LiveKit + comms),
-// or unsets the Rule-M (≥2 P-track parallel) / Rule-K (NEVER STOP) /
-// 15-25 slices / 8h memory throughput.
+// or unsets the resume-throughput rules (≥2 P-track parallel / work
+// the queue until empty / 15-25 slices per 8h).
 //
 //   • Paused 2026-05-09 per founder cost-discipline.
-//   • Resume condition: Tuesday weekly token reset.
+//   • Resume condition: founder reactivation Tuesday.
 //   • F-001 mobile UI + F-003 OAuth gated on founder details.
 //   • Queue items 1-9 (F-001, F-003, V-294 cont, V-278.J-2, V-278.K,
 //     V-278.L, apps/docs gaps, test coverage, PLANNING-INDEX.md).
@@ -29,15 +29,12 @@ function read(p: string): string {
 describe('W571.C /docs/progress/tuesday-pickup.md content parity', () => {
   const body = read(LIB);
 
-  it('Header + paused-2026-05-09 + cost-discipline + Tuesday-reset + Rule-M + Rule-K + 15-25 slices framing pinned', () => {
+  it('Header + paused-2026-05-09 + cost-discipline + Tuesday-resume + 2-parallel-slices + work-until-empty + 15-25 slices framing pinned', () => {
     expect(body).toMatch(/^# Tuesday pickup queue$/m);
     expect(body).toMatch(/\*\*Last updated:\*\* 2026-05-09 \(paused per founder cost-discipline\)/);
-    expect(body).toMatch(
-      /\*\*Resume condition:\*\* founder explicit reactivation Tuesday \(weekly/,
-    );
-    expect(body).toMatch(/token reset\)\./);
-    expect(body).toMatch(/Per Rule M minimum 2 P-track parallel slices on resume; per Rule K/);
-    expect(body).toMatch(/NEVER STOP once reactivated\. Per memory #18 sustained throughput/);
+    expect(body).toMatch(/\*\*Resume condition:\*\* founder explicit reactivation Tuesday\./);
+    expect(body).toMatch(/On resume, run at least 2 P-track slices in parallel and keep working/);
+    expect(body).toMatch(/the queue until it is empty\. Sustained throughput/);
     expect(body).toMatch(/target 15-25 slices \/ 8h\./);
   });
 
@@ -145,8 +142,10 @@ describe('W571.C /docs/progress/tuesday-pickup.md content parity', () => {
     expect(body).toMatch(/- Cross-SDK regression for the V-455 closure additions \(currently/);
     expect(body).toMatch(/TS-only edge cases; mirror in Python \+ Go\)\./);
     expect(body).toMatch(/### 9\. PLANNING-INDEX\.md continuation/);
-    expect(body).toMatch(/Per memory rule #12: when V-294 catalog saturates, consult/);
-    expect(body).toMatch(/`\/mnt\/project\/PLANNING-INDEX\.md` \(118 planning files\)\./);
+    expect(body).toMatch(
+      /Standing rule: when the V-294 catalog saturates, consult\s*\nthe planning index, `PLANNING-INDEX\.md` \(118 planning files\)\./,
+    );
+    expect(body).toMatch(/the planning index, `PLANNING-INDEX\.md` \(118 planning files\)\./);
     expect(body).toMatch(/The catalog is/);
     expect(body).toMatch(/~50% saturated; expect this to land mid-Tuesday session\./);
     expect(body).toMatch(/## Items NOT to pick up without founder direction/);
@@ -183,12 +182,12 @@ describe('W571.C /docs/progress/tuesday-pickup.md content parity', () => {
       /\*\*SHIPPED\*\* — five `\/v1\/billing\/crypto-\*` routes are registered/,
     );
     expect(body).toMatch(/chosen\./);
-    expect(body).toMatch(/- \*\*LiveKit\*\* — Agent 1 territory\./);
+    expect(body).toMatch(/- \*\*LiveKit\*\* — device-side work in the WebKit fork\./);
     expect(body).toMatch(/- \*\*Organic growth \/ paid acquisition \/ launch comms\*\* — out of/);
-    expect(body).toMatch(/Agent 2 scope\./);
+    expect(body).toMatch(/this repo's scope\./);
     expect(body).toMatch(/## Pre-resume sanity checks \(Tuesday\)/);
-    expect(body).toMatch(/git -C \/Users\/john\/code\/driftstack-api log -1 --oneline/);
-    expect(body).toMatch(/git -C \/Users\/john\/code\/driftstack-api status --short/);
+    expect(body).toMatch(/git log -1 --oneline {5}# from the repository root/);
+    expect(body).toMatch(/^git status --short$/m);
     expect(body).toMatch(/npm run typecheck && npm run lint && npm run format:check && npm test/);
     expect(body).toMatch(
       /ssh -o BatchMode=yes root@128\.140\.37\.74 'systemctl is-active driftstack-api'/,

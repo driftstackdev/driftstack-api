@@ -40,7 +40,7 @@ describe('W807 commit-msg hook + install + env-templates parity', () => {
       /V-205 attribution — Driftstack-only commit attribution\. ZERO third-\s*\n#\s+party tooling trailers, ZERO "Generated with" footers, ZERO robot\s*\n#\s+emoji markers, ZERO noreply@<tool>\.com addresses\./,
     );
     expect(p).toMatch(
-      /V-211 anonymity\s+— ZERO founder framing, ZERO personal-name\s*\n#\s+references \(currently: Joel, Joeltheunissen, Theunissen\) in\s*\n#\s+commit subject or body\./,
+      /V-211 anonymity\s+— ZERO founder framing, ZERO personal-name\s*\n#\s+references \(listed outside the repo, see scripts\/personal-names\.mjs\) in\s*\n#\s+commit subject or body\./,
     );
   });
 
@@ -58,16 +58,14 @@ describe('W807 commit-msg hook + install + env-templates parity', () => {
     expect(p).toMatch(/'noreply@github\\\.com'/);
   });
 
-  it("CRITICAL commit-msg V-211 4-reject-pattern set pinned — Founder + Joel + Theunissen + Joeltheunissen with word-boundary [^[:alnum:]] guards. The (^|[^[:alnum:]])X([^[:alnum:]]|$) shape lets compounds like 'foundered' / 'foundation' / 'Joeline' through while catching the bare tokens.", () => {
+  it("CRITICAL commit-msg V-211 set pinned — the Founder pattern with word-boundary [^[:alnum:]] guards, plus the personal-name check against the out-of-repo list. The (^|[^[:alnum:]])X([^[:alpha:]]|$) shape lets compounds like 'foundered' / 'foundation' through while catching the bare token; the names are matched per word by scripts/personal-names.mjs so the hook never spells them out.", () => {
     const p = read(HOOK);
     expect(p).toMatch(/REJECT_PATTERNS_V211=\(/);
     expect(p).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Ff\]ounder\(\[\^\[:alpha:\]\]\|\$\)'/);
-    expect(p).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Jj\]oel\(\[\^\[:alpha:\]\]\|\$\)'/);
-    expect(p).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Tt\]heunissen\(\[\^\[:alpha:\]\]\|\$\)'/);
-    expect(p).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Jj\]oeltheunissen\(\[\^\[:alpha:\]\]\|\$\)'/);
+    expect(p).toMatch(/node "\$PERSONAL_NAMES" "\$MSG_FILE"/);
   });
 
-  it('CRITICAL commit-msg V-205 uses grep -iqE (case-INsensitive) vs V-211 uses grep -qE (case-SENsitive). The case-distinction matters because V-211 patterns already include [Ff]/[Jj]/[Tt] character-classes that would over-match if -i were added.', () => {
+  it('CRITICAL commit-msg V-205 uses grep -iqE (case-INsensitive) vs V-211 uses grep -qE (case-SENsitive). The case-distinction matters because the V-211 pattern already carries an [Ff] character-class, which is as wide as it is meant to be.', () => {
     const p = read(HOOK);
     expect(p).toMatch(/grep -iqE "\$PATTERN"/);
     expect(p).toMatch(/grep -qE "\$PATTERN"/);
@@ -195,9 +193,9 @@ describe('W807 commit-msg hook + install + env-templates parity', () => {
     }
   });
 
-  it("CRITICAL Stripe TEST-mode-pre-launch framing pinned in prod template. The 'TEST mode pre-launch (per Stripe credential-handling memory rule). Live keys swap in via SSH-write after BV KvK closure (~2026-05-21)' wording matches the credential-handling memory rule.", () => {
+  it("CRITICAL Stripe TEST-mode-pre-launch framing pinned in prod template. The 'TEST mode pre-launch (per the Stripe credential-handling rule). Live keys swap in via SSH-write after BV KvK closure (~2026-05-21)' wording matches the credential-handling rule.", () => {
     const p = read(ENV_PROD);
-    expect(p).toMatch(/TEST mode pre-launch \(per Stripe credential-handling memory rule\)\./);
+    expect(p).toMatch(/TEST mode pre-launch \(per the Stripe credential-handling rule\)\./);
     expect(p).toMatch(/Live keys swap in via SSH-write after BV KvK closure \(~2026-05-21\)\./);
     expect(p).toMatch(/STRIPE_SECRET_KEY=sk_test_REDACTED/);
     expect(p).toMatch(/STRIPE_PUBLISHABLE_KEY=pk_test_REDACTED/);

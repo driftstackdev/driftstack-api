@@ -27,12 +27,12 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
   });
 
   it("section taxonomy pinned: 'Home' (Command Center) + 'Browse' (Profiles + Proxies) lead, then 'Automate' (AI chat + Saved tasks) + 'History' (Session log + Recordings) + 'Self-hosted' (Your servers, cloud-customer-gated via isCloudBaseUrl; 2026-09-15 owner directive: no 'Cluster' / 'Mac mini fleet' on a customer surface) + 'Account' (Settings, Team conditional). 2026-06-15: Raw sessions removed (redundant with the profile View/Open) + Connectivity test moved into Settings. 2026-06-19: the 'Diagnostics' (Logs) nav surface was removed — it was a client-side console/error buffer mislabeled as session logs; the floating DevLogPanel keeps it for dev triage. The speculative Marketplace preview was removed before backend work on 2026-07-12. Do not collapse / rename sections without updating the GUI snapshot tests + this pin.", () => {
-    expect(body).toMatch(/<SidebarSection label="Home">/);
-    expect(body).toMatch(/<SidebarSection label="Automate">/);
-    expect(body).toMatch(/<SidebarSection label="Browse">/);
-    expect(body).toMatch(/<SidebarSection label="History">/);
-    expect(body).toMatch(/<SidebarSection label="Self-hosted">/);
-    expect(body).toMatch(/<SidebarSection label="Account">/);
+    expect(body).toMatch(/<SidebarSection label="Home" rail=\{rail\}>/);
+    expect(body).toMatch(/<SidebarSection label="Automate" rail=\{rail\}>/);
+    expect(body).toMatch(/<SidebarSection label="Browse" rail=\{rail\}>/);
+    expect(body).toMatch(/<SidebarSection label="History" rail=\{rail\}>/);
+    expect(body).toMatch(/<SidebarSection label="Self-hosted" rail=\{rail\}>/);
+    expect(body).toMatch(/<SidebarSection label="Account" rail=\{rail\}>/);
     expect(body).toMatch(/Your servers/);
     expect(body).not.toMatch(/<SidebarSection label="Cluster">/);
     expect(body).not.toMatch(/Mac mini fleet/);
@@ -64,7 +64,7 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
 
   it('Self-hosted section cloud-gate: !isCloudBaseUrl(settings.baseUrl) — pinned so a cloud-hosted customer never sees the self-hosted servers surface (the same binary serves both deploy targets; this is a render-only gate, not auth)', () => {
     expect(body).toMatch(
-      /\{!isCloudBaseUrl\(settings\.baseUrl\) && \(\s*<SidebarSection label="Self-hosted">/,
+      /\{!isCloudBaseUrl\(settings\.baseUrl\) && \(\s*<SidebarSection label="Self-hosted" rail=\{rail\}>/,
     );
   });
 

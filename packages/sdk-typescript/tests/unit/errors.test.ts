@@ -108,7 +108,7 @@ describe('errorFromProblem', () => {
     expect((e as RateLimitError).retryAfterSeconds).toBe(1);
   });
 
-  // Arc 4 Wave 2.B sub-slice 8.20.k.4 (v2-#8) — TS TierLimitError
+  // Arc 4 phase 2.B, slice 8.20.k.4 (v2-#8) — TS TierLimitError
   // parity with Python+Go QuotaExceededError typed-extension fields.
   // Customers reading the error in TS now get err.current /
   // err.limit / err.recordType without re-parsing the raw problem.
@@ -172,7 +172,7 @@ describe('errorFromProblem', () => {
         title: 'Custom',
         status: 418,
         // Extension members MUST survive the unknown-type fallback (they were
-        // dropped before the Fable SDK re-audit fix — the fallback bypassed
+        // dropped before the SDK re-audit fix — the fallback bypassed
         // toOpts/extensionMembers).
         request_id: 'req_abc123',
         code: 'teapot',
@@ -400,7 +400,7 @@ describe('errorFromProblem — bundled-LLM 402 + pair-mode 409 kind correctness'
   });
 
   it('maps profile-in-use → ProfileInUseError (kind conflict, status 409, active_session_id surfaced)', () => {
-    // A3 finding #7 — single-active-session-per-profile guard 409.
+    // Harness finding #7 — single-active-session-per-profile guard 409.
     const e = errorFromProblem(
       {
         type: PROBLEM_TYPES.ProfileInUse,

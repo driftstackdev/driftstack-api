@@ -62,8 +62,8 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
   });
 
   it('ProfileSchema: id + name + archetype + description nullable + folder nullable + tags array + last_used_at nullable + size_bytes/last_saved_at nullable (doc-150 item 5) + created/updated_at', () => {
-    // Per-field toContain (no long \s* chains — see
-    // feedback_no_long_chain_parity_regex).
+    // Per-field toContain (no long \s* chains — they backtrack
+    // pathologically and are hard to debug).
     expect(body).toMatch(/export const ProfileSchema = z\.object\(\{/);
     expect(body).toContain('id: ProfileIdSchema,');
     expect(body).toContain('archetype: z.string(),');

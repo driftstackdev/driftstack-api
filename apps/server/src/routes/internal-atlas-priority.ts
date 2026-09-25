@@ -1,4 +1,4 @@
-// Wave 29-400 §8.2 — internal /v1/internal/atlas-priority/* endpoints.
+// Plan 29-400 §8.2 — internal /v1/internal/atlas-priority/* endpoints.
 //
 // Auto-learn observability surface for the Mac fork's harvester +
 // BS Automate workers + atlas-priority-append.py callbacks. NOT

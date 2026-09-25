@@ -1,6 +1,6 @@
 // Drift guard for apps/gui-client/src/lib/livekit.ts. Pins LK.6.a
 // the typed wrapper around livekit-client + LK.6.d InputEvent
-// schema that MUST stay in lock-step with Agent 1's Mac-side Quartz
+// schema that MUST stay in lock-step with the harness's Mac-side Quartz
 // CGEvent decoder (commit 9170da82). Drift to the InputEvent shape
 // would break customer manual-control input.
 
@@ -31,10 +31,10 @@ describe('gui-client/lib/livekit content parity', () => {
     );
   });
 
-  it("LK.6.d InputEvent 13-variant tagged union pinned: 7 mouse/key/wheel/ping + 5 touch (tap / touchStart / touchMove / touchEnd / swipe) + navigate (URL-nav over the same data channel, A3 W2668). + 'the input-event schema the Mac side decodes. Must stay in lock-step with Agent 1's Swift InputEvent enum.' — pinned so the cross-agent Swift-side enum + the touch contract (founder 2026-06-08) + the navigate command (founder 2026-06-19) all stay documented (drift would break customer manual control input). Per-variant toContain (NOT one mega-regex) to avoid the long-chain backtracking hazard.", () => {
+  it("LK.6.d InputEvent 13-variant tagged union pinned: 7 mouse/key/wheel/ping + 5 touch (tap / touchStart / touchMove / touchEnd / swipe) + navigate (URL-nav over the same data channel, W2668). + 'the input-event schema the Mac side decodes. Must stay in lock-step with the harness's Swift InputEvent enum.' — pinned so the cross-repo Swift-side enum + the touch contract (founder 2026-06-08) + the navigate command (founder 2026-06-19) all stay documented (drift would break customer manual control input). Per-variant toContain (NOT one mega-regex) to avoid the long-chain backtracking hazard.", () => {
     // Framing comment + the union declaration.
     expect(body).toMatch(
-      /\/\*\* LK\.6\.d — the input-event schema the Mac side decodes\. Must\s*\*\s+stay in lock-step with Agent 1's Swift `InputEvent` enum\. \*\//,
+      /\/\*\* LK\.6\.d — the input-event schema the Mac side decodes\. Must\s*\*\s+stay in lock-step with the harness's Swift `InputEvent` enum\. \*\//,
     );
     expect(body).toMatch(/export type InputEvent =/);
     // Each variant pinned individually (mouse/key/wheel/ping + the 5 touch + navigate).
@@ -57,7 +57,7 @@ describe('gui-client/lib/livekit content parity', () => {
     }
   });
 
-  it('sendNavigate emits a navigate command on the same reliable data channel as taps (A3 W2668; the URL-bar fork chrome is un-tappable so the GUI emits its own). Pinned so the data-channel transport (no server route — would 401 for the keychain-less Simulator app) stays documented', () => {
+  it('sendNavigate emits a navigate command on the same reliable data channel as taps (W2668; the URL-bar fork chrome is un-tappable so the GUI emits its own). Pinned so the data-channel transport (no server route — would 401 for the keychain-less Simulator app) stays documented', () => {
     expect(body).toContain('export async function sendNavigate(room: Room, url: string)');
     expect(body).toContain(
       "await sendInputEvent(room, { type: 'navigate', url }, { reliable: true });",
@@ -86,8 +86,7 @@ describe('gui-client/lib/livekit content parity', () => {
     // resolves that promise through `waitForBufferStatusLow`, which has no timer,
     // so on a congested reliable channel it never settles and every abandoned
     // publish leaks its frame for the life of the Room. A pin can only assert the
-    // shape someone chose; it cannot know the shape is correct
-    // (parity-pins-freeze-false-claims).
+    // shape someone chose; it cannot know the shape is correct.
     //
     // What this file is actually for is the reliable=true DEFAULT and the framing,
     // so pin those and pin that the publish is bounded — not the await itself.

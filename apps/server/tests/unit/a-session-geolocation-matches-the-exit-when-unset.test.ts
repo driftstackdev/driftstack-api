@@ -3,8 +3,8 @@
 // real location." (owner item T-11.)
 //
 // The fork already overrides navigator.geolocation and, with no explicit
-// override, auto-derives the location from the exit IP — but coarsely. A2's half
-// is to feed it the ACCURATE exit coordinates the pre-launch probe measured
+// override, auto-derives the location from the exit IP — but coarsely. The server's
+// half is to feed it the ACCURATE exit coordinates the pre-launch probe measured
 // (Cloudflare cf-iplatitude/longitude), so the reported location matches the exit
 // IP precisely. These arms pin the resolution rule the dispatch applies.
 

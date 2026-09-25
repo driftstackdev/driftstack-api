@@ -257,6 +257,7 @@ const EXPECTED_SCOPED_ROUTES: readonly string[] = [
   'POST /v1/agent-sessions/:id/handback [write]',
   'POST /v1/agent-sessions/:id/history [write]',
   'POST /v1/agent-sessions/:id/input-event [write]',
+  'POST /v1/agent-sessions/:id/livekit-token [read:sessions]',
   'POST /v1/agent-sessions/:id/livekit-token [write]',
   'POST /v1/agent-sessions/:id/message [write]',
   'POST /v1/agent-sessions/:id/mode [write]',

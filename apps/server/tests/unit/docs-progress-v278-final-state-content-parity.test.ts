@@ -6,7 +6,7 @@
 //
 //   • V-278. LIVE checkpoint. HEAD 632a5f2.
 //   • TLS: Cloudflare Full (strict), TLS 1.3.
-//   • 6/6 URLs HTTP 200 (Rule L empirical proof).
+//   • 6/6 URLs HTTP 200 (empirical proof).
 //   • Origin TLS: Let's Encrypt DNS-01 (pivot from Cloudflare Origin
 //     CA because /v4/certificates requires legacy Origin CA Key).
 //   • Sub-processor map matches DPA Annex 3.
@@ -36,7 +36,7 @@ describe('W572.A /docs/progress/v278-final-state.md content parity', () => {
     expect(body).toMatch(
       /\*\*TLS posture:\*\* Cloudflare Full \(strict\), TLS 1\.3 customer-edge ↔ Cloudflare ↔ origin/,
     );
-    expect(body).toMatch(/## Live URLs \(6\/6 HTTP 200, Rule L empirical proof\)/);
+    expect(body).toMatch(/## Live URLs \(6\/6 HTTP 200, empirical proof\)/);
     expect(body).toMatch(
       /\| https:\/\/driftstack\.io\/\s+\| 200\s+\| Cloudflare Pages → driftstack-marketing\s+\|/,
     );
@@ -64,7 +64,9 @@ describe('W572.A /docs/progress/v278-final-state.md content parity', () => {
       /- \*\*Tooling:\*\* `python3-certbot-dns-cloudflare` \(Ubuntu 24\.04 system/,
     );
     expect(body).toMatch(/package\)\./);
-    expect(body).toMatch(/- \*\*Auth:\*\* the agent's Cloudflare API token \(`Zone:DNS:Edit`\)/);
+    expect(body).toMatch(
+      /- \*\*Auth:\*\* the deploy automation's Cloudflare API token \(`Zone:DNS:Edit`\)/,
+    );
     expect(body).toMatch(/via `\/etc\/letsencrypt\/cf-dns-creds\.ini`\./);
     expect(body).toMatch(
       /- prod: `\/etc\/letsencrypt\/live\/api\.driftstack\.dev\/\{fullchain,privkey\}\.pem`/,
@@ -75,7 +77,7 @@ describe('W572.A /docs/progress/v278-final-state.md content parity', () => {
     expect(body).toMatch(/\(SAN: `staging\.driftstack\.dev` \+ `api\.staging\.driftstack\.dev`\)/);
     expect(body).toMatch(/- \*\*Renewal:\*\* certbot's systemd timer auto-renews every ~60 days\./);
     expect(body).toMatch(/Both certs expire 2026-08-07; first auto-renewal lands ~July\./);
-    expect(body).toMatch(/- \*\*TLS handshake captured \(Rule L empirical\):\*\*/);
+    expect(body).toMatch(/- \*\*TLS handshake captured \(empirical\):\*\*/);
     expect(body).toMatch(/TLSv1\.3 \/ AEAD-CHACHA20-POLY1305-SHA256/);
     expect(body).toMatch(/subject: CN=api\.driftstack\.dev/);
     expect(body).toMatch(/issuer:\s+C=US; O=Let's Encrypt; CN=E8/);
@@ -162,7 +164,7 @@ describe('W572.A /docs/progress/v278-final-state.md content parity', () => {
       /\| NowPayments\s+\| Crypto rail re-evaluation per ADR-002 — no provider chosen yet; not on critical-launch path\./,
     );
     expect(body).toMatch(
-      /\| LiveKit\s+\| V-306-V-308 GUI client streaming; Agent 1 territory \+ LiveKit account provisioning\./,
+      /\| LiveKit\s+\| V-306-V-308 GUI client streaming; WebKit-fork territory \+ LiveKit account provisioning\./,
     );
     expect(body).toMatch(
       /\| V-413 Tier-3\s+\| Audit IP\/UA leak in account-audit payloads — pending founder verdict on scrub strategy\./,
@@ -198,7 +200,7 @@ describe('W572.A /docs/progress/v278-final-state.md content parity', () => {
     expect(body).toMatch(
       /\| V-278\.M\s+\| Full \(strict\) TLS upgrade with Let's Encrypt origin certs \(DNS-01\)\./,
     );
-    expect(body).toMatch(/## Commit trail \(this session, in order\)/);
+    expect(body).toMatch(/## Commit trail \(this checkpoint, in order\)/);
     expect(body).toMatch(/85aee83\s+V-468: docs\/sdk\/installation — fold V-455 closure additions/);
     expect(body).toMatch(/9ed4cba\s+V-278\.B\/F production-deploy fixups \(live verified\)/);
     expect(body).toMatch(

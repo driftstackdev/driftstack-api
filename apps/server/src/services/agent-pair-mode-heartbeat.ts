@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.13b (v2-#8) — pair-mode heartbeat tracker.
+// Arc 4 phase 2.B, slice 8.13b (v2-#8) — pair-mode heartbeat tracker.
 //
 // Pure data structure that maps `sessionId → lastHeartbeatAt` and
 // exposes `findStaleSessions(now, ttlMs)` so a sweep service can
@@ -74,6 +74,6 @@ export class InMemoryPairModeHeartbeatTracker implements PairModeHeartbeatTracke
 }
 
 /** Default heartbeat-timeout window per founder verdict on the
- *  Wave 2.A 8.13 transition (30 seconds). Exported as a constant so
+ *  phase 2.A 8.13 transition (30 seconds). Exported as a constant so
  *  the sweep service + docs + state-machine commentary stay aligned. */
 export const PAIR_MODE_HEARTBEAT_TTL_MS = 30_000;

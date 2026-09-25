@@ -1,6 +1,6 @@
 // An invite token stops working the moment it is used.
 //
-// `findInviteByTokenHash` carries a Fable auth re-audit (2026-07-02) fix in its
+// `findInviteByTokenHash` carries an auth re-audit (2026-07-02) fix in its
 // WHERE clause — `isNull(acceptedAt)` — and records what it prevents:
 //
 //   an already-accepted invite token could be REPLAYED to re-join a team after

@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.13c (v2-#8) — pair-mode heartbeat sweep.
+// Arc 4 phase 2.B, slice 8.13c (v2-#8) — pair-mode heartbeat sweep.
 //
 // Walks PairModeHeartbeatTracker.findStaleSessions(), fires the
 // `heartbeat-timeout` state-machine transition for each, persists

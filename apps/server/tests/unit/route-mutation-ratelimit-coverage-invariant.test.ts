@@ -354,8 +354,8 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // Review tripwire, not a security assertion — the invariant below is what
     // enforces protection. Refreshed after confirming violations(routes) is
     // EMPTY at this count, i.e. all 161 mutation routes carry a limiter, a
-    // privileged gate, or an exact reviewed exemption. NOTE: A3's dual
-    // actor + effective-owner limiter lane will move this number again; refresh
+    // privileged gate, or an exact reviewed exemption. NOTE: the planned dual
+    // actor + effective-owner limiter will move this number again; refresh
     // it the same way (prove violations() empty first), never by chasing green.
     // V-1611 #14 — 162 since `PATCH /v1/teams/:id`. Only ONE of the two new team
     // routes is a mutation; `GET /v1/teams` is not, which is why this moves by one

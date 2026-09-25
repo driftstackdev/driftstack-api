@@ -36,14 +36,14 @@ function read(p: string): string {
 describe('W547.B /docs/security-audit-2026-05-06.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + V-246 + embarrassment-bar + 14-file-scope framing pinned: '# Pre-launch security audit — 2026-05-06' + 'V-246. Walks `apps/server/` auth + payment + data-handling code paths against the \"would I be embarrassed if this hit production with the first paying customer?\" bar.' + 'Conducted via Explore agent reading 14 service/lib/route files; findings cross-checked by line citations.' — pinned so the V-246 + first-paying-customer-embarrassment-bar + 14-file-Explore-agent + line-citation cross-check commitment survives", () => {
+  it("Header + V-246 + embarrassment-bar + 14-file-scope framing pinned: '# Pre-launch security audit — 2026-05-06' + 'V-246. Walks `apps/server/` auth + payment + data-handling code paths against the \"would I be embarrassed if this hit production with the first paying customer?\" bar.' + 'Conducted as a code read of 14 service/lib/route files; findings cross-checked by line citations.' — pinned so the V-246 + first-paying-customer-embarrassment-bar + 14-file-code-read + line-citation cross-check commitment survives", () => {
     expect(body).toMatch(/^# Pre-launch security audit — 2026-05-06$/m);
     expect(body).toMatch(
       /V-246\. Walks `apps\/server\/` auth \+ payment \+ data-handling code paths/,
     );
     expect(body).toMatch(/against the "would I be embarrassed if this hit production with the/);
     expect(body).toMatch(/first paying customer\?" bar\./);
-    expect(body).toMatch(/Conducted via Explore agent reading 14/);
+    expect(body).toMatch(/Conducted as a code read of 14/);
     expect(body).toMatch(/service\/lib\/route files; findings cross-checked by line citations\./);
   });
 
@@ -177,19 +177,19 @@ describe('W547.B /docs/security-audit-2026-05-06.md content parity', () => {
 
   it("V-498 delta-audit V-481/V-484/V-485/V-486/V-487/V-494 no-new-P0-P1 framing pinned: '## V-498 delta audit — what changed since 2026-05-06' + '### V-481 — granular API key scopes' + 'unit test matrix at `tests/unit/scope-check.test.ts` (41 cases)' + '### V-484 — audit-log filter extensions' + '### V-485 — per-tier feature gating' + 'TIER_FEATURES[tier][feature]' + '### V-494 — log + Sentry redaction' + 'pino is best-effort (developers may forget to nest fields under `body.*`); Sentry's recursive walker catches leakage that bypasses pino. Both layers must fail open for a secret to leak.' + '### V-486 — Postmark templates' + '### V-487 — NowPayments scaffold' + '`verifyNowpaymentsSignature` uses `timingSafeEqual` for the constant-time HMAC compare.' + 'Canonicalises JSON body (sorts keys at every level) before HMAC — protects against the `{\"a\":1,\"b\":2}` vs `{\"b\":2,\"a\":1}` variant attack.' + '### Net delta-audit verdict' + '**No new P0 or P1 findings introduced by V-481 → V-487.**' — pinned so the V-498-delta-audit + 6-slice-review (V-481+V-484+V-485+V-486+V-487+V-494) + 41-scope-check-cases + TIER_FEATURES-pure-boolean + pino+Sentry-both-must-fail-open + NowPayments-timingSafeEqual-canonicalised-JSON + no-new-P0-or-P1 commitment survives", () => {
     expect(body).toMatch(/## V-498 delta audit — what changed since 2026-05-06/);
-    expect(body).toMatch(/### V-481 — granular API key scopes \(Track A wave 2\)/);
+    expect(body).toMatch(/### V-481 — granular API key scopes \(Track A\)/);
     expect(body).toMatch(/unit test matrix at `tests\/unit\/scope-check\.test\.ts` \(41 cases\)/);
-    expect(body).toMatch(/### V-484 — audit-log filter extensions \(Track A wave 3\)/);
-    expect(body).toMatch(/### V-485 — per-tier feature gating \(Track A wave 4\)/);
+    expect(body).toMatch(/### V-484 — audit-log filter extensions \(Track A\)/);
+    expect(body).toMatch(/### V-485 — per-tier feature gating \(Track A\)/);
     expect(body).toMatch(
       /`requireTierFeature\(tier, feature\)` is a pure boolean lookup against `TIER_FEATURES\[tier\]\[feature\]`/,
     );
-    expect(body).toMatch(/### V-494 — log \+ Sentry redaction \(Track C wave 4\)/);
+    expect(body).toMatch(/### V-494 — log \+ Sentry redaction \(Track C\)/);
     expect(body).toMatch(
       /pino is best-effort \(developers may forget to nest fields under `body\.\*`\); Sentry's recursive walker catches leakage that bypasses pino\. Both layers must fail open for a secret to leak\./,
     );
-    expect(body).toMatch(/### V-486 — Postmark templates \(Track A wave 5\)/);
-    expect(body).toMatch(/### V-487 — NowPayments scaffold \(Track A wave 6\)/);
+    expect(body).toMatch(/### V-486 — Postmark templates \(Track A\)/);
+    expect(body).toMatch(/### V-487 — NowPayments scaffold \(Track A\)/);
     expect(body).toMatch(
       /`verifyNowpaymentsSignature` uses `timingSafeEqual` for the constant-time HMAC compare\./,
     );

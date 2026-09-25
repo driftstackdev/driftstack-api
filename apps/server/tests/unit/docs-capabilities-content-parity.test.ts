@@ -1,5 +1,5 @@
 // W546.A — drift guard for /docs/CAPABILITIES.md.
-// Fingerprint parity closure backlog. Per AGENTS.md "CAPABILITIES.md
+// Fingerprint parity closure backlog. Per the contributor guidelines' "CAPABILITIES.md
 // as truth source" framing — every documented capability must work
 // end-to-end. Drift here either weakens the zero-detectable-delta
 // bar (would re-introduce "observable-by-design" / "acceptable
@@ -73,7 +73,7 @@ describe('W546.A /docs/CAPABILITIES.md content parity', () => {
     expect(body).toMatch(/V-log\s+\|\s+Citations to verification-log entries\./);
   });
 
-  it("2-V-log-stream namespace-note framing pinned: '## Numbering namespace note' + 'There are two parallel verification-log streams that both start at V-031:' + '**Main repo** (`/operations/verification-log.md`) — fingerprint closure work (V-031–V-143+ as of this writing). All entries below cite this stream by default.' + '**Control-plane repo** (this repo, `docs/verification-log.md`) — API / SDK / GUI / contract work (V-031–V-039 as of this writing). No fingerprint residuals are tracked here.' + 'When CAPABILITIES.md cites a V-ID, default is main repo unless suffixed `[control]`.' — pinned so the 2-parallel-V-log-stream + main-repo-V-031-V-143+ + control-plane-V-031-V-039 + suffix-[control]-disambiguation commitment survives", () => {
+  it("2-V-log-stream namespace-note framing pinned: '## Numbering namespace note' + 'There are two parallel verification-log streams that both start at V-031:' + '**Main repo** (`/operations/verification-log.md`) — fingerprint closure work (V-031–V-143+ as of this writing). All entries below cite this stream by default.' + '**Control-plane repo** (this repo's internal verification records) — API / SDK / GUI / contract work (V-031–V-039 as of this writing). No fingerprint residuals are tracked here.' + 'When CAPABILITIES.md cites a V-ID, default is main repo unless suffixed `[control]`.' — pinned so the 2-parallel-V-log-stream + main-repo-V-031-V-143+ + control-plane-V-031-V-039 + suffix-[control]-disambiguation commitment survives", () => {
     expect(body).toMatch(/## Numbering namespace note/);
     expect(body).toMatch(/There are two parallel verification-log streams that both start at/);
     expect(body).toMatch(/V-031:/);
@@ -82,7 +82,7 @@ describe('W546.A /docs/CAPABILITIES.md content parity', () => {
     );
     expect(body).toMatch(/closure work \(V-031–V-143\+ as of this writing\)\./);
     expect(body).toMatch(
-      /- \*\*Control-plane repo\*\* \(this repo, `docs\/verification-log\.md`\) —/,
+      /- \*\*Control-plane repo\*\* \(this repo's internal verification records\) —/,
     );
     expect(body).toMatch(/API \/ SDK \/ GUI \/ contract work \(V-031–V-039 as of this writing\)\./);
     expect(body).toMatch(/No fingerprint residuals are tracked here\./);

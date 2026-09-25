@@ -40,9 +40,9 @@ describe('W493.C apps/customer-dashboard/src/pages/verify-email.astro content pa
     );
   });
 
-  it("Issue 3 wave 1085+ auto-submit framing: 'when the user clicks the link in the verify email, the token is already in ?token=…. Auto-submit immediately and HIDE the form (replace with a spinner). The form is unhidden as a manual fallback only when (a) auto-submit fails OR (b) the page is reached without a token in the URL' — Founder feedback: the prior implementation pre-filled the form but kept the code-input visible, which read as a 'type your code' UX even when the link click should be the primary flow.", () => {
+  it("Issue 3 auto-submit framing: 'when the user clicks the link in the verify email, the token is already in ?token=…. Auto-submit immediately and HIDE the form (replace with a spinner). The form is unhidden as a manual fallback only when (a) auto-submit fails OR (b) the page is reached without a token in the URL' — Founder feedback: the prior implementation pre-filled the form but kept the code-input visible, which read as a 'type your code' UX even when the link click should be the primary flow.", () => {
     expect(body).toMatch(
-      /Issue 3 wave 1085\+ — when the user clicks the link in the verify\s*\/\/ email, the token is already in `\?token=…`\. Auto-submit\s*\/\/ immediately and HIDE the form/,
+      /Issue 3 — when the user clicks the link in the verify\s*\/\/ email, the token is already in `\?token=…`\. Auto-submit\s*\/\/ immediately and HIDE the form/,
     );
     expect(body).toMatch(/showFallback/);
   });
@@ -56,7 +56,7 @@ describe('W493.C apps/customer-dashboard/src/pages/verify-email.astro content pa
     );
   });
 
-  it("Issue 3 wave 1085+ auto-verifying spinner: linkToken present → spinnerEl unhidden + intro textContent changes to 'Verifying your account…' + form stays hidden. (Replaces the prior 'Verifying your email — one moment…' intro-only swap; full visual surface is the spinner now.)", () => {
+  it("Issue 3 auto-verifying spinner: linkToken present → spinnerEl unhidden + intro textContent changes to 'Verifying your account…' + form stays hidden. (Replaces the prior 'Verifying your email — one moment…' intro-only swap; full visual surface is the spinner now.)", () => {
     expect(body).toMatch(/if \(spinnerEl\) spinnerEl\.hidden = false;/);
     expect(body).toMatch(/if \(introEl\) introEl\.textContent = 'Verifying your account…';/);
     expect(body).toMatch(/data-field="auto-verify-spinner"/);

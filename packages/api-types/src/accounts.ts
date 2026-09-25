@@ -336,7 +336,7 @@ export const AccountAuditActionSchema = z.enum([
   // operator UI surface at v1.0.
   'agent.decompose.claude',
   'agent.decompose.deterministic',
-  // Arc 4 Wave 2.B sub-slice 8.20 (v2-#8) — pair-mode lifecycle.
+  // Arc 4 phase 2.B, slice 8.20 (v2-#8) — pair-mode lifecycle.
   // Each emission carries payload {from, to, client_id?} so the
   // customer audit log surfaces the full state-machine history.
   // 'timeout' fires when the heartbeat-timeout sweep (8.13) auto-

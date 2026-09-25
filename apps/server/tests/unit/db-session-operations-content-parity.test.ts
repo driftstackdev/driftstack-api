@@ -1,5 +1,5 @@
-// Drift guard for the durable direct-operation fences (slice 1 of
-// docs/internal/durable-direct-operation-design.md).
+// Drift guard for the durable direct-operation fences (slice 1 of the
+// internal durable direct-operation design).
 //
 // The integration suite proves the fences hold against real Postgres, but it
 // skips wherever no database is reachable. These assertions run everywhere and

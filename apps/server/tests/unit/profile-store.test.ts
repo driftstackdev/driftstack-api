@@ -96,18 +96,18 @@ describe('makeProfileSavedPersister', () => {
     expect(putObject).not.toHaveBeenCalled();
   });
 
-  // A3 W421 — the daemon's EXACT emitted profileSaved frames (verified, not
-  // hand-written; pinned harness-side by testProfileSavedEmittedFrameForA2Consumer).
+  // W421 — the daemon's EXACT emitted profileSaved frames (verified, not
+  // hand-written; pinned harness-side by the harness's emitted-frame test).
   // Bind the FULL decode→persist path against these verbatim so the cross-service
   // contract can't silently drift (the ws_url silent-nil lesson). Critical
   // property: nil optionals are OMITTED, not null — absence is the discriminator.
-  const A3_INLINE_FRAME =
+  const HARNESS_INLINE_FRAME =
     '{"profile_id":"prof_abc","sealed_blob":"c2VhbGVk","sessionId":"sess_42","type":"profileSaved"}';
-  const A3_LARGE_ACK_FRAME =
+  const HARNESS_LARGE_ACK_FRAME =
     '{"profile_id":"prof_xyz","sessionId":"sess_99","stored":true,"type":"profileSaved"}';
 
-  it("A3 W421 verbatim inline frame: decodes via HarnessOutbound union → persister writes to R2 (no 'stored' key present)", async () => {
-    const decoded = HarnessOutboundSchema.parse(JSON.parse(A3_INLINE_FRAME));
+  it("W421 verbatim inline frame: decodes via HarnessOutbound union → persister writes to R2 (no 'stored' key present)", async () => {
+    const decoded = HarnessOutboundSchema.parse(JSON.parse(HARNESS_INLINE_FRAME));
     expect(decoded.type).toBe('profileSaved');
     const frame = decoded as ProfileSaved;
     expect(frame.stored).toBeUndefined(); // omitted, not null
@@ -125,8 +125,8 @@ describe('makeProfileSavedPersister', () => {
     expect(arg.body.toString('utf8')).toBe('sealed'); // base64 'c2VhbGVk' → 'sealed'
   });
 
-  it("A3 W421 verbatim large-ack frame: decodes via HarnessOutbound union → persister no-ops (no 'sealed_blob' key present)", () => {
-    const decoded = HarnessOutboundSchema.parse(JSON.parse(A3_LARGE_ACK_FRAME));
+  it("W421 verbatim large-ack frame: decodes via HarnessOutbound union → persister no-ops (no 'sealed_blob' key present)", () => {
+    const decoded = HarnessOutboundSchema.parse(JSON.parse(HARNESS_LARGE_ACK_FRAME));
     expect(decoded.type).toBe('profileSaved');
     const frame = decoded as ProfileSaved;
     expect(frame.sealed_blob).toBeUndefined(); // omitted, not null

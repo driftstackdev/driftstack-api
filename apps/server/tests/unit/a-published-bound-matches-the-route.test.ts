@@ -165,7 +165,7 @@ const UNCONSTRAINED_BY_DESIGN: Record<string, string> = {
   'POST /v1/agent-sessions/{id}/history .tabId':
     'traced end to end: `z.string().optional()` in NavigateHistoryBodySchema, again in ' +
     'NavigateHistoryRequestSchema on the wire, and read by nothing — it ships gated-inert until ' +
-    "A3's harness reads it. Honestly unconstrained on both sides.",
+    'the harness reads it. Honestly unconstrained on both sides.',
 };
 
 /**

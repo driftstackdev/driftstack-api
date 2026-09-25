@@ -1,6 +1,6 @@
 // AI-CHAT BYOK Anthropic — per-customer key storage service.
 // Tier-3 verdicts LOCKED 2026-05-17 (5 questions, see
-// docs/internal/byok-anthropic-key-storage-design.md).
+// the internal BYOK key-storage design notes).
 //
 // Surface:
 //   - `setKey`     — encrypt customer's Anthropic key + persist

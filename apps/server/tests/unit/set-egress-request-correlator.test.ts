@@ -1,4 +1,4 @@
-// Live egress swap — unit tests for the set-egress correlator (A3 P-17). Pins the
+// Live egress swap — unit tests for the set-egress correlator (P-17). Pins the
 // mirrored request/reply mechanics its siblings have, plus the two properties that
 // are specific to this frame and are the reason it was designed rather than
 // borrowed: an apply point that is ECHOED or the outcome says so, and a `drain`

@@ -47,7 +47,7 @@
 // an HTTP request with a stubbed probe.
 //
 // ⚠️ The route has NOT been switched over for rules 1-3. account-me.ts is being
-// edited concurrently by another agent (ITEM 1-3, the route OUT for the stored
+// edited concurrently by another change (ITEM 1-3, the route OUT for the stored
 // reading), and rewriting its persist closures underneath that work would be a
 // merge hazard for no behavioural gain — the route's copy is correct today.
 // Rule 4 is the exception and has NO second copy: `persistOsFingerprintIfObserved`

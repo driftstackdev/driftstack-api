@@ -1328,7 +1328,7 @@ export class AuthFlowsService {
     // user-enumeration side-channel (CWE-208). A non-existent / password-less
     // account runs a throwaway scrypt verify against a dummy hash so it can't
     // be told apart from a real wrong-password attempt by latency.
-    // Fable audit-2 2026-07-08 (C3) — OAuth/IdP-created accounts carry the
+    // Audit-2 2026-07-08 (C3) — OAuth/IdP-created accounts carry the
     // EMPTY-STRING password sentinel (createFromIdp writes passwordHash: ''),
     // not null. verifyPassword('') fails FAST in its catch (unparseable hash,
     // zero scrypt work), so without the '' check here an OAuth-only account

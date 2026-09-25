@@ -32,7 +32,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     expect(p).toMatch(
       /^---\nlayout: \.\.\/\.\.\/layouts\/DocLayout\.astro\ntitle: Profile snapshots\n/,
     );
-    // S36 2026-07-07 (fable-truth-audit): "copies" → "metadata records" —
+    // S36 2026-07-07 (truth audit): "copies" → "metadata records" —
     // v1 snapshots are metadata-only (services/profile-snapshots.ts header:
     // captures land stateBlob {}; no browser state is stored or restored).
     expect(p).toMatch(
@@ -45,7 +45,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
 
     expect(p).toMatch(/\*\*Profiles\*\* evolve: every session you run against a profile/);
     expect(p).toMatch(/may mutate cookies, `localStorage`, IndexedDB, etc\./);
-    // S36 2026-07-07 (fable-truth-audit): "frozen" → "frozen metadata" —
+    // S36 2026-07-07 (truth audit): "frozen" → "frozen metadata" —
     // what's frozen is archetype/name/description, never browser state.
     expect(p).toMatch(/\*\*Snapshots\*\* are frozen metadata: capture an evolving profile into a/);
     // The metadata-only truth banner must stay present.
@@ -55,7 +55,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     );
   });
 
-  it("CRITICAL restore creates-NEW-profile-row framing pinned. S36 2026-07-07 (fable-truth-audit): the old 'populated from the snapshot's frozen state' framing was FALSE — restore() creates a fresh profile carrying only the snapshot's parent archetype + description (services/profile-snapshots.ts restore(); capture() writes stateBlob: {}), so the doc now says frozen device profile + description and fresh empty browser state.", () => {
+  it("CRITICAL restore creates-NEW-profile-row framing pinned. S36 2026-07-07 (truth audit): the old 'populated from the snapshot's frozen state' framing was FALSE — restore() creates a fresh profile carrying only the snapshot's parent archetype + description (services/profile-snapshots.ts restore(); capture() writes stateBlob: {}), so the doc now says frozen device profile + description and fresh empty browser state.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
@@ -154,7 +154,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/`POST \/v1\/profile-snapshots\/:id\/restore`/);
-    // S36 2026-07-07 (fable-truth-audit): metadata-only restore truth.
+    // S36 2026-07-07 (truth audit): metadata-only restore truth.
     expect(p).toMatch(
       /Creates a new profile carrying the snapshot's frozen metadata —\s*\n?device profile and description — under the name you supply\./,
     );
@@ -233,7 +233,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     expect(p).toMatch(/There is no per-account snapshot quota\s*\n?today\./);
   });
 
-  it("CRITICAL storage-characteristics framing pinned: metadata only + no browser state stored + frozen parent_archetype/parent_name + no per-account quota. S36 2026-07-07 (fable-truth-audit): the old 'stored in the underlying driver-managed storage layer' claim was FALSE — snapshots are DB rows with an always-empty stateBlob jsonb column (db/schema.ts state_blob; services/profile-snapshots.ts capture() writes {}); nothing lives in a driver-managed layer. (Also keeps the earlier stale-size_bytes guard.)", () => {
+  it("CRITICAL storage-characteristics framing pinned: metadata only + no browser state stored + frozen parent_archetype/parent_name + no per-account quota. S36 2026-07-07 (truth audit): the old 'stored in the underlying driver-managed storage layer' claim was FALSE — snapshots are DB rows with an always-empty stateBlob jsonb column (db/schema.ts state_blob; services/profile-snapshots.ts capture() writes {}); nothing lives in a driver-managed layer. (Also keeps the earlier stale-size_bytes guard.)", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(

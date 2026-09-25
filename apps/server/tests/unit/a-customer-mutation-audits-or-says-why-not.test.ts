@@ -9,7 +9,7 @@
 // scope gates — and nothing asserted which customer mutations reach
 // `account_audit`.
 //
-// Coverage there rested on `docs/internal/2026-05-19-audit-log-coverage-audit.md`,
+// Coverage there rested on the internal 2026-05-19 audit-log coverage audit,
 // whose own method was "spot-check route files". It has since drifted: it filed
 // recipes under "Acceptable gaps (not customer-action-driven) — read-only
 // customer surface; no modification ⇒ no audit needed", and recipes now register

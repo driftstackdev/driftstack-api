@@ -42,7 +42,7 @@ export const AgentSessionSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   livekit: LiveKitInfoSchema.optional(),
-  // A2 W2679 — worker-reported per-session liveness, re-based onto the fleet
+  // W2679 — worker-reported per-session liveness, re-based onto the fleet
   // Heartbeat.activeSessionStates map (NOT the `status` lifecycle, which stays
   // 'active' until DELETE/sweep even when the worker crashed). `state` is the
   // latest worker state (or null = "store wired + session seen but no live
@@ -98,6 +98,29 @@ export const AgentSessionSchema = z.object({
       exit_timezone: z.string().nullable(),
       webrtc_candidate_ips: z.array(z.string()).nullable(),
       observed_at: z.string().nullable(),
+      /** The last OS reading Driftstack took of this session's exit proxy, and how
+       *  it was taken — the same reading the proxy's `os_fingerprint` carries, with
+       *  `at` for when it was taken (a stored reading of any age, not a live one).
+       *  `observed_via` and the two path flags say whether an OS that differs from
+       *  the phone's describes the path a website sees: read a missing or false
+       *  flag as "this reading does not describe that path". `direct_reading` and
+       *  `website_like_reading` are the customer names of `single_host_vantage` and
+       *  `web_port_vantage`; they always agree. `null` means not measured, never
+       *  "no OS". Optional: an older server sends neither the key nor the method
+       *  fields. */
+      os_fingerprint: z
+        .object({
+          os: z.string(),
+          confidence: z.string(),
+          at: z.string(),
+          observed_via: z.enum(['proxy_host', 'exit_ip']).optional(),
+          single_host_vantage: z.boolean().optional(),
+          web_port_vantage: z.boolean().optional(),
+          direct_reading: z.boolean().optional(),
+          website_like_reading: z.boolean().optional(),
+        })
+        .nullable()
+        .optional(),
     })
     .optional(),
   /** The most recent start-up or runtime failure for this session. */

@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — in-process metrics registry.
+// Arc 4 phase 2.B, slice 8.18 (v2-#8) — in-process metrics registry.
 //
 // Renders Prometheus exposition format directly; no external deps. The
 // surface is intentionally narrow (counters + gauges, no histograms) —

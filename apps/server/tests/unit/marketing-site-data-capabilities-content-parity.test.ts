@@ -13,10 +13,10 @@
 //     denominator distinction 'probes-with-iPhone-reference
 //     denominator, not raw — raw includes ref=None pinned post-
 //     V-141 capture and is NOT the marketing-surface number.'
-//   • Update-protocol framing pinned: 'when Agent 1 closes a
-//     cumulative-rig batch that moves the numerator or
-//     denominator, founder relays the new values to Agent 2 in
-//     next interaction; Agent 2 lands the update as a Tier 1
+//   • Update-protocol framing pinned: 'when the fingerprint work
+//     closes a cumulative-rig batch that moves the numerator or
+//     denominator, founder relays the new values to this repo,
+//     where the update lands as a Tier 1
 //     maintenance commit (no founder review needed for factual
 //     technical state).'
 //   • Last-update timestamp pinned: '2026-05-03 founder confirmation'.
@@ -55,9 +55,9 @@ describe('W462.C apps/marketing-site/src/data/capabilities.ts content parity', (
     );
   });
 
-  it("Update-protocol framing pinned: 'when Agent 1 closes a cumulative-rig batch that moves the numerator or denominator, founder relays the new values to Agent 2 in next interaction; Agent 2 lands the update as a Tier 1 maintenance commit (no founder review needed for factual technical state).'", () => {
+  it("Update-protocol framing pinned: 'when the fingerprint work closes a cumulative-rig batch that moves the numerator or denominator, founder relays the new values to this repo, where the update lands as a Tier 1 maintenance commit (no founder review needed for factual technical state).'", () => {
     expect(body).toMatch(
-      /\/\/ Update protocol: when Agent 1 closes a cumulative-rig batch that\s*\/\/ moves the numerator or denominator, founder relays the new values\s*\/\/ to Agent 2 in next interaction; Agent 2 lands the update as a\s*\/\/ Tier 1 maintenance commit \(no founder review needed for factual\s*\/\/ technical state\)\./,
+      /\/\/ Update protocol: when the fingerprint work closes a cumulative-rig batch\s*\/\/ that moves the numerator or denominator, founder relays the new values\s*\/\/ to this repo, where the update lands as a\s*\/\/ Tier 1 maintenance commit \(no founder review needed for factual\s*\/\/ technical state\)\./,
     );
   });
 

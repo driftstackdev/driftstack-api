@@ -24,9 +24,9 @@
 // 20-`\s*`-chain regex. The prior style was hitting catastrophic
 // backtracking on fail-match (post-v2-#4 source changes broke the
 // chain; the regex engine exhausted ~3 minutes of CPU per pre-push
-// before vitest cycled the worker). Memory rule "Eliminated
-// catastrophic backtracking parity-regex risk by pivoting to discrete
-// kind-extraction regex instead of broad \\s*\\n?\\s* chains" applied.
+// before vitest cycled the worker). The standing lesson applies: discrete
+// kind-extraction regexes instead of broad \\s*\\n?\\s* chains eliminate the
+// catastrophic-backtracking risk.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

@@ -1,8 +1,8 @@
-// 2026-06-23 — CP bootId consumer (A2 W2813 / A3 W2827).
+// 2026-06-23 — CP bootId consumer (W2813 / W2827).
 //
-// A3 now puts a per-PROCESS `bootId` (`ProcessInfo.processInfo.globallyUniqueString`,
+// The harness now puts a per-PROCESS `bootId` (`ProcessInfo.processInfo.globallyUniqueString`,
 // captured once per daemon process) on the Heartbeat wire. This is the missing third
-// leg of the CP↔daemon reconcile (A2 W2808/W2809 keystone #3): it distinguishes a
+// leg of the CP↔daemon reconcile (W2808/W2809 keystone #3): it distinguishes a
 // daemon RESTART from a mere reconnect.
 //
 // Why it's needed: the worker-disconnect reaper (worker-disconnect-reaper.ts) closes a
@@ -30,7 +30,7 @@
 //     it shows up only on a LATER beat). So on the bootId-change beat that LIVE just-assigned
 //     session is absent from keepIds and WOULD be wrongly closed. The fix: only sweep rows
 //     whose `updatedAt` is older than `minIdleMs` — setNodeId bumps updatedAt, so a freshly-
-//     assigned session (updatedAt≈now) is NEVER eligible. With A3's W2828 fast reconnect
+//     assigned session (updatedAt≈now) is NEVER eligible. With the harness's W2828 fast reconnect
 //     re-announce the change is detected ~1s after reconnect, when any just-assigned session
 //     is still well inside the window;
 //   - ⭐ RE-SWEEP WINDOW (W2821, audit w93vi1teq #2): the recency guard alone would leave a

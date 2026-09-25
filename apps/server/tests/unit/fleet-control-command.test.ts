@@ -1,7 +1,7 @@
 // Fleet-admin (§A5) node-level control command frame (server → harness):
 // serializeControlCommand builds + validates the envelope; FleetControlConnection
 // .sendControlCommand pushes it over the node's WSS. The harness receiver half
-// (A3, W2197) is built against this exact shape (A2-A3-BUS W2203).
+// (W2197) is built against this exact shape (W2203).
 
 import { describe, expect, it } from 'vitest';
 import { serializeControlCommand } from '../../src/services/harness-control-codec.js';

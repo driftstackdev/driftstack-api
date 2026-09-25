@@ -85,7 +85,7 @@ export class InMemorySessionsRepo implements SessionRepo {
   // advisory lock guards lives only in the multi-connection Postgres path,
   // covered by db-sessions-concurrency-drizzle).
   //
-  // A3 finding #7 (W2979/W2980) — mirrors the Drizzle single-active-session-per-
+  // Finding #7 (W2979/W2980) — mirrors the Drizzle single-active-session-per-
   // profile guard: when opts.profileId is set, refuse a second bind against a
   // NON-TERMINAL (status not destroyed/errored AND destroyed_at null) session
   // whose metadata.profile_id matches for the same account, by throwing

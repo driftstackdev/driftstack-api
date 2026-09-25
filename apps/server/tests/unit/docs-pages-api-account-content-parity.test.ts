@@ -186,7 +186,7 @@ describe('W770 docs /api/account content parity', () => {
     );
   });
 
-  // S38 2026-07-07 (fable-truth-audit follow-on) — the old pin locked an "EU-jurisdiction R2"
+  // S38 2026-07-07 (truth audit follow-on) — the old pin locked an "EU-jurisdiction R2"
   // claim; the buckets live in Cloudflare's default jurisdiction
   // (EU + US replication; founder soften decision 2026-07-07), so the
   // page now states the honest posture.

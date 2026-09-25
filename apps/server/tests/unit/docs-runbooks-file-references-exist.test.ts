@@ -38,10 +38,10 @@ function runbookFiles(): string[] {
 
 /**
  * V-769 — the operator-facing procedure docs. `docs/deployment/` is in scope for the same
- * reason `docs/runbooks/` is: a human follows it during an incident. `docs/internal/` is
- * deliberately NOT scanned — those are dated wave reports and design records, where a
+ * reason `docs/runbooks/` is: a human follows it during an incident. Internal design notes are
+ * deliberately NOT scanned — those are dated batch reports and design records, where a
  * reference to a since-deleted file is an accurate historical record rather than a defect.
- * (Measured: widening to docs/internal surfaced 19 such references, none operator-facing.)
+ * (Measured: widening to the internal notes surfaced 19 such references, none operator-facing.)
  */
 function procedureDocs(): string[] {
   const out: string[] = [];

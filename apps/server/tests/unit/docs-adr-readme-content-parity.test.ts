@@ -62,7 +62,7 @@ describe('W551.C /docs/adr/README.md content parity', () => {
     expect(body).toMatch(/ADRs are reserved for the\s*load-bearing contextual decisions\./);
   });
 
-  it("Format spec — 6-section ADR shape pinned: 'ADR-NNN — Short title' + '**Status:** Accepted | Superseded by ADR-MMM | Deprecated' + '**Tier:** 1 | 2 | 3 (per AGENTS.md autonomy tiers)' + '**Related D-entry:** D-NNN (if applicable)' + '**Related V-entry:** V-NNN (if applicable)' + '## Context' + '## Decision' + '## Consequences' + '## Alternatives considered' + '## Revisit triggers' — pinned so the ADR-format-frontmatter + 5-section-body-Context+Decision+Consequences+Alternatives+Revisit-triggers commitment survives", () => {
+  it("Format spec — 6-section ADR shape pinned: 'ADR-NNN — Short title' + '**Status:** Accepted | Superseded by ADR-MMM | Deprecated' + '**Tier:** 1 | 2 | 3 (per the project's autonomy tiers)' + '**Related D-entry:** D-NNN (if applicable)' + '**Related V-entry:** V-NNN (if applicable)' + '## Context' + '## Decision' + '## Consequences' + '## Alternatives considered' + '## Revisit triggers' — pinned so the ADR-format-frontmatter + 5-section-body-Context+Decision+Consequences+Alternatives+Revisit-triggers commitment survives", () => {
     expect(body).toMatch(/# ADR-NNN — Short title/);
     // `Proposed` added 2026-08-18. This pin required the three-value line, and
     // ADR-005 and ADR-006 had been carrying `Proposed (pending review)` since
@@ -70,7 +70,7 @@ describe('W551.C /docs/adr/README.md content parity', () => {
     expect(body).toMatch(
       /\*\*Status:\*\* Proposed \| Accepted \| Superseded by ADR-MMM \| Deprecated/,
     );
-    expect(body).toMatch(/\*\*Tier:\*\* 1 \| 2 \| 3 \(per AGENTS\.md autonomy tiers\)/);
+    expect(body).toMatch(/\*\*Tier:\*\* 1 \| 2 \| 3 \(per the project's autonomy tiers\)/);
     expect(body).toMatch(/\*\*Related D-entry:\*\* D-NNN \(if applicable\)/);
     expect(body).toMatch(/\*\*Related V-entry:\*\* V-NNN \(if applicable\)/);
     expect(body).toMatch(/## Context/);

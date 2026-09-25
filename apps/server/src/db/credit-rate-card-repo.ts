@@ -248,7 +248,7 @@ export class DrizzleCreditRateCardRepo implements CreditRateCardReader, CreditRa
           // Same shape as `cardInForce` above: the raw `sql` fragment carries
           // only the literal `now()`, with the column comparison left to the
           // builder — never a column or a `Date` interpolated into a raw
-          // template (docs/internal/drizzle-date-param-workaround.md).
+          // template (the drizzle Date-param workaround).
           at === undefined
             ? gt(creditRateCards.effectiveAt, sql`now()`)
             : gt(creditRateCards.effectiveAt, at),

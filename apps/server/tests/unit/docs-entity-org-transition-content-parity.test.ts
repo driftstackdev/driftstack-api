@@ -35,7 +35,7 @@ function read(p: string): string {
 describe('W546.C /docs/entity-org-transition.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + 2026-05-21-KvK + founder-track-out-of-scope + platform-side-scope framing pinned: '# Entity-org transition — platform-side punch list' + '**Target date:** geruisloze omzetting completes ~2026-05-21 (KvK).' + '**Founder track:** legal entity setup (eenmanszaak → BV), Stripe/Mollie billing entity, ToS authoring entity, Moneybird invoicing — all **out of scope** for this repo per `AGENTS.md`.' + 'This document scopes only the **platform-side configuration** changes — what stuff in this repo + the published artifacts has to shift to reflect the new entity, in what sequence, and what's already neutral so we don't churn it.' — pinned so the 2026-05-21-KvK-geruisloze-omzetting + eenmanszaak-to-BV + 4-founder-track-out-of-scope (legal-entity + Stripe/Mollie + ToS + Moneybird) + AGENTS.md-anchor + platform-side-only-scope commitment survives", () => {
+  it("Header + 2026-05-21-KvK + founder-track-out-of-scope + platform-side-scope framing pinned: '# Entity-org transition — platform-side punch list' + '**Target date:** geruisloze omzetting completes ~2026-05-21 (KvK).' + '**Founder track:** legal entity setup (eenmanszaak → BV), Stripe/Mollie billing entity, ToS authoring entity, Moneybird invoicing — all **out of scope** for this repo per the repository scope policy.' + 'This document scopes only the **platform-side configuration** changes — what stuff in this repo + the published artifacts has to shift to reflect the new entity, in what sequence, and what's already neutral so we don't churn it.' — pinned so the 2026-05-21-KvK-geruisloze-omzetting + eenmanszaak-to-BV + 4-founder-track-out-of-scope (legal-entity + Stripe/Mollie + ToS + Moneybird) + scope-policy-anchor + platform-side-only-scope commitment survives", () => {
     expect(body).toMatch(/^# Entity-org transition — platform-side punch list$/m);
     expect(body).toMatch(
       /\*\*Target date:\*\* geruisloze omzetting completes ~2026-05-21 \(KvK\)\./,
@@ -44,7 +44,7 @@ describe('W546.C /docs/entity-org-transition.md content parity', () => {
       /\*\*Founder track:\*\* legal entity setup \(eenmanszaak → BV\), Stripe\/Mollie/,
     );
     expect(body).toMatch(/billing entity, ToS authoring entity, Moneybird invoicing — all/);
-    expect(body).toMatch(/\*\*out of scope\*\* for this repo per `AGENTS\.md`\./);
+    expect(body).toMatch(/\*\*out of scope\*\* for this repo per the repository scope policy\./);
     expect(body).toMatch(/This document scopes only the \*\*platform-side configuration\*\*/);
     expect(body).toMatch(/changes — what stuff in this repo \+ the published artifacts has to/);
     expect(body).toMatch(/shift to reflect the new entity, in what sequence, and what's/);

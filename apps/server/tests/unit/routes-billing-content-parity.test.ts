@@ -170,9 +170,9 @@ describe('W418.C apps/server/src/routes/billing.ts content parity', () => {
     );
   });
 
-  it('Wave 1119 / Slice 1119.2 B1 server-side leg: registerBillingDisabledRoutes wires the same 4 paths to 503 FeatureUnavailable stubs when Stripe env is unconfigured (so the customer dashboard 503-detection leg in select-tier.astro gets a machine-readable signal instead of 404)', () => {
+  it('Slice 1119.2 B1 server-side leg: registerBillingDisabledRoutes wires the same 4 paths to 503 FeatureUnavailable stubs when Stripe env is unconfigured (so the customer dashboard 503-detection leg in select-tier.astro gets a machine-readable signal instead of 404)', () => {
     expect(body).toMatch(
-      /\/\/ Wave 1119 \/ Slice 1119\.2 B1 server-side leg — when Stripe env is not\s*\/\/ configured \(no STRIPE_SECRET_KEY \/ DRIFTSTACK_TIER_PRICE_IDS\),\s*\/\/ `registerBillingRoutes` doesn't run and the `\/v1\/billing\/\*` paths\s*\/\/ fall through to the global 404 handler\./,
+      /\/\/ Slice 1119\.2 B1 server-side leg — when Stripe env is not\s*\/\/ configured \(no STRIPE_SECRET_KEY \/ DRIFTSTACK_TIER_PRICE_IDS\),\s*\/\/ `registerBillingRoutes` doesn't run and the `\/v1\/billing\/\*` paths\s*\/\/ fall through to the global 404 handler\./,
     );
     expect(body).toMatch(
       /export function registerBillingDisabledRoutes\(app: FastifyInstance\): void \{/,

@@ -1289,7 +1289,7 @@ export class RealAgentExecutor implements AgentExecutor {
         };
       }
       case 'press': {
-        // W540 (A3-W677) — key press. `value` carries the key name (e.g.
+        // W540 (W677) — key press. `value` carries the key name (e.g.
         // "Enter", "Escape"); driver InteractAction press caps it at 20 chars.
         if (intent.value === undefined || intent.value.length === 0) {
           return { kind: 'failure', intent, reason: 'press requires a value (the key name)' };

@@ -1,14 +1,14 @@
 // EG-API-1.1 — drift guard for packages/api-types/src/egress.ts.
 // Customer-configurable egress per-session config schema. The shape
-// here is the binding cross-agent contract per
-// `docs/planning/133-egress-architecture-cross-agent.md` in the
+// here is the binding cross-repo contract per
+// planning doc 133 (egress architecture) in the
 // driftstack repo (LOCKED by founder verdict 2026-05-16).
 //
-// Drift here either changes the per-protocol field shape (Agent 1 +
+// Drift here either changes the per-protocol field shape (the WebKit fork +
 // harness would deserialize incompatibly) or relaxes the egress
 // safeguard defaults (would let sessions egress without proxy, breaking
-// CLAUDE.md "Egress safeguards enforce: sessions cannot egress without
-// proxy" non-negotiable). Cross-agent contract changes require a
+// the "Egress safeguards enforce: sessions cannot egress without
+// proxy" non-negotiable). Cross-repo contract changes require a
 // concurrent update to planning file 133 in the same PR.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -43,15 +43,13 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it('Planning-133 source-of-truth framing pinned + supersession note for the f7bab517 session-egress.ts scaffold + cross-agent-contract change-coordination rule', () => {
-    expect(body).toMatch(
-      /Source of truth: docs\/planning\/133-egress-architecture-cross-agent\.md/,
-    );
+  it('Planning-133 source-of-truth framing pinned + supersession note for the f7bab517 session-egress.ts scaffold + cross-repo-contract change-coordination rule', () => {
+    expect(body).toMatch(/Source of truth: planning doc 133 \(egress architecture\) in the/);
     expect(body).toMatch(
       /SUPERSEDES the earlier `apps\/server\/src\/services\/session-egress\.ts`/,
     );
     expect(body).toMatch(
-      /any breaking change here is a breaking change to the\s*\/\/ cross-agent contract/,
+      /any breaking change here is a breaking change to the\s*\/\/ cross-repo contract/,
     );
   });
 
@@ -59,7 +57,7 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
     expect(ProxyTypeSchema.options).toEqual(['socks5', 'openvpn', 'wireguard']);
   });
 
-  it('SocksProxyConfig fields: host string / port int 1-65535 / username + password optional / udp_associate boolean default true (planning 133 §"Cross-agent split" requires UDP ASSOCIATE for WebRTC)', () => {
+  it('SocksProxyConfig fields: host string / port int 1-65535 / username + password optional / udp_associate boolean default true (planning 133 per-repo split requires UDP ASSOCIATE for WebRTC)', () => {
     const parsed = SocksProxyConfigSchema.parse({ host: 'proxy.example.com', port: 1080 });
     expect(parsed.host).toBe('proxy.example.com');
     expect(parsed.port).toBe(1080);
@@ -314,7 +312,7 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
     ).toBe(false);
   });
 
-  it('EgressSafeguard fields: 3 booleans (block_direct_internet / block_unproxied_dns / block_webrtc_stun_leakage) ALL default true (CLAUDE.md "Egress safeguards enforce: sessions cannot egress without proxy" non-negotiable)', () => {
+  it('EgressSafeguard fields: 3 booleans (block_direct_internet / block_unproxied_dns / block_webrtc_stun_leakage) ALL default true ("Egress safeguards enforce: sessions cannot egress without proxy" non-negotiable)', () => {
     const parsed = EgressSafeguardSchema.parse({});
     expect(parsed.block_direct_internet).toBe(true);
     expect(parsed.block_unproxied_dns).toBe(true);
@@ -337,7 +335,7 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
     ).toBe(false);
   });
 
-  it('SavedProxyConfig: label 1-120 chars + proxy ProxyConfig (planning 133 §"Cross-agent split" Agent 2 scope POST /v1/proxies reusable config endpoint)', () => {
+  it('SavedProxyConfig: label 1-120 chars + proxy ProxyConfig (planning 133 per-repo split: server-side scope POST /v1/proxies reusable config endpoint)', () => {
     expect(
       SavedProxyConfigSchema.parse({
         label: 'team SOCKS5 — london',
@@ -358,7 +356,7 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
     ).toBe(false);
   });
 
-  it('EgressCapabilities: harness-reported per-session SOCKS5 capability shape (cross-agent contract 7d5992d9 + EG-WK-1.9 dns_remote_resolve extension, migration 0045) — udp_associate boolean + quic_route 3-enum (proxy|direct|disabled) + dns_remote_resolve boolean + warnings string-array default []', () => {
+  it('EgressCapabilities: harness-reported per-session SOCKS5 capability shape (cross-repo contract 7d5992d9 + EG-WK-1.9 dns_remote_resolve extension, migration 0045) — udp_associate boolean + quic_route 3-enum (proxy|direct|disabled) + dns_remote_resolve boolean + warnings string-array default []', () => {
     const parsed = EgressCapabilitiesSchema.parse({
       udp_associate: true,
       quic_route: 'proxy',

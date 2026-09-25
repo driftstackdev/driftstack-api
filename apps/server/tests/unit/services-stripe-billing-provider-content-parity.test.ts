@@ -70,7 +70,7 @@ describe('W410.B apps/server/src/services/stripe-billing-provider.ts content par
 
   it('ensureCustomer: email + name + metadata{driftstack_account_id} + per-account idempotencyKey; returns result.id', () => {
     // Discrete pins — the added idempotencyKey + its comment broke the single
-    // mega-regex (see feedback_no_long_chain_parity_regex).
+    // mega-regex (a long chained regex is brittle and hard to debug).
     expect(body).toMatch(/async ensureCustomer\(args: \{/);
     expect(body).toMatch(/const result = await this\.client\.createCustomer\(\{/);
     expect(body).toMatch(/email: args\.email,/);

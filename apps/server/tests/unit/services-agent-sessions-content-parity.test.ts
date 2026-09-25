@@ -33,9 +33,9 @@ describe('services/agent-sessions content parity', () => {
     expect(body).not.toMatch(/no SQL migration|persistent layer lands/);
   });
 
-  it("Design SOT pointer pinned: 'docs/internal/ai-chat-agent-layer-design.md (in-repo) + Wave 1119+ founder verdict moving AI-CHAT from v1.1 → v1.0 launch arc (per the V-361 framing comment in agent-decomposer.ts).' — pinned so the design-doc location + the v1.1→v1.0 promotion verdict + the V-361 cross-reference all survive", () => {
+  it("Design SOT pointer pinned: 'the internal AI-chat agent-layer design notes + the 2026-05-16 founder verdict moving AI-CHAT from v1.1 → v1.0 launch arc (per the V-361 framing comment in agent-decomposer.ts).' — pinned so the design-doc location + the v1.1→v1.0 promotion verdict + the V-361 cross-reference all survive", () => {
     expect(body).toMatch(
-      /\/\/ Design source of truth: `docs\/internal\/ai-chat-agent-layer-design\.md`\s*\/\/ \(in-repo\) \+ Wave 1119\+ founder verdict moving AI-CHAT from v1\.1 → v1\.0\s*\/\/ launch arc \(per the V-361 framing comment in agent-decomposer\.ts\)\./,
+      /\/\/ Design source of truth: the internal AI-chat agent-layer design notes\s*\/\/ \+ the 2026-05-16 founder verdict moving AI-CHAT from v1\.1 → v1\.0\s*\/\/ launch arc \(per the V-361 framing comment in agent-decomposer\.ts\)\./,
     );
   });
 

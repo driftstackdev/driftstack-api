@@ -1,9 +1,9 @@
-// Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — MetricsRegistry unit tests.
+// Arc 4 phase 2.B, slice 8.18 (v2-#8) — MetricsRegistry unit tests.
 
 import { describe, expect, it } from 'vitest';
 import { MetricsRegistry } from '../../src/services/metrics-registry.js';
 
-describe('Arc 4 Wave 2.B sub-slice 8.18 MetricsRegistry', () => {
+describe('Arc 4 phase 2.B, slice 8.18 MetricsRegistry', () => {
   it('renders counter with no labels', () => {
     const r = new MetricsRegistry();
     r.registerCounter('driftstack_test_total', 'A test counter');

@@ -84,14 +84,14 @@ const CLICK_MS = 120;
 const TYPE_MS_PER_CHAR = 12;
 const SCROLL_MS = 180;
 /**
- * perceive for ONE selector, as A3 describes it: the native find (which on the
+ * perceive for ONE selector, as the harness describes it: the native find (which on the
  * real device always fails fast), then the script resolver click falls back to,
  * then one hit test. Two instantaneous device operations, each costed like any
  * other here. This is the MODELLED per-tap cost of the look before a tap; the
  * real one is what the look's round-trip histogram measures in production.
  */
 export const PERCEIVE_BY_SELECTOR_MS = 2 * TRIVIAL_MS;
-/** A3's cap on the label perceive returns. */
+/** The harness's cap on the label perceive returns. */
 const PERCEIVE_LABEL_MAX_CHARS = 200;
 /** How long the harness spends before giving up on a page that never loads. */
 const NEVER_FINISHES_LOAD_MS = 30_000;
@@ -220,11 +220,11 @@ export interface FakeDeviceOptions {
   authenticatedHosts?: ReadonlySet<string>;
   /** How these sites answer for an address they do not have. */
   notFound?: NotFoundBehaviour;
-  /** A device from before perceive-by-selector (A3 2026-09-18): it ignores
+  /** A device from before perceive-by-selector (2026-09-18): it ignores
    *  `selector` and answers with its page listing, carrying none of the new
    *  fields — the older device the look before a tap must fall back on. */
   predatesTapLook?: boolean;
-  /** A device from before click `require_unoccluded` (A3 V-3358): it reads its
+  /** A device from before click `require_unoccluded` (V-3358): it reads its
    *  click params by key and never looks for that one, so it taps unchecked. */
   predatesRequireUnoccluded?: boolean;
   /** Every click sent with `require_unoccluded` finds the check unable to run,
@@ -235,7 +235,7 @@ export interface FakeDeviceOptions {
    *  today — it carries `intent_webdriver_failed` with the same message. */
   elementOccludedCode?: boolean;
   /**
-   * A device from before A3 V-3360 (harness 7795de230): its single tap verdict
+   * A device from before V-3360 (harness 7795de230): its single tap verdict
    * has NO own-label rule, so a hit on a control's own label is
    * `hit_is_not_target_or_descendant` to perceive and to click's check alike;
    * perceive's element carries no `hit_via_own_label`; send_keys never reads
@@ -663,7 +663,7 @@ export class FakeDevice {
   }
 
   /**
-   * click `require_unoccluded` (A3 V-3358): the occlusion verdict at the tap
+   * click `require_unoccluded` (V-3358): the occlusion verdict at the tap
    * point the click would actually use — after its own scroll — or null when
    * the tap may go ahead.
    *
@@ -1003,7 +1003,7 @@ export class FakeDevice {
   }
 
   /**
-   * perceive for ONE selector (A3 2026-09-18) — what a tap on it would land on.
+   * perceive for ONE selector (2026-09-18) — what a tap on it would land on.
    *
    * ⛔ RESOLVED EXACTLY AS `click` RESOLVES IT: the same `queryFirst`, the same
    * "cannot parse" answer. An element the click would find is the element this
@@ -1792,7 +1792,7 @@ function collapsed(text: string | null): string {
 }
 
 /**
- * The label A3's perceive-by-selector derives, in A3's order: aria-labelledby →
+ * The label the harness's perceive-by-selector derives, in the harness's order: aria-labelledby →
  * aria-label → `<label for>` / a wrapping `<label>` → alt → placeholder → value
  * (button inputs only) → text content → title; whitespace collapsed, at most 200
  * characters. Never a typed value: a text field's `value` is not in the order.

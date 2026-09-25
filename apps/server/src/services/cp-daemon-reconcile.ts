@@ -1,4 +1,4 @@
-// 2026-06-22 — CP↔daemon bidirectional reconcile (A2 W2808 / A3 W2804).
+// 2026-06-22 — CP↔daemon bidirectional reconcile (W2808 / W2804).
 //
 // The PRECISE complement to the W2682 worker→CP terminal-status auto-close
 // (agent-session-terminal-close.ts). That handler covers one direction: a still-

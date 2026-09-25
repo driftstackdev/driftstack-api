@@ -60,7 +60,7 @@ describe('W761 docs /api/sessions content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      // S31 2026-07-07 (fable-truth-audit) — ConcurrencyLimitError carries current_sessions/limit
+      // S31 2026-07-07 (truth audit) — ConcurrencyLimitError carries current_sessions/limit
       // extensions and NO retry_after_seconds, so no Retry-After header is
       // emitted (middleware/error-handler.ts only sets it for rate limits).
       /Hitting the cap on `POST \/v1\/sessions` returns `429 Too Many\s*\n?Requests` with `current_sessions` and `limit` in the problem body/,

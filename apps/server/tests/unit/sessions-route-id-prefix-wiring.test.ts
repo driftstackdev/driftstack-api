@@ -2,8 +2,8 @@
 // GET /v1/sessions/:id strips a `ses_<uuid>` public id to the bare uuid before
 // the service lookup, scopes by the authed account, and round-trips the prefix
 // on the way out. A malformed or wrong-prefix id is a 400 (BadRequest) — never
-// a service call. Rule L cites a real SESSION_ID_RE prefix bug that integration
-// tests caught; this pins the prefix contract (PUBLIC_ID_RE: exactly a 3-letter
+// a service call. A real SESSION_ID_RE prefix bug was caught by integration
+// tests, not drift guards; this pins the prefix contract (PUBLIC_ID_RE: exactly a 3-letter
 // `ses_`, not the 4-letter `sess_` the dashboard once used in fake mock ids).
 
 import { describe, expect, it } from 'vitest';

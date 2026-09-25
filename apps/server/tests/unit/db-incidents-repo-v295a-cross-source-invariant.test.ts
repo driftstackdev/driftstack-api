@@ -148,7 +148,7 @@ describe('W999 db/incidents-repo V-295a cross-source invariant', () => {
     expect(p).toMatch(/await tx/);
     expect(p).toMatch(/\.insert\(incidentUpdates\)/);
     expect(p).toMatch(/\.update\(incidents\)/);
-    // resolved_at lockstep on the timeline-update path (Fable admin re-audit
+    // resolved_at lockstep on the timeline-update path (admin re-audit
     // 2026-07-02) — the addUpdate invariant is now guarded here too.
     expect(p).toMatch(/if \(input\.status === 'resolved'\) \{/);
     expect(p).toMatch(/resolvedAt = existing\?\.resolvedAt \?\? now;/);

@@ -62,7 +62,7 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     // gt/lte (Arc 3 sub-slice 28.5 follow-up) are typed drizzle
     // comparison operators, not raw `sql` template interpolation — they
     // sidestep the drizzle-orm Date-param-in-raw-sql crash class
-    // entirely (docs/internal/drizzle-date-param-workaround.md), same
+    // entirely (the drizzle Date-param workaround notes), same
     // rationale as the existing lt(webhookEndpoints.secretCreatedAt, cutoff)
     // / lt(webhookEndpoints.secretPrevExpiresAt, args.now) call sites below.
     expect(body).toContain("import { randomUUID } from 'node:crypto';");
@@ -130,7 +130,7 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
       /\/\/ Single UPDATE: overwrite the current secret with the new pair and decide\s*\/\/ the grace slot from the row's own values at UPDATE time — no\s*\/\/ SELECT-then-UPDATE race, and concurrent rotations apply in turn\./,
     );
     // Inside a LIVE grace window the prev slot is KEPT. That covers V-359.G.2
-    // (Fable audit 2026-07-03): under a live FORCE-rotation grace the prev slot
+    // (audit 2026-07-03): under a live FORCE-rotation grace the prev slot
     // holds the customer's still-deployed secret, and clobbering it with the
     // un-deployed force secret makes the worker dual-sign {new, force} — both fail
     // the customer's verifier. And webhooks audit #7 (2026-09-24): a second

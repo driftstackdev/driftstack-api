@@ -309,7 +309,7 @@ describe('FleetControlConnection', () => {
     ).not.toThrow();
   });
 
-  it('routes an inbound profileSaveFailed frame \u2192 invokes the onProfileSaveFailed handler (A3 W1364)', () => {
+  it('routes an inbound profileSaveFailed frame \u2192 invokes the onProfileSaveFailed handler (W1364)', () => {
     const seen: unknown[] = [];
     const conn = new FleetControlConnection(
       'node-1',
@@ -340,7 +340,7 @@ describe('FleetControlConnection', () => {
     expect(seen).toHaveLength(2);
     expect((seen[0] as { reason: string }).reason).toBe('upload_failed');
     expect((seen[1] as { detail?: string }).detail).toBeUndefined();
-    // degenerate_dump (A3 W2977/W2979) is now an accepted reason — it routes and
+    // degenerate_dump (W2977/W2979) is now an accepted reason — it routes and
     // keeps its value (the data-loss guard skipped a save-back to preserve a prior).
     conn.handleInbound(
       JSON.stringify({
@@ -393,7 +393,7 @@ describe('FleetControlConnection', () => {
     ).not.toThrow();
   });
 
-  it('routes an inbound pageState frame → invokes the onPageState handler (W650/A3-W1254)', () => {
+  it('routes an inbound pageState frame → invokes the onPageState handler (W650/W1254)', () => {
     const seen: unknown[] = [];
     const conn = new FleetControlConnection(
       'node-1',
@@ -564,7 +564,7 @@ describe('FleetControlConnection', () => {
     expect(JSON.stringify(obj), 'no frame payload in the log record').not.toContain('s-secret');
   });
 
-  it('routes a TERMINAL sessionStatus (ended | errored) → invokes onSessionStatus (A3 W2682 worker-connected auto-close)', () => {
+  it('routes a TERMINAL sessionStatus (ended | errored) → invokes onSessionStatus (W2682 worker-connected auto-close)', () => {
     const seen: SessionStatus[] = [];
     const conn = new FleetControlConnection(
       'node-1',
@@ -813,7 +813,7 @@ describe('FleetControlRegistry', () => {
     expect(firstClosed).toBe(1);
   });
 
-  it('queues a teardown when a node is offline + re-dispatches sessionEnd on reconnect (A3 W2859)', () => {
+  it('queues a teardown when a node is offline + re-dispatches sessionEnd on reconnect (W2859)', () => {
     const reg = new FleetControlRegistry();
     // No connection for node-1 yet → a session close couldn't reach the box; queue it.
     reg.recordPendingTeardown('node-1', 'ses_orphan');
@@ -888,7 +888,7 @@ describe('FleetControlRegistry', () => {
     ]);
   });
 
-  it('threads the onSessionStatus handler (positional arg 8) into the connections it creates — fires on a terminal frame only (A3 W2682)', () => {
+  it('threads the onSessionStatus handler (positional arg 8) into the connections it creates — fires on a terminal frame only (W2682)', () => {
     const seen: SessionStatus[] = [];
     const reg = new FleetControlRegistry(
       undefined, // onProfileSaved

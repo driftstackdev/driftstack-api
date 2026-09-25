@@ -422,7 +422,7 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     await expect(repo.compareAndSetPairModeState('agt_missing', null, pending)).resolves.toBeNull();
   });
 
-  it('Slice 3 (Wave 29-NNN ARC 3) setMode: ai → pair sets pair_mode_state to initial state; pair → manual clears it; idempotent same-target preserves state; bumps updatedAt; rejects on unknown id', async () => {
+  it('Slice 3 (ARC 3) setMode: ai → pair sets pair_mode_state to initial state; pair → manual clears it; idempotent same-target preserves state; bumps updatedAt; rejects on unknown id', async () => {
     let now = new Date('2026-05-19T00:00:00Z');
     const repo = new InMemoryAgentSessionsRepo(() => now);
     const rec = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });

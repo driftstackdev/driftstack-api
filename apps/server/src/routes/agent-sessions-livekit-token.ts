@@ -19,6 +19,8 @@
 // Token TTL: 24h to match the gui_control_key TTL. The room name
 // is the agent_session id (one room per session); the participant
 // identity is `customer-<account-id>` so the SFU can dedupe joins.
+// A token minted through the per-session control key lives
+// LIVEKIT_CONTROL_KEY_TOKEN_TTL_SECONDS instead (security sweep #2).
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
@@ -28,7 +30,11 @@ import { mintLivekitToken, resolveSessionPublisherNode } from '../lib/livekit-to
 import { decryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { FeatureUnavailableError } from '../lib/errors.js';
-import { GUI_CONTROL_KEY_HEADER, validateGuiControlKey } from '../lib/agent-session-control-key.js';
+import {
+  GUI_CONTROL_KEY_HEADER,
+  requireLiveGuiControlKeyMinter,
+  validateGuiControlKey,
+} from '../lib/agent-session-control-key.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 import { consumeEffectiveOwnerRateLimit } from '../middleware/rate-limit.js';
 
@@ -39,6 +45,21 @@ const AGENT_SESSION_ID_RE = /^agt_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4
  *  handshake only, so post-handshake long-lived connections survive
  *  the token expiry. Customer reconnects re-mint via this route. */
 export const LIVEKIT_TOKEN_TTL_SECONDS = 24 * 60 * 60;
+
+/**
+ * Security sweep #2 — the lifetime of a token minted through the per-session
+ * gui_control_key rather than an account credential. The SFU checks a token only
+ * at the handshake and there is no call back to it, so a token cannot be bound
+ * to its minter the way the control key now is: whatever lifetime it carries is
+ * how long a key-holder the owner has since removed can still START a connection.
+ * So it is short. The desktop app never mints through this path — its Simulator
+ * receives its token from the main app, which mints with the account credential
+ * (24h, above, because the app reuses that one token for every reconnect of the
+ * session) — so the path's only caller is one that mints right before it connects,
+ * and ten minutes covers that handshake with room for clock skew. A connection
+ * already joined is unaffected by the expiry (LiveKit refreshes it server-side).
+ */
+export const LIVEKIT_CONTROL_KEY_TOKEN_TTL_SECONDS = 10 * 60;
 
 export interface RegisterAgentSessionsLivekitTokenRouteDeps {
   fleetNodesRepo: DrizzleFleetNodesRepo;
@@ -107,16 +128,33 @@ export function registerAgentSessionsLivekitTokenRoute(
         nowMs,
       });
       if (result.authorized) {
+        // Security sweep #2 — and its minter still holds (else 401 + cleared).
+        await requireLiveGuiControlKeyMinter({
+          session,
+          authority: agentSessionsRepo,
+          nowMs,
+          onClearError: (err) =>
+            req.log.warn(
+              { component: 'gui-control-key', session_id: sessionId, err },
+              'refused control key could not be cleared; it stays refused',
+            ),
+        });
         req.guiControlKeyAuthorized = true;
         // rateLimit() keys off request.account (absent here); charge the owner.
         req.guiControlKeyRateLimitAccountId = result.ownerAccountId;
         return;
       }
     }
-    // No control key → normal account auth chain (requireScope('write') because
-    // the token carries canPublishData:true — a control credential).
+    // No control key → normal account auth chain. The token is BOTH a control
+    // credential (canPublishData:true — it sends the session input) and a read
+    // one (canSubscribe:true — it shows the live screen), so the mint needs both
+    // verbs, like the gui-control-key mint: `write`, and `read:sessions`, which
+    // every other way of seeing the session requires (security sweep #14 — a
+    // bare-write key was refused those reads and could still watch through this
+    // token). Broad read+write and account_owner satisfy both.
     await app.requireAuth(req, reply);
     await app.requireScope('write')(req, reply);
+    await app.requireScope('read:sessions')(req, reply);
   };
 
   app.post<{ Params: { id: string } }>(
@@ -125,8 +163,11 @@ export function registerAgentSessionsLivekitTokenRoute(
       // requireScope('write'): this mints a token with canPublishData:true — a
       // CONTROL credential (the DataChannel drives mouse/keyboard InputEvents to
       // the Mac). A read-only key minting one could DRIVE the session, so the mint
-      // is write-equivalent (same posture as the gui-control-key route). The
-      // control-key path is the alternative for the Simulator's reconnect.
+      // is write-equivalent (same posture as the gui-control-key route).
+      // requireScope('read:sessions'): the same token has canSubscribe:true — it
+      // WATCHES the live screen — so a write-only key must not mint it either
+      // (security sweep #14). Both run in controlKeyOrAccountAuth's account path;
+      // the control-key path is the alternative for the Simulator's reconnect.
       preHandler: [controlKeyOrAccountAuth, app.rateLimit('global')],
     },
     async (req, reply) => {
@@ -229,7 +270,11 @@ export function registerAgentSessionsLivekitTokenRoute(
         );
       }
 
-      const ttlSeconds = LIVEKIT_TOKEN_TTL_SECONDS;
+      // Security sweep #2 — a control-key mint gets the short lifetime: the SFU
+      // cannot re-check the key's minter, so the token's own expiry is the bound.
+      const ttlSeconds = controlKeyAuthorized
+        ? LIVEKIT_CONTROL_KEY_TOKEN_TTL_SECONDS
+        : LIVEKIT_TOKEN_TTL_SECONDS;
       const tokenNowMs = nowMs();
       const token = mintLivekitToken({
         apiKey: mac.livekit.apiKey,

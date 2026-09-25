@@ -60,7 +60,7 @@ export interface FleetNodeHeartbeatSnapshot {
   diskFreePercent?: number;
   harnessVersion?: string;
   /**
-   * A3 2026-09-19 — the MEASURED build identity beside the DECLARED
+   * 2026-09-19 — the MEASURED build identity beside the DECLARED
    * `harnessVersion` above, kept as the device sent it.
    *
    * ⛔ RAW, NOT DECODED. `fleet-build-drift.ts` owns the only definition of a

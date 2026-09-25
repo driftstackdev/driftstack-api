@@ -154,7 +154,7 @@ export function makeSessionNetworkLogRelay(
       );
       return;
     }
-    // T-16 (A1+A3 2026-09-08) — PER-ENTRY validation. The frame schema accepts
+    // T-16 (2026-09-08) — PER-ENTRY validation. The frame schema accepts
     // raw entries (z.array(z.unknown())) precisely so ONE malformed row cannot
     // fail the array parse and drop the WHOLE frame (which would blank the pane
     // and read as "the fork emits nothing"). Validate each row here against the
@@ -196,7 +196,7 @@ export function makeSessionNetworkLogRelay(
     const droppedCount = schemaDropped + reboundDropped + queueDropped;
     if (droppedCount > 0) {
       // LOUD: a drop must be distinguishable downstream from a legitimately-empty
-      // ring — otherwise correct-empty and data-loss present identically (A3). Names
+      // ring — otherwise correct-empty and data-loss present identically. Names
       // the field:value of the first reject so "completing" a producer that emits an
       // unmapped protocol (e.g. WebKit's `http/1.1` instead of `h1`) is diagnosable.
       logger.warn(

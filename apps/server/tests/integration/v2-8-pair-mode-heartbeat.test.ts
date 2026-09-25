@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
+// Arc 4 phase 2.B, slice 8.13d (v2-#8) — pair-mode heartbeat
 // route integration. Pins that the takeover route records a
 // heartbeat + the handback route forgets the entry. The sweep
 // service itself isn't time-driven here — its unit tests cover the
@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
-describe('Arc 4 Wave 2.B sub-slice 8.13d pair-mode heartbeat route integration', () => {
+describe('Arc 4 phase 2.B, slice 8.13d pair-mode heartbeat route integration', () => {
   let fx: TestAppFixture;
 
   afterEach(async () => {

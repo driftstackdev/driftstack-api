@@ -478,7 +478,7 @@ class StubRepo implements SessionRepo {
 
   // §eg.1.b — egress capability report. Not exercised by the V-090
   // driver-failure suite; provided to satisfy the SessionRepo interface
-  // after the Wave 29-400 §10 egress wave extended it.
+  // after the 29-400 §10 egress work extended it.
   setEgressCapabilityReport(_args: {
     sessionId: string;
     derived: unknown;

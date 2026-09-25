@@ -16,7 +16,7 @@
 //                                               docs/deployment/stripe-webhook-testing.md,
 //                                               which the step now names.
 //   docs/architecture/afp-harness-configuration.md
-//                                               a forward-looking Agent-1
+//                                               a forward-looking fork
 //                                               cross-reference for a WebKit
 //                                               integration that has not
 //                                               happened. Replaced with prose

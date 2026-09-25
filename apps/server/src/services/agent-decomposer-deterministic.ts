@@ -32,8 +32,8 @@ import { normalizeTaskForScreening } from './task-refusal.js';
 // AI-B1.b will use the Anthropic content-policy + a fuller corpus).
 // Cases here are the most common abuse patterns that v1.0 launch
 // must reject — full corpus per the design doc lives outside this
-// repo (legal handles the AUP wording per CLAUDE.md "Business and
-// legal/compliance content lives outside any repo").
+// repo (legal handles the AUP wording; per the contributor guidelines,
+// business and legal/compliance content lives outside any repo).
 //
 // Exported (audit fix 2026-07-01) — ClaudeAgentDecomposer imports this SAME
 // array as its own pre-filter rather than keeping a hand-copied duplicate.

@@ -21,7 +21,7 @@
 //     filters.
 //   • toSessionRecord: 14-field SessionRecord incl. metadata
 //     null-coalesce + egressCapabilities null-coalesce (migration
-//     0045, cross-agent contract 7d5992d9).
+//     0045, cross-repo contract 7d5992d9).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -56,7 +56,7 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     expect(body).toMatch(
       /import \{ SessionStatusSchema, type AccountTier \} from '@driftstack\/api-types';/,
     );
-    // A3 finding #7 (W2979/W2980) — ProfileInUseError thrown by the single-active-
+    // Finding #7 (W2979/W2980) — ProfileInUseError thrown by the single-active-
     // session-per-profile guard inside insertSessionIfUnderLimit.
     expect(body).toMatch(/import \{ ProfileInUseError \} from '\.\.\/lib\/errors\.js';/);
     expect(body).toMatch(
@@ -95,7 +95,7 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     );
   });
 
-  it('A3 finding #7 (W2979/W2980) — global single-profile guard uses the canonical lock and checks both legacy + agent live tables before insert, returning the competing public id', () => {
+  it('Finding #7 (W2979/W2980) — global single-profile guard uses the canonical lock and checks both legacy + agent live tables before insert, returning the competing public id', () => {
     expect(body).toMatch(
       /SELECT pg_advisory_xact_lock\(hashtext\(\$\{profileSessionAdvisoryLockKey\(opts\.profileId\)\}\)\)/,
     );

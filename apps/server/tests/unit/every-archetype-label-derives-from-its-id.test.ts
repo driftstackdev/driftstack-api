@@ -1,6 +1,6 @@
 // Every archetype's rendered fields must follow from its id.
 //
-// ARCHETYPE_REGISTRY is GENERATED from Agent-1 catalog (scripts/gen-archetype-registry.mjs)
+// ARCHETYPE_REGISTRY is GENERATED from the fork's catalog (scripts/gen-archetype-registry.mjs)
 // and carries 106 entries. Each one states the same facts twice —
 // once encoded in the slug, once spelled out in the fields the device picker,
 // the profiles view, the dashboard and the docs render:
@@ -52,13 +52,13 @@ const DEVICE_SUFFIX: Readonly<Record<string, string>> = {
 // ⛔ THREE components on BOTH version sides, the third optional.
 //
 // This read `_ios(\d+)_(\d+)_safari(\d+)_(\d+)$` until 2026-09-14 — two-wide on
-// each side, anchored. Agent-1 hit the identical bug in five parsers of their
+// each side, anchored. The fork hit the identical bug in five parsers of its
 // own and warned us before a subversion slug reached this registry. Both sides
 // really do carry point releases now: `iphone14_ios18_7_safari26_6_1` is Safari
 // 26.6.1, and `iphone13_ios18_4_1_safari18_4` is iOS 18.4.1.
 //
 // The guard FAILS on an id it cannot parse rather than skipping it, and that is
-// deliberate — see the header. Agent-1's own generator skipped unparseable
+// deliberate — see the header. The fork's own generator skipped unparseable
 // slugs and its freshness check still printed "up to date", so an archetype
 // could exist on disk and never reach anyone. A guard that refuses what it does
 // not understand is strictly better than one that quietly drops it.

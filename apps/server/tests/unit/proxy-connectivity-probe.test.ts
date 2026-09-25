@@ -46,7 +46,7 @@ describe('parseExitIdentityFromResponseTail (#128 new-tab panel capture)', () =>
     });
   });
 
-  // T-11 (exit lat/lon — A2 half of live geolocation spoofing): the parser reads the
+  // T-11 (exit lat/lon — the server half of live geolocation spoofing): the parser reads the
   // exit COORDINATES back off the echo body so they can ride the assign to the box.
   // MEASURED: the echo emits `lat`/`lon` as JSON numbers only when the CF transform
   // resolved them; the body rides back THROUGH the customer's (MITM-able) proxy, so

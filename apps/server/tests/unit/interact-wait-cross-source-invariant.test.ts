@@ -59,12 +59,12 @@ describe('W875 InteractAction+WaitCondition cross-source invariant', () => {
       /kind: z\.literal\('type'\),\s*\n\s*selector: z\.string\(\)\.min\(1\),\s*\n\s*text: z\.string\(\)\.max\(10_000\),/,
     );
     expect(p).toMatch(/delay_ms: z\.number\(\)\.int\(\)\.min\(0\)\.max\(500\)\.optional\(\)/);
-    // W612 (A3 W1149/W1150) — optional sensitive flag: harness suppresses
+    // W612 (W1149/W1150) — optional sensitive flag: harness suppresses
     // visible typo-corrections for card/OTP/PIN values.
     expect(p).toMatch(/sensitive: z\.boolean\(\)\.optional\(\)/);
   });
 
-  it('W612 sensitive flag parity across surfaces: Go SDK InteractAction has Sensitive *bool json:sensitive,omitempty + customer doc documents optional `sensitive` on the type action + AgentIntentSchema interact variant carries it + the dispatch mapper forwards it as the send_keys param (the A3-W1150 wire)', () => {
+  it('W612 sensitive flag parity across surfaces: Go SDK InteractAction has Sensitive *bool json:sensitive,omitempty + customer doc documents optional `sensitive` on the type action + AgentIntentSchema interact variant carries it + the dispatch mapper forwards it as the send_keys param (the W1150 wire)', () => {
     const goSdk = read(resolve(REPO_ROOT, 'packages/sdk-go/types.go'));
     expect(goSdk).toMatch(/Sensitive \*bool\s+`json:"sensitive,omitempty"`/);
     const doc = read(resolve(REPO_ROOT, 'apps/docs/src/pages/api/sessions.md'));

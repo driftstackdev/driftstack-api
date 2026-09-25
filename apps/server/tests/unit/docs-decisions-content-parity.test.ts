@@ -39,7 +39,7 @@ function read(p: string): string {
 describe('W549.A /docs/decisions.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + 3-tier decision-authority model pinned: '# Driftstack API — Decision Log' + 'Chronological record of decisions affecting the `driftstack-api` repo.' + 'Format: `D-NNN — title (one line)`' + 'Routine — implementation detail inside the locked stack; landed and recorded' + 'Architectural — vendor / dependency / structural; surface for review before commit' + 'Contractual — affects API contract, CAPABILITIES.md, or WebKit-fork integration; explicit approval required' — pinned so the D-NNN-format + V-log-cross-reference + 3-tier-Routine-Architectural-Contractual + agent-surface-before-commit-Architectural + explicit-approval-Contractual commitment survives", () => {
+  it("Header + 3-tier decision-authority model pinned: '# Driftstack API — Decision Log' + 'Chronological record of decisions affecting the `driftstack-api` repo.' + 'Format: `D-NNN — title (one line)`' + 'Routine — implementation detail inside the locked stack; landed and recorded' + 'Architectural — vendor / dependency / structural; surface for review before commit' + 'Contractual — affects API contract, CAPABILITIES.md, or WebKit-fork integration; explicit approval required' — pinned so the D-NNN-format + V-log-cross-reference + 3-tier-Routine-Architectural-Contractual + surface-before-commit-Architectural + explicit-approval-Contractual commitment survives", () => {
     expect(body).toMatch(/^# Driftstack API — Decision Log$/m);
     expect(body).toMatch(/Chronological record of decisions affecting the `driftstack-api` repo\./);
     expect(body).toMatch(/Format: `D-NNN — title \(one line\)`\./);
@@ -54,7 +54,7 @@ describe('W549.A /docs/decisions.md content parity', () => {
     );
   });
 
-  it("D-001 locked-stack baseline framing pinned: '## D-001 — Locked stack baseline' + 'Node 22 LTS, TypeScript 5.x strict, Fastify, Drizzle on Postgres 17, ioredis on Redis 7, Zod (single source of truth, OpenAPI 3.1 generated), Vitest + Supertest + Playwright, Pino, Docker Compose, GitHub Actions.' + 'Tier: 3 (set in spec; agent does not change without surfacing).' — pinned so the locked-stack inventory + Tier-3-spec-locked-no-agent-change commitment survives", () => {
+  it("D-001 locked-stack baseline framing pinned: '## D-001 — Locked stack baseline' + 'Node 22 LTS, TypeScript 5.x strict, Fastify, Drizzle on Postgres 17, ioredis on Redis 7, Zod (single source of truth, OpenAPI 3.1 generated), Vitest + Supertest + Playwright, Pino, Docker Compose, GitHub Actions.' + 'Tier: 3 (set in spec; not changed without surfacing for review).' — pinned so the locked-stack inventory + Tier-3-spec-locked-no-silent-change commitment survives", () => {
     expect(body).toMatch(/## D-001 — Locked stack baseline/);
     expect(body).toMatch(
       /Node 22 LTS, TypeScript 5\.x strict, Fastify, Drizzle on Postgres 17, ioredis on Redis 7,/,
@@ -64,12 +64,12 @@ describe('W549.A /docs/decisions.md content parity', () => {
     );
     expect(body).toMatch(/Pino, Docker Compose, GitHub Actions\./);
     expect(body).toMatch(
-      /\*\*Tier:\*\* 3 \(set in spec; agent does not change without surfacing\)\./,
+      /\*\*Tier:\*\* 3 \(set in spec; not changed without surfacing for review\)\./,
     );
   });
 
-  it("D-007 push-to-main framing pinned: '## D-007 — Push-to-main, no PR workflow (mirrors WebKit agent)' + 'every commit is pushed directly to main. No PRs, no branches, no review workflow.' + 'mirrors the WebKit fork repo's `D-12` pattern' — pinned so the no-PR-workflow + per-feature-PR-zero-value + V-log+decisions-as-discipline commitment survives", () => {
-    expect(body).toMatch(/## D-007 — Push-to-main, no PR workflow \(mirrors WebKit agent\)/);
+  it("D-007 push-to-main framing pinned: '## D-007 — Push-to-main, no PR workflow (mirrors WebKit fork)' + 'every commit is pushed directly to main. No PRs, no branches, no review workflow.' + 'mirrors the WebKit fork repo's `D-12` pattern' — pinned so the no-PR-workflow + per-feature-PR-zero-value + V-log+decisions-as-discipline commitment survives", () => {
+    expect(body).toMatch(/## D-007 — Push-to-main, no PR workflow \(mirrors WebKit fork\)/);
     expect(body).toMatch(
       /every commit is pushed directly to main\. No PRs, no branches, no review workflow\./,
     );

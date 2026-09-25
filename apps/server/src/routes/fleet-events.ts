@@ -4,10 +4,10 @@
 // canonical surface is a WebSocket at `wss://fleet.driftstack.dev/v1/fleet/events`:
 // each fleet NODE opens one authenticated connection; the control plane sends
 // IntentDispatch / sessionAssign / sessionEnd down it and receives intentResult /
-// sessionStatus / heartbeat / capabilityReport / errorEvent back (A3 bus W122
+// sessionStatus / heartbeat / capabilityReport / errorEvent back (W122
 // flat `{type,…}` envelope).
 //
-// Auth (A3 W121, control-plane-owns): the node presents an Ed25519 Bearer JWT
+// Auth (W121, control-plane-owns): the node presents an Ed25519 Bearer JWT
 // (verified via FleetNodeAuth + the Redis nonce cache wired into it) and the
 // `X-Driftstack-Mac-Node-Id` header (== the JWT iss). authenticateFleetUpgrade
 // runs as a preHandler so a bad token is rejected with 401 BEFORE the socket
@@ -113,12 +113,12 @@ export async function registerFleetEventsRoutes(
   // trims for EVERY session dispatched to that node, so an oversized frame
   // fails every in-flight correlator for the node (FleetControlRegistry's
   // close/unregister → failAll()), not just the one request that overflowed.
-  // The largest legit frame is now the file-DOWNLOAD reply (A3 W2856 /
+  // The largest legit frame is now the file-DOWNLOAD reply (W2856 /
   // DownloadDataResultSchema): `downloadData.dataB64` carries up to the 64 MiB
   // per-file cap (harness-enforced, same ceiling as the upload path's
   // UPLOAD_MAX_FILE_BYTES) — base64-encoded on the wire (~×4/3 → ~85.3 MiB) plus
   // the JSON envelope. That supersedes the OLD sizing rationale (an intentResult
-  // whose inline outputData the harness caps at 8 MiB / A3 W227 / harness
+  // whose inline outputData the harness caps at 8 MiB / W227 / harness
   // f711840f → ~10.7 MiB base64), which is now the SMALLER of the two caps.
   // 96 MiB clears the 64 MiB download cap's ~85.3 MiB base64 inflation with real
   // headroom (mirrors UPLOAD_MAX_BODY_BYTES in agent-sessions.ts, which sizes

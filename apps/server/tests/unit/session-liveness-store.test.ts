@@ -1,4 +1,4 @@
-// Unit tests for SessionLivenessStore (A2 W2679): latest-worker-liveness-per-
+// Unit tests for SessionLivenessStore (W2679): latest-worker-liveness-per-
 // agent-session, fed by Heartbeat.activeSessionStates. The load-bearing
 // invariants are (1) per-node absence eviction, (2) NO cross-node eviction
 // (anti-poison), (3) the beatAt staleness guard, (4) the bounded maxEntries cap

@@ -28,15 +28,15 @@ describe('W623 root tsconfig.json + status.md content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'tsconfig.json'))).toBe(true);
   });
 
-  it('status.md: Driftstack API current-status doc + Last-updated 2026-05-11 + Wave 42 V-530.E multi-touch CLOSED + Autopilot active + 25-substantive-V-NNN-slices-overnight + Phase-3 closed series (V-530 A-E + V-532 A-D + V-533 A-C) + V-540.B 12 E2E specs + 6-customer-URL TLS 1.3 Full-strict mode + 1565/1565 tests green at cdfa176 + V-205/V-211/V-455/V-278 persistent rules + Postmark approval awaiting (2026-05-09 submission) pinned', () => {
+  it('status.md: Driftstack API current-status doc + Last-updated 2026-05-11 + iteration 42 V-530.E multi-touch CLOSED + Active development + 25-substantive-V-NNN-slices-rollup + Phase-3 closed series (V-530 A-E + V-532 A-D + V-533 A-C) + V-540.B 12 E2E specs + 6-customer-URL TLS 1.3 Full-strict mode + 1565/1565 tests green at cdfa176 + V-205/V-211/V-455/V-278 persistent rules + Postmark approval awaiting (2026-05-09 submission) pinned', () => {
     const body = read('status.md');
     expect(body).toMatch(/^# Driftstack API — current status$/m);
     expect(body).toMatch(/\*\*Last updated:\*\* 2026-05-11/);
     expect(body).toMatch(
-      /\*\*Most recent wave:\*\* Wave 42 \(V-530\.E multi-touch gestures; V-530 series CLOSED\)/,
+      /\*\*Most recent iteration:\*\* 42 \(V-530\.E multi-touch gestures; V-530 series CLOSED\)/,
     );
-    expect(body).toMatch(/\*\*Mode:\*\* Autopilot active\./);
-    expect(body).toMatch(/^## W26-W42 — overnight rollup$/m);
+    expect(body).toMatch(/\*\*Mode:\*\* Active development\./);
+    expect(body).toMatch(/^## Iterations 26-42 — rollup$/m);
     expect(body).toMatch(/\*\*25 substantive V-NNN slices\*\*/);
     expect(body).toMatch(/V-655 \(V-NNN customer-surface scrub of 44 files\) is staged/);
     expect(body).toMatch(/Phase-3 series CLOSED this window:/);
@@ -74,7 +74,7 @@ describe('W623 root tsconfig.json + status.md content parity', () => {
       /\*\*Postmark account approval\*\* — submitted 2026-05-09 via postmarkapp\.com\/help\./,
     );
     expect(body).toMatch(/\*\*F-003\*\* OAuth — pending Client IDs \+ secrets/);
-    expect(body).toMatch(/\*\*V-528 GitHub-private flip\*\* — runbook lands W17/);
+    expect(body).toMatch(/\*\*V-528 GitHub-private flip\*\* — runbook landed in iteration 17/);
     expect(body).toMatch(/\*\*V-205 history scrub\*\* — gated on V-528 privatization/);
     expect(body).toMatch(/^## Reference docs$/m);
     expect(existsSync(resolve(REPO_ROOT, 'status.md'))).toBe(true);

@@ -1,4 +1,4 @@
-// File-control (A3 W2851 / founder "control files") — integration tests for
+// File-control (W2851 / founder "control files") — integration tests for
 // POST /v1/agent-sessions/:id/files (relay a customer file into the session's
 // upload jail). Pins the discriminated body contract the GUI relies on (200 in
 // every relay case, never an HTTP error for an expected-inert state), the gated
@@ -128,7 +128,7 @@ describe('POST /v1/agent-sessions/:id/files (wired)', () => {
     const nodeId = 'node-upload-1';
     await fx.agentSessionsRepo!.setNodeId(id, nodeId);
     // Register a node whose socket synchronously echoes an uploadResult for the
-    // uploadFile the route sends — exactly what A3's harness will do live.
+    // uploadFile the route sends — exactly what the harness will do live.
     const conn = fx.fleetControlRegistry.register(nodeId, (data) => {
       const frame = JSON.parse(data) as { type?: string; requestId?: string; sessionId?: string };
       if (frame.type === 'uploadFile') {

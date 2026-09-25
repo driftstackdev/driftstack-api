@@ -492,7 +492,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
   // `observerTarget` on the frame) and then reads the record under the exit the
   // node reported, bound to the dispatch instant. Until a node honours the
   // target the lookup misses and the row keeps the `vpn_tunnel` cause it always
-  // had — the arms below pin both halves and the frame contract A3 implements.
+  // had — the arms below pin both halves and the frame contract the harness implements.
   // The stub refuses a `sinceMs` older than the test started, so a route that
   // passed a stale or zero stamp — losing the dispatch binding — reads as a miss
   // here, exactly as the real `observeOsAtExit` would refuse the record.

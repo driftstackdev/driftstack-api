@@ -23,7 +23,7 @@ describe('docs api/profile-snapshots content parity', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
-  it('title + description front-matter pinned (S36 2026-07-07 fable-truth-audit: "copies" → "metadata records" — v1 snapshots are metadata-only, no browser state is captured)', () => {
+  it('title + description front-matter pinned (S36 2026-07-07 truth audit: "copies" → "metadata records" — v1 snapshots are metadata-only, no browser state is captured)', () => {
     expect(body).toMatch(/title: Profile snapshots/);
     expect(body).toMatch(
       /description: Capture, list, and restore immutable point-in-time metadata records/,

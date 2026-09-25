@@ -277,9 +277,9 @@ export interface RecipeSuggestion {
  * Doc-132 §5.2 (recipe auto-generation) — v1.0 slice. A real
  * cross-customer ML pipeline ("observes patterns, trains a model,
  * feeds published recipes back into training") is out of scope here:
- * it's a genuine customer-data-handling design (Tier 3 per
- * docs/planning/21-agent-autonomy.md) that needs a founder call, not
- * a unilateral A2 build. This slice auto-derives a sensible label +
+ * it's a genuine customer-data-handling design (Tier 3 per the
+ * project's decision-authority policy) that needs a founder call, not
+ * a unilateral server-side build. This slice auto-derives a sensible label +
  * description from the CUSTOMER'S OWN intent_log (same data the
  * manual "Save recipe" flow already snapshots for them) so the save
  * dialog prefills something useful instead of a blank form — safe,

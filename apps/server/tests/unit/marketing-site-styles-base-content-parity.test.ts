@@ -231,7 +231,7 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
   });
 
   it('Fleet token layer pinned (2026-06-12 rework): two-axis data-mode/data-accent custom-property blocks — violet/oxblood/teal accents + light/dark modes — referencing the locked spec; ADDITIVE (legacy classes keep their baked palette until each page ports)', () => {
-    expect(body).toMatch(/docs\/internal\/2026-06-12-design-system-spec\.md/);
+    expect(body).toMatch(/the internal 2026-06-12 design-system spec/);
     // each axis block carries the full-color var AND its -rgb triplet twin
     // (alpha-capable Tailwind colors); the hex + triplet must stay in sync.
     expect(body).toMatch(/\[data-accent='violet'\] \{\s*\n\s*--accent-rgb: 109 94 252;/);

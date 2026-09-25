@@ -2,7 +2,7 @@
 // V-294 production-ready scope catalog. Drift here either weakens the
 // 213-feature-survey + every-previously-deferred-ships-in-v1 founder
 // direction, drops the 6-status-taxonomy (SHIPPED/IN-FLIGHT/DEFERRED/
-// UNDISCOVERED/AGENT-1/OUT-OF-SCOPE), or unsets the 67-slice V-295+
+// UNDISCOVERED/FORK/OUT-OF-SCOPE), or unsets the 67-slice V-295+
 // arc commitment + 6-open-question pre-codegen-scope-review gate.
 //
 //   • V-294. 213 features surveyed across 12 surface categories.
@@ -30,13 +30,13 @@ function read(p: string): string {
 describe('W561 /docs/architecture/v294-feature-catalog.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + Source + Purpose + every-previously-deferred-ships-in-v1 framing pinned: '# V-294 — Feature catalog (production-ready scope)' + '**Source**: Comprehensive survey of `/Users/john/Downloads/driftstack-planning 2/` (132 planning files, files 00-131).' + 'Cross-referenced against `docs/verification-log.md` (V-001 → V-293) + `docs/launch/pre-launch-checklist.md` (V-287 refresh)' + '**Purpose**: Single load-bearing scope artifact for the V-295+ multi-week production-ready arc.' + 'Founder direction 2026-05-07 retired the deferred-post-launch pattern; every previously-deferred feature ships in v1 unless V-294 surfaces it as legitimately out-of-scope.' — pinned so the V-294-header + 132-planning-files-00-131 + V-001→V-293-verification-log-cross-ref + V-287-pre-launch-checklist-refresh + 2026-05-07-founder-direction + every-previously-deferred-ships-in-v1 commitment survives", () => {
+  it("Header + Source + Purpose + every-previously-deferred-ships-in-v1 framing pinned: '# V-294 — Feature catalog (production-ready scope)' + '**Source**: Comprehensive survey of the planning archive (132 planning files, files 00-131).' + 'Cross-referenced against the internal verification records (V-001 → V-293) + `docs/launch/pre-launch-checklist.md` (V-287 refresh)' + '**Purpose**: Single load-bearing scope artifact for the V-295+ multi-week production-ready arc.' + 'Founder direction 2026-05-07 retired the deferred-post-launch pattern; every previously-deferred feature ships in v1 unless V-294 surfaces it as legitimately out-of-scope.' — pinned so the V-294-header + 132-planning-files-00-131 + V-001→V-293-verification-records-cross-ref + V-287-pre-launch-checklist-refresh + 2026-05-07-founder-direction + every-previously-deferred-ships-in-v1 commitment survives", () => {
     expect(body).toMatch(/^# V-294 — Feature catalog \(production-ready scope\)$/m);
     expect(body).toMatch(
-      /\*\*Source\*\*: Comprehensive survey of `\/Users\/john\/Downloads\/driftstack-planning 2\/` \(132 planning files, files 00-131\)\./,
+      /\*\*Source\*\*: Comprehensive survey of the planning archive \(132 planning files, files 00-131\)\./,
     );
     expect(body).toMatch(
-      /Cross-referenced against `docs\/verification-log\.md` \(V-001 → V-293\) \+ `docs\/launch\/pre-launch-checklist\.md` \(V-287 refresh\)/,
+      /Cross-referenced against the internal verification records \(V-001 → V-293\) \+ `docs\/launch\/pre-launch-checklist\.md` \(V-287 refresh\)/,
     );
     expect(body).toMatch(
       /\*\*Purpose\*\*: Single load-bearing scope artifact for the V-295\+ multi-week production-ready arc\./,
@@ -46,7 +46,7 @@ describe('W561 /docs/architecture/v294-feature-catalog.md content parity', () =>
     );
   });
 
-  it("6-status-taxonomy framing pinned: '## Status taxonomy' + '**SHIPPED** — exists on `main`; verified by passing tests + passing lint + at least one V-NNN log entry covering it.' + '**IN-FLIGHT** — partial implementation on `main`; V-NNN entry exists but feature is not customer-complete.' + '**DEFERRED** — known-needed; not yet started; targeted by V-295+ slice.' + '**UNDISCOVERED** — referenced in planning files but never started + not in current V-NNN backlog.' + '**AGENT-1** — feature lives in the WebKit-fork repo (Agent 1 territory); Agent 2 doesn't ship.' + '**OUT-OF-SCOPE** — surveyed but explicitly cut from v1 (e.g. enterprise-tier-only, post-launch growth, year-2 ambition).' — pinned so the 6-status-taxonomy (SHIPPED + IN-FLIGHT + DEFERRED + UNDISCOVERED + AGENT-1 + OUT-OF-SCOPE) definitions + Agent-1-WebKit-fork commitment survives", () => {
+  it("6-status-taxonomy framing pinned: '## Status taxonomy' + '**SHIPPED** — exists on `main`; verified by passing tests + passing lint + at least one V-NNN log entry covering it.' + '**IN-FLIGHT** — partial implementation on `main`; V-NNN entry exists but feature is not customer-complete.' + '**DEFERRED** — known-needed; not yet started; targeted by V-295+ slice.' + '**UNDISCOVERED** — referenced in planning files but never started + not in current V-NNN backlog.' + '**FORK** — feature lives in the WebKit-fork repo; this repo doesn't ship it.' + '**OUT-OF-SCOPE** — surveyed but explicitly cut from v1 (e.g. enterprise-tier-only, post-launch growth, year-2 ambition).' — pinned so the 6-status-taxonomy (SHIPPED + IN-FLIGHT + DEFERRED + UNDISCOVERED + FORK + OUT-OF-SCOPE) definitions + WebKit-fork commitment survives", () => {
     expect(body).toMatch(/## Status taxonomy/);
     expect(body).toMatch(
       /- \*\*SHIPPED\*\* — exists on `main`; verified by passing tests \+ passing lint \+ at least one V-NNN log entry covering it\./,
@@ -61,31 +61,31 @@ describe('W561 /docs/architecture/v294-feature-catalog.md content parity', () =>
       /- \*\*UNDISCOVERED\*\* — referenced in planning files but never started \+ not in current V-NNN backlog\./,
     );
     expect(body).toMatch(
-      /- \*\*AGENT-1\*\* — feature lives in the WebKit-fork repo \(Agent 1 territory\); Agent 2 doesn't ship\./,
+      /- \*\*FORK\*\* — feature lives in the WebKit-fork repo; this repo doesn't ship it\./,
     );
     expect(body).toMatch(
       /- \*\*OUT-OF-SCOPE\*\* — surveyed but explicitly cut from v1 \(e\.g\. enterprise-tier-only, post-launch growth, year-2 ambition\)\./,
     );
   });
 
-  it("Aggregate-scope + ~297-hour-~10-week framing pinned: '## Aggregate scope summary' + '**Total features surveyed**: 213 (across 12 surface categories).' + '| SHIPPED      | 87' + '| IN-FLIGHT    | 6' + '| DEFERRED     | 41' + '| UNDISCOVERED | 53' + '| AGENT-1      | 18' + '| OUT-OF-SCOPE | 8' + '**Aggregate Agent-2 launch scope**: ~297 Tier-1 hours of feature work + ~31 legal page updates spread across the V-295+ slice arc.' + 'At 6h/day sustained = ~50 working days = ~10 weeks.' + 'V-294 catalog refines upward to ~10 weeks once UNDISCOVERED features are folded in.' + 'This converges with Agent 1's V-383+ multi-week native-pipeline-alignment arc (4-12 weeks)' — pinned so the 213-features-12-surface + 6-status-count (87+6+41+53+18+8) + ~297-Tier-1-hour + ~50-days-~10-weeks + Agent-1-V-383+-4-12-week-converge commitment survives", () => {
+  it("Aggregate-scope + ~297-hour-~10-week framing pinned: '## Aggregate scope summary' + '**Total features surveyed**: 213 (across 12 surface categories).' + '| SHIPPED      | 87' + '| IN-FLIGHT    | 6' + '| DEFERRED     | 41' + '| UNDISCOVERED | 53' + '| FORK         | 18' + '| OUT-OF-SCOPE | 8' + '**Aggregate launch scope for this repo**: ~297 Tier-1 hours of feature work + ~31 legal page updates spread across the V-295+ slice arc.' + 'At 6h/day sustained = ~50 working days = ~10 weeks.' + 'V-294 catalog refines upward to ~10 weeks once UNDISCOVERED features are folded in.' + 'This converges with the WebKit fork's V-383+ multi-week native-pipeline-alignment arc (4-12 weeks)' — pinned so the 213-features-12-surface + 6-status-count (87+6+41+53+18+8) + ~297-Tier-1-hour + ~50-days-~10-weeks + fork-V-383+-4-12-week-converge commitment survives", () => {
     expect(body).toMatch(/## Aggregate scope summary/);
     expect(body).toMatch(/\*\*Total features surveyed\*\*: 213 \(across 12 surface categories\)\./);
     expect(body).toMatch(/\| SHIPPED\s+\| 87/);
     expect(body).toMatch(/\| IN-FLIGHT\s+\| 6/);
     expect(body).toMatch(/\| DEFERRED\s+\| 41/);
     expect(body).toMatch(/\| UNDISCOVERED \| 53/);
-    expect(body).toMatch(/\| AGENT-1\s+\| 18/);
+    expect(body).toMatch(/\| FORK\s+\| 18/);
     expect(body).toMatch(/\| OUT-OF-SCOPE \| 8/);
     expect(body).toMatch(
-      /\*\*Aggregate Agent-2 launch scope\*\*: ~297 Tier-1 hours of feature work \+ ~31 legal page updates spread across the V-295\+ slice arc\./,
+      /\*\*Aggregate launch scope for this repo\*\*: ~297 Tier-1 hours of feature work \+ ~31 legal page updates spread across the V-295\+ slice arc\./,
     );
     expect(body).toMatch(/At 6h\/day sustained = ~50 working days = ~10 weeks\./);
     expect(body).toMatch(
       /V-294 catalog refines upward to ~10 weeks once UNDISCOVERED features are folded in\./,
     );
     expect(body).toMatch(
-      /This converges with Agent 1's V-383\+ multi-week native-pipeline-alignment arc \(4-12 weeks\)/,
+      /This converges with the WebKit fork's V-383\+ multi-week native-pipeline-alignment arc \(4-12 weeks\)/,
     );
   });
 
@@ -133,20 +133,20 @@ describe('W561 /docs/architecture/v294-feature-catalog.md content parity', () =>
     );
   });
 
-  it("Surface 1 customer-API + Surface 7 admin-panel highlights framing pinned: '### Surface 1 — Customer API server (`apps/server`)' + '**Session management** (planning file 03 + 37)' + '**Persistent profiles** (planning file 17 + 35)' + '**Behavioral customization** (planning file 05 + 35)' + 'behavioral realism IMPLEMENTATION is Agent 1's territory — WebKit-fork modifications. Agent 2 ships the API surface that exposes the parameters.' + '**Proxy integration** (planning file 03 + 11 + 17)' + '**Challenge handling** (planning file 12 + 37)' + '**Webhooks** (planning file 37 + 48)' + '**API auth + rate limiting** (planning file 37)' + '### Surface 7 — Admin panel (`apps/admin-panel`)' + '| Mac fleet management UI                           | AGENT-1' + '| Customer impersonation                            | UNDISCOVERED | V-319         | 8       | privacy + ToS' + '| Separate auth (email + password + mandatory TOTP) | DEFERRED     | V-333' — pinned so the Surface-1-API-7-subsystem + behavioral-realism-Agent-1-API-Agent-2 + Surface-7-admin-with-AGENT-1-fleet + V-319-impersonation-privacy+ToS + V-333-separate-auth commitment survives", () => {
+  it("Surface 1 customer-API + Surface 7 admin-panel highlights framing pinned: '### Surface 1 — Customer API server (`apps/server`)' + '**Session management** (planning file 03 + 37)' + '**Persistent profiles** (planning file 17 + 35)' + '**Behavioral customization** (planning file 05 + 35)' + 'behavioral realism IMPLEMENTATION lives in the WebKit fork — fork modifications. This repo ships the API surface that exposes the parameters.' + '**Proxy integration** (planning file 03 + 11 + 17)' + '**Challenge handling** (planning file 12 + 37)' + '**Webhooks** (planning file 37 + 48)' + '**API auth + rate limiting** (planning file 37)' + '### Surface 7 — Admin panel (`apps/admin-panel`)' + '| Mac fleet management UI                           | FORK' + '| Customer impersonation                            | UNDISCOVERED | V-319         | 8       | privacy + ToS' + '| Separate auth (email + password + mandatory TOTP) | DEFERRED     | V-333' — pinned so the Surface-1-API-7-subsystem + behavioral-realism-fork-API-here + Surface-7-admin-with-FORK-fleet + V-319-impersonation-privacy+ToS + V-333-separate-auth commitment survives", () => {
     expect(body).toMatch(/### Surface 1 — Customer API server \(`apps\/server`\)/);
     expect(body).toMatch(/\*\*Session management\*\* \(planning file 03 \+ 37\)/);
     expect(body).toMatch(/\*\*Persistent profiles\*\* \(planning file 17 \+ 35\)/);
     expect(body).toMatch(/\*\*Behavioral customization\*\* \(planning file 05 \+ 35\)/);
     expect(body).toMatch(
-      /behavioral realism IMPLEMENTATION is Agent 1's territory — WebKit-fork modifications\. Agent 2 ships the API surface that exposes the parameters/,
+      /behavioral realism IMPLEMENTATION lives in the WebKit fork — fork modifications\. This repo ships the API surface that exposes the parameters/,
     );
     expect(body).toMatch(/\*\*Proxy integration\*\* \(planning file 03 \+ 11 \+ 17\)/);
     expect(body).toMatch(/\*\*Challenge handling\*\* \(planning file 12 \+ 37\)/);
     expect(body).toMatch(/\*\*Webhooks\*\* \(planning file 37 \+ 48\)/);
     expect(body).toMatch(/\*\*API auth \+ rate limiting\*\* \(planning file 37\)/);
     expect(body).toMatch(/### Surface 7 — Admin panel \(`apps\/admin-panel`\)/);
-    expect(body).toMatch(/\| Mac fleet management UI\s+\| AGENT-1/);
+    expect(body).toMatch(/\| Mac fleet management UI\s+\| FORK/);
     expect(body).toMatch(
       /\| Customer impersonation\s+\| UNDISCOVERED \| V-319\s+\| 8\s+\| privacy \+ ToS/,
     );
@@ -215,7 +215,7 @@ describe('W561 /docs/architecture/v294-feature-catalog.md content parity', () =>
     expect(body).toMatch(/\*\*Total\*\*: 67 V-NNN slices × avg 4\.4h = ~297 Tier-1 hours\./);
   });
 
-  it("8-out-of-scope + 6-open-question + V-295-no-start framing pinned: '## Items explicitly OUT-OF-SCOPE for v1' + '**Agent perception-reason-action loop full implementation** — 24h+ AI surface' + '**Cross-region profile portability** — multi-region S3 replication. v1 stays single-region.' + '**OpenVPN proxy support** — niche customer ask; SOCKS5 + WireGuard + HTTP cover the launch surface.' + '**Mobile device control on iOS/Android** — accessing GUI client from a mobile device. Year-2.' + '**Penetration testing** — annual engagement; year-2 budget.' + '**Self-hosted licensing v2** — different commercial model; year-2.' + '**Customer logos / case studies** — post-launch (no customers yet).' + '**WebGPU on iOS 26 fingerprint surface** — Agent-1 territory; cross-repo dep.' + '## Open questions for founder Tier-2 ack' + '**Priority order confirmation** — recommended order above is `customer-trust → admin → SDK → ops`. Confirm or reorder.' + '**WebRTC live-session streaming (LiveKit)** — biggest single-feature scope (~32h across V-306/V-307/V-308 + LiveKit DPA Annex 3 row).' + '**Multi-payment-processor (Mollie)** — planning file 00/116 lists Mollie as primary' + '**Team RBAC + multi-user** — ~20h across V-NNN+ slices.' + 'V-295+ does NOT START until founder verdicts on the 6 above + an explicit \"go\" on the priority order.' + 'Pre-codegen scope review mandatory per V-294 founder direction.' — pinned so the 8-out-of-scope (agent-loop + cross-region + OpenVPN + mobile-iOS/Android + pentest + self-hosted-v2 + logos-case-studies + WebGPU-iOS-26-Agent-1) + 6-open-question + V-295+-does-NOT-START-without-founder-verdicts + pre-codegen-mandatory commitment survives", () => {
+  it("8-out-of-scope + 6-open-question + V-295-no-start framing pinned: '## Items explicitly OUT-OF-SCOPE for v1' + '**Agent perception-reason-action loop full implementation** — 24h+ AI surface' + '**Cross-region profile portability** — multi-region S3 replication. v1 stays single-region.' + '**OpenVPN proxy support** — niche customer ask; SOCKS5 + WireGuard + HTTP cover the launch surface.' + '**Mobile device control on iOS/Android** — accessing GUI client from a mobile device. Year-2.' + '**Penetration testing** — annual engagement; year-2 budget.' + '**Self-hosted licensing v2** — different commercial model; year-2.' + '**Customer logos / case studies** — post-launch (no customers yet).' + '**WebGPU on iOS 26 fingerprint surface** — WebKit-fork work; cross-repo dep.' + '## Open questions for founder Tier-2 ack' + '**Priority order confirmation** — recommended order above is `customer-trust → admin → SDK → ops`. Confirm or reorder.' + '**WebRTC live-session streaming (LiveKit)** — biggest single-feature scope (~32h across V-306/V-307/V-308 + LiveKit DPA Annex 3 row).' + '**Multi-payment-processor (Mollie)** — planning file 00/116 lists Mollie as primary' + '**Team RBAC + multi-user** — ~20h across V-NNN+ slices.' + 'V-295+ does NOT START until founder verdicts on the 6 above + an explicit \"go\" on the priority order.' + 'Pre-codegen scope review mandatory per V-294 founder direction.' — pinned so the 8-out-of-scope (agent-loop + cross-region + OpenVPN + mobile-iOS/Android + pentest + self-hosted-v2 + logos-case-studies + WebGPU-iOS-26-fork) + 6-open-question + V-295+-does-NOT-START-without-founder-verdicts + pre-codegen-mandatory commitment survives", () => {
     expect(body).toMatch(/## Items explicitly OUT-OF-SCOPE for v1/);
     expect(body).toMatch(
       /- \*\*Agent perception-reason-action loop full implementation\*\* — 24h\+ AI surface/,
@@ -237,7 +237,7 @@ describe('W561 /docs/architecture/v294-feature-catalog.md content parity', () =>
       /- \*\*Customer logos \/ case studies\*\* — post-launch \(no customers yet\)\./,
     );
     expect(body).toMatch(
-      /- \*\*WebGPU on iOS 26 fingerprint surface\*\* — Agent-1 territory; cross-repo dep\./,
+      /- \*\*WebGPU on iOS 26 fingerprint surface\*\* — WebKit-fork work; cross-repo dep\./,
     );
     expect(body).toMatch(/## Open questions for founder Tier-2 ack/);
     expect(body).toMatch(

@@ -1,7 +1,7 @@
 // LK.2 — POST /v1/mac-nodes/register
 //
 // Each Mac mini in the fleet stores its own LiveKit API key + secret
-// (provisioned by Agent 1's launchd LiveKit Server install) and
+// (provisioned by the device side's launchd LiveKit Server install) and
 // POSTs them to the control plane on harness boot. The control
 // plane stores them encrypted under MFA_ENCRYPTION_KEY so the JWT
 // mint path (LK.3 — POST /v1/agent-sessions/:id/livekit-token) can
@@ -47,7 +47,7 @@ const RegisterBodySchema = z.object({
     api_key: z.string().min(1).max(256),
     api_secret: z.string().min(1).max(1024),
     // Wide URL bound — accepts wss://mac-NNN.driftstack.dev:8443
-    // form per the orchestrator brief.
+    // form per the LK.2 design.
     ws_url: z.string().url(),
   }),
 });
@@ -112,7 +112,7 @@ export interface RegisterMacNodesRoutesDeps {
    *  have LiveKit yet not be connected, which is exactly when dispatch
    *  logs "fleet node not connected". */
   controlRegistry?: FleetControlRegistry;
-  /** A3 2026-09-19 — when wired, GET /v1/mac-nodes reports `build_drift`: the
+  /** 2026-09-19 — when wired, GET /v1/mac-nodes reports `build_drift`: the
    *  measured harness-binary and WebKit-framework digests beside the declared
    *  `harnessVersion` / `webkitForkBuild`, plus the devices and sessions that
    *  contradict each other. The store supplies the per-SESSION half (which
@@ -240,7 +240,7 @@ export function registerMacNodesRoutes(
       }
 
       // Response is intentionally minimal — never echoes the api_key
-      // (treated as secret-equivalent per the orchestrator brief)
+      // (treated as secret-equivalent per the LK.2 design)
       // and obviously never echoes the api_secret.
       return reply.code(200).send({
         mac_node_id: updated.id,
@@ -256,7 +256,7 @@ export function registerMacNodesRoutes(
   // key + metadata, this mints the fleet_nodes row, and the response returns the
   // minted uuid → set it as DRIFTSTACK_MAC_NODE_ID on the daemon (its JWT
   // iss/sub must equal this uuid for the FleetNodeAuth.getPublicKey lookup; the
-  // human display_name is NOT the node id — see A2-A3-BUS W2203b). LiveKit creds
+  // human display_name is NOT the node id — see W2203b). LiveKit creds
   // are set separately via POST /v1/mac-nodes/register once identity exists.
   app.post(
     '/v1/mac-nodes',
@@ -333,7 +333,7 @@ export function registerMacNodesRoutes(
     },
     async (_req, reply) => {
       const nodes = await repo.listActive();
-      // A3 2026-09-19 — DECLARED vs MEASURED build identity across the fleet.
+      // 2026-09-19 — DECLARED vs MEASURED build identity across the fleet.
       //
       // ⛔ THE JOIN IS DONE HERE AND THE VERDICT IS NOT. Assembling the inputs
       // needs the repo, the store and the node_id→row-id mapping; deciding what
@@ -401,7 +401,7 @@ export function registerMacNodesRoutes(
               ? null
               : n.nodeId !== null && deps.controlRegistry.get(n.nodeId) !== undefined,
         })),
-        // A3 2026-09-19 — the declared-vs-measured build report, admin-scoped
+        // 2026-09-19 — the declared-vs-measured build report, admin-scoped
         // like everything else on this route. `devices` is keyed by the same `id`
         // the rows above carry, so the panel joins without a second identity.
         //
@@ -416,7 +416,7 @@ export function registerMacNodesRoutes(
 
   // Fleet-admin (§A5) node control — POST /v1/mac-nodes/:id/control. Admin-scoped
   // operator action (cordon / uncordon / drain / restart) pushed to the node over
-  // its live WSS connection via the controlCommand frame (A2-A3-BUS W2203). v1
+  // its live WSS connection via the controlCommand frame (W2203). v1
   // RBAC: driftstack_internal_admin (there is no finer staff operator/admin split
   // yet; admin-only is the conservative choice — the §A5 operator/admin tiering is
   // a later slice once a staff-role surface exists). 503 when the control plane is

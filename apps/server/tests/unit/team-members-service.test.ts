@@ -529,7 +529,7 @@ describe('V-553.B-13 TeamMembersService.accept — happy path', () => {
     expect(state.members).toHaveLength(1);
   });
 
-  it('a used invite token is SINGLE-USE: replaying it after acceptance is rejected (Fable auth re-audit 2026-07-02)', async () => {
+  it('a used invite token is SINGLE-USE: replaying it after acceptance is rejected (auth re-audit 2026-07-02)', async () => {
     const { repo, state } = makeRepo();
     const { service: email } = makeEmail();
     state.invites.push({
@@ -928,7 +928,7 @@ describe('V-553.B-13 TeamMembersService.removeMember', () => {
     expect(calls.filter((c) => c.action === 'api_key.revoked')).toHaveLength(1);
   });
 
-  it('cancels the removed member OUTSTANDING invites so they cannot re-join via a pending invite (Fable auth re-audit 2026-07-02)', async () => {
+  it('cancels the removed member OUTSTANDING invites so they cannot re-join via a pending invite (auth re-audit 2026-07-02)', async () => {
     const { repo, state } = makeRepo();
     const { service: email } = makeEmail();
     state.emailByAccount.set('acc_b', 'b@e.test');

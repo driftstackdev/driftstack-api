@@ -32,7 +32,7 @@
 // `setWebSessionFinder` so every fixture delegates here, and its local seeding seam
 // (`upsertWebSession`) has zero callers. But a future test that seeds through that seam gets a
 // session which survives a password change, and nothing would say so. Left in place rather than
-// deleted — it is another agent's helper and the removal is theirs to make — and documented at the
+// deleted — it is a shared helper and removing it is a separate change — and documented at the
 // seam so the next person to reach for it sees the limitation first.
 
 import { randomUUID } from 'node:crypto';

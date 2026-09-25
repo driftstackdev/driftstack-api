@@ -8,7 +8,7 @@
 // unchecked taps. Nobody was hurt only because no turn ran in the window. An
 // additive key breaking a dispatch is an outage waiting to happen.
 //
-// The rule agreed with the harness owner (A3):
+// The rule agreed with the harness owner:
 //   · a key we DECODE is validated exactly as before — a wrong type or value on
 //     a known key is still a contract failure, and the strict schema still
 //     rejects it;

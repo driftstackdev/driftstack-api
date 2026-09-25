@@ -270,7 +270,7 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
     );
   });
 
-  it("errorFromProblem unknown-type fallback — routes through toOpts(p.status >= 500 ? 'internal' : 'bad_request', p). CRITICAL: (a) the status-based kind keeps the retryability split (internal IS retryable per isRetryable; bad_request is NOT); (b) routing through toOpts preserves the problem's EXTENSION members on .extensions (Fable SDK re-audit 2026-07-02 — the old direct-construct fallback dropped them). The unknown-type path uses DriftstackError directly (not a typed subclass) so consumers fall back to `instanceof DriftstackError`.", () => {
+  it("errorFromProblem unknown-type fallback — routes through toOpts(p.status >= 500 ? 'internal' : 'bad_request', p). CRITICAL: (a) the status-based kind keeps the retryability split (internal IS retryable per isRetryable; bad_request is NOT); (b) routing through toOpts preserves the problem's EXTENSION members on .extensions (SDK re-audit 2026-07-02 — the old direct-construct fallback dropped them). The unknown-type path uses DriftstackError directly (not a typed subclass) so consumers fall back to `instanceof DriftstackError`.", () => {
     expect(body).toMatch(
       /\/\/ Unknown problem type — surface as DriftstackError with the raw fields\./,
     );

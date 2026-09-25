@@ -1,6 +1,7 @@
 // V-1216 — no markdown file the pre-commit hook formats is large enough to kill it.
 //
-// THE INCIDENT. `docs/verification-log.md` grew to 3.4 MB and Prettier started dying on it with
+// THE INCIDENT. The verification log (since moved to the internal records) grew to 3.4 MB and
+// Prettier started dying on it with
 // `Ineffective mark-compacts near heap limit` under the 8 GB heap `lint-staged` gives it. Nothing
 // warned first: the file simply crossed a line, and the next commit that touched it — any commit
 // that touched it — failed inside a V8 stack trace rather than at anything resembling a rule. That
@@ -13,14 +14,13 @@
 //
 // WHY MARKDOWN ONLY, AND WHY THIS BUDGET. Measured rather than assumed: at the hook's own 8 GB,
 // `packages/sdk-python/openapi.json` (1.95 MB) checks in 0.38s and
-// `docs/internal/A2-PRODUCTION-READINESS-ASSESSMENT.md` (440 KB) in 0.47s. JSON and TypeScript are
+// an internal production-readiness assessment in markdown (440 KB) in 0.47s. JSON and TypeScript are
 // cheap; it is markdown's parser that blows up, and it did so somewhere between 440 KB and 3.4 MB.
 // The budget below sits well above every real file and far below the size that killed the hook, so
 // it fires as a nudge to split with room to spare rather than as an emergency.
 //
 // It reads `.prettierignore` rather than carrying its own list, so an ignored file is exempt here
-// for exactly the reason it is exempt there — the frozen log archive is not formatted, so its size
-// cannot break anything.
+// for exactly the reason it is exempt there — a file the hook never formats cannot break it by size.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -83,35 +83,19 @@ describe('V-1216 no formatted markdown outgrows the format hook', () => {
     const files = markdownFiles();
     expect(files.length, 'no markdown files were found at all').toBeGreaterThan(50);
     expect(
-      files.some((f) => f.rel === 'docs/verification-log.md'),
-      'the live verification log was not among the files walked',
+      files.some((f) => f.rel === 'docs/decisions.md'),
+      'the decision log was not among the files walked',
     ).toBe(true);
   });
 
   it('CRITICAL the ignore list is read from .prettierignore, not restated here. A private copy would keep passing after the real list changed, and this guard would be enforcing a rule the hook no longer follows.', () => {
     const patterns = prettierIgnored();
     expect(patterns.length, 'no patterns were parsed out of .prettierignore').toBeGreaterThan(5);
-    // V-1708 — EVERY archive, not the first one. A second archive landed on 2026-08-26 and this
-    // arm named only the first, which left a hole nothing else covered: an archive is under the
-    // budget at the moment it is split off, so dropping its `.prettierignore` line fails no arm
-    // here and Prettier silently starts reformatting a frozen file. The count guards the loop —
-    // an empty match list would satisfy a `for` forever.
-    const archives = markdownFiles().filter((f) =>
-      /^docs\/verification-log-archive-through-v\d+\.md$/.test(f.rel),
-    );
+    // A known ignored file and a known formatted one, so the matcher is shown to read both ways.
+    expect(isIgnored('package-lock.json', patterns), 'the lockfile is ignored').toBe(true);
     expect(
-      archives.length,
-      'no frozen log archive was found, so the loop below would assert nothing',
-    ).toBeGreaterThanOrEqual(2);
-    for (const a of archives) {
-      expect(
-        isIgnored(a.rel, patterns),
-        `${a.rel} is no longer ignored, so the hook would try to format ${(a.bytes / 1_000_000).toFixed(1)} MB`,
-      ).toBe(true);
-    }
-    expect(
-      isIgnored('docs/verification-log.md', patterns),
-      'the LIVE log is ignored, which would silently drop it from the hook entirely',
+      isIgnored('docs/decisions.md', patterns),
+      'the decision log is ignored, which would silently drop it from the hook entirely',
     ).toBe(false);
   });
 

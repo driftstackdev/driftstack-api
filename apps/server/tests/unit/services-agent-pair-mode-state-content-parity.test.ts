@@ -36,19 +36,19 @@ describe('services/agent-pair-mode-state content parity', () => {
     );
   });
 
-  it('Transition table framing pinned: founder verdict 2026-05-18 implicit queue spec + Wave 2.A 8.11 mid-runTurn queue path. All 7 transitions documented as a Unicode arrow table. Drift would orphan readers from the state-flow diagram', () => {
+  it('Transition table framing pinned: founder verdict 2026-05-18 implicit queue spec + phase 2.A 8.11 mid-runTurn queue path. All 7 transitions documented as a Unicode arrow table. Drift would orphan readers from the state-flow diagram', () => {
     expect(body).toMatch(
-      /\/\/ States \+ transitions \(founder verdict 2026-05-18 implicit in the\s*\/\/ queue spec; Wave 2\.A 8\.11 adds the mid-runTurn queue path\):/,
+      /\/\/ States \+ transitions \(founder verdict 2026-05-18 implicit in the\s*\/\/ queue spec; phase 2\.A 8\.11 adds the mid-runTurn queue path\):/,
     );
     expect(body).toMatch(/\/\/ {3}ai-driving {9}── takeover-request {10}─→ {2}takeover-pending/);
     expect(body).toMatch(
-      /\/\/ {3}ai-driving {9}── takeover-request-queued {3}─→ {2}takeover-queued {5}\(Wave 2\.A 8\.11\)/,
+      /\/\/ {3}ai-driving {9}── takeover-request-queued {3}─→ {2}takeover-queued {5}\(phase 2\.A 8\.11\)/,
     );
     expect(body).toMatch(
-      /\/\/ {3}takeover-queued {4}── decompose-settled {9}─→ {2}takeover-pending {4}\(Wave 2\.A 8\.11\)/,
+      /\/\/ {3}takeover-queued {4}── decompose-settled {9}─→ {2}takeover-pending {4}\(phase 2\.A 8\.11\)/,
     );
     expect(body).toMatch(
-      /\/\/ {3}takeover-queued {4}── takeover-decline {10}─→ {2}ai-driving {10}\(Wave 2\.A 8\.11\)/,
+      /\/\/ {3}takeover-queued {4}── takeover-decline {10}─→ {2}ai-driving {10}\(phase 2\.A 8\.11\)/,
     );
     expect(body).toMatch(/\/\/ {3}takeover-pending {3}── takeover-grant {12}─→ {2}human-driving/);
     expect(body).toMatch(/\/\/ {3}human-driving {6}── handback-request {10}─→ {2}handback-pending/);
@@ -107,18 +107,18 @@ describe('services/agent-pair-mode-state content parity', () => {
     );
   });
 
-  it("Wave 2.A 8.11 takeover-queued framing pinned: 'intermediate state when a takeover request lands while AgentRuntime.runTurn is mid-flight (decompose still resolving). The state machine holds the request here until the runtime fires decompose-settled, at which point the queued request flows through to takeover-pending. SSE subscribers see this discriminator so the dashboard can render takeover queued — waiting for the current AI turn to finish.' — pinned so the queue-during-decompose semantics + the SSE-discriminator-rendered-by-dashboard contract stay documented", () => {
+  it("phase 2.A 8.11 takeover-queued framing pinned: 'intermediate state when a takeover request lands while AgentRuntime.runTurn is mid-flight (decompose still resolving). The state machine holds the request here until the runtime fires decompose-settled, at which point the queued request flows through to takeover-pending. SSE subscribers see this discriminator so the dashboard can render takeover queued — waiting for the current AI turn to finish.' — pinned so the queue-during-decompose semantics + the SSE-discriminator-rendered-by-dashboard contract stay documented", () => {
     expect(body).toMatch(
-      /Arc 4 Wave 2\.A sub-slice 8\.11 \(v2-#8\) — intermediate state when a\s*\*\s+takeover request lands while AgentRuntime\.runTurn is mid-flight/,
+      /Arc 4 phase 2\.A, slice 8\.11 \(v2-#8\) — intermediate state when a\s*\*\s+takeover request lands while AgentRuntime\.runTurn is mid-flight/,
     );
     expect(body).toMatch(
       /SSE\s*\*\s+subscribers see this discriminator so the dashboard can render\s*\*\s+"takeover queued — waiting for the current AI turn to finish"\./,
     );
   });
 
-  it("Wave 2.A 8.13 heartbeat-timeout auto-handback framing pinned: 'auto-handback to ai-driving after 30s of no client heartbeat. The state-machine accepts this transition from any non-ai-driving state so the timer service can fire it without inspecting the current state first. Idempotent on ai-driving (silent no-op).' — pinned so the 30s-timeout + accept-from-any-state + idempotent-on-ai-driving contract survives", () => {
+  it("phase 2.A 8.13 heartbeat-timeout auto-handback framing pinned: 'auto-handback to ai-driving after 30s of no client heartbeat. The state-machine accepts this transition from any non-ai-driving state so the timer service can fire it without inspecting the current state first. Idempotent on ai-driving (silent no-op).' — pinned so the 30s-timeout + accept-from-any-state + idempotent-on-ai-driving contract survives", () => {
     expect(body).toMatch(
-      /Arc 4 Wave 2\.A sub-slice 8\.13 \(v2-#8\) — auto-handback to ai-driving\s*\*\s+after 30s of no client heartbeat\. The state-machine accepts this\s*\*\s+transition from any non-ai-driving state so the timer service can\s*\*\s+fire it without inspecting the current state first\. Idempotent on\s*\*\s+ai-driving \(silent no-op\)\./,
+      /Arc 4 phase 2\.A, slice 8\.13 \(v2-#8\) — auto-handback to ai-driving\s*\*\s+after 30s of no client heartbeat\. The state-machine accepts this\s*\*\s+transition from any non-ai-driving state so the timer service can\s*\*\s+fire it without inspecting the current state first\. Idempotent on\s*\*\s+ai-driving \(silent no-op\)\./,
     );
   });
 

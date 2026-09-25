@@ -84,7 +84,7 @@ export const sessionStatus = pgEnum('session_status', [
 ]);
 
 // V-169 — sessions.purpose drives WebKit driver harness selection.
-// See docs/architecture/afp-harness-configuration.md (Agent 1
+// See docs/architecture/afp-harness-configuration.md (fork-side
 // cross-reference, Phase 3 work).
 export const sessionPurpose = pgEnum('session_purpose', [
   'production_customer',
@@ -151,7 +151,7 @@ export const webhookEventType = pgEnum('webhook_event_type', [
   // bot-check + the control plane relays it. Migration 0070 ALTERs the existing
   // pgEnum to add this value.
   'session.challenge_detected',
-  // 2026-06-12 — A3 W1364: profile save-back failure relay (migration 0073).
+  // 2026-06-12 — W1364: profile save-back failure relay (migration 0073).
   // Terminal teardown event; the session stays succeeded.
   'session.profile_save_failed',
 ]);
@@ -1512,7 +1512,7 @@ export const sessions = pgTable(
     // Free-form session metadata supplied by client; bounded at API layer.
     metadata: jsonb('metadata').$type<Record<string, unknown>>(),
     // Migration 0045 — harness-reported egress capabilities for SOCKS5
-    // sessions per cross-agent contract commit 7d5992d9 (+ EG-WK-1.9
+    // sessions per cross-repo contract commit 7d5992d9 (+ EG-WK-1.9
     // 2026-05-17 dns_remote_resolve extension). Nullable; populated
     // async after the proxy is wired. See
     // packages/api-types/src/egress.ts EgressCapabilitiesSchema.
@@ -2106,7 +2106,7 @@ export type NewAccountAuditLogEntry = typeof accountAuditLog.$inferInsert;
 // harness worker's processTick() finds rows with next_run_at <= now()
 // AND enabled=true, dispatches to RecaptureService.triggerRecapture,
 // then updates last_run_at / next_run_at. Cross-repo: actual probe
-// execution lands when Agent 1's V-203 Phase 2A vendor probes drop;
+// execution lands when the fork's V-203 Phase 2A vendor probes drop;
 // until then, the mock RecaptureService from packages/recapture-
 // automation is the dispatch target.
 export const validationSchedules = pgTable(
@@ -2578,7 +2578,7 @@ export type StatusSubscriber = typeof statusSubscribers.$inferSelect;
 export type NewStatusSubscriber = typeof statusSubscribers.$inferInsert;
 
 // AI-A.b — agent_sessions persistence (migration 0042; schema LOCKED
-// 2026-05-17 per orchestrator handoff post-AUTO #1).
+// 2026-05-17).
 //
 // text PK matches the existing InMemoryAgentSessionsRepo's
 // `agt_<uuid>` minting pattern; jsonb transcript is the append-only
@@ -2650,6 +2650,18 @@ export const agentSessions = pgTable(
     guiControlKeyCiphertext: customType<{ data: Buffer; driverData: Buffer }>({
       dataType: () => 'bytea',
     })('gui_control_key_ciphertext'),
+    // 0142 (security sweep #2) — who minted the stored gui_control_key. Every use
+    // of the key re-checks this principal against the live rows (the credential
+    // is not revoked or expired, the membership still exists as admin, the
+    // account is active) and refuses a key with none recorded. The account is the
+    // caller: the owner, or the team member acting for them. Exactly one of the
+    // API-key / web-session credential ids is set on a key minted since 0142; the
+    // membership is set only when a member minted it. No foreign keys: a missing
+    // row fails the use-time check on its own.
+    guiControlKeyMintedByAccountId: uuid('gui_control_key_minted_by_account_id'),
+    guiControlKeyMintedByApiKeyId: uuid('gui_control_key_minted_by_api_key_id'),
+    guiControlKeyMintedByWebSessionId: uuid('gui_control_key_minted_by_web_session_id'),
+    guiControlKeyMintedByMembershipId: uuid('gui_control_key_minted_by_membership_id'),
     mode: text('mode').notNull().default('ai'),
     // 6.c / #15 (migration 0066; default bumped to Opus 4.8 in 0087, to Opus 5
     // in 0115, to Sonnet 5 in 0126) — per-session model picker. Which Claude
@@ -2737,6 +2749,11 @@ export const agentSessions = pgTable(
       .on(t.accountId, t.idempotencyKey)
       .where(sql`${t.idempotencyKey} IS NOT NULL`),
     check('agent_sessions_authority_revision_nonnegative', sql`${t.authorityRevision} >= 0`),
+    // Migration 0142 — a control key names at most one minting credential.
+    check(
+      'agent_sessions_gui_control_key_one_minter_credential',
+      sql`num_nonnulls(${t.guiControlKeyMintedByApiKeyId}, ${t.guiControlKeyMintedByWebSessionId}) <= 1`,
+    ),
   ],
 );
 
@@ -2795,7 +2812,7 @@ export type AgentTurnReceiptRow = typeof agentTurnReceipts.$inferSelect;
 export type NewAgentTurnReceiptRow = typeof agentTurnReceipts.$inferInsert;
 
 // V-820 fleet_nodes — design APPROVED AS WRITTEN 2026-05-17
-// (orchestrator handoff post-AUTO #1; migration 0043).
+// (migration 0043).
 //
 // Backs FleetNodeAuthImpl's getPublicKey(nodeId) lookup in production.
 // public_key_base64url is the natural-unique 32-byte Ed25519 key
@@ -2831,7 +2848,7 @@ export const fleetNodes = pgTable(
     // Fleet-admin panel (file-48 §A5; migration 0083): latest per-node
     // telemetry snapshot from the heartbeat (host-health + capacity + uptime +
     // drain + session-outcome tally), overwritten each beat. jsonb (not ~12
-    // typed columns) so A3's evolving heartbeat shape needs no migration per
+    // typed columns) so the harness's evolving heartbeat shape needs no migration per
     // field; NULL until the first beat is recorded.
     lastHeartbeat: jsonb('last_heartbeat'),
     // Human-readable node identity (migration 0085) — the harness daemon's JWT
@@ -2915,7 +2932,7 @@ export const recipes = pgTable(
 export type RecipeRow = typeof recipes.$inferSelect;
 export type NewRecipeRow = typeof recipes.$inferInsert;
 
-// Wave 29-400 §8.1 — atlas_priority_events. Tracks each Mac-fork-emitted
+// Plan 29-400 §8.1 — atlas_priority_events. Tracks each Mac-fork-emitted
 // probe signature through its auto-learn lifecycle (emitted → queued →
 // bs_in_flight → bs_succeeded → atlas_appended; bs_failed / atlas_failed
 // terminal). Source for the admin /atlas-priority-queue page (§8.3) +
@@ -3136,7 +3153,7 @@ export const cryptoEntitlements = pgTable(
 
 /**
  * Durable direct-operation resource (slice 1 — schema + fences; no route yet).
- * Design: `docs/internal/durable-direct-operation-design.md`.
+ * Design: the internal durable direct-operation design notes.
  *
  * `POST /v1/sessions/:id/login` and `/search` run to a 600,000 ms producer wall
  * that no default public path survives (nginx `location /` 60 s, proxied edge

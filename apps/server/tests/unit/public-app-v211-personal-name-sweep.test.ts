@@ -1,7 +1,13 @@
 // W843 — public-facing app V-211 personal-name sweep. One-hundred-
 // sixty-ninth in the drift-guard series. Pins that public-visible
-// apps contain ZERO personal-name strings (Joel / Theunissen /
-// Joeltheunissen) anywhere in their source.
+// apps contain ZERO personal-name strings anywhere in their source.
+//
+// The names are not written here, nor anywhere in the repo: the list lives
+// outside it (DRIFTSTACK_PERSONAL_NAMES, or ~/.config/driftstack/
+// personal-names.txt — see scripts/personal-names.mjs, the one matcher every
+// V-211 guard shares). A sweep that spelled the names out, or hashed them,
+// would itself publish them. With no list configured this sweep checks the
+// canary word only and the matcher says so once (a GitHub warning in CI).
 //
 // The app roster is DERIVED from scripts/deploy-frontend.sh rather than
 // listed here. It was listed here, as five names, and errors-site — deployed
@@ -18,6 +24,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { CANARY_WORD, personalNameHits } from '../../../../scripts/personal-names.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -49,18 +56,10 @@ function listFiles(dir: string, exts: string[]): string[] {
   return out;
 }
 
-// V-211 PERSONAL-NAME patterns (the strictest subset — not 'founder'
-// which is a role descriptor used in internal code).
-const PERSONAL_NAME_PATTERNS = [
-  { name: 'Joel', regex: /\b[Jj]oel\b/ },
-  { name: 'Theunissen', regex: /\b[Tt]heunissen\b/ },
-  { name: 'Joeltheunissen', regex: /\b[Jj]oeltheunissen\b/ },
-];
-
 describe('W843 public-app V-211 personal-name sweep', () => {
   // ─── Public-app source scan ──────────────────────────────────
 
-  it('CRITICAL ZERO personal-name strings (Joel / Theunissen / Joeltheunissen) in public-visible apps. Public apps SHIP customer-facing content — drift would silently publish founder identity to every customer who loads the page. Word-boundary regex allows compounds like Joeline through.', () => {
+  it('CRITICAL ZERO personal-name strings in public-visible apps. Public apps SHIP customer-facing content — drift would silently publish founder identity to every customer who loads the page. Matching is per word (a run of letters), so a longer word that contains a name is not a hit.', () => {
     // Derived from the deploy script, not listed here: a hand-listed roster is
     // exactly how errors-site — deployed, and linked from every problem+json
     // the API emits — sat outside this sweep while it claimed to cover the
@@ -70,20 +69,20 @@ describe('W843 public-app V-211 personal-name sweep', () => {
     for (const d of dirs) {
       files.push(...listFiles(d, [...PUBLIC_APP_EXTS]));
     }
+    expect(files.length, 'the public-app walk found files to sweep').toBeGreaterThan(0);
 
+    const leaks: string[] = [];
     for (const f of files) {
-      const p = read(f);
-      const rel = relative(REPO_ROOT, f);
-      for (const { name, regex } of PERSONAL_NAME_PATTERNS) {
-        const m = p.match(regex);
-        expect(m, `${rel} contains V-211 personal-name '${name}': '${m?.[0] ?? ''}'`).toBeNull();
+      for (const { word } of personalNameHits(read(f))) {
+        leaks.push(`${relative(REPO_ROOT, f)}: '${word}'`);
       }
     }
+    expect(leaks, 'V-211 personal name(s) in public-app source').toEqual([]);
   });
 
   // ─── 'founder' role descriptor is allowed in internal code ────
 
-  it("CRITICAL 'founder' as a role descriptor is intentionally allowed in INTERNAL apps (gui-client + scripts + docs/internal). Drift to banning 'founder' in source would force false 'team' renames that lose meaning. The V-527 commit-msg hook DOES reject 'founder' in commit messages — that's the line.", () => {
+  it("CRITICAL 'founder' as a role descriptor is intentionally allowed in INTERNAL apps (gui-client + scripts + internal docs). Drift to banning 'founder' in source would force false 'team' renames that lose meaning. The V-527 commit-msg hook DOES reject 'founder' in commit messages — that's the line.", () => {
     // gui-client/README + PACKAGING legitimately mention 'founder' as role.
     const guiReadme = read(resolve(REPO_ROOT, 'apps/gui-client/README.md'));
     expect(guiReadme).toMatch(/[Ff]ounder/);
@@ -91,36 +90,45 @@ describe('W843 public-app V-211 personal-name sweep', () => {
 
   // ─── V-211 sweep coordinates with W807 hook policy ────────────
 
-  it('CRITICAL the V-527 commit-msg hook + this test together implement defense-in-depth — the hook stops new violators from being committed; this test stops existing violators from drifting INTO public-facing apps. Drift to dropping the hook OR this test would leave a single-line-of-defense gap.', () => {
+  it('CRITICAL the V-527 commit-msg hook + this test together implement defense-in-depth — the hook stops new violators from being committed; this test stops existing violators from drifting INTO public-facing apps. Both read the SAME digest list, so the two cannot disagree about who is named. Drift to dropping the hook OR this test would leave a single-line-of-defense gap.', () => {
     const hook = read(resolve(REPO_ROOT, 'scripts/git-hooks/commit-msg'));
     expect(hook).toMatch(/V-211 anonymity/);
-    expect(hook).toMatch(/\[Jj\]oel/);
-    expect(hook).toMatch(/\[Tt\]heunissen/);
+    expect(hook).toMatch(/PERSONAL_NAMES="\$HOOK_DIR\/\.\.\/personal-names\.mjs"/);
+    expect(hook).toMatch(/node "\$PERSONAL_NAMES" "\$MSG_FILE"/);
   });
 
-  // ─── Sanity check: regex matches violators ────────────────────
+  // ─── Sanity check: the matcher finds names and spares compounds ─
 
-  it("CRITICAL regex matches canonical personal-name violators — 'Joel' / 'joel' / 'Theunissen' / 'theunissen' / 'Joeltheunissen'. Drift would lose detection.", () => {
-    const violators = ['Joel', 'joel', 'Theunissen', 'theunissen', 'Joeltheunissen'];
-    for (const v of violators) {
-      let matched = false;
-      for (const { regex } of PERSONAL_NAME_PATTERNS) {
-        if (regex.test(v)) {
-          matched = true;
-          break;
-        }
-      }
-      expect(matched, `regex failed to match '${v}'`).toBe(true);
+  it('CRITICAL the canary word is always on the list and drives the real matcher end to end — capitalised, upper-case, beside digits, inside an address. Drift would lose detection.', () => {
+    const cap = CANARY_WORD[0]!.toUpperCase() + CANARY_WORD.slice(1);
+    for (const text of [
+      CANARY_WORD,
+      cap,
+      CANARY_WORD.toUpperCase(),
+      `foo-${CANARY_WORD}-bar`,
+      `${CANARY_WORD}89`,
+      `${CANARY_WORD}@example.com`,
+    ]) {
+      expect(personalNameHits(text).length, `missed the canary in '${text}'`).toBeGreaterThan(0);
     }
   });
 
-  it("CRITICAL regex tolerates compounds — 'Joeline' / 'theunissenia' / 'foo-joel-bar' (no — 'joel' in 'foo-joel-bar' is bounded by hyphens which ARE word-boundaries; pinned NOT to match arbitrary compound). The word-boundary discrimination is what makes the regex safe.", () => {
-    // Compounds that should NOT match.
-    expect(/\b[Jj]oel\b/.test('Joeline')).toBe(false);
-    expect(/\b[Tt]heunissen\b/.test('theunissenia')).toBe(false);
-    // 'joel-bar' DOES match because hyphen is a word-boundary — this
-    // is the desired behavior (catches hyphenated drift).
-    expect(/\b[Jj]oel\b/.test('joel-bar')).toBe(true);
+  it("CRITICAL the matcher tolerates compounds and folds accents and case — a name plus 'ine' is a different word, while an accented or capitalised spelling is the same one. Checked with a made-up list so no real name is needed. The per-word discrimination is what makes the sweep safe.", () => {
+    const list = ['alexandra', 'zorbu42', 'zorbu42@example.org'];
+    expect(personalNameHits('Alexandrine', list)).toEqual([]);
+    expect(personalNameHits('alexandraville', list)).toEqual([]);
+    expect(personalNameHits('Álexandra', list)).toEqual([{ index: 0, word: 'Álexandra' }]);
+    expect(personalNameHits('Ale\u0301xandra', list)).toHaveLength(1);
+    expect(personalNameHits('ALEXANDRA', list)).toHaveLength(1);
+    // A hyphen or a digit ends a name — this is the desired behaviour
+    // (catches hyphenated drift and handles like name89).
+    expect(personalNameHits('alexandra-bar', list)).toHaveLength(1);
+    expect(personalNameHits('alexandra89', list)).toHaveLength(1);
+    // A handle or an address matches as a whole — the longest listed form — and not inside a longer one.
+    expect(personalNameHits('mail zorbu42@example.org now', list)).toEqual([
+      { index: 5, word: 'zorbu42@example.org' },
+    ]);
+    expect(personalNameHits('zorbu420', list)).toEqual([]);
   });
 
   it('test file metadata — file exists at canonical path', () => {

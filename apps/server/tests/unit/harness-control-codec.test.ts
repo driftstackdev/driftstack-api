@@ -1,6 +1,6 @@
 // Increment-2 — unit tests for the harness control-plane wire codec
 // (serializeIntentDispatch / parseIntentResult + encode/decodeWireData).
-// Pins the A3-confirmed base64-JSON `Data` codec + camelCase envelopes, and
+// Pins the harness-confirmed base64-JSON `Data` codec + camelCase envelopes, and
 // the round-trip with the (b) mapper output.
 
 import { describe, expect, it } from 'vitest';
@@ -488,7 +488,7 @@ describe('parseIntentResult', () => {
   });
 });
 
-describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
+describe('serializeSessionAssign (EG-API-1.6; W136 shape)', () => {
   const base = {
     sessionId: 'ses_1',
     archetype: 'iphone17_ios18_7_safari26_4',
@@ -508,7 +508,7 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     expect(a.livekit).toBeUndefined();
   });
 
-  it('A3 W138 — minimal assign: transportMode + timeouts omitted (→ harness defaults), only the required fields emitted', () => {
+  it('W138 — minimal assign: transportMode + timeouts omitted (→ harness defaults), only the required fields emitted', () => {
     const a = serializeSessionAssign({
       sessionId: 'ses_1',
       archetype: 'iphone17_ios18_7_safari26_4',
@@ -522,7 +522,7 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     expect(Object.keys(a).sort()).toEqual(['archetype', 'behaviorProfile', 'sessionId', 'type']);
   });
 
-  it('inlineProxyConfig (SocksProxyConfig) → base64 of utf8 JSON (A3 W136 = Data codec, NOT nested object)', () => {
+  it('inlineProxyConfig (SocksProxyConfig) → base64 of utf8 JSON (W136 = Data codec, NOT nested object)', () => {
     const proxy = {
       host: 'proxy.example.com',
       port: 1080,
@@ -540,7 +540,7 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     expect(decodeWireData(a.inlineProxyConfig as string)).toEqual(proxy);
   });
 
-  it('inlineProxyConfig carries the wire-ONLY udp_capable (A3 W2756 proxy pre-detection) — the extended wire schema keeps it; the plain SocksProxyConfig schema would strip it', () => {
+  it('inlineProxyConfig carries the wire-ONLY udp_capable (W2756 proxy pre-detection) — the extended wire schema keeps it; the plain SocksProxyConfig schema would strip it', () => {
     const proxy = {
       host: 'proxy.example.com',
       port: 1080,
@@ -554,7 +554,7 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     expect(decodeWireData(a.inlineProxyConfig as string)).toEqual(proxy);
   });
 
-  it('inlineProxyConfig (VPN) → base64 of the FLAT wire (A3 W2163: type + sibling fields, NOT nested)', () => {
+  it('inlineProxyConfig (VPN) → base64 of the FLAT wire (W2163: type + sibling fields, NOT nested)', () => {
     const wg = {
       type: 'wireguard' as const,
       private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
@@ -565,7 +565,7 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     };
     const a = serializeSessionAssign({ ...base, inlineProxyConfig: wg });
     // FLAT: the decoded object has `type` + the WG fields as DIRECT siblings —
-    // never nested under a `wireguard` key (a nested payload fails A3's guard).
+    // never nested under a `wireguard` key (a nested payload fails the harness's guard).
     expect(decodeWireData(a.inlineProxyConfig as string)).toEqual(wg);
 
     const ovpn = {
@@ -644,7 +644,7 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     ).not.toThrow();
   });
 
-  it('profile-backed (A3 W417): camelCase in → snake_case wire; omits absent blob fields', () => {
+  it('profile-backed (W417): camelCase in → snake_case wire; omits absent blob fields', () => {
     // inline (≤256KB) shape
     const inline = serializeSessionAssign({
       ...base,
@@ -702,7 +702,7 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     });
   });
 
-  it('initialUrl is http(s)-only — a file:/javascript: initialUrl throws (chokepoint guard, A3 W135)', () => {
+  it('initialUrl is http(s)-only — a file:/javascript: initialUrl throws (chokepoint guard, W135)', () => {
     expect(serializeSessionAssign({ ...base, initialUrl: 'https://ok.example' }).initialUrl).toBe(
       'https://ok.example',
     );
@@ -787,7 +787,7 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     expect(serializeSessionAssign(base).exit_identity).toBeUndefined();
   });
 
-  // T-11 (exit lat/lon — A2 half of live geolocation spoofing): the assign's
+  // T-11 (exit lat/lon — the server half of live geolocation spoofing): the assign's
   // exit_identity block carries the exit COORDINATES the fork answers navigator.
   // geolocation from. MEASURED at the wire contract: SessionAssignExitIdentitySchema
   // is `.strict()`, so lat/lon are only carried if the schema declares them, and it

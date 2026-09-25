@@ -142,7 +142,7 @@ export function registerProfileSnapshotsRoutes(
   );
 
   // ── GET /v1/profiles/:id/snapshots — list per profile ──────────────────
-  // V-553.B-21 / Fable last-hours audit 2026-07-07 (C9) — read:profiles gate.
+  // V-553.B-21 / last-hours audit 2026-07-07 (C9) — read:profiles gate.
   // Snapshots ARE profile data (the reference already documents `read` or
   // `read:profiles` as required here, and write:profiles is scoped to cover
   // "profiles and their snapshots"); the sibling GET /v1/profiles routes gate

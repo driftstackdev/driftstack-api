@@ -1,5 +1,5 @@
 // Drift guard for apps/server/src/services/agent-pair-mode-heartbeat-sweep.ts.
-// Pins the Arc 4 Wave 2.B sub-slice 8.13c heartbeat sweep — closing the
+// Pins the Arc 4 phase 2.B, slice 8.13c heartbeat sweep — closing the
 // pair-mode-heartbeat trio (8.13 state-machine transition + 8.13b
 // tracker + 8.13c sweep). Load-bearing: defends the 5-step tickOnce
 // pipeline + the idempotent-on-ai-driving short-circuit + the
@@ -25,9 +25,9 @@ describe('services/agent-pair-mode-heartbeat-sweep content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Arc 4 Wave 2.B sub-slice 8.13c module-level framing pinned: 'pair-mode heartbeat sweep. Walks PairModeHeartbeatTracker.findStaleSessions(), fires the heartbeat-timeout state-machine transition for each, persists the post-transition state, and emits an agent_session.pair_mode.timeout customer audit row. Bounded by the in-memory tracker's session count + the TTL — typical sweep touches zero sessions; under heavy use it touches one per stale pair-mode session.' — pinned so the 8.13c anchor + tracker-walk + state-transition + audit-emit pipeline contract + the bounded-by-tracker-count complexity rationale stay documented", () => {
+  it("Arc 4 phase 2.B, slice 8.13c module-level framing pinned: 'pair-mode heartbeat sweep. Walks PairModeHeartbeatTracker.findStaleSessions(), fires the heartbeat-timeout state-machine transition for each, persists the post-transition state, and emits an agent_session.pair_mode.timeout customer audit row. Bounded by the in-memory tracker's session count + the TTL — typical sweep touches zero sessions; under heavy use it touches one per stale pair-mode session.' — pinned so the 8.13c anchor + tracker-walk + state-transition + audit-emit pipeline contract + the bounded-by-tracker-count complexity rationale stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Arc 4 Wave 2\.B sub-slice 8\.13c \(v2-#8\) — pair-mode heartbeat sweep\./,
+      /\/\/ Arc 4 phase 2\.B, slice 8\.13c \(v2-#8\) — pair-mode heartbeat sweep\./,
     );
     expect(body).toMatch(
       /\/\/ Walks PairModeHeartbeatTracker\.findStaleSessions\(\), fires the\s*\/\/ `heartbeat-timeout` state-machine transition for each, persists\s*\/\/ the post-transition state, and emits an\s*\/\/ `agent_session\.pair_mode\.timeout` customer audit row\./,

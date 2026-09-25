@@ -2,7 +2,7 @@
 // Launch-readiness audit + priority queue. Drift here either
 // weakens the 10-section roll-up structure (would orphan the
 // single-page audit role), drops the 3-status tagging (READY /
-// PENDING ENG / PENDING FOUNDER — drives the agent-vs-founder
+// PENDING ENG / PENDING FOUNDER — drives the eng-vs-founder
 // queue), or weakens the source-of-truth split (per-runbook detail
 // in docs/founder-actions + docs/deployment + docs/operations).
 //
@@ -13,7 +13,7 @@
 //   • Status tags: READY / PENDING ENG / PENDING FOUNDER.
 //   • Last roll-up: 2026-05-07 (V-279) refreshed via V-287 +
 //     V-361 (V-353 cycle + V-359 + V-298a + V-313 + V-360).
-//   • Cross-repo dep on Agent 1 V-203 Phase 2A + V-372–V-378.
+//   • Cross-repo dep on the WebKit fork's V-203 Phase 2A + V-372–V-378.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -31,7 +31,7 @@ function read(p: string): string {
 describe('W552.A /docs/launch/pre-launch-checklist.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + 3-status + source-of-truth split framing pinned: '# Driftstack pre-launch checklist' + 'Roll-up of every item between current state and \"first paying customer can sign up, pay, and use the product.\" Each item is tagged with status (READY / PENDING ENG / PENDING FOUNDER), owner, blocking-launch (yes/no), and rough estimate.' + 'This checklist = single-page audit + priority queue.' + 'Per-runbook detail lives in `docs/founder-actions/v*.md` + `docs/deployment/*.md` + `docs/operations/*.md`.' + 'Per-V-NNN history lives in `docs/verification-log.md`.' + '**Last roll-up:** 2026-05-07 (V-279)' — pinned so the first-paying-customer-roll-up + 3-status-tagging + single-page-audit + per-runbook-detail-cross-reference + V-NNN-history + V-279-2026-05-07 commitment survives", () => {
+  it("Header + 3-status + source-of-truth split framing pinned: '# Driftstack pre-launch checklist' + 'Roll-up of every item between current state and \"first paying customer can sign up, pay, and use the product.\" Each item is tagged with status (READY / PENDING ENG / PENDING FOUNDER), owner, blocking-launch (yes/no), and rough estimate.' + 'This checklist = single-page audit + priority queue.' + 'Per-runbook detail lives in `docs/founder-actions/v*.md` + `docs/deployment/*.md` + `docs/operations/*.md`.' + 'Per-V-NNN history lives in the internal verification records.' + '**Last roll-up:** 2026-05-07 (V-279)' — pinned so the first-paying-customer-roll-up + 3-status-tagging + single-page-audit + per-runbook-detail-cross-reference + V-NNN-history + V-279-2026-05-07 commitment survives", () => {
     expect(body).toMatch(/^# Driftstack pre-launch checklist$/m);
     expect(body).toMatch(
       /Roll-up of every item between current state and "first paying customer can sign up, pay, and use the product\."/,
@@ -43,7 +43,7 @@ describe('W552.A /docs/launch/pre-launch-checklist.md content parity', () => {
     expect(body).toMatch(
       /- Per-runbook detail lives in `docs\/founder-actions\/v\*\.md` \+ `docs\/deployment\/\*\.md` \+ `docs\/operations\/\*\.md`\./,
     );
-    expect(body).toMatch(/- Per-V-NNN history lives in `docs\/verification-log\.md`\./);
+    expect(body).toMatch(/- Per-V-NNN history lives in the internal verification records\./);
     expect(body).toMatch(/\*\*Last roll-up:\*\* 2026-05-07 \(V-279\)/);
   });
 
@@ -80,18 +80,18 @@ describe('W552.A /docs/launch/pre-launch-checklist.md content parity', () => {
       /perpetual free tier; no card, expiry, one-time purchase, or prepaid credit/,
     );
     expect(body).not.toMatch(/STRIPE_TRIAL_PACK_PRICE_ID/);
-    expect(body).toMatch(/Driver: webkit\s*\|\s*PENDING ENG\s*\|\s*Agent 1/);
+    expect(body).toMatch(/Driver: webkit\s*\|\s*PENDING ENG\s*\|\s*fork/);
     expect(body).toMatch(
-      /cross-repo dep on Agent 1's V-203 Phase 2A \+ V-372–V-378 readback-path remediation/,
+      /cross-repo dep on the WebKit fork's V-203 Phase 2A \+ V-372–V-378 readback-path remediation/,
     );
   });
 
-  it("Minimum-launchable + Founder-action-queue + What's-deferred + Cross-repo-deps framing pinned: '## Minimum-launchable surface (pre-payment-customer)' + '## Minimum-launchable surface (first-paying-customer-acceptable)' + '## Founder action queue (priority order)' + '## What's deferred post-launch (not blocking)' + '## Cross-repo dependencies (Agent 1)' — pinned so the 2-minimum-launchable-surfaces (pre-payment + first-paying) + founder-action-queue-priority + deferred-post-launch + Agent-1-cross-repo-deps commitment survives", () => {
+  it("Minimum-launchable + Founder-action-queue + What's-deferred + Cross-repo-deps framing pinned: '## Minimum-launchable surface (pre-payment-customer)' + '## Minimum-launchable surface (first-paying-customer-acceptable)' + '## Founder action queue (priority order)' + '## What's deferred post-launch (not blocking)' + '## Cross-repo dependencies (WebKit fork)' — pinned so the 2-minimum-launchable-surfaces (pre-payment + first-paying) + founder-action-queue-priority + deferred-post-launch + WebKit-fork-cross-repo-deps commitment survives", () => {
     expect(body).toMatch(/## Minimum-launchable surface \(pre-payment-customer\)/);
     expect(body).toMatch(/## Minimum-launchable surface \(first-paying-customer-acceptable\)/);
     expect(body).toMatch(/## Founder action queue \(priority order\)/);
     expect(body).toMatch(/## What's deferred post-launch \(not blocking\)/);
-    expect(body).toMatch(/## Cross-repo dependencies \(Agent 1\)/);
+    expect(body).toMatch(/## Cross-repo dependencies \(WebKit fork\)/);
   });
 
   // The roll-up header is from 2026-05-09 (V-361) while the verification log is
@@ -113,7 +113,7 @@ describe('W552.A /docs/launch/pre-launch-checklist.md content parity', () => {
     // The roll-up reference the warning is about — stable, unlike a log head.
     expect(body).toContain('2026-05-09 (V-361)');
     expect(body).toMatch(
-      /compare the roll-up\s*\n?>?\s*reference against the head of `docs\/verification-log\.md`/,
+      /compare the roll-up\s*\n?>?\s*reference against the head of the internal verification records/,
     );
     // And it must NOT reintroduce a hard-coded log position, which is what made
     // this pin freeze a false statement in the first place.

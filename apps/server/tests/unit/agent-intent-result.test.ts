@@ -291,7 +291,7 @@ describe('intentResultToCustomer — failure reasons', () => {
     if (withMsg.kind !== 'failure') throw new Error('narrow');
     expect(withMsg.reason).toContain('no such element: #go');
 
-    // A NON-webdriver code is unchanged (still its A3-locked base copy).
+    // A NON-webdriver code is unchanged (still its harness-agreed base copy).
     const paramR = intentResultToCustomer(
       { kind: 'interact', action: 'tap', selector: '#go' },
       fail('intent_missing_parameter'),
@@ -442,7 +442,7 @@ describe('intentResultToCustomer — failure reasons', () => {
       fail('intent_deadline_cleanup_unconfirmed'),
     );
     if (cleanupUnconfirmed.kind !== 'failure') throw new Error('narrow');
-    // The copy must NOT assert a fencing mechanism: since A1's
+    // The copy must NOT assert a fencing mechanism: since the fork's
     // `driftstack@16a94d0e5` this code has two emitters, and the
     // lost-captured-browser one installs no tombstone and ends no session.
     // Guidance (non-retryable, start a new session) is what customers act on

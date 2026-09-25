@@ -14,8 +14,8 @@
 // block other handlers or the publisher. No persistence; events
 // with no live subscribers are dropped on the floor.
 //
-// Full design at `docs/internal/driftstack-telemetry-event-schema-
-// for-gui-panel.md`.
+// Full design in the internal GUI-panel telemetry event-schema
+// notes.
 
 import type { ThresholdState } from '../lib/cost-estimator.js';
 

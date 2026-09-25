@@ -1,5 +1,5 @@
 // Drift guard for apps/server/src/services/agent-pair-mode-heartbeat.ts.
-// Pins the Arc 4 Wave 2.B sub-slice 8.13b pair-mode heartbeat tracker —
+// Pins the Arc 4 phase 2.B, slice 8.13b pair-mode heartbeat tracker —
 // PairModeHeartbeatTracker interface + InMemory impl + 30s default TTL +
 // oldest-first sort contract.
 
@@ -23,9 +23,9 @@ describe('services/agent-pair-mode-heartbeat content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Arc 4 Wave 2.B sub-slice 8.13b module-level framing pinned: 'pair-mode heartbeat tracker. Pure data structure that maps sessionId → lastHeartbeatAt and exposes findStaleSessions(now, ttlMs) so a sweep service can fire the heartbeat-timeout state-machine transition (sub-slice 8.13) for each stale session.' — pinned so the 8.13b anchor + the pure-data-structure framing + the 8.13 state-machine cross-reference stay documented", () => {
+  it("Arc 4 phase 2.B, slice 8.13b module-level framing pinned: 'pair-mode heartbeat tracker. Pure data structure that maps sessionId → lastHeartbeatAt and exposes findStaleSessions(now, ttlMs) so a sweep service can fire the heartbeat-timeout state-machine transition (sub-slice 8.13) for each stale session.' — pinned so the 8.13b anchor + the pure-data-structure framing + the 8.13 state-machine cross-reference stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Arc 4 Wave 2\.B sub-slice 8\.13b \(v2-#8\) — pair-mode heartbeat tracker\./,
+      /\/\/ Arc 4 phase 2\.B, slice 8\.13b \(v2-#8\) — pair-mode heartbeat tracker\./,
     );
     expect(body).toMatch(
       /\/\/ Pure data structure that maps `sessionId → lastHeartbeatAt` and\s*\/\/ exposes `findStaleSessions\(now, ttlMs\)` so a sweep service can\s*\/\/ fire the `heartbeat-timeout` state-machine transition \(sub-slice\s*\/\/ 8\.13\) for each stale session\./,
@@ -72,9 +72,9 @@ describe('services/agent-pair-mode-heartbeat content parity', () => {
     );
   });
 
-  it("PAIR_MODE_HEARTBEAT_TTL_MS = 30_000 pinned: 'Default heartbeat-timeout window per founder verdict on the Wave 2.A 8.13 transition (30 seconds). Exported as a constant so the sweep service + docs + state-machine commentary stay aligned.' — pinned so the 30s window + cross-source single-source-of-truth contract survives. Drift would diverge from the state-machine's heartbeat-timeout transition framing", () => {
+  it("PAIR_MODE_HEARTBEAT_TTL_MS = 30_000 pinned: 'Default heartbeat-timeout window per founder verdict on the phase 2.A 8.13 transition (30 seconds). Exported as a constant so the sweep service + docs + state-machine commentary stay aligned.' — pinned so the 30s window + cross-source single-source-of-truth contract survives. Drift would diverge from the state-machine's heartbeat-timeout transition framing", () => {
     expect(body).toMatch(
-      /\/\*\* Default heartbeat-timeout window per founder verdict on the\s*\*\s+Wave 2\.A 8\.13 transition \(30 seconds\)\. Exported as a constant so\s*\*\s+the sweep service \+ docs \+ state-machine commentary stay aligned\. \*\/\s*export const PAIR_MODE_HEARTBEAT_TTL_MS = 30_000;/,
+      /\/\*\* Default heartbeat-timeout window per founder verdict on the\s*\*\s+phase 2\.A 8\.13 transition \(30 seconds\)\. Exported as a constant so\s*\*\s+the sweep service \+ docs \+ state-machine commentary stay aligned\. \*\/\s*export const PAIR_MODE_HEARTBEAT_TTL_MS = 30_000;/,
     );
   });
 });

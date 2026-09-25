@@ -535,7 +535,7 @@ export class ProfilesService {
    * already written by ack time, so this is the enforceable point to block
    * NEW state growth. Sessions without a profile never reach this method.
    *
-   * TODO(item6-trim): gated on A3 trimProfile op — once posted, a future
+   * TODO(item6-trim): gated on the harness trimProfile op — once posted, a future
    * `trimProfile` action lets a customer reclaim space in-place instead of
    * only delete/upgrade. No hook needed here yet; this stays a pure block.
    */

@@ -53,7 +53,7 @@ export class UnsafeProxyHostError extends Error {
  */
 export const WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD = 'wrapped_preshared_key';
 
-/** 7-day TTL for a verified per-proxy UDP capability (A3 W2756). A proxy's
+/** 7-day TTL for a verified per-proxy UDP capability (W2756). A proxy's
  *  UDP_ASSOCIATE support is stable, but a customer can reconfigure the exit, so a
  *  verified value older than this is treated as unknown (→ omit → the fork
  *  re-probes). */
@@ -64,7 +64,7 @@ const UDP_CAPABLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  *  is an ISO timestamp within the TTL; otherwise undefined (→ resolveForDispatch
  *  omits `udp_capable` → harness leaves DRIFTSTACK_PROXY_UDP_CAPABLE unset → the
  *  fork's async probe = today's safe default). The value is only ever WRITTEN from a
- *  real data-path probe (the deferred Swift probe-writer; A3 to spec the
+ *  real data-path probe (the deferred Swift probe-writer; the harness to spec the
  *  server→harness control-command), never from a customer claim. */
 function freshUdpCapable(config: Record<string, unknown>): boolean | undefined {
   const cap = config['udp_capable'];
@@ -383,7 +383,7 @@ export class AccountProxiesService {
         return { config: null, reason: 'secret_unreadable', detail: unreadableDetail(false) };
       }
     }
-    // Proxy UDP pre-detection (A3 W2756): emit the verified capability when fresh
+    // Proxy UDP pre-detection (W2756): emit the verified capability when fresh
     // so the harness can skip the per-session ~3s probe; omitted (→ fork async-probe
     // = today's behavior) until the deferred probe-writer populates config.
     const udpCapable = freshUdpCapable(row.config);
@@ -403,7 +403,7 @@ export class AccountProxiesService {
   }
 
   /**
-   * Build the FLAT inline VPN dispatch wire (A3 W2163: sibling fields, NOT
+   * Build the FLAT inline VPN dispatch wire (W2163: sibling fields, NOT
    * nested) from a stored VPN row. Unwraps only the exact account + proxy +
    * protocol slot, so moving a valid envelope to another row or slot fails GCM.
    * The non-secret fields ride `config` (jsonb). Returns null when encryption
@@ -483,7 +483,7 @@ export class AccountProxiesService {
       // refused since T-20 but the dispatch never looked at: a row stored before
       // that check (or by any other writer) dispatched fine and then died inside
       // openvpn on the node as a generic "Options error" naming neither field nor
-      // cause. Cross-source pin with the node's own parse-reject (A3 8a03a3929) —
+      // cause. Cross-source pin with the node's own parse-reject (harness 8a03a3929) —
       // the node refuses the same config, so nothing that launches today stops
       // launching; it just fails here, early, naming the line.
       if (findUnresolvableOpenvpnFileReferences(blob).length > 0) {

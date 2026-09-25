@@ -63,7 +63,7 @@ describe('docs sdk/typescript-quickstart content parity', () => {
     expect(body).toMatch(/client\.sessions\.destroy\(session\.id\)/);
   });
 
-  it('concurrent-slot framing pinned: slot held until YOU destroy — no idle timeout on any tier, only the free-tier 20-minute duration cap (S36 2026-07-07 fable-truth-audit: the per-tier-idle-timeout comment was fictional; the try/finally rationale stands). Spans lines inside a code-comment so allow the // continuation', () => {
+  it('concurrent-slot framing pinned: slot held until YOU destroy — no idle timeout on any tier, only the free-tier 20-minute duration cap (S36 2026-07-07 truth audit: the per-tier-idle-timeout comment was fictional; the try/finally rationale stands). Spans lines inside a code-comment so allow the // continuation', () => {
     expect(body).toMatch(
       /the concurrent slot stays held until you do\.\s*\/\/ There is no idle timeout on any tier/,
     );

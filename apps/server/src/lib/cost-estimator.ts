@@ -1,7 +1,7 @@
 // V-658 — cost estimator (V-541.B foundation).
 //
 // Pure functions that implement the cost-to-serve formula sketched in
-// `docs/internal/v541-cost-monitoring-design.md`. The downstream
+// the internal V-541 cost-monitoring design. The downstream
 // service (V-541.B) wires these against the `sessions` + `usage_records`
 // tables and persists the result into `cost_snapshots`; this module
 // has zero DB dependencies so it can be tested + tuned independently.

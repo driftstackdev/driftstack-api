@@ -12,7 +12,7 @@
 // create/update time. It does NOT defend DNS rebinding (a HOSTNAME that
 // resolves public at create and private at delivery) — that needs
 // connection-time resolution + IP pinning in the delivery path, tracked in
-// docs/internal/2026-05-31-webhook-ssrf-outbound-target.md.
+// the internal webhook-SSRF outbound-target notes (2026-05-31).
 //
 // Implemented over Node's `net.BlockList` (vetted range math) rather than
 // hand-rolled bit twiddling. Two non-obvious traps (both pinned in tests):
@@ -228,7 +228,7 @@ export function openvpnProxyHosts(configBlob: string): string[] {
 /**
  * True when an OpenVPN `config_blob` contains a script-executing directive
  * (up/down/route-up/…) or raises `script-security` to 2/3 (which is what ENABLES
- * those directives to run programs) — the class the P0 root-RCE (A3 118722821)
+ * those directives to run programs) — the class the P0 root-RCE (harness 118722821)
  * exploited. The directive set and the line tokenizer live in
  * @driftstack/api-types (T-20) so the desktop client can name the same lines
  * before submitting; this side keeps ENFORCING — a hit here is still a refusal.
@@ -301,7 +301,7 @@ export function unsupportedOpenvpnDirectiveDetail(configBlob: string): string {
  * inline block). Mirrors unsupportedOpenvpnDirectiveDetail: names the FIRST
  * offending line so the fix is to paste an inline block, not search. The echoed
  * line is the DIRECTIVE + FILENAME only (never an inline PEM block), so no key
- * material is quoted. Cross-source pin with the node's parse-reject (A3
+ * material is quoted. Cross-source pin with the node's parse-reject (harness
  * `8a03a3929`); both enforce the same rule from `findUnresolvableOpenvpnFileReferences`.
  */
 export function unresolvableOpenvpnFileReferenceDetail(configBlob: string): string {

@@ -65,7 +65,7 @@ export function defaultTcpProbe(host: string, port: number, timeoutMs: number): 
       // domain→internal-IP host fails session-create cleanly, instead of the
       // probe (and the fork's later dial) reaching Driftstack's internal network.
       // (The fork re-resolves the hostname independently; pinning the validated IP
-      // into the fork's dial is the remaining defense-in-depth layer — A1/go-live.)
+      // into the fork's dial is the remaining defense-in-depth layer — fork work, before go-live.)
       const peer = socket.remoteAddress;
       if (peer !== undefined && classifyUnsafeHost(peer) !== null) {
         socket.destroy();

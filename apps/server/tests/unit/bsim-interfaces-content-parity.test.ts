@@ -23,8 +23,8 @@
 //     generators (humanlike Bezier mouse paths, hand-position-aware
 //     keystroke cadence, naturalistic scroll velocity decay).'
 //   • 6 methods: generateMouseTrajectory + generateKeyboardCadence +
-//     generateScrollPattern + generateTouchEvent (V-530.A wave 15) +
-//     generateScrollVelocityProfile (V-530.B wave 16; distinct from
+//     generateScrollPattern + generateTouchEvent (V-530.A) +
+//     generateScrollVelocityProfile (V-530.B; distinct from
 //     constant-tick generateScrollPattern — finger-flick model) +
 //     listProfiles convenience.
 
@@ -99,7 +99,7 @@ describe('W450.C packages/behavioural-simulation/src/interfaces.ts content parit
     );
   });
 
-  it('6 BehaviouralSimulator methods: generateMouseTrajectory + generateKeyboardCadence + generateScrollPattern + generateTouchEvent (V-530.A wave 15 framing) + generateScrollVelocityProfile (V-530.B wave 16 framing; finger-flick decay distinct from constant-tick) + listProfiles convenience', () => {
+  it('6 BehaviouralSimulator methods: generateMouseTrajectory + generateKeyboardCadence + generateScrollPattern + generateTouchEvent (V-530.A framing) + generateScrollVelocityProfile (V-530.B framing; finger-flick decay distinct from constant-tick) + listProfiles convenience', () => {
     expect(body).toMatch(
       /generateMouseTrajectory\(opts: GenerateMouseTrajectoryOpts\): MouseTrajectory;/,
     );
@@ -110,10 +110,10 @@ describe('W450.C packages/behavioural-simulation/src/interfaces.ts content parit
       /generateScrollPattern\(opts: GenerateScrollPatternOpts\): ScrollPattern;/,
     );
     expect(body).toMatch(
-      /\* V-530\.A — added in Wave 15\. Sub-slices C \(dwell \+ click-position\),\s*\*\s*D \(idle jitter \+ multi-touch sequencing\) extend the touch surface\s*\*\s*in later waves\.[\s\S]*?generateTouchEvent\(opts: GenerateTouchEventOpts\): TouchEvent;/,
+      /\* V-530\.A — initial touch surface\. Sub-slices C \(dwell \+ click-position\),\s*\*\s*D \(idle jitter \+ multi-touch sequencing\) extend the touch surface\s*\*\s*in later slices\.[\s\S]*?generateTouchEvent\(opts: GenerateTouchEventOpts\): TouchEvent;/,
     );
     expect(body).toMatch(
-      /\* Produce a scroll velocity profile with exponential decay starting\s*\*\s*from a finger-flick initial velocity\. Distinct from the constant-tick\s*\*\s*`generateScrollPattern` surface — this is the realistic finger-flick\s*\*\s*model\. V-530\.B — added in Wave 16\.[\s\S]*?generateScrollVelocityProfile\(opts: GenerateScrollVelocityProfileOpts\): ScrollVelocityProfile;/,
+      /\* Produce a scroll velocity profile with exponential decay starting\s*\*\s*from a finger-flick initial velocity\. Distinct from the constant-tick\s*\*\s*`generateScrollPattern` surface — this is the realistic finger-flick\s*\*\s*model\. V-530\.B\.[\s\S]*?generateScrollVelocityProfile\(opts: GenerateScrollVelocityProfileOpts\): ScrollVelocityProfile;/,
     );
     expect(body).toMatch(
       /\/\*\* Convenience: returns the simulator's loaded profile catalogue\. \*\/\s*listProfiles\(\): readonly BehaviouralProfile\[\];/,

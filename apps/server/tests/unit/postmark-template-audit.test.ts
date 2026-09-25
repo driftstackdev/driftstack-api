@@ -63,7 +63,7 @@ function extractTemplates(): Array<{ alias: string; body: string }> {
 const TEMPLATES = extractTemplates();
 
 const BANNED_ATTRIBUTION_STRINGS: ReadonlyArray<{ token: string; reason: string }> = [
-  // V-205 + driftstack-api AGENTS.md: ZERO AI-tooling strings in
+  // V-205 + the contributor guidelines: ZERO AI-tooling strings in
   // customer-facing copy. The commit-msg hook enforces this for
   // commit bodies; templates are an equivalent customer surface.
   { token: 'Claude', reason: 'AI tooling attribution forbidden in customer copy (V-205)' },

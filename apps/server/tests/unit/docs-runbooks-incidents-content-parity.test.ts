@@ -66,12 +66,12 @@ describe('W556.A /docs/runbooks/incidents.md content parity', () => {
     expect(body).toMatch(/incident timeline/);
   });
 
-  it("§2 Customer-reported bug triage + §3 First 60 min framing pinned: '## 2. Customer-reported bug triage' + 'Customer reports arrive through three channels' + 'Acknowledge within 30 min during business hours' + 'Acknowledgement is a non-AI human reply per Rule J — do not auto-respond.' + 'Do **not** ask them to send API keys' + '### 3.2 First 60 minutes (P-0 security event)' + '**Contain** before investigating. The attacker keeps moving while you grep logs.' + '**Preserve evidence.** Snapshot Postgres point-in-time (Neon's PITR is on by default), capture Redis with `BGSAVE`' + 'docs/internal/incidents/YYYY-MM-DD-<slug>.md` — internal-only' + 'Establish timeline.' + 'The timeline IS the incident — without it the post-mortem is fiction.' — pinned so the 3-channel-customer-report + 30min-non-AI-human-Rule-J + no-API-keys-paste + Contain-before-investigate + Neon-PITR-Redis-BGSAVE + internal-incidents-doc + timeline-IS-the-incident commitment survives", () => {
+  it("§2 Customer-reported bug triage + §3 First 60 min framing pinned: '## 2. Customer-reported bug triage' + 'Customer reports arrive through three channels' + 'Acknowledge within 30 min during business hours' + 'Acknowledgement is a non-AI human reply per the support policy — do not auto-respond.' + 'Do **not** ask them to send API keys' + '### 3.2 First 60 minutes (P-0 security event)' + '**Contain** before investigating. The attacker keeps moving while you grep logs.' + '**Preserve evidence.** Snapshot Postgres point-in-time (Neon's PITR is on by default), capture Redis with `BGSAVE`' + 'repo (`incidents/YYYY-MM-DD-<slug>.md`) — internal-only' + 'Establish timeline.' + 'The timeline IS the incident — without it the post-mortem is fiction.' — pinned so the 3-channel-customer-report + 30min-non-AI-human-Rule-J + no-API-keys-paste + Contain-before-investigate + Neon-PITR-Redis-BGSAVE + internal-incidents-doc + timeline-IS-the-incident commitment survives", () => {
     expect(body).toMatch(/## 2\. Customer-reported bug triage/);
     expect(body).toMatch(/Customer reports arrive through three channels:/);
     expect(body).toMatch(/1\. \*\*Acknowledge within 30 min during business hours, end of next/);
     expect(body).toMatch(/business day otherwise\.\*\* Acknowledgement is a non-AI human/);
-    expect(body).toMatch(/reply per Rule J — do not auto-respond\./);
+    expect(body).toMatch(/reply per the support policy — do not auto-respond\./);
     expect(body).toMatch(/Do$/m);
     expect(body).toMatch(/\*\*not\*\* ask them to send API keys/);
     expect(body).toMatch(/### 3\.2 First 60 minutes \(P-0 security event\)/);
@@ -79,7 +79,7 @@ describe('W556.A /docs/runbooks/incidents.md content parity', () => {
     expect(body).toMatch(/while you grep logs\./);
     expect(body).toMatch(/2\. \*\*Preserve evidence\.\*\* Snapshot Postgres point-in-time/);
     expect(body).toMatch(/\(Neon's PITR is on by default\), capture Redis with `BGSAVE`,/);
-    expect(body).toMatch(/`docs\/internal\/incidents\/YYYY-MM-DD-<slug>\.md` — internal-only,/);
+    expect(body).toMatch(/repo \(`incidents\/YYYY-MM-DD-<slug>\.md`\) — internal-only,/);
     expect(body).toMatch(/4\. \*\*Establish timeline\.\*\* UTC timestamps for every observation/);
     expect(body).toMatch(/The timeline IS the incident — without it the/);
     expect(body).toMatch(/post-mortem is fiction\./);

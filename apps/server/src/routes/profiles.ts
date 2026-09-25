@@ -498,7 +498,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
     // read:profiles gate MUST live here — exportProfile only scopes by
     // accountId, not by scope (like the other GET reads above). Without it a
     // read:sessions-only granular key could read profile metadata it wasn't
-    // granted (Fable customer-routes re-audit 2026-07-02).
+    // granted (customer-routes re-audit 2026-07-02).
     { preHandler: [app.requireAuth, app.requireScope('read:profiles'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);

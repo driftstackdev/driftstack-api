@@ -1,7 +1,7 @@
 // Drift guard for apps/server/src/services/session-egress.ts.
 // Pins the V-540.E customer-configurable egress interface — E1 slice
 // scaffold (concrete backends defer to EG-API-1.6 SOCKS5 propagation).
-// Anchored against planning 133's cross-agent contract.
+// Anchored against planning 133's cross-repo contract.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -29,9 +29,9 @@ describe('services/session-egress content parity', () => {
     );
   });
 
-  it("Design SOT pointer pinned: 'docs/planning/133-egress-architecture-cross-agent.md in the driftstack repo (founder-locked 2026-05-16). The earlier docs/internal/customer-configurable-egress-design.md was SUPERSEDED by planning 133 (~56h Agent-2-only estimate was undersized; real cross-agent + harness scope is 7-12 weeks per planning 133).' — pinned so the founder-locked-2026-05-16 + superseded-design + 56h-undersize + 7-12-weeks-real-scope all stay documented (drift to dropping the superseded-pointer would let readers consult the wrong design doc)", () => {
+  it("Design SOT pointer pinned: 'planning doc 133 (egress architecture) in the driftstack repo (founder-locked 2026-05-16). The earlier internal customer-configurable-egress design notes were SUPERSEDED by planning 133 (~56h server-only estimate was undersized; real cross-repo + harness scope is 7-12 weeks per planning 133).' — pinned so the founder-locked-2026-05-16 + superseded-design + 56h-undersize + 7-12-weeks-real-scope all stay documented (drift to dropping the superseded-pointer would let readers consult the wrong design doc)", () => {
     expect(body).toMatch(
-      /\/\/ Design source of truth: `docs\/planning\/133-egress-architecture-\s*\/\/ cross-agent\.md` in the driftstack repo \(founder-locked 2026-05-16\)\.\s*\/\/ The earlier `docs\/internal\/customer-configurable-egress-design\.md`\s*\/\/ was SUPERSEDED by planning 133 \(~56h Agent-2-only estimate was\s*\/\/ undersized; real cross-agent \+ harness scope is 7-12 weeks per\s*\/\/ planning 133\)\./,
+      /\/\/ Design source of truth: planning doc 133 \(egress architecture\)\s*\/\/ in the driftstack repo \(founder-locked 2026-05-16\)\.\s*\/\/ The earlier internal customer-configurable-egress design notes\s*\/\/ were SUPERSEDED by planning 133 \(~56h server-only estimate was\s*\/\/ undersized; real cross-repo \+ harness scope is 7-12 weeks per\s*\/\/ planning 133\)\./,
     );
   });
 
@@ -41,9 +41,9 @@ describe('services/session-egress content parity', () => {
     );
   });
 
-  it("Schema-side single-source-of-truth framing pinned: 'the proxy-config DISCRIMINATED UNION + per-protocol shapes live in @driftstack/api-types/egress (EG-API-1.1, commit 555d8001). This file no longer redeclares them — it re-exports SessionEgressConfig + ProxyConfig for legacy callers and types EgressHandle against ProxyType from api-types so the cross-agent contract has one source of truth.' — pinned so the EG-API-1.1 commit 555d8001 + cross-agent-one-source-of-truth + legacy-re-export-only contract stay documented", () => {
+  it("Schema-side single-source-of-truth framing pinned: 'the proxy-config DISCRIMINATED UNION + per-protocol shapes live in @driftstack/api-types/egress (EG-API-1.1, commit 555d8001). This file no longer redeclares them — it re-exports SessionEgressConfig + ProxyConfig for legacy callers and types EgressHandle against ProxyType from api-types so the cross-repo contract has one source of truth.' — pinned so the EG-API-1.1 commit 555d8001 + cross-repo-one-source-of-truth + legacy-re-export-only contract stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Schema-side: the proxy-config DISCRIMINATED UNION \+ per-protocol\s*\/\/ shapes live in `@driftstack\/api-types\/egress` \(EG-API-1\.1, commit\s*\/\/ 555d8001\)\. This file no longer redeclares them — it re-exports\s*\/\/ `SessionEgressConfig` \+ `ProxyConfig` for legacy callers and types\s*\/\/ `EgressHandle` against `ProxyType` from api-types so the cross-\s*\/\/ agent contract has one source of truth\./,
+      /\/\/ Schema-side: the proxy-config DISCRIMINATED UNION \+ per-protocol\s*\/\/ shapes live in `@driftstack\/api-types\/egress` \(EG-API-1\.1, commit\s*\/\/ 555d8001\)\. This file no longer redeclares them — it re-exports\s*\/\/ `SessionEgressConfig` \+ `ProxyConfig` for legacy callers and types\s*\/\/ `EgressHandle` against `ProxyType` from api-types so the cross-\s*\/\/ repo contract has one source of truth\./,
     );
   });
 
@@ -73,14 +73,14 @@ describe('services/session-egress content parity', () => {
     );
   });
 
-  it("SessionEgressService 2-method interface pinned: applyToSession (BEFORE-browser-spawn + throws-on-tunnel-unreachable + problem-type URI catalog) + releaseFromSession (idempotent). + 'Args shape matches the cross-agent contract from planning 133's §Per-session config schema — a SessionEgressConfig envelope with session_id + proxy discriminator + egress_safeguard.' framing — pinned so the cross-agent-config-envelope contract stays documented", () => {
+  it("SessionEgressService 2-method interface pinned: applyToSession (BEFORE-browser-spawn + throws-on-tunnel-unreachable + problem-type URI catalog) + releaseFromSession (idempotent). + 'Args shape matches the cross-repo contract from planning 133's §Per-session config schema — a SessionEgressConfig envelope with session_id + proxy discriminator + egress_safeguard.' framing — pinned so the cross-repo-config-envelope contract stays documented", () => {
     expect(body).toMatch(/export interface SessionEgressService \{/);
     expect(body).toMatch(
       /applyToSession\(args: \{ config: SessionEgressConfig \}\): Promise<EgressHandle>;/,
     );
     expect(body).toMatch(/releaseFromSession\(handle: EgressHandle\): Promise<void>;/);
     expect(body).toMatch(
-      /Args shape matches the cross-agent contract from planning 133's\s*\*\s+§"Per-session config schema" — a SessionEgressConfig envelope with\s*\*\s+session_id \+ proxy discriminator \+ egress_safeguard\./,
+      /Args shape matches the cross-repo contract from planning 133's\s*\*\s+§"Per-session config schema" — a SessionEgressConfig envelope with\s*\*\s+session_id \+ proxy discriminator \+ egress_safeguard\./,
     );
   });
 

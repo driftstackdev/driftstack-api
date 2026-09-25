@@ -4,7 +4,7 @@ import { ProfileInUseError } from '../../src/lib/errors.js';
 import { InMemorySessionsRepo } from '../integration/_helpers/in-memory-sessions-repo.js';
 import type { NewSessionInput } from '../../src/services/sessions.js';
 
-// A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard. A
+// Finding #7 (W2979/W2980) — single-active-session-per-profile guard. A
 // session-create carrying a profile_id that already has a NON-TERMINAL session
 // for the account is REFUSED with ProfileInUseError so two sessions can't both
 // restore + clobber the same sealed cookie/state blob. These in-memory unit

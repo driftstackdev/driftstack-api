@@ -70,7 +70,9 @@ describe('gui-client lib/log-buffer content parity', () => {
     // #137 — an ERROR flushes immediately (cancelling any pending debounce) so the
     // last log before a crash reaches disk; non-errors stay debounced. Pinned so
     // the crash trail can't silently regress to a debounced-only write.
-    expect(body).toMatch(/if \(level === 'error'\) \{/);
+    // 2026-09-24 — or a line the caller asks to flush (the previous run's
+    // crash report, which is a WARN about that run, not an ERROR in this one).
+    expect(body).toMatch(/if \(level === 'error' \|\| opts\.flush === true\) \{/);
     expect(body).toMatch(/void persistNow\(\);/);
   });
 

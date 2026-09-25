@@ -351,7 +351,7 @@ describe('loadConfig', () => {
     expect(cfg.dashboardOrigin).toBe('https://app.driftstack.io');
   });
 
-  it('Arc 4 Wave 2.B sub-slice 8.18 METRICS_SCRAPE_TOKEN passes through to config', () => {
+  it('Arc 4 phase 2.B, slice 8.18 METRICS_SCRAPE_TOKEN passes through to config', () => {
     const cfg = loadConfig({
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',
       REDIS_URL: 'redis://localhost:6379',
@@ -360,7 +360,7 @@ describe('loadConfig', () => {
     expect(cfg.metricsScrapeToken).toBe('abcdef0123456789abcdef');
   });
 
-  it('Arc 4 Wave 2.B sub-slice 8.18 METRICS_SCRAPE_TOKEN undefined when env-var unset', () => {
+  it('Arc 4 phase 2.B, slice 8.18 METRICS_SCRAPE_TOKEN undefined when env-var unset', () => {
     const cfg = loadConfig({
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',
       REDIS_URL: 'redis://localhost:6379',
@@ -368,7 +368,7 @@ describe('loadConfig', () => {
     expect(cfg.metricsScrapeToken).toBeUndefined();
   });
 
-  it('Arc 4 Wave 2.B sub-slice 8.18 METRICS_SCRAPE_TOKEN < 16 chars is rejected', () => {
+  it('Arc 4 phase 2.B, slice 8.18 METRICS_SCRAPE_TOKEN < 16 chars is rejected', () => {
     expect(() =>
       loadConfig({
         DATABASE_URL: 'postgres://u:p@localhost:5432/db',

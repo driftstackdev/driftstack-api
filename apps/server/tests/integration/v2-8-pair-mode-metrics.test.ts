@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics integration.
+// Arc 4 phase 2.B, slice 8.18 (v2-#8) — Prometheus metrics integration.
 //
 // Pins three properties together:
 //   1. /metrics requires the bearer token
@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
-describe('Arc 4 Wave 2.B sub-slice 8.18 Prometheus pair-mode metrics', () => {
+describe('Arc 4 phase 2.B, slice 8.18 Prometheus pair-mode metrics', () => {
   let fx: TestAppFixture;
 
   afterEach(async () => {

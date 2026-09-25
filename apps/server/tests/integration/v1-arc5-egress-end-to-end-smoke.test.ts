@@ -16,14 +16,14 @@
 // split it created: the FULL payload at rest (what operators and the fleet
 // drift report read) and the customer-safe subset on the response.
 //
-// What's NOT in scope (gated on cross-agent):
-//   - eg.2 WebSocket control-plane listener (Agent 1 harness side)
+// What's NOT in scope (gated on the harness side):
+//   - eg.2 WebSocket control-plane listener (device harness side)
 //   - eg.2-side validation of the harness wire envelope
 //
 // The smoke simulates the harness emit by calling ingestEgressCapabilityReport
 // directly. When eg.2 lands, the WebSocket handler will call the same
 // service method — so this smoke pins the SERVER side of the chain
-// independently of the cross-agent piece.
+// independently of the harness-side piece.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';

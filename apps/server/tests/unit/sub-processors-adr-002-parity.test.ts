@@ -4,8 +4,10 @@
 // Pins THREE files that define the sub-processor + payment-rail
 // posture:
 //
-//   AGENTS.md — V-052 sub-processor list authoritative manifest
-//     (any addition outside the list = directional question first).
+//   docs/architecture.md — the V-052 sub-processor table, the internal
+//     manifest (any addition outside the list = directional question first).
+//     This roster was previously read from an untracked contributor-notes
+//     file; the architecture doc carries the same list and stays tracked.
 //
 //   apps/marketing-site/src/pages/legal/sub-processors.md — the
 //     customer-facing legal sub-processor table.
@@ -30,48 +32,40 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-const AGENTS = resolve(REPO_ROOT, 'AGENTS.md');
+const ARCH = resolve(REPO_ROOT, 'docs/architecture.md');
 const LEGAL = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal/sub-processors.md');
 const ADR = resolve(REPO_ROOT, 'docs/adr/ADR-002-stripe-only-payment-processing.md');
 
 describe('W733 sub-processors + ADR-002 Stripe-only parity', () => {
   it('all 3 files exist at canonical paths', () => {
-    expect(existsSync(AGENTS)).toBe(true);
+    expect(existsSync(ARCH)).toBe(true);
     expect(existsSync(LEGAL)).toBe(true);
     expect(existsSync(ADR)).toBe(true);
   });
 
-  it('CRITICAL AGENTS.md sub-processor roster pinned (V-052 revision 2026-05-03) — 10 vendors: Hetzner / Neon / Upstash / Cloudflare (R2+Pages+DNS) / Postmark / Sentry / Stripe / Anthropic (BYO bundled LLM only, opt-in) / Moneybird / MacStadium. Drift to adding outside this list = directional question first, never silent.', () => {
-    const a = read(AGENTS);
+  it('CRITICAL architecture sub-processor roster pinned (V-052) — 10 vendors: Hetzner / Neon / Upstash / Cloudflare R2 / Postmark / Sentry / Stripe / Anthropic (BYOK opt-in only) / Moneybird / MacStadium. Drift to adding outside this list = directional question first, never silent.', () => {
+    const a = read(ARCH);
 
+    // Hetzner is the host itself (ADR-001), not a row in the services table.
+    expect(a).toMatch(/\*\*ADR-001\*\* — Hetzner for control-plane hosting\./);
+    for (const vendor of [
+      'Neon Postgres',
+      'Upstash Redis',
+      'Cloudflare R2',
+      'Postmark',
+      'Sentry',
+      'Stripe',
+      'Anthropic',
+      'Moneybird',
+      'MacStadium',
+    ]) {
+      expect(a, `architecture sub-processor row ${vendor}`).toMatch(
+        new RegExp(`^\\| ${escapeRe(vendor)}\\s*\\|`, 'm'),
+      );
+    }
+    expect(a).toMatch(/\| Anthropic\s*\| Bundled-LLM AI agent \(BYOK opt-in only\)/);
     expect(a).toMatch(
-      /Sub-processor list \(revised 2026-05-03 — V-052\): Hetzner, Neon, Upstash, Cloudflare/,
-    );
-    expect(a).toMatch(
-      /\(R2 \+ Pages \+ DNS\), Postmark, Sentry, Stripe, Anthropic \(BYO bundled LLM only, opt-in\), Moneybird, MacStadium/,
-    );
-    expect(a).toMatch(
-      /Adding any sub-processor outside this list = directional question first, never silent/,
-    );
-  });
-
-  it('CRITICAL AGENTS.md crypto-rail-dropped-2026-05-03 framing pinned. Coinbase Commerce closed for non-US/Singapore 2026-03-31; Stripe sole rail at launch (fiat-only).', () => {
-    const a = read(AGENTS);
-
-    expect(a).toMatch(/Crypto rail dropped from launch \(2026-05-03\):/);
-    expect(a).toMatch(/Coinbase Commerce closed for non-US\/Singapore merchants 2026-03-31/);
-    expect(a).toMatch(/Stripe is the sole payment rail at launch \(fiat-only\)/);
-  });
-
-  it("CRITICAL AGENTS.md post-launch crypto candidates framing pinned. Stripe's native USDC/USDB (Dec 2025) is candidate for crypto re-entry pending EU merchant eligibility; alt processors (CoinGate / NOWPayments / BVNK / Triple-A) deferred.", () => {
-    const a = read(AGENTS);
-
-    expect(a).toMatch(
-      /Stripe's native USDC\/USDB support \(Dec 2025\) is the candidate for crypto re-entry/,
-    );
-    expect(a).toMatch(/pending EU merchant eligibility verification/);
-    expect(a).toMatch(
-      /Alternative EU-friendly crypto processors \(CoinGate, NOWPayments, BVNK, Triple-A\) deferred to post-launch/,
+      /Sub-processor list locked per V-052\. Adding a vendor outside this list = directional question first\./,
     );
   });
 
@@ -200,22 +194,24 @@ describe('W733 sub-processors + ADR-002 Stripe-only parity', () => {
     expect(l).not.toMatch(/Hetzner narrowed.{0,100}dev\/staging only/);
   });
 
-  it('CRITICAL cross-file consistency — Stripe + Postmark + Sentry + Cloudflare + Hetzner appear in BOTH AGENTS.md sub-processor list AND legal/sub-processors.md customer table. Drift would let one document show vendors the other does not.', () => {
-    const a = read(AGENTS);
+  it('CRITICAL cross-file consistency — Stripe + Postmark + Sentry + Cloudflare + Hetzner appear in BOTH the architecture sub-processor table AND legal/sub-processors.md customer table. Drift would let one document show vendors the other does not.', () => {
+    const a = read(ARCH);
     const l = read(LEGAL);
 
     for (const vendor of ['Stripe', 'Postmark', 'Sentry', 'Cloudflare', 'Hetzner']) {
-      expect(a, `AGENTS.md ${vendor}`).toMatch(new RegExp(vendor));
+      expect(a, `architecture ${vendor}`).toMatch(new RegExp(vendor));
       expect(l, `legal ${vendor}`).toMatch(new RegExp(vendor));
     }
   });
 
   it('Sub-processors + ADR-002 5-invariant cluster — V-052 anchor + 10-vendor manifest + crypto-rail-dropped framing + ADR-002 Accepted-2026-05-03 + 4-constraint rationale + Stripe 5-primitive roster + driftstack_llm_tokens meter + Mollie-deferred-revisit-triggers.', () => {
-    const a = read(AGENTS);
+    const a = read(ARCH);
     const d = read(ADR);
 
     expect(a).toMatch(/V-052/);
-    expect(a).toMatch(/Crypto rail dropped from launch \(2026-05-03\)/);
+    expect(d).toMatch(
+      /Coinbase Commerce was earlier in the rail mix; dropped 2026-05-03 \(V-052\)/,
+    );
     expect(d).toMatch(/V-052/);
     expect(d).toMatch(/D-027/);
     expect(d).toMatch(/driftstack_llm_tokens/);

@@ -9,15 +9,15 @@
 // replacement for the verb→driver translation in the (unwired,
 // architecture-superseded) RealAgentExecutor — agent-session intents
 // dispatch over the control-plane WSS by intentName, NOT the local driver
-// (see docs/internal/cross-agent-control-plane-contract.md).
+// (see the internal harness control-plane contract notes).
 //
 // Pure + transport-agnostic on purpose: it produces the params OBJECT and
 // validates it against HARNESS_INTENT_PARAM_SCHEMAS, but does NOT serialise
 // inputParams. So this mapping is stable regardless of how the envelope is encoded.
 //
 // ⛔ STALE (2026-08-26) — this said the Swift `Data` wire codec was "still pending
-// Agent-3 confirmation". It was RESOLVED 2026-06-05, and the very header this line
-// points at says so: "Wire codec (RESOLVED 2026-06-05 by Agent-3): … cross the wire
+// harness confirmation". It was RESOLVED 2026-06-05, and the very header this line
+// points at says so: "Wire codec (confirmed against the harness 2026-06-05): … cross the wire
 // as a BASE64 STRING of the UTF-8 JSON". `harness-control-codec.ts` has implemented
 // both directions since.
 //
@@ -141,7 +141,7 @@ function mapIntent(intent: AgentIntent): AgentIntentDispatch {
     case 'behavioral_pause':
       // reading_word_count wins (→ persona-scaled reading pause); else duration_ms
       // (→ explicit pause); else neither → bare {} = harness persona idle pause.
-      // W1223 (A3) — reading pauses always request scroll_through: the harness
+      // W1223 — reading pauses always request scroll_through: the harness
       // segmentedReadingPlan traverses long content (read→scroll→read) instead of a
       // frozen multi-minute dwell (a tell), and degrades to a single in-place dwell
       // (byte-identical to the old behaviour) for content that fits the viewport — so
@@ -181,7 +181,7 @@ function mapInteract(intent: Extract<AgentIntent, { kind: 'interact' }>): AgentI
       // CSS selector is the only locator the AgentIntent carries today.
       // The harness routes `strategy` straight to W3C WebDriver, so we emit the
       // W3C rawValue 'css selector' (NOT a friendly 'css') — the API translates
-      // friendly→W3C so the harness stays W3C-faithful (A3 bus W115). When the
+      // friendly→W3C so the harness stays W3C-faithful (W115). When the
       // customer schema later exposes other locators, map them here too
       // (xpath→'xpath', link_text→'link text', …).
       return {
@@ -213,7 +213,7 @@ function mapInteract(intent: Extract<AgentIntent, { kind: 'interact' }>): AgentI
           strategy: 'css selector',
           value: intent.selector,
           text: intent.value,
-          // W1150 (A3 W1149) — forwarded only when set: sensitive fields get
+          // W1150 (W1149) — forwarded only when set: sensitive fields get
           // no visible typo-corrections harness-side (and are never logged).
           ...(sensitive
             ? { sensitive: true }
@@ -231,7 +231,7 @@ function mapInteract(intent: Extract<AgentIntent, { kind: 'interact' }>): AgentI
       return { ok: true, intentName: 'scroll', params: {} };
 
     case 'press':
-      // W540/W1221 — the harness `press_key` handler is LIVE (A3 W1221): one
+      // W540/W1221 — the harness `press_key` handler is LIVE (W1221): one
       // genuine W3C key press (keyDown+keyUp) on the FOCUSED element, for submit
       // (Enter), focus traversal (Tab), dismiss (Escape), list nav (Arrow*). The
       // customer's interact:press carries the DOM KeyboardEvent.key name in
@@ -272,7 +272,7 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       // `return` to yield a value — a bare expression returns undefined → the
       // condition is never met → a full 5s timeout. Emit a return-statement.
       //
-      // ⛔ SHADOW ROOTS (P-3, 2026-09-06). A3 supplied the native template while
+      // ⛔ SHADOW ROOTS (P-3, 2026-09-06). The harness supplied the native template while
       // answering the "can we drop this predicate" question, and it reads
       // `!!deepQuerySelector(sel)` — the harness's own selector resolution PIERCES
       // shadow roots. A plain `document.querySelector` does not, so this predicate
@@ -280,7 +280,7 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       // about whether the same selector matched. That is worse than either
       // behaviour alone: the reason this predicate exists is that it does MORE than
       // the native one (rendered visibility, which the native wait does not check at
-      // all), so it must not quietly do LESS on another axis. ⚠️ What A3 supplied is
+      // all), so it must not quietly do LESS on another axis. ⚠️ What the harness supplied is
       // the CALL, not the implementation — the walker below is our own
       // breadth-first descent into open shadow roots, so it matches the native path's
       // REACH and is not claimed to match its traversal. Kept small because it ships
@@ -369,8 +369,8 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       // Previously this returned ok:false → the executor HALTED the whole plan on
       // the settle step, so a "navigate then screenshot" plan lost its screenshot.
       //
-      // ⛔ WHERE IT RUNS, and it is not behind a world boundary. A3 established
-      // (V-2026-09-04, and they corrected their own earlier answer) that
+      // ⛔ WHERE IT RUNS, and it is not behind a world boundary. The harness established
+      // (V-2026-09-04, correcting its own earlier answer) that
       // `WebDriverClient.waitFor` polls by calling `executeScript(predicate)`, and
       // every `executeScript` compiles in the PAGE'S MAIN WORLD through
       // page-replaceable built-ins. So everything this touches is observable to a
@@ -433,7 +433,7 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       // ⛔ AND IT ALWAYS ASKS FOR ITS OWN TIMEOUT (see below). The 30s device
       // default is never what bounds a settle now, whoever is on the other end.
       //
-      // ⛔ THE NATIVE JS-FREE FORM IS STILL NOT AVAILABLE FOR THIS. A3 answered
+      // ⛔ THE NATIVE JS-FREE FORM IS STILL NOT AVAILABLE FOR THIS. The harness answered
       // 2026-09-06: `{ for: { selector, appears } }` compiles to
       // `!!deepQuerySelector(arguments[0]) === arguments[1]` — EXISTENCE ONLY. The
       // script-free `{ for: { seconds } }` form carries no script at all, but it
@@ -441,7 +441,7 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       // doing, which is both slower on a fast page and a constant of its own.
       // Named as the alternative that was considered, not as one that was missed.
       //
-      // ⭐ A3's larger finding, which is theirs and is unchanged by this: the tell
+      // ⭐ The harness side's larger finding, which is theirs and is unchanged by this: the tell
       // is the CADENCE, not the call. `pollIntervalMs` is a fixed 250 ms with no
       // jitter, so an instrumented page sees the same reads at a machine-perfect
       // interval. That interval is the device's to change, not ours (device Q5).

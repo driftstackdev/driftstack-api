@@ -1,6 +1,6 @@
 // T-9 — per-agent-session bounded ring of network-log entries.
 //
-// The harness (A3, the fork) emits HarnessOutbound.networkRequests keyed by the
+// The harness (driving the fork) emits HarnessOutbound.networkRequests keyed by the
 // AGENT session id: the per-request rows the simulator's DevTools-style Network
 // pane shows (URL, method, status, and — the point of the feature — the
 // negotiated wire protocol h1/h2/h3). The ownership-gated relay

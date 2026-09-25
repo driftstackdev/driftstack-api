@@ -26,7 +26,7 @@
 // identifies it is therefore the disclosed behaviour, not a workaround — and it is what the
 // Session-metadata row's "aggregated counters retained indefinitely" clause describes.
 //
-// Design record: docs/internal/2026-08-12-retention-anonymisation-design.md
+// Design record: the internal retention-anonymisation design notes (2026-08-12)
 //
 // ── Constraints discovered before writing these statements ──────────────────────────
 //

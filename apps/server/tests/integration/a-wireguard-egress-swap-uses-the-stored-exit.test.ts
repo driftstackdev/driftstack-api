@@ -163,8 +163,9 @@ describe('POST /v1/agent-sessions/:id/egress onto a WireGuard proxy (mid-session
     expect(identity.ip).toBe(STORED_EXIT.ip);
     expect(identity.country).toBe('NL');
     expect(identity.timezone).toBe(STORED_EXIT.timezone);
-    // A tunnel carries UDP by nature — the same rule the cache path applies.
-    expect(identity.quic_ok).toBe(true);
+    // Owner item 9 — nothing measured QUIC through this tunnel, so it is not
+    // reported (a tunnel carrying UDP is an expectation, not a check).
+    expect(identity.quic_ok).toBe(false);
     // The observation's OWN date, never the reply time.
     expect(identity.probed_at).toBe(OBSERVED_AT.toISOString());
   });

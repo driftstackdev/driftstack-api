@@ -1,7 +1,7 @@
-// In-memory latest-pageState-per-AGENT-session store (W650 / A3 W1254).
+// In-memory latest-pageState-per-AGENT-session store (W650 / W1254).
 //
 // The harness emits HarnessOutbound.pageState keyed by the AGENT session id
-// (== the sessionAssign.sessionId we dispatch — A3 W1254 verified there is NO
+// (== the sessionAssign.sessionId we dispatch — W1254 verified there is NO
 // driver `ses_` id on the wire) on every agent-initiated navigate
 // (loading → loaded | errored). The fleet-control-registry's onPageState
 // consumer writes the latest here; GET /v1/agent-sessions/:id/page-state reads
@@ -64,11 +64,11 @@ export interface SessionPageState {
   // state per tab; the store itself stays a per-session record for now (no per-tab
   // Map restructure yet), which is a GUI-side decision, not a missing wire field.
   //
-  // ⛔ STALE (2026-08-26) — this said "A3 contract pending … null until the box
+  // ⛔ STALE (2026-08-26) — this said "harness contract pending … null until the box
   // sends it". The box SENDS it: `HarnessCoordinator.stampTabId` is applied at five
   // PageState construction sites and `tabId` is on the wire type
   // (ControlClient.swift:755). ⚠️ The cost of leaving it was a FALSE BLOCKER pointed
-  // at another agent — per-tab keying read as waiting on a harness contract that had
+  // at the harness side — per-tab keying read as waiting on a harness contract that had
   // already landed. Same class as the four correlator comments; this one attributed
   // the delay to someone.
   tabId: string | null;

@@ -46,7 +46,7 @@ describe('LK.6.d — useInputCapture hook', () => {
     expect(body).toMatch(/type: 'touchEnd'/);
     expect(body).toMatch(/type: 'keyDown'/);
     expect(body).toMatch(/type: 'keyUp'/);
-    // Wheel/trackpad scroll now drives a touchStream drag (A3 W2736: the fork adds
+    // Wheel/trackpad scroll now drives a touchStream drag (W2736: the fork adds
     // its OWN momentum to every `swipe`, so ~100 wheel events/sec stacked into jumpy
     // overshoot / "randomly scrolls back up") → the GUI no longer emits `swipe`.
     expect(body).not.toMatch(/type: 'swipe'/);
@@ -69,7 +69,7 @@ describe('LK.6.d — useInputCapture hook', () => {
     expect(inline + multiline).toBeGreaterThanOrEqual(5);
   });
 
-  it('coordinate translation maps browser px → the per-archetype captured-frame logical device frame (threaded `logical`, default 402×874), NOT the SFU-downscaled track px (founder tap-offset fix / A3 W2811 + per-archetype content-only fork A3 84de32ad4d)', () => {
+  it('coordinate translation maps browser px → the per-archetype captured-frame logical device frame (threaded `logical`, default 402×874), NOT the SFU-downscaled track px (founder tap-offset fix / W2811 + per-archetype content-only fork 84de32ad4d)', () => {
     // The element-offset math stays.
     expect(body).toMatch(/event\.clientX - rect\.left/);
     // Scale against the per-archetype captured-frame logical device frame (the live

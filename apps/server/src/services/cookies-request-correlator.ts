@@ -1,7 +1,7 @@
 // Cookies PULL correlator (founder #48 — live cookie-jar view in the simulator
 // drawer). The transport-agnostic CORE of GET /v1/agent-sessions/:id/cookies:
 // it issues a `cookiesRequest` over the node's LIVE control WSS and awaits the
-// matching `cookiesResult`, correlated by `requestId` (A2 W2816 / A3 W2817 PULL
+// matching `cookiesResult`, correlated by `requestId` (W2816 / W2817 PULL
 // contract). A direct mirror of IntentDispatchCorrelator, but keyed by requestId
 // and with a single fixed timeout (no per-intent cap), since a cookie pull is a
 // one-shot read, not a behavioral intent.
@@ -17,7 +17,7 @@
 // ⛔ STALE (2026-08-26) — kept as the record of a past belief, NOT true now. The
 // harness handler is LIVE: `HarnessCoordinator.handleCookiesRequest` fetches a real
 // jar via the standard W3C WD `GET /cookie` ("Zero fork work, works on the deployed
-// box today"), so the A1 #36 fork extension was never required and a wired request
+// box today"), so the #36 fork extension was never required and a wired request
 // resolves `ok` with the jar, not `timeout`.
 //
 // ⚠️ This is the THIRD comment to have claimed this one path was inert — the others
@@ -26,7 +26,7 @@
 // REACHABLE would read one, conclude the path was dead, and stop. That is exactly
 // what happened to the oversized-name/path jar-drop fixed in 9b1cca9ac.
 //
-// ⛔ SUPERSEDED: "Ships gated-inert until A3's harness `getAllCookies` WD-extension
+// ⛔ SUPERSEDED: "Ships gated-inert until the harness's `getAllCookies` WD-extension
 // lands: until then a live node never emits `cookiesResult`, so a wired request
 // resolves `timeout` — which the GUI renders as the 'pending data source' state."
 
@@ -44,7 +44,7 @@ export interface CookiesTransport {
 }
 
 /** A cookie pull is a one-shot read of the live jar — generous but bounded so a
- *  silent (pre-A3) or wedged node can't hang the GET indefinitely. */
+ *  silent (pre-handler) or wedged node can't hang the GET indefinitely. */
 export const COOKIES_REQUEST_TIMEOUT_MS = 10_000;
 
 /** Uniform outcome — never rejects, so the route maps each case to a status. */

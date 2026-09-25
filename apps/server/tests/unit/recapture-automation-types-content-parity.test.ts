@@ -11,7 +11,7 @@
 //     entire fingerprint reference set captured against the old
 //     version MAY have drifted.'
 //   • Phase-3 manual workflow framing pinned 'Today the workflow
-//     is manual: when Agent 1 notices a new iOS version on Apple's
+//     is manual: when the fork notices a new iOS version on Apple's
 //     release notes, the founder runs the BS Automate capture
 //     batches manually. This package's mock implementation models
 //     the SAME workflow programmatically so a future scheduled-job
@@ -62,9 +62,9 @@ describe('W458.A packages/recapture-automation/src/types.ts content parity', () 
     );
   });
 
-  it("Phase-3 manual-workflow framing pinned: 'Today the workflow is manual: when Agent 1 notices a new iOS version on Apple's release notes, the founder runs the BS Automate capture batches manually. This package's mock implementation models the SAME workflow programmatically so a future scheduled-job + alerting layer can drop in.'", () => {
+  it("Phase-3 manual-workflow framing pinned: 'Today the workflow is manual: when the fork notices a new iOS version on Apple's release notes, the founder runs the BS Automate capture batches manually. This package's mock implementation models the SAME workflow programmatically so a future scheduled-job + alerting layer can drop in.'", () => {
     expect(body).toMatch(
-      /\/\/ Phase 3\+ workstream\. Today the workflow is manual: when Agent 1\s*\/\/ notices a new iOS version on Apple's release notes, the founder runs\s*\/\/ the BS Automate capture batches manually\. This package's mock\s*\/\/ implementation models the SAME workflow programmatically so a future\s*\/\/ scheduled-job \+ alerting layer can drop in\./,
+      /\/\/ Phase 3\+ workstream\. Today the workflow is manual: when the fork\s*\/\/ notices a new iOS version on Apple's release notes, the founder runs\s*\/\/ the BS Automate capture batches manually\. This package's mock\s*\/\/ implementation models the SAME workflow programmatically so a future\s*\/\/ scheduled-job \+ alerting layer can drop in\./,
     );
   });
 

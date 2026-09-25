@@ -435,7 +435,7 @@ func TestKeyedPostIsRetried(t *testing.T) {
 
 // A response body larger than the 8 MiB drain cap must surface an EXPLICIT
 // size-limit TransportError, not a silently-truncated body that then fails
-// JSON decoding with a misleading "failed to parse JSON response body". Fable
+// JSON decoding with a misleading "failed to parse JSON response body". The
 // SDK re-audit 2026-07-02: io.LimitReader truncates without error, so the old
 // read (cap exactly) masked oversized bodies as parse failures.
 func TestOversizedResponseBody_SurfacesExplicitError(t *testing.T) {

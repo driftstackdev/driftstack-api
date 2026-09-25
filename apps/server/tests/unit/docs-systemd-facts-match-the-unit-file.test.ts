@@ -33,7 +33,7 @@ import { describe, expect, it } from 'vitest';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const SYSTEMD_DIR = resolve(REPO_ROOT, 'infra/systemd');
 
-/** Operator-facing procedure docs. `docs/internal/` is historical record, not procedure. */
+/** Operator-facing procedure docs. Internal design notes are historical record, not procedure. */
 const DOC_DIRS = ['docs/runbooks', 'docs/deployment', 'docs/operations'] as const;
 
 interface Unit {

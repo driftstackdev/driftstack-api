@@ -1,5 +1,5 @@
 // Drift guard for apps/server/src/services/metrics-registry.ts. Pins the
-// Arc 4 Wave 2.B sub-slice 8.18 in-process Prometheus metrics registry
+// Arc 4 phase 2.B, slice 8.18 in-process Prometheus metrics registry
 // — counter + gauge surface, Prometheus 0.0.4 line-based exposition,
 // METRIC_NAMES single-source-of-truth catalog, NUL-byte composite key.
 
@@ -23,9 +23,9 @@ describe('services/metrics-registry content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Arc 4 Wave 2.B sub-slice 8.18 module-level framing pinned: 'in-process metrics registry. Renders Prometheus exposition format directly; no external deps. The surface is intentionally narrow (counters + gauges, no histograms) — histograms can land in a follow-up when the first signal calls for them. The /metrics route (registerMetricsRoutes) scrapes via registry.render().' — pinned so the 8.18 anchor + no-external-deps + counter+gauge-only-no-histogram scope + /metrics scrape path stay documented", () => {
+  it("Arc 4 phase 2.B, slice 8.18 module-level framing pinned: 'in-process metrics registry. Renders Prometheus exposition format directly; no external deps. The surface is intentionally narrow (counters + gauges, no histograms) — histograms can land in a follow-up when the first signal calls for them. The /metrics route (registerMetricsRoutes) scrapes via registry.render().' — pinned so the 8.18 anchor + no-external-deps + counter+gauge-only-no-histogram scope + /metrics scrape path stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Arc 4 Wave 2\.B sub-slice 8\.18 \(v2-#8\) — in-process metrics registry\./,
+      /\/\/ Arc 4 phase 2\.B, slice 8\.18 \(v2-#8\) — in-process metrics registry\./,
     );
     expect(body).toMatch(
       /\/\/ Renders Prometheus exposition format directly; no external deps\. The\s*\/\/ surface is intentionally narrow \(counters \+ gauges, no histograms\) —\s*\/\/ histograms can land in a follow-up when the first signal calls for\s*\/\/ them\. The \/metrics route \(registerMetricsRoutes\) scrapes via\s*\/\/ registry\.render\(\)\./,

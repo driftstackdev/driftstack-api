@@ -113,7 +113,7 @@ describe('instrumentSlowQueryLogging', () => {
 
     // Built via concat so the source carries no literal `sk`+`_live_` string
     // (the GitHub secret-scanner blocks those even in obviously-fake fixtures —
-    // see feedback_github_secret_scanner_blocks_test_literals).
+    // a push carrying one is rejected).
     const secret = 'sk' + '_live_super_secret_value_should_never_be_logged';
     return (client as unknown as { unsafe: (s: string, p?: unknown[]) => PromiseLike<unknown> })
       .unsafe('UPDATE api_keys SET key_hash = $1 WHERE id = $2', [secret, 'key_42'])

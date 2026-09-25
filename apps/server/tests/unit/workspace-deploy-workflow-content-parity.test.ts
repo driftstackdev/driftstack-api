@@ -1,6 +1,6 @@
 // W542.A — drift guard for /.github/workflows/deploy.yml.
 // REWRITTEN 2026-05-17 for Option B verdict (docker dropped; see
-// docs/internal/2026-05-16-deploy-yml-verdict-design.md).
+// the 2026-05-16 deploy.yml verdict design notes).
 //
 // Pins the Option B deploy pipeline shape:
 //

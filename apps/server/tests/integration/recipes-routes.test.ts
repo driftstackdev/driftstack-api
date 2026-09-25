@@ -378,7 +378,7 @@ describe('AI-B4 POST /v1/recipes — wired', () => {
   });
 });
 
-// Arc 4 Wave 2.B sub-slice 8.20.l (v2-#8) — activation gate posture
+// Arc 4 phase 2.B, slice 8.20.l (v2-#8) — activation gate posture
 // pin for recipes. The route requires BOTH recipesRepo +
 // agentSessionsRepo wired in AppDeps; the test fixture wires
 // recipesRepo unconditionally but agentSessionsRepo only when

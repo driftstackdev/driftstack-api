@@ -56,7 +56,7 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     );
     expect(body).not.toMatch(/ADR-004/);
     expect(body).toMatch(/^## Four bucket keys$/m);
-    // S36 2026-07-07 (fable-truth-audit): global is only drained by calls
+    // S36 2026-07-07 (truth audit): global is only drained by calls
     // WITHOUT a dedicated bucket — each call consumes exactly one bucket.
     expect(body).toMatch(
       /- \*\*`global`\*\* — every authenticated `\/v1\/\*` call that doesn't\s*have a dedicated bucket below\./,

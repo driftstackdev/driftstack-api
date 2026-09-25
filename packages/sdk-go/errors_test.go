@@ -240,7 +240,7 @@ func TestSessionTimeoutExtractsTimeoutMs(t *testing.T) {
 
 func TestProfileInUseExtractsActiveSessionID(t *testing.T) {
 	t.Parallel()
-	// A3 finding #7 — single-active-session-per-profile guard 409. The server
+	// Harness finding #7 — single-active-session-per-profile guard 409. The server
 	// spreads active_session_id to the problem top level; the SDK surfaces it as
 	// ActiveSessionID (cross-SDK parity with TS err.activeSessionId / Python
 	// err.active_session_id). errors.Is matches BOTH ErrProfileInUse and the

@@ -39,7 +39,7 @@ describe('W558.C /docs/architecture/team-roles-taxonomy.md content parity', () =
     expect(body).toMatch(
       /\*\*Status:\*\* locked as of V-142 \(2026-05-05\) per founder DECISION 5 in/,
     );
-    expect(body).toMatch(/the overnight directive\./);
+    expect(body).toMatch(/the founder directive of that date\./);
     expect(body).toMatch(/\*\*Owner:\*\* Driftstack engineering\./);
     expect(body).toMatch(
       /\*\*Audience:\*\* engineers working on multi-seat account support, which has/,

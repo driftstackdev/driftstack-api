@@ -16,7 +16,7 @@ function read(p: string): string {
 }
 
 describe('W609 scripts/git-hooks + install-git-hooks content parity', () => {
-  it('commit-msg: V-527 framing + V-205 attribution rejection (Claude/anthropic/GPT/Copilot/robot-emoji/Generated-with-Claude/noreply tooling) + V-211 anonymity rejection (founder/Joel/Theunissen/Joeltheunissen standalone-token regex) + set -euo pipefail + fail-with-pattern+policy reporter pinned', () => {
+  it('commit-msg: V-527 framing + V-205 attribution rejection (Claude/anthropic/GPT/Copilot/robot-emoji/Generated-with-Claude/noreply tooling) + V-211 anonymity rejection (founder standalone-token regex + personal names from the out-of-repo list) + set -euo pipefail + fail-with-pattern+policy reporter pinned', () => {
     const body = read(HOOK);
     expect(body).toMatch(/^#!\/usr\/bin\/env bash$/m);
     expect(body).toMatch(
@@ -38,7 +38,9 @@ describe('W609 scripts/git-hooks + install-git-hooks content parity', () => {
     );
     expect(body).toMatch(/^#\s+emoji markers, ZERO noreply@<tool>\.com addresses\.$/m);
     expect(body).toMatch(/^#\s+- V-211 anonymity\s+— ZERO founder framing, ZERO personal-name$/m);
-    expect(body).toMatch(/^#\s+references \(currently: Joel, Joeltheunissen, Theunissen\) in$/m);
+    expect(body).toMatch(
+      /^#\s+references \(listed outside the repo, see scripts\/personal-names\.mjs\) in$/m,
+    );
     expect(body).toMatch(/^#\s+commit subject or body\.$/m);
     expect(body).toMatch(/^# Canonical source — version-controlled\. Install per-clone with$/m);
     expect(body).toMatch(
@@ -59,12 +61,15 @@ describe('W609 scripts/git-hooks + install-git-hooks content parity', () => {
     expect(body).toMatch(/^\s+'noreply@anthropic\\\.com'$/m);
     expect(body).toMatch(/^\s+'noreply@github\\\.com'$/m);
     expect(body).toMatch(/^# V-211 anonymity patterns\. Match standalone tokens — avoid biting$/m);
-    expect(body).toMatch(/^# "foundered" \/ "foundation" \/ "Joeline" inside larger words\.$/m);
+    expect(body).toMatch(/^# "foundered" \/ "foundation" inside larger words\.$/m);
     expect(body).toMatch(/^REJECT_PATTERNS_V211=\($/m);
     expect(body).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Ff\]ounder\(\[\^\[:alpha:\]\]\|\$\)'/);
-    expect(body).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Jj\]oel\(\[\^\[:alpha:\]\]\|\$\)'/);
-    expect(body).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Tt\]heunissen\(\[\^\[:alpha:\]\]\|\$\)'/);
-    expect(body).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Jj\]oeltheunissen\(\[\^\[:alpha:\]\]\|\$\)'/);
+    // Personal names come from a list outside the repo, matched by
+    // scripts/personal-names.mjs — never spelled out or hashed in the hook; a
+    // check that cannot run fails the commit, and its notice reaches stderr.
+    expect(body).toMatch(/^PERSONAL_NAMES="\$HOOK_DIR\/\.\.\/personal-names\.mjs"$/m);
+    expect(body).toMatch(/NAME_HITS=\$\(node "\$PERSONAL_NAMES" "\$MSG_FILE"\) \|\| NAME_RC=\$\?/);
+    expect(body).toMatch(/the V-211 personal-name check could not run/);
     expect(body).toMatch(/^fail\(\) \{$/m);
     expect(body).toMatch(/echo "✗ commit-msg HOOK REJECTED: contains banned pattern" >&2/);
     expect(body).toMatch(/grep -iqE "\$PATTERN"; then/);

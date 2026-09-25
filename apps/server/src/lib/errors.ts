@@ -281,7 +281,7 @@ export class StorageQuotaExceededError extends ApiError {
   }
 }
 
-// A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard. A
+// Finding #7 (W2979/W2980) — single-active-session-per-profile guard. A
 // session-create carrying a `profile_id` that already has a NON-TERMINAL session
 // for the account is REFUSED with this 409: two concurrent sessions on the SAME
 // profile would both restore the same sealed cookie/state blob, diverge, and BOTH
@@ -321,7 +321,7 @@ export class ProfileInUseError extends ApiError {
  * SDK can branch ("auth failed → re-enter credentials", "unreachable → check the
  * host", "timeout → the proxy is slow/down", "egress_blocked → the proxy connects
  * but can't reach the internet"). `detail` is the human one-liner. Forward-
- * compatible with A3's W2931 post-dispatch box-reported egress failure (same
+ * compatible with the harness's W2931 post-dispatch box-reported egress failure (same
  * problem-type + reason enum, surfaced after launch instead of before it).
  */
 export class ProxyValidationFailedError extends ApiError {

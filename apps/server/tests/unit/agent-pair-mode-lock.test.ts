@@ -36,7 +36,7 @@ describe('Arc 2 v2-#8 sub-slice 8.8 InMemoryPairModeTakeoverLock', () => {
     expect(b2.acquired).toBe(true);
   });
 
-  // Arc 4 Wave 2.A sub-slice 8.14 (v2-#8) — race-condition pin.
+  // Arc 4 phase 2.A, slice 8.14 (v2-#8) — race-condition pin.
   // Two near-simultaneous tryAcquire calls on the same sessionId
   // resolve deterministically: exactly one wins; the loser sees the
   // winner's clientId. Both InMemory and Redis paths.
@@ -148,7 +148,7 @@ describe('Arc 2 v2-#8 sub-slice 8.8 RedisPairModeTakeoverLock', () => {
     expect(store.has('pair_lock:agt_x')).toBe(false);
   });
 
-  // Arc 4 Wave 2.B sub-slice 8.20.j (v2-#8) — atomic-release race
+  // Arc 4 phase 2.B, slice 8.20.j (v2-#8) — atomic-release race
   // regression pin. The original GET-then-DEL release had a window
   // where another client could acquire the lock between the GET and
   // the DEL — the original holder's stale DEL would then erase the

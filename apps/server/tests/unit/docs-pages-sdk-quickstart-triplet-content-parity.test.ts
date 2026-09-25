@@ -162,7 +162,7 @@ describe('W779 docs /sdk quickstart triplet content parity', () => {
     );
   });
 
-  it("CRITICAL TS session create + try/finally + destroy + console-out idiomatic shape pinned. S36 2026-07-07 (fable-truth-audit): the old 'per-tier idle timeout fires' comment was FICTIONAL — no idle timeout exists on any tier (MAX_SESSION_MINUTES_PER_TIER: 20 for free, null elsewhere; api-types common.ts); the comment now states the no-idle-timeout + free-tier-20-min-cap truth, matching S31's session-lifecycle wording.", () => {
+  it("CRITICAL TS session create + try/finally + destroy + console-out idiomatic shape pinned. S36 2026-07-07 (truth audit): the old 'per-tier idle timeout fires' comment was FICTIONAL — no idle timeout exists on any tier (MAX_SESSION_MINUTES_PER_TIER: 20 for free, null elsewhere; api-types common.ts); the comment now states the no-idle-timeout + free-tier-20-min-cap truth, matching S31's session-lifecycle wording.", () => {
     const p = read(TS_PAGE);
 
     expect(p).toMatch(/const session = await client\.sessions\.create\(\{ label: 'demo' \}\);/);

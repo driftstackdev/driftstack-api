@@ -1,6 +1,6 @@
 // W582 — task-refusal start-gate contract-mirror tests. The canonical
-// mechanism lives in A3's agent-service (task-refusal-contract.md); this
-// pins A2's mirror to the same semantics: normalize order, bias-to-allow,
+// mechanism lives in the harness's agent-service (task-refusal contract); this
+// pins this repo's mirror to the same semantics: normalize order, bias-to-allow,
 // bounds, lastIndex determinism, and the loader's skip-not-throw rules.
 
 import { readFileSync } from 'node:fs';
@@ -280,7 +280,7 @@ describe('W582 task-refusal contract mirror', () => {
     it('DANGEROUS_UNICODE source is byte-identical to the agent-service canonical class', () => {
       // CI has no cross-repo checkout, so pin the LITERAL source (copied from
       // driftstack/agent-service/src/page-representation.ts W1019/W1112). If
-      // A3 widens their class, this pin forces a deliberate A2 update.
+      // the harness widens its class, this pin forces a deliberate update here.
       expect(src).toContain(
         '/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2069\\uFEFF]/g',
       );

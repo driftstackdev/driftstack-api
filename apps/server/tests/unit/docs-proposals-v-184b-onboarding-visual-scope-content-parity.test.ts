@@ -1,11 +1,11 @@
 // W572.B — drift guard for /docs/proposals/post-launch/v-184b-onboarding-visual-scope.md.
 // V-184b Tier-3 scope outline 2026-05-05. Drift here either weakens
-// the autopilot-NEVER-decides-T3 boundary, drops a per-page section
+// the engineering-NEVER-decides-T3 boundary, drops a per-page section
 // from the 5-page (signup→verify-email→welcome→select-tier→
 // first-session) flow, or unsets the [FOUNDER COPY] redline markers.
 //
 //   • V-184b. Tier 3 scope outline. NOT customer-facing copy.
-//   • Per autopilot guardrails: T3 NEVER autonomously decide.
+//   • Per the decision-authority guardrails: T3 NEVER autonomously decide.
 //   • 5 onboarding pages with structural-changes + [FOUNDER COPY].
 //   • V-219* PHASE 3 patterns already approved (minimal header +
 //     oxblood-700 + DashboardLayout footer).
@@ -29,7 +29,7 @@ function read(p: string): string {
 describe('W572.B /docs/proposals/post-launch/v-184b-onboarding-visual-scope.md content parity', () => {
   const body = read(LIB);
 
-  it('Header + Tier-3 scope outline + autopilot-direction-2026-05-05 + 5-page V-184a baseline + Why-scope-proposal framing pinned', () => {
+  it('Header + Tier-3 scope outline + work-queue-direction-2026-05-05 + 5-page V-184a baseline + Why-scope-proposal framing pinned', () => {
     expect(body).toMatch(/^# V-184b — Onboarding visual UX scope proposal$/m);
     expect(body).toMatch(/\*\*Status:\*\* Tier 3 scope outline — surfaces for founder redline\./);
     expect(body).toMatch(/Contains NO autonomously-drafted customer-facing copy;/);
@@ -37,9 +37,9 @@ describe('W572.B /docs/proposals/post-launch/v-184b-onboarding-visual-scope.md c
     expect(body).toMatch(
       /marks each Tier 3 copy decision with `\[FOUNDER COPY\]` so the redline pass is bounded\./,
     );
-    expect(body).toMatch(/\*\*Source:\*\* Autopilot direction 2026-05-05/);
+    expect(body).toMatch(/\*\*Source:\*\* Work-queue direction 2026-05-05/);
     expect(body).toMatch(
-      /"V-184b Tier 3 onboarding visual UX \(founder-redline Tier 3 — DRAFT working-tree only, NOT commit; founder reviews on wake\)"\./,
+      /"V-184b Tier 3 onboarding visual UX \(founder-redline Tier 3 — DRAFT working-tree only, NOT commit; founder reviews before landing\)"\./,
     );
     expect(body).toMatch(
       /\*\*V-184a baseline:\*\* `apps\/customer-dashboard\/src\/pages\/\{signup,verify-email,welcome,select-tier,first-session\}\.astro`/,
@@ -47,7 +47,7 @@ describe('W572.B /docs/proposals/post-launch/v-184b-onboarding-visual-scope.md c
     expect(body).toMatch(/— all five Tier 1 scaffolding pages exist with minimal placeholder UX\./);
     expect(body).toMatch(/## Why a scope proposal instead of a working-tree draft/);
     expect(body).toMatch(
-      /Per autopilot guardrails: "T3 \(security architecture, customer data handling, pricing\/\$-numbers, marketing language\): NEVER autonomously decide\./,
+      /Per the decision-authority guardrails: "T3 \(security architecture, customer data handling, pricing\/\$-numbers, marketing language\): NEVER autonomously decide\./,
     );
     expect(body).toMatch(/If encountered, draft \+ surface for founder, move to next T1\."/);
     expect(body).toMatch(/V-184b is largely customer-facing copy \+ visual decisions\./);
@@ -70,7 +70,7 @@ describe('W572.B /docs/proposals/post-launch/v-184b-onboarding-visual-scope.md c
 
   it('Per-page scope outline 1-3 (signup + verify-email + welcome) framing pinned', () => {
     expect(body).toMatch(/### 1\. `signup\.astro`/);
-    expect(body).toMatch(/\*\*Structural changes the autopilot can safely propose:\*\*/);
+    expect(body).toMatch(/\*\*Structural changes engineering can safely propose:\*\*/);
     expect(body).toMatch(
       /- Add a `progress-step` component \(visual: 5-step indicator with current step highlighted in oxblood-700\) at top of the form panel\./,
     );
@@ -126,14 +126,14 @@ describe('W572.B /docs/proposals/post-launch/v-184b-onboarding-visual-scope.md c
       /\*\*Tier 3 sensitivity is HIGHEST on this page\*\* — this is where the customer commits to a tier with \$-amount visible\./,
     );
     expect(body).toMatch(
-      /Per autopilot guardrails: "pricing\/\$-numbers: NEVER autonomously decide\."/,
+      /Per the decision-authority guardrails: "pricing\/\$-numbers: NEVER autonomously decide\."/,
     );
     expect(body).toMatch(
-      /\*\*Structural changes the autopilot can safely propose \(NO pricing-touching\):\*\*/,
+      /\*\*Structural changes engineering can safely propose \(NO pricing-touching\):\*\*/,
     );
     expect(body).toMatch(/- Same progress-step indicator \(step 4\/5\)\./);
     expect(body).toMatch(/- Tier comparison shape — table vs card-row vs vertical-list\./);
-    expect(body).toMatch(/Founder picks; autopilot does NOT pick\./);
+    expect(body).toMatch(/Founder picks; engineering does NOT pick\./);
     expect(body).toMatch(
       /- "Start with trial pack" CTA must be visually distinct from "Skip to paid tier" path/,
     );
@@ -143,10 +143,10 @@ describe('W572.B /docs/proposals/post-launch/v-184b-onboarding-visual-scope.md c
       /- `\[FOUNDER COPY \+ PRICING\]` Tier names \+ descriptions \+ \$-amounts\./,
     );
     expect(body).toMatch(
-      /Per founder's locked tier-3-explicit-values memory, the canonical numbers live in `driftstack-repo` file 127/,
+      /Per founder's locked tier-3-explicit-values rule, the canonical numbers live in `driftstack-repo` file 127/,
     );
     expect(body).toMatch(
-      /— autopilot must not invent any numbers here\. Source: `packages\/api-types\/src\/capabilities\.ts`/,
+      /— engineering must not invent any numbers here\. Source: `packages\/api-types\/src\/capabilities\.ts`/,
     );
     expect(body).toMatch(
       /- `\[FOUNDER COPY\]` Trial-pack pitch \(\$2\.99 \/ 14 days \/ \$0\.18-per-hour decrement per ADR-003 — those numbers are locked, but the pitch language is open\)\./,
@@ -204,13 +204,13 @@ describe('W572.B /docs/proposals/post-launch/v-184b-onboarding-visual-scope.md c
       /1\. Founder reviews this proposal, marks structural items APPROVE \/ REJECT\./,
     );
     expect(body).toMatch(
-      /2\. Founder provides COPY for the `\[FOUNDER COPY\]` markers OR delegates back to autopilot with constraints/,
+      /2\. Founder provides COPY for the `\[FOUNDER COPY\]` markers OR delegates back to engineering with constraints/,
     );
     expect(body).toMatch(
       /\(e\.g\. "use marketing-site voice; no \$-numbers; max 25 words per heading"\)\./,
     );
     expect(body).toMatch(
-      /3\. Either the founder or a future autopilot session translates the redlines into actual `\.astro` edits,/,
+      /3\. Either the founder or a future engineering pass translates the redlines into actual `\.astro` edits,/,
     );
     expect(body).toMatch(
       /lands as V-184b-1 \/ V-184b-2 etc\. per page \(smaller PRs preferred for onboarding flow\)\./,

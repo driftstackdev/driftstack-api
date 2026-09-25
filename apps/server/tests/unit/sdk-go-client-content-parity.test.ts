@@ -184,7 +184,7 @@ describe('W588.A packages/sdk-go/client.go content parity', () => {
     // Reads one byte past the cap so an oversized body is DETECTED and surfaced
     // as an explicit size-limit error rather than silently truncated by
     // io.LimitReader (which returns no error) and misreported as a JSON parse
-    // failure. Fable SDK re-audit 2026-07-02.
+    // failure. SDK re-audit 2026-07-02.
     expect(body).toMatch(
       /body, err := io\.ReadAll\(io\.LimitReader\(resp\.Body, maxBodyBytes\+1\)\)/,
     );

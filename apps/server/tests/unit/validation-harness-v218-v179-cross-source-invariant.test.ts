@@ -12,7 +12,7 @@
 //   lives in the RecaptureService implementation — this service is
 //   just the scheduler + ledger'.
 //
-//   V-203 forward-wiring framing — 'Cross-repo dep: when Agent 1's
+//   V-203 forward-wiring framing — 'Cross-repo dep: when the device side's
 //   V-203 Phase 2A vendor probes land, the production
 //   RecaptureService can wire vendor-probe execution behind the
 //   same triggerRecapture interface. Until then, the mock from
@@ -80,9 +80,9 @@ describe('W957 V-218 + V-179 validation-harness cross-source invariant', () => {
 
   // ─── V-203 forward-wiring framing ────────────────────────────
 
-  it("CRITICAL V-203 forward-wiring framing — 'Cross-repo dep: when Agent 1's V-203 Phase 2A vendor probes land, the production RecaptureService can wire vendor-probe execution behind the same triggerRecapture interface. Until then, the mock from packages/recapture-automation is the dispatch target'. The same-interface + V-203-future-wiring is the swap-without-breaking-callers contract.", () => {
+  it("CRITICAL V-203 forward-wiring framing — 'Cross-repo dep: when the device side's V-203 Phase 2A vendor probes land, the production RecaptureService can wire vendor-probe execution behind the same triggerRecapture interface. Until then, the mock from packages/recapture-automation is the dispatch target'. The same-interface + V-203-future-wiring is the swap-without-breaking-callers contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/validation-harness.ts'));
-    expect(p).toMatch(/Cross-repo dep: when Agent 1's V-203 Phase 2A vendor probes land,/);
+    expect(p).toMatch(/Cross-repo dep: when the device side's V-203 Phase 2A vendor probes land,/);
     expect(p).toMatch(/the production RecaptureService can wire vendor-probe execution/);
     expect(p).toMatch(/behind the same triggerRecapture interface\. Until then, the mock/);
     expect(p).toMatch(/from packages\/recapture-automation is the dispatch target\./);

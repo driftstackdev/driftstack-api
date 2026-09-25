@@ -76,7 +76,7 @@ describe('Arc 6 docs.pagination — pagination reference parity', () => {
     expect(body).toMatch(/opaque/);
   });
 
-  it('canonical drive-to-completion loop in all 3 SDKs (TS / Python / Go). S36 2026-07-07 (fable-truth-audit): the Go example now compiles against the real SDK — query type is *ListAuditLogQuery (ListAuditOpts never existed), List takes a pointer, and AuditLogListPage.NextCursor is *string so the loop nil-checks + derefs it.', () => {
+  it('canonical drive-to-completion loop in all 3 SDKs (TS / Python / Go). S36 2026-07-07 (truth audit): the Go example now compiles against the real SDK — query type is *ListAuditLogQuery (ListAuditOpts never existed), List takes a pointer, and AuditLogListPage.NextCursor is *string so the loop nil-checks + derefs it.', () => {
     expect(body).toMatch(/### TypeScript/);
     expect(body).toMatch(/### Python/);
     expect(body).toMatch(/### Go/);

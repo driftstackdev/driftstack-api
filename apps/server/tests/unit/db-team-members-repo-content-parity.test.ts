@@ -99,7 +99,7 @@ describe('W448.C apps/server/src/db/team-members-repo.ts content parity', () => 
   });
 
   it('findInviteByTokenHash is SINGLE-USE (isNull(acceptedAt) filter) + findAccountEmail: limit 1 lookups; findAccountEmail returns row?.email ?? null', () => {
-    // Single-use guard (Fable auth re-audit 2026-07-02): an accepted invite
+    // Single-use guard (auth re-audit 2026-07-02): an accepted invite
     // token must never be returned, so a used token can't be replayed to
     // re-join a team / re-escalate a role.
     expect(body).toMatch(

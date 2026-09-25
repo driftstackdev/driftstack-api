@@ -1,13 +1,12 @@
-// Drift guard for apps/gui-client/src/lib/fork-telemetry.ts (Wave 29-400
+// Drift guard for apps/gui-client/src/lib/fork-telemetry.ts (Plan 29-400
 // §1+§2 telemetry consumer, Slice B). Pins:
 //
 //   • Event-family regex constants (RX_V510_HIT / RX_ATLAS_MAPPED /
 //     RX_ATLAS_NOT_PRESENT / RX_AFP_FALLBACK / RX_PROBE_SIG / RX_HOOK /
 //     RX_ARCHETYPE_INIT). Source-of-truth = the WTFLogAlways tags in
-//     /Users/john/code/driftstack/docs/internal/driftstack-telemetry-
-//     event-schema-for-gui-panel.md — drift on either side breaks the
-//     panel without a runtime test catching it until a customer session
-//     actually fires the missed event.
+//     the fork's telemetry event schema for the GUI panel — drift on
+//     either side breaks the panel without a runtime test catching it
+//     until a customer session actually fires the missed event.
 //
 //   • Type-union shapes (AtlasSlot / AfpContext / ProbeSigContext /
 //     HookTag / SpoofingStatus). Drift on the unions vs the schema means
@@ -32,13 +31,13 @@ const SOURCE = readFileSync(
   'utf8',
 );
 
-describe('fork-telemetry content parity (Wave 29-400 Slice B)', () => {
+describe('fork-telemetry content parity (Plan 29-400 Slice B)', () => {
   it('header anchors the schema doc + Option A verdict', () => {
-    expect(SOURCE).toMatch(/Wave 29-400 §1\+§2 telemetry consumer/);
+    expect(SOURCE).toMatch(/Plan 29-400 §1\+§2 telemetry consumer/);
     // "Option A locked" may line-wrap as "Option\n// A locked" in the
     // header comment — match across any intermediate chars.
     expect(SOURCE).toMatch(/Option[\s\S]*?A locked/);
-    expect(SOURCE).toMatch(/docs\/internal\/driftstack-telemetry-event-schema-for-/);
+    expect(SOURCE).toMatch(/Source schema: the internal telemetry event schema for the GUI panel/);
   });
 
   it('atlas-slot union: main | priority', () => {

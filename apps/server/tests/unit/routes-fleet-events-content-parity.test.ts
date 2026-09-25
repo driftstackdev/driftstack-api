@@ -45,14 +45,14 @@ describe('routes/fleet-events content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it('V-820 module framing pinned: fleet-node control-plane WebSocket at wss://fleet.driftstack.dev/v1/fleet/events; flat {type,…} envelope (A3 W122)', () => {
+  it('V-820 module framing pinned: fleet-node control-plane WebSocket at wss://fleet.driftstack.dev/v1/fleet/events; flat {type,…} envelope (W122)', () => {
     expect(body).toMatch(/\/\/ V-820 — `\/v1\/fleet\/events` fleet-node control-plane WebSocket\./);
     expect(body).toMatch(/wss:\/\/fleet\.driftstack\.dev\/v1\/fleet\/events/);
-    expect(body).toMatch(/A3 bus W122\s*\/\/ flat `\{type,…\}` envelope/);
+    expect(body).toMatch(/back \(W122\s*\/\/ flat `\{type,…\}` envelope/);
   });
 
-  it('auth framing pinned: Ed25519 Bearer JWT + X-Driftstack-Mac-Node-Id (== JWT iss) verified at the upgrade preHandler → 401 before the socket opens (A3 W121 control-plane-owns)', () => {
-    expect(body).toMatch(/A3 W121, control-plane-owns/);
+  it('auth framing pinned: Ed25519 Bearer JWT + X-Driftstack-Mac-Node-Id (== JWT iss) verified at the upgrade preHandler → 401 before the socket opens (W121 control-plane-owns)', () => {
+    expect(body).toMatch(/Auth \(W121, control-plane-owns\)/);
     expect(body).toMatch(/X-Driftstack-Mac-Node-Id` header \(== the JWT iss\)/);
     expect(body).toMatch(
       /authenticateFleetUpgrade\s*\/\/ runs as a preHandler so a bad token is rejected with 401 BEFORE the socket\s*\/\/ opens\./,
@@ -72,7 +72,7 @@ describe('routes/fleet-events content parity', () => {
       /export async function registerFleetEventsRoutes\(\s*app: FastifyInstance,\s*deps: FleetEventsRoutesDeps,\s*\): Promise<void> \{/,
     );
     // Registers the plugin with a maxPayload bound on inbound frames, sized to the
-    // largest legit frame — the file-download reply (A3 W2856): a 64 MiB per-file
+    // largest legit frame — the file-download reply (W2856): a 64 MiB per-file
     // cap → ~85.3 MiB base64 wire; 96 MiB headroom (mirrors UPLOAD_MAX_BODY_BYTES).
     expect(body).toMatch(/const FLEET_WS_MAX_PAYLOAD_BYTES = 96 \* 1024 \* 1024;/);
     expect(body).toMatch(

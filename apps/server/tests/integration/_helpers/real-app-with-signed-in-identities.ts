@@ -13,7 +13,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type postgres from 'postgres';
 import type { ApiKeyScope } from '@driftstack/api-types';
-import { buildApp } from '../../../src/lib/app.js';
+import { buildApp, type AppDeps } from '../../../src/lib/app.js';
 import { createTestLogger } from '../../../src/lib/logger.js';
 import { MemoryRateLimitStore } from '../../../src/lib/memory-rate-limit-store.js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../../../src/lib/api-keys.js';
@@ -144,6 +144,12 @@ export interface RealAppOptions {
   readonly authCache?: AuthCache | null;
   /** The email service the auth flows send through. Omit for a no-op one. */
   readonly email?: EmailService;
+  /**
+   * Surfaces this app does not wire by default (the agent sessions, the team
+   * routes), each passed exactly as bootstrap would pass it. Spread last, so a
+   * suite can also replace a default.
+   */
+  readonly extraDeps?: Partial<AppDeps>;
 }
 
 /** The whole app, wired the way bootstrap wires it, against the isolated database. */
@@ -266,6 +272,7 @@ export async function buildRealApp(
     staffEmails,
     ...(opts.ownerEmail !== undefined ? { ownerEmail: opts.ownerEmail } : {}),
     permissiveCors: true,
+    ...(opts.extraDeps ?? {}),
   });
 }
 

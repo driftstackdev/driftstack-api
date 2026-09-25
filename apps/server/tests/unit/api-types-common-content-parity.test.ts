@@ -301,7 +301,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     );
   });
 
-  it('ARCHETYPE_REGISTRY is the multi-archetype catalogue (NOT a single hardcoded device): ArchetypeConfig shape + status enum + the locked id (iphone17, post-2026-06-11 cutover) is the sole status:launch entry + the full 81-slug Agent-1 catalog folds in as `available` + a legacy reference baseline retained', () => {
+  it('ARCHETYPE_REGISTRY is the multi-archetype catalogue (NOT a single hardcoded device): ArchetypeConfig shape + status enum + the locked id (iphone17, post-2026-06-11 cutover) is the sole status:launch entry + the full 81-slug fork catalog folds in as `available` + a legacy reference baseline retained', () => {
     // The platform models a device MATRIX; the registry is the source of
     // truth. A drift back to a single hardcoded archetype would re-break
     // the multi-archetype architecture.
@@ -315,7 +315,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     // The prose here used to claim "all 81 catalog slugs appear". Both numbers
     // were stale, and counting from a regex is why: the registry holds 82
     // entries (a naive grep says 81 because the launch entry uses
-    // LOCKED_ARCHETYPE_ID, not a literal), and Agent-1's catalog
+    // LOCKED_ARCHETYPE_ID, not a literal), and the fork's catalog
     // (driftstack/operations/archetype-catalog.json) holds 84 — it carries
     // three chrome-iOS slugs this registry deliberately does not expose,
     // pending a product call. Nothing reconciles the two files; the catalog

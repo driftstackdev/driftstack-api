@@ -1,19 +1,19 @@
-// V-531 — frame source interface (cross-agent contract).
+// V-531 — frame source interface (cross-repo contract).
 //
 // This is the contract between this repo (driftstack-api control plane) and
-// the WebKit fork (Agent 1's scope). The WebKit fork implements
+// the WebKit fork (a separate repo). The WebKit fork implements
 // `WkWebViewFrameSource` on the harness side — extracting frames from a
 // WKWebView's surface — and ships them across the IPC boundary to the
 // control plane's encode pipeline (see `encode-pipeline.ts`).
 //
-// Document at `docs/internal/v531-cross-agent-contract.md` describes the
+// The internal V-531 fork contract notes describe the
 // IPC envelope; this file is the language-level interface the server-side
 // pipeline depends on.
 //
-// V-530-style real-implementation work; V-531.A this wave covers the
+// V-530-style real-implementation work; V-531.A covers the
 // interface + a mock implementation + the server-side encode pipeline
 // (next file). The real `WkWebViewFrameSource` lands in the WebKit fork
-// in coordination with Agent 1.
+// as a coordinated change.
 
 /** Pixel format the frame source emits. */
 export type FramePixelFormat = 'I420' | 'NV12' | 'BGRA' | 'RGBA';
@@ -61,13 +61,13 @@ export interface FrameSourceConfig {
  * Frame source interface. Implementations:
  *
  *   1. `MockFrameSource` (this file) — synthetic frames for solo testing.
- *   2. `WkWebViewFrameSource` (WebKit fork; Agent 1 scope) — real frames
- *      from a WKWebView surface via the IPC envelope in V-531 cross-agent
+ *   2. `WkWebViewFrameSource` (WebKit fork; separate repo) — real frames
+ *      from a WKWebView surface via the IPC envelope in V-531 cross-repo
  *      contract doc.
  *
- * Cross-agent compatibility constraint: the interface contract here MUST
+ * Cross-repo compatibility constraint: the interface contract here MUST
  * match the IPC envelope shape. Changes to this interface require a
- * coordinated change to the WebKit-fork implementation in the same wave.
+ * coordinated change to the WebKit-fork implementation in the same release.
  */
 export interface FrameSource {
   /** Begin emitting frames. Resolves once the source is ready. */

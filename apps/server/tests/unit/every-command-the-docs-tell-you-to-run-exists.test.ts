@@ -84,14 +84,11 @@ function workspaceScripts(): Map<string, Set<string>> {
 }
 
 /**
- * Instruction surfaces. The verification log and dated session notes are HISTORY — a command
- * that was correct when written is not a defect now, the same rule V-1145 applied to paths.
+ * Instruction surfaces. Dated session notes are HISTORY — a command that was correct when
+ * written is not a defect now, the same rule V-1145 applied to paths. (The verification log
+ * and its archives were excluded for the same reason until they moved to the internal records.)
  */
-// V-1215 —  joined this list when the log was split. It is the same
-// record under a new name: a frozen history citing commands that were real when written, which is
-// exactly what this exclusion exists for. Without it the split alone turns the gate red.
-const HISTORY =
-  /(?:^|\/)(?:verification-log(?:-archive[^/]*)?\.md|MEMORY.*\.md)$|\/\d{4}-\d{2}-\d{2}-/;
+const HISTORY = /(?:^|\/)MEMORY.*\.md$|\/\d{4}-\d{2}-\d{2}-/;
 
 function instructionPages(): string[] {
   const out: string[] = [];

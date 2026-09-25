@@ -14,7 +14,7 @@
 //     rationale (AFP Layer 1 / ATFP firing semantics).
 //   • DEFAULT_SESSION_PURPOSE = 'production_customer'.
 //   • SessionSchema: 13-field shape (egress_capabilities added in
-//     migration 0045 + cross-agent contract 7d5992d9); purpose
+//     migration 0045 + cross-repo contract 7d5992d9); purpose
 //     required (server defaults).
 //   • L-001 — InteractAction intent-only; coordinate primitives stay
 //     on gui_control plane, not customer-facing schema.
@@ -217,7 +217,7 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     );
   });
 
-  it('Extract contract pinned (harness intent A3 W456): ExtractionType text|attribute|list + ExtractionSpec {name,selector,type,attribute?,transform:number?,extract?} + ExtractRequest {extractions: 1..100} + ExtractResponse {value: record}. Drift here breaks the cross-package contract the /v1/sessions/:id/extract route + all 3 SDK extract methods import', () => {
+  it('Extract contract pinned (harness intent W456): ExtractionType text|attribute|list + ExtractionSpec {name,selector,type,attribute?,transform:number?,extract?} + ExtractRequest {extractions: 1..100} + ExtractResponse {value: record}. Drift here breaks the cross-package contract the /v1/sessions/:id/extract route + all 3 SDK extract methods import', () => {
     expect(body).toMatch(
       /export const ExtractionTypeSchema = z\.enum\(\['text', 'attribute', 'list'\]\);/,
     );
@@ -269,7 +269,7 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     expect(body).toMatch(
       /const SessionLoginSubmittedResponseSchema = z[\s\S]*?submitted: z\.literal\(true\),[\s\S]*?credentials_truncated: z\.literal\(false\),[\s\S]*?logged_in: z\s*\.boolean\(\)\s*\.describe\([\s\S]*?post_login_url: z\.string\(\)\.optional\(\),[\s\S]*?duration_ms: SessionLoginDurationMsSchema,[\s\S]*?\.strict\(\);/,
     );
-    // post_login_url is the plain session URL. This lane invents no URL
+    // post_login_url is the plain session URL. This server invents no URL
     // mutation, and an authorized `GET /state` already returns the same
     // value — so a "redacted" adjective here would be a false guarantee that
     // callers (and future log-handling code) could rely on.

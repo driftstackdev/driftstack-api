@@ -18,7 +18,7 @@
 // This is the CORRECT-LAYER successor to RealAgentExecutor (agent-executor.ts),
 // which dispatched to the local driver — the architecture-superseded path
 // (agent-session intents dispatch over the control-plane WSS by intentName, not
-// the server driver; see docs/internal/cross-agent-control-plane-contract.md).
+// the server driver; see the internal harness control-plane contract notes).
 //
 // Depends only on an injected `IntentDispatcher` — so it's unit-testable with a
 // mock dispatcher. #139 go-live: WIRED into bootstrap (gated on
@@ -278,7 +278,7 @@ const DEFAULT_ELEMENT_WAIT_RUN_BUDGET_MS = 15_000;
 
 // ── the look before a tap ────────────────────────────────────────────
 // WHERE 2000ms COMES FROM. The look is one `perceive` for ONE selector: on the
-// device, a native find that A3 reports always fails fast on this fork, then the
+// device, a native find that the harness reports always fails fast on this fork, then the
 // same script resolver click falls back to, then one hit test — no document
 // serialisation at all. The read-back's `get_page_source`, which serialises the
 // WHOLE document, returns in under 2s on a healthy box (DEFAULT_OBSERVE_TIMEOUT_MS
@@ -287,7 +287,7 @@ const DEFAULT_ELEMENT_WAIT_RUN_BUDGET_MS = 15_000;
 // the look existed: the look is paid on every tap, so its ceiling is what a sick
 // box costs a customer PER TAP, and must stay a small fraction of the click's
 // own round trip plus the human pacing around it. What a healthy look actually
-// costs is the thing the look's own histograms exist to measure — A3 could not
+// costs is the thing the look's own histograms exist to measure — the harness could not
 // measure it without a real session.
 const DEFAULT_PRE_TAP_LOOK_TIMEOUT_MS = 2_000;
 
@@ -310,7 +310,7 @@ const DEFAULT_PRE_TAP_LOOK_TIMEOUT_MS = 2_000;
 // Nothing here may be described as undetectable.
 //
 // ⛔ WHAT IT DELIBERATELY DOES NOT TOUCH. The device's own `wait_for` poll
-// interval (a fixed 250 ms) is the device team's to change, not ours — and A3's
+// interval (a fixed 250 ms) is the device team's to change, not ours — and the harness's
 // argument against jittering a single fixed-mean interval stands on its own
 // terms (a jittered fixed mean is a fatter peak, not the absence of one). The
 // argument here is a different one: it is about two spacings being EXACTLY
@@ -656,7 +656,7 @@ type PerceiveReading =
       target: TapTarget;
       /** The element carried `hit_via_own_label` (either value): the device's
        *  single tap verdict has the own-label rule, and its send_keys takes
-       *  `require_unoccluded` — both shipped in one deploy (A3 V-3360). */
+       *  `require_unoccluded` — both shipped in one deploy (V-3360). */
       ownLabelVerdict: boolean;
     };
 
@@ -874,7 +874,7 @@ interface UnoccludedCheck {
  *                    never scrolls), so until now this tap went ahead unchecked
  *
  * TYPING TOO, on a device that has shown it takes the parameter on send_keys
- * (`ownLabelVerdict`, A3 V-3360): typing begins with a tap that focuses the
+ * (`ownLabelVerdict`, V-3360): typing begins with a tap that focuses the
  * field, and a cover the click's scroll puts over it takes that tap exactly as
  * it would a button's. Only where the look said `outside_viewport` — the one
  * case the look cannot vouch for; a covered field was already refused by the
@@ -2927,7 +2927,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
 
   /**
    * Sessions whose device has shown, on a look, the build with the own-label
-   * verdict and send_keys `require_unoccluded` (A3 V-3360): a perceive element
+   * verdict and send_keys `require_unoccluded` (V-3360): a perceive element
    * carrying `hit_via_own_label`. The mirror of {@link sessionsPredatingLook},
    * for the same reason — a device does not change under a live session — so a
    * later step whose own look told nothing (it timed out) still knows. Absent
@@ -3980,7 +3980,7 @@ function selectorOf(intent: ExecuteArgs['plan']['intents'][number]): string | nu
 
 /**
  * #140 — defensive extraction of the page-source text from a `get_page_source`
- * result's outputData. The exact key is A3-confirmed pending (bus 2026-07-07) —
+ * result's outputData. The exact key is pending harness confirmation (2026-07-07) —
  * handle the raw-string form + the common object shapes so the wiring works
  * regardless of the final key. Returns null for an empty/absent source.
  */

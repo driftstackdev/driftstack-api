@@ -170,7 +170,7 @@ import {
 } from '@driftstack/api-types';
 import { PROFILE_ID_INPUT_RE } from './profile-id.js';
 import { TIER_MONTHLY_PRICE_CENTS } from './cost-defaults.js';
-// S33 2026-07-07 (fable-truth-audit) — the cookie shape the agent-session
+// S33 2026-07-07 (truth audit) — the cookie shape the agent-session
 // cookie read/import routes emit + validate. Imported from the harness
 // control protocol (the routes' own single source of truth) rather than
 // re-declared here, so a wire-shape change flows into the spec.
@@ -4961,7 +4961,7 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
-  // S33 2026-07-07 (fable-truth-audit) — #187 self-service verification
+  // S33 2026-07-07 (truth audit) — #187 self-service verification
   // re-send: live route that was previously absent from the spec.
   registerRoute(r, {
     method: 'post',
@@ -5835,7 +5835,7 @@ function buildRegistry(): OpenAPIRegistry {
   // For mode='pair' agent sessions only — these endpoints return 409 on
   // non-pair sessions. State machine carries through 'takeover-queued' /
   // 'handback-queued' intermediate states when the runtime is mid-
-  // decompose (Wave 2.A 8.11 / 8.12); the wire response reflects the
+  // decompose (phase 2.A 8.11 / 8.12); the wire response reflects the
   // post-transition state so callers branch on `pair_mode_state.kind`.
   const pairModeStateResponseSchema = z.object({
     pair_mode_state: z
@@ -5970,7 +5970,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
   });
-  // Wave 29-NNN ARC 3 Slice 3 (2026-05-19) — top-level mode setter.
+  // ARC 3 Slice 3 (2026-05-19) — top-level mode setter.
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions/{id}/mode',
@@ -6016,7 +6016,7 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
-  // Wave 29-NNN ARC 3 Slice 4+5 (2026-05-19/20) — LK.6 InputEvent
+  // ARC 3 Slice 4+5 (2026-05-19/20) — LK.6 InputEvent
   // forward-to-harness + pair-mode takeover-trigger. Slice 6
   // (2026-05-20) — modifier vocabulary documented in description.
   registerRoute(r, {
@@ -6115,7 +6115,7 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
-  // ── S33 2026-07-07 (fable-truth-audit) — live-session control surface ──
+  // ── S33 2026-07-07 (truth audit) — live-session control surface ──
   //
   // Seven live-but-previously-unregistered agent-session endpoints: the
   // page-state poll, the cookie-jar read + import pair, the history step,
@@ -6610,7 +6610,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/agent-sessions/{id}/livekit-token',
     summary:
-      "Mint a LiveKit join token for the agent session's live-view room (requires `write` or `account_owner`)",
+      "Mint a LiveKit join token for the agent session's live-view room (requires `write` and `read:sessions`, or `account_owner`)",
     tags: ['agent-chat'],
     security: auth,
     request: {
@@ -8951,7 +8951,7 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
-  // ── S33 2026-07-07 (fable-truth-audit) — profile storage trim ──────────
+  // ── S33 2026-07-07 (truth audit) — profile storage trim ────────────────
   // doc-150 §8 storage cleanup: live route (write:profiles) that was
   // previously absent from the spec. Discriminated 200 body in every
   // case, mirroring the agent-session relay routes.

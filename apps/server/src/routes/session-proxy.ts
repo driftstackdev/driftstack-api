@@ -1,6 +1,6 @@
 // EG-API-1.2 — POST /v1/sessions/{id}/proxy + GET /v1/sessions/{id}/proxy.
 //
-// Planning 133 §"Cross-agent split" Agent 2 scope:
+// Planning 133 server/harness split — server scope:
 //   - POST /v1/sessions/{id}/proxy — set proxy config for a session
 //   - GET  /v1/sessions/{id}/proxy — fetch current session's proxy config
 //
@@ -23,7 +23,7 @@
 // comments below as written goes hunting through env vars for a backend
 // that is already there and correctly built.
 //
-// The route consumes the cross-agent contract schema from
+// The route consumes the cross-repo contract schema from
 // `@driftstack/api-types/egress` (EG-API-1.1). Body shape:
 //
 //   {
@@ -145,7 +145,7 @@ export function registerSessionProxyRoutes(
 }
 
 // Registered when `sessionEgressService` is omitted from AppDeps. Same
-// pattern as `registerBillingDisabledRoutes` (Wave 1119 / Slice 1119.2):
+// pattern as `registerBillingDisabledRoutes` (Slice 1119.2):
 // returning 503 + FeatureUnavailable on the route surface gives clients
 // a machine-readable deployment-state signal instead of a misleading 404.
 export function registerSessionProxyDisabledRoutes(app: FastifyInstance): void {

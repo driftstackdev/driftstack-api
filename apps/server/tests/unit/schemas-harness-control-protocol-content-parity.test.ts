@@ -1,8 +1,8 @@
 // Drift guard for apps/server/src/schemas/harness-control-protocol.ts.
 // The server↔harness intent-dispatch wire contract. This MUST stay in
-// lockstep with the canonical Agent-3 contract
-// (driftstack/docs/internal/harness-intent-contract.md, grounded in the
-// harness IntentExecutor.swift). Divergence here is a cross-agent wire
+// lockstep with the canonical harness contract
+// (the harness intent contract in the internal design notes, grounded in the
+// harness IntentExecutor.swift). Divergence here is a server↔harness wire
 // bug: the server would dispatch intents the harness can't route, or
 // mis-shape params and surface opaque intent_dispatch_error to customers.
 //
@@ -97,12 +97,12 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it('module framing pinned: server↔harness wire protocol; canonical source = A3 harness-intent-contract.md', () => {
+  it('module framing pinned: server↔harness wire protocol; canonical source = the harness intent contract', () => {
     expect(body).toMatch(
       /\/\/ Harness control-plane wire protocol — server↔harness intent dispatch\./,
     );
     expect(body).toMatch(
-      /Canonical source: driftstack\/docs\/internal\/harness-intent-contract\.md/,
+      /Canonical source: the harness intent contract in the internal design notes/,
     );
   });
 
@@ -118,9 +118,9 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
   });
 
   it('drive-bridge gate (item 9) + the RESOLVED base64-JSON wire codec documented', () => {
-    expect(body).toMatch(/Drive-bridge gate \(ORCHESTRATOR item 9\)/);
+    expect(body).toMatch(/Drive-bridge gate \(item 9\)/);
     expect(body).toMatch(
-      /Wire codec \(RESOLVED 2026-06-05 by Agent-3\): IntentDispatch\.inputParams/,
+      /Wire codec \(RESOLVED 2026-06-05 by the harness\): IntentDispatch\.inputParams/,
     );
     expect(body).toMatch(/cross the wire as a BASE64\s*\/\/ STRING of the UTF-8 JSON/);
   });
@@ -184,11 +184,11 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain('export const SendKeysParamsSchema = z');
     expect(body).toContain('text: z.string().max(HARNESS_SEND_KEYS_MAX_CHARS),');
     expect(body).toContain('sensitive: z.boolean().optional(),');
-    // A3 V-3360: the focus tap's check, the same optional boolean as click's.
+    // V-3360: the focus tap's check, the same optional boolean as click's.
     expect(body).toContain('require_unoccluded: RequireUnoccludedSchema,');
   });
 
-  it('press_key params pinned: key string 1..20 (strict) — A3 W1221, one DOM KeyboardEvent.key on the focused element', () => {
+  it('press_key params pinned: key string 1..20 (strict) — W1221, one DOM KeyboardEvent.key on the focused element', () => {
     expect(body).toMatch(
       /export const PressKeyParamsSchema = z\.object\(\{ key: z\.string\(\)\.min\(1\)\.max\(20\) \}\)\.strict\(\);/,
     );
@@ -268,12 +268,12 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     );
   });
 
-  it('flat {type,…} wire envelope (no _0) pinned + SessionStatus + HarnessOutbound tagged union (A3 W122 / 2a5639dc)', () => {
+  it('flat {type,…} wire envelope (no _0) pinned + SessionStatus + HarnessOutbound tagged union (W122 / 2a5639dc)', () => {
     expect(body).toMatch(/FLAT tagged union keyed on `type`/);
     expect(body).toMatch(/NO `_0` nesting/);
     // SessionStatus shape — toContain fragments (not a closed multi-line regex)
-    // so the A3 W2682 inline doc comment between `detail` and `reason` doesn't
-    // break the pin (the long-chain regex backtracking hazard / feedback).
+    // so the W2682 inline doc comment between `detail` and `reason` doesn't
+    // break the pin (the long-chain regex backtracking hazard).
     expect(body).toContain('export const SessionStatusSchema = z.object({');
     expect(body).toContain("type: z.literal('sessionStatus'),");
     expect(body).toContain('sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
@@ -282,9 +282,9 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // Bounded like every sibling result field — a JWT-authed node must not inject
     // an unbounded string that persists into the customer-facing close reason.
     expect(body).toContain('detail: z.string().max(4096).optional(),');
-    // A3 W2682 — the optional snake_case close reason on a terminal frame.
+    // W2682 — the optional snake_case close reason on a terminal frame.
     expect(body).toContain('.regex(/^[a-z][a-z0-9_]{0,127}$/)');
-    // A3 W2682 terminal-status vocabulary — the EXACT close-on set (drift-guarded).
+    // W2682 terminal-status vocabulary — the EXACT close-on set (drift-guarded).
     expect(body).toMatch(
       /export const TERMINAL_SESSION_STATUSES = new Set<string>\(\['ended', 'errored'\]\);/,
     );
@@ -313,7 +313,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
   it('history-navigation frames pinned: navigateHistory (CP→node, strict, direction enum back|forward, optional tabId) + navigateHistoryResult (node→CP, in union)', () => {
     // CP→node REQUEST — strict, carries the closed direction enum (the sibling of
     // setCookies; the only two history steps) + an optional tabId (multi-tab
-    // forward-compat, gated-inert until A3's harness reads it).
+    // forward-compat, gated-inert until the harness reads it).
     // toContain fragments (not a closed multi-line regex) so the tabId field +
     // its rationale comment don't break the pin.
     expect(body).toContain('export const NavigateHistoryRequestSchema = z');
@@ -408,7 +408,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(ProbeEgressFrameSchema.safeParse(validProbe).success).toBe(true);
   });
 
-  it("behavioral: an object carrying a sessionId key FAILS ProbeEgressFrameSchema.parse — A3's binding constraint #2, the .strict reject that keeps this node-scoped", () => {
+  it('behavioral: an object carrying a sessionId key FAILS ProbeEgressFrameSchema.parse — the harness binding constraint #2, the .strict reject that keeps this node-scoped', () => {
     // The frame above minus nothing, PLUS a sessionId: the only difference from the
     // passing frame is the extra key, so the failure is attributable to it (the
     // round-trip test above is the vacuity control). A node-scoped op must never be
@@ -502,7 +502,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain('error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),');
   });
 
-  it('trimProfile WIRE keys are snake_case (A3-root-caused regression: camelCase broke the box Codable decode → trim never ran)', () => {
+  it('trimProfile WIRE keys are snake_case (regression root-caused on the harness: camelCase broke the box Codable decode → trim never ran)', () => {
     // CONTENT-parity, not just a source regex: serialize a real trim envelope (camelCase
     // args in) and assert the emitted WIRE object carries the exact snake_case payload
     // keys the harness Swift Codable decoder requires. The correlator unit tests use a
@@ -592,7 +592,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     ).toBe(false); // missing challengeId
   });
 
-  it('profileSaved (A3 W417 + doc-150 item 5) pinned to the outbound union + shape (sessionId camelCase + profile_id/sealed_blob snake_case + stored + size_bytes optional)', () => {
+  it('profileSaved (W417 + doc-150 item 5) pinned to the outbound union + shape (sessionId camelCase + profile_id/sealed_blob snake_case + stored + size_bytes optional)', () => {
     expect(body).toContain('export const ProfileSavedSchema = z');
     expect(body).toContain('sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
     expect(body).toContain('profile_id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
@@ -682,7 +682,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     ).toBe(false);
   });
 
-  it('pageState (A3 W2730 wire spec) pinned to the outbound union + the RELAXED shape (Swift encodeIfPresent OMITS nil keys): url/title/error all optional, kind lenient, http_status optional+null-only. The previous REQUIRED url/error/http_status dropped EVERY real frame at safeParse → empty store → no live URL', () => {
+  it('pageState (W2730 wire spec) pinned to the outbound union + the RELAXED shape (Swift encodeIfPresent OMITS nil keys): url/title/error all optional, kind lenient, http_status optional+null-only. The previous REQUIRED url/error/http_status dropped EVERY real frame at safeParse → empty store → no live URL', () => {
     // Shape pinned via toContain fragments (NOT a closed multi-line regex — the
     // schema now carries comments + prettier may reflow it). Key relaxations:
     expect(body).toContain('export const PageStateFrameSchema = z.object({');
@@ -692,7 +692,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain(
       'title: z.string().max(PAGE_STATE_TEXT_MAX_LENGTH).nullable().optional(),',
     );
-    // Forward-compat per-tab attribution (A3 contract pending) — optional so a
+    // Forward-compat per-tab attribution (harness contract pending) — optional so a
     // frame without it still validates + is carried as null downstream.
     expect(body).toContain('tabId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),');
     // T-25 — optional boolean editable-input focus (drives the GUI keyboard from
@@ -703,7 +703,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain(
       'http_status: z.number().int().min(100).max(599).nullable().optional(),',
     );
-    // The exact A3 W2730 wire shapes must ALL parse (these are what the box sends):
+    // The exact W2730 wire shapes must ALL parse (these are what the box sends):
     // loading: url present, NO error key.
     expect(
       HarnessOutboundSchema.safeParse({
@@ -751,7 +751,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
         error: { kind: 'tls', message: 'x' },
       }).success,
     ).toBe(true);
-    // stalled (A3 W2845): a frozen-but-alive renderer — url present, NO error.
+    // stalled (W2845): a frozen-but-alive renderer — url present, NO error.
     // Was rejected by the closed enum before the add → frame silently dropped.
     expect(
       HarnessOutboundSchema.safeParse({
@@ -883,8 +883,8 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     }
   });
 
-  it('all 6 HarnessOutbound payloads pinned to A3 W124 field-sets (heartbeat/errorEvent/capabilityReport typed, not passthrough)', () => {
-    // heartbeat — the A3 W124 base field-set (toContain fragments, not a
+  it('all 6 HarnessOutbound payloads pinned to W124 field-sets (heartbeat/errorEvent/capabilityReport typed, not passthrough)', () => {
+    // heartbeat — the W124 base field-set (toContain fragments, not a
     // closed multi-line regex, so prettier reflow + the optional fleet
     // additions below don't break the pin).
     expect(body).toContain('const HeartbeatPayloadSchema = z.object({');
@@ -898,7 +898,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toMatch(
       /activeSessionCount: z\.number\(\)\.int\(\)\.nonnegative\(\)\.max\(HARNESS_HEARTBEAT_MAX_CONCURRENT\),/,
     );
-    // …extended with the fleet-admin-panel telemetry (file-48 §A5; A3
+    // …extended with the fleet-admin-panel telemetry (file-48 §A5;
     // W2189/W2197/W2199*), all OPTIONAL so an older node's beat still decodes;
     // field names mirror the Swift Codable Heartbeat 1:1 (else stripped).
     expect(body).toMatch(
@@ -909,7 +909,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     );
     expect(body).toContain("drainState: z.literal('draining').optional(),");
     expect(body).toContain('sessionOutcomeCounts: HeartbeatOutcomeCountsSchema.optional(),');
-    // Per-session liveness re-base (A2 W2679 / A3 driftstack f52699c37) — the
+    // Per-session liveness re-base (W2679 / harness f52699c37) — the
     // {agentSessionId → state} map the SessionLivenessStore reads. OPTIONAL +
     // omit-when-nil so an older node's beat still decodes byte-identically.
     expect(body).toContain("z.enum(['active', 'provisioning', 'idle', 'terminating']),");
@@ -1111,7 +1111,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     );
   });
 
-  it('fleet-admin telemetry fields decode through (no longer stripped) — file-48 §A5 / A3 W2189-W2199', () => {
+  it('fleet-admin telemetry fields decode through (no longer stripped) — file-48 §A5 / W2189-W2199', () => {
     const parsed = HarnessOutboundSchema.safeParse({
       type: 'heartbeat',
       macNodeId: 'n1',
@@ -1183,13 +1183,13 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       'intent_not_implemented',
       'intent_missing_parameter',
       'intent_invalid_parameter',
-      // Split out of intent_invalid_parameter (A3 harness `113d99ab4`): a valid
+      // Split out of intent_invalid_parameter (harness `113d99ab4`): a valid
       // selector that matches nothing is page state and IS safe to replay, while
       // an invalid selector is a planning fault that is not. Sits immediately
       // after the code it was carved from, so the pair reads together.
       'intent_element_not_found',
       'intent_webdriver_failed',
-      // A3 #8 — navigate load-error code, ships before the harness emits it
+      // Harness #8 — navigate load-error code, ships before the harness emits it
       // (gated behind DRIFTSTACK_INTENT_PAGE_LOAD_FAILED_CODE). Sits by the
       // webdriver failure it splits the "load never happened" case out of.
       'intent_page_load_failed',
@@ -1200,7 +1200,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       'result_too_large',
       'session_paused',
       'session_intent_in_flight',
-      // A3 2026-09-18 — click { require_unoccluded } refusing a covered tap.
+      // 2026-09-18 — click { require_unoccluded } refusing a covered tap.
       // Appended: it splits nothing out of a neighbour, and the decode entry
       // ships before the device emits it (the legacy form is
       // intent_webdriver_failed + "element occluded at the tap point:").
@@ -1407,7 +1407,7 @@ describe('harness-control-protocol behavioral contract', () => {
     }
   });
 
-  it('A3 W135 — an intentResult carrying errorCode intent_invalid_parameter PARSES (the decode-enum gap: before adding it, IntentResultEnvelopeSchema rejected the frame → the correlator silently dropped it → the dispatch hung to its timeout)', () => {
+  it('W135 — an intentResult carrying errorCode intent_invalid_parameter PARSES (the decode-enum gap: before adding it, IntentResultEnvelopeSchema rejected the frame → the correlator silently dropped it → the dispatch hung to its timeout)', () => {
     expect(HarnessErrorCodeSchema.safeParse('intent_invalid_parameter').success).toBe(true);
     const frame = {
       type: 'intentResult',
@@ -1421,7 +1421,7 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(IntentResultEnvelopeSchema.safeParse(frame).success).toBe(true);
   });
 
-  it('EG-API-1.6 SessionAssign (A3 W136 shape, W138 optionality): required vs optional fields, transportMode enum, initialUrl http(s)-only, livekit snake_case strict', () => {
+  it('EG-API-1.6 SessionAssign (W136 shape, W138 optionality): required vs optional fields, transportMode enum, initialUrl http(s)-only, livekit snake_case strict', () => {
     const valid = {
       type: 'sessionAssign',
       sessionId: 'ses_1',
@@ -1432,7 +1432,7 @@ describe('harness-control-protocol behavioral contract', () => {
       maxDurationSeconds: 3600,
     };
     expect(SessionAssignSchema.safeParse(valid).success).toBe(true);
-    // A3 W138 — the MINIMAL valid assign is just type+sessionId+archetype+
+    // W138 — the MINIMAL valid assign is just type+sessionId+archetype+
     // behaviorProfile; transportMode + the two timeouts are optional (omit →
     // harness defaults).
     expect(
@@ -1457,7 +1457,7 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(SessionAssignSchema.safeParse({ ...valid, transportMode: 'h2Only' }).success).toBe(
       false,
     );
-    // initialUrl http(s)-only (chokepoint guard; A3 W135).
+    // initialUrl http(s)-only (chokepoint guard; W135).
     expect(SessionAssignSchema.safeParse({ ...valid, initialUrl: 'https://ok' }).success).toBe(
       true,
     );
@@ -1477,7 +1477,7 @@ describe('harness-control-protocol behavioral contract', () => {
         livekit: { room: 'r', token: 't', wsUrl: 'wss://x', expiresAt: 'z' },
       }).success,
     ).toBe(false);
-    // geolocation override (A3 verdict 2026-07-01) — optional; bounded lat/lon,
+    // geolocation override (harness verdict 2026-07-01) — optional; bounded lat/lon,
     // optional positive accuracy, strict (no extra keys). Absent → auto-derive.
     expect(
       SessionAssignSchema.safeParse({
@@ -1698,13 +1698,13 @@ describe('harness-control-protocol behavioral contract', () => {
     ).toBe(false);
   });
 
-  it('A3 W2682 TERMINAL_SESSION_STATUSES is EXACTLY {ended, errored} (drift-guard — a mismatch silently no-ops the worker-connected close)', () => {
+  it('W2682 TERMINAL_SESSION_STATUSES is EXACTLY {ended, errored} (drift-guard — a mismatch silently no-ops the worker-connected close)', () => {
     // Runtime membership (order-agnostic Set) — the close contract.
     expect([...TERMINAL_SESSION_STATUSES].sort()).toEqual(['ended', 'errored']);
     expect(TERMINAL_SESSION_STATUSES.size).toBe(2);
     expect(TERMINAL_SESSION_STATUSES.has('ended')).toBe(true);
     expect(TERMINAL_SESSION_STATUSES.has('errored')).toBe(true);
-    // A3 confirmed there is NO terminated/closed/crashed — those must NOT match.
+    // The harness confirmed there is NO terminated/closed/crashed — those must NOT match.
     for (const notTerminal of [
       'terminated',
       'closed',
@@ -1717,7 +1717,7 @@ describe('harness-control-protocol behavioral contract', () => {
     }
   });
 
-  it('SessionStatus carries an optional snake_case reason (A3 W2682) — present on a terminal frame, omittable on a non-terminal one', () => {
+  it('SessionStatus carries an optional snake_case reason (W2682) — present on a terminal frame, omittable on a non-terminal one', () => {
     // terminal ended/errored frame with a clean reason parses.
     expect(
       HarnessOutboundSchema.safeParse({
@@ -1776,7 +1776,7 @@ describe('harness-control-protocol behavioral contract', () => {
     }
   });
 
-  it('profile-backed sessions (A3 W417): optional snake_case profile block; profile_id+dek required; blob fields optional; strict', () => {
+  it('profile-backed sessions (W417): optional snake_case profile block; profile_id+dek required; blob fields optional; strict', () => {
     const base = {
       type: 'sessionAssign',
       sessionId: 'ses_1',
@@ -1817,7 +1817,7 @@ describe('harness-control-protocol behavioral contract', () => {
         false,
       );
     }
-    // snake_case only — camelCase key rejected (strict; the silent-nil drift A3 W417 guards).
+    // snake_case only — camelCase key rejected (strict; the silent-nil drift W417 guards).
     expect(
       SessionAssignSchema.safeParse({
         ...base,
@@ -2472,9 +2472,9 @@ describe('harness-control-protocol behavioral contract', () => {
 // Forward-compat leniency is a property of the harness→server direction, and
 // nothing enforced it.
 //
-// The frames the harness sends are plain `z.object({...})` on purpose: A3 owns
-// the wire and adds fields to it (`tabId` is in the schema right now labelled
-// "forward-compat plumbing — A3 contract pending"). A plain object strips keys
+// The frames the harness sends are plain `z.object({...})` on purpose: the harness
+// owns the wire and adds fields to it (`tabId` is in the schema right now labelled
+// "forward-compat plumbing — harness contract pending"). A plain object strips keys
 // it does not model, so a frame carrying a field this server has never heard of
 // still validates and still gets handled.
 //
@@ -2591,7 +2591,7 @@ describe('harness→server frame strictness is pinned per frame', () => {
       downloadsList: 'strip',
       downloadData: 'strip',
       trimResult: 'strip',
-      // Live egress swap (A3 P-17). `strip` like every sibling result: the box
+      // Live egress swap (P-17). `strip` like every sibling result: the box
       // owns the field set and may add to it. The applyPoint echo this frame
       // depends on is OPTIONAL by design, and strip is what lets an older node
       // omit it — which is exactly why the correlator treats its absence as a

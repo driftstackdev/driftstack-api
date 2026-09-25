@@ -78,7 +78,7 @@ describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
     );
     // Per-field toContain rather than one long \s*-chained regex (the
     // chain backtracks pathologically past ~5 groups; folder/tags pushed it
-    // over — see feedback_no_long_chain_parity_regex).
+    // over, so long chained regexes are avoided here).
     expect(body).toMatch(/function publicProfile\(p: ProfileRecord\): Record<string, unknown> \{/);
     expect(body).toContain('id: `prof_${p.id}`,');
     expect(body).toContain('name: p.name,');
@@ -182,8 +182,8 @@ describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
     );
     // The export route (a READ) MUST carry the read:profiles scope gate its
     // sibling reads enforce — exportProfile only scopes by accountId, so without
-    // it a narrow key lacking read:profiles could read profile metadata (Fable
-    // customer-routes re-audit 2026-07-02).
+    // it a narrow key lacking read:profiles could read profile metadata
+    // (customer-routes re-audit 2026-07-02).
     expect(body).toMatch(
       /'\/v1\/profiles\/:id\/export',[\s\S]*?preHandler: \[app\.requireAuth, app\.requireScope\('read:profiles'\), app\.rateLimit\('global'\)\]/,
     );

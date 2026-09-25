@@ -1,4 +1,4 @@
-// Slice 4 (Wave 29-NNN ARC 3) — LK.6 InputEvent wire contract shared
+// Slice 4 (ARC 3) — LK.6 InputEvent wire contract shared
 // across LiveKit DataChannel (gui-client direct path) AND HTTP route
 // POST /v1/agent-sessions/:id/input-event (customer-dashboard path).
 //
@@ -104,7 +104,7 @@ export const InputEventSchema = z.discriminatedUnion('type', [
   // 04-harness §226-228 + 05-behavioral-library). Coordinates are DEVICE-CSS px
   // (iPhone viewport space) — the GUI/dashboard projects stream-px → device-CSS
   // upstream; the harness injects via W3C Actions `pointerType:touch` and owns
-  // the micro-settle / interpolation / momentum (A3 W551/W553). `tap` and
+  // the micro-settle / interpolation / momentum (W551/W553). `tap` and
   // `swipe` are single events the harness expands; touchStart/Move/End carry a
   // `touchId` for multi-touch (concurrent ids = pinch).
   z.object({
@@ -173,11 +173,11 @@ export const SendInputEventResponseSchema = z.discriminatedUnion('kind', [
     pair_mode_state: z.object({ kind: z.string() }).passthrough(),
   }),
   /**
-   * Slice 4 (Wave 29-NNN ARC 3) — straight forward-to-harness
+   * Slice 4 (ARC 3) — straight forward-to-harness
    * outcome. Returned when the event is dispatched directly to
    * the harness (manual mode OR pair mode after takeover-grant).
    * Today the harness end-to-end is gated; route returns 503 on
-   * this path until Agent 1's Swift work lands.
+   * this path until the fork's Swift work lands.
    */
   z.object({
     kind: z.literal('forwarded'),

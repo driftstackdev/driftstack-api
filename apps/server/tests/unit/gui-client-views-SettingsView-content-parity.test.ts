@@ -164,9 +164,18 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     );
   });
 
-  it("Sign-out branded useConfirm pinned with 'Sign out on this computer? Your API key is removed from this app only. It stays valid until you revoke it in the web dashboard.' wording — pinned so customer understands the difference between local sign-out and full server-side revocation (migrated off window.confirm, which is flaky in the Tauri WKWebView; plain-words rewrite 2026-09-15)", () => {
+  it("Sign-out branded useConfirm pinned with the SHARED sign-out confirm (SIGN_OUT_CONFIRM_MESSAGE, lib/forget-signed-out-account.ts) — the same words as the sidebar button and ⌘⇧L. 2026-09-24: sign-out also removes this computer's chats, saved proxies and their passwords, notes and bindings, so the confirm names what leaves this computer and what stays; it used to mention only the API key (migrated off window.confirm, which is flaky in the Tauri WKWebView)", () => {
     expect(body).toMatch(
-      /await confirm\(\s*'Sign out on this computer\? Your API key is removed from this app only\. It stays valid until you revoke it in the web dashboard\.',/,
+      /await confirm\(SIGN_OUT_CONFIRM_MESSAGE, \{\s*confirmLabel: 'Sign out',\s*tone: 'danger',\s*\}\)/,
+    );
+    const shared = readFileSync(
+      resolve(HERE, '../../../gui-client/src/lib/forget-signed-out-account.ts'),
+      'utf8',
+    );
+    expect(shared).toMatch(/'Sign out on this computer\?',/);
+    expect(shared).toMatch(/This removes from this computer: your API key/);
+    expect(shared).toMatch(
+      /Your recordings stay on this computer\. Nothing changes on your Driftstack account/,
     );
   });
 

@@ -33,7 +33,7 @@ describe('W307.A session-lifecycle ↔ PROBLEM_TYPES parity', () => {
     expect(body).toMatch(/concurrent slot/i);
   });
 
-  // S31 2026-07-07 (fable-truth-audit) — the old assertion locked a FICTIONAL contract:
+  // S31 2026-07-07 (truth audit) — the old assertion locked a FICTIONAL contract:
   // no idle timeout exists (only the free-tier 20-min duration sweep)
   // and the webhook enum has no session.destroyed event.
   it('describes the real auto-destroy boundary: free-tier duration cap, no idle timeout, no session.destroyed event', () => {

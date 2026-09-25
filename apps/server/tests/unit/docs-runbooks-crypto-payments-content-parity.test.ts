@@ -142,7 +142,7 @@ describe('W555.B /docs/runbooks/crypto-payments.md content parity', () => {
     expect(body).toContain('payment is silently dropped** while the secrets match perfectly');
     expect(body).toContain('**Distinguish before rotating anything.**');
     expect(body).toContain('serialisation divergence, not a secret mismatch — do not rotate the');
-    expect(body).toContain('docs/internal/2026-06-03-crypto-payment-path-security-audit.md');
+    expect(body).toContain('the internal 2026-06-03 crypto-payment-path security audit');
   });
 
   it("Refund procedure + when-merchant-account-lands framing pinned: 'Refunds are issued by the founder via the NowPayments dashboard, not by Driftstack.' + 'Founder issues the refund in NowPayments (asset + amount + the customer's forwarding address).' + 'Our applyIpnStatus maps `refunded` → `failed`. The order moves to terminal `failed`.' + 'Do NOT edit `crypto_orders` rows by hand' + '## When the merchant account lands (V-666.E follow-up)' + 'NowPayments merchant account is approved + API keys minted.' + '`NOWPAYMENTS_API_KEY` env var is set in production.' + 'The `/v1/billing/crypto-checkout` route's stubbed `payment_address: null` response is replaced with a real NowPayments `POST /v1/payment` call' + 'The customer-facing crypto checkout flow is unblocked in the GUI (V-534.J button + view).' + '~~A `crypto_orders` table replaces the in-memory repo~~ **Done**' — pinned so the founder-issues-via-NowPayments + refunded→failed-mapping + DO-NOT-mutate-by-hand + V-666.E-5-step-go-live + V-534.J-GUI-button commitment survives", () => {

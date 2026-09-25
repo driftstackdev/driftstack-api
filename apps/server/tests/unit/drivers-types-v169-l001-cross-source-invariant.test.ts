@@ -23,7 +23,7 @@
 //   V-169 purpose framing — 'V-169 — harness purpose. Drives WebKit
 //   driver's harness-config selection (persistent vs ephemeral
 //   context, _resourceLoadStatisticsEnabled flag, ATFP firing). See
-//   docs/architecture/afp-harness-configuration.md (Agent 1 cross-
+//   docs/architecture/afp-harness-configuration.md (fork-side cross-
 //   reference, Phase 3 work). production_customer (default):
 //   ephemeral + ATFP-on. cumulative_rig_validation: persistent, ATFP-
 //   off. test_domain_probe: ephemeral, deterministic ATFP firing'.
@@ -112,12 +112,12 @@ describe('W984 drivers/types V-169 + L-001 cross-source invariant', () => {
 
   // ─── V-169 purpose framing ───────────────────────────────────
 
-  it("CRITICAL V-169 purpose framing — 'V-169 — harness purpose. Drives WebKit driver's harness-config selection (persistent vs ephemeral context, _resourceLoadStatisticsEnabled flag, ATFP firing). See docs/architecture/afp-harness-configuration.md (Agent 1 cross-reference, Phase 3 work). production_customer (default): ephemeral + ATFP-on. cumulative_rig_validation: persistent, ATFP-off. test_domain_probe: ephemeral, deterministic ATFP firing. MockDriver accepts but doesn't act on this; the WebKit driver is where the harness branching lives'. The 3-purpose × 3-ATFP-config matrix is the V-169 harness-selection contract.", () => {
+  it("CRITICAL V-169 purpose framing — 'V-169 — harness purpose. Drives WebKit driver's harness-config selection (persistent vs ephemeral context, _resourceLoadStatisticsEnabled flag, ATFP firing). See docs/architecture/afp-harness-configuration.md (fork-side cross-reference, Phase 3 work). production_customer (default): ephemeral + ATFP-on. cumulative_rig_validation: persistent, ATFP-off. test_domain_probe: ephemeral, deterministic ATFP firing. MockDriver accepts but doesn't act on this; the WebKit driver is where the harness branching lives'. The 3-purpose × 3-ATFP-config matrix is the V-169 harness-selection contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/drivers/types.ts'));
     expect(p).toMatch(/V-169 — harness purpose\. Drives WebKit driver's harness-config/);
     expect(p).toMatch(/selection \(persistent vs ephemeral context, _resourceLoad/);
     expect(p).toMatch(/StatisticsEnabled flag, ATFP firing\)\. See/);
-    expect(p).toMatch(/`docs\/architecture\/afp-harness-configuration\.md` \(Agent 1/);
+    expect(p).toMatch(/`docs\/architecture\/afp-harness-configuration\.md` \(fork-side/);
     expect(p).toMatch(/cross-reference, Phase 3 work\)\./);
     expect(p).toMatch(/- `production_customer` \(default\): ephemeral \+ ATFP-on\./);
     expect(p).toMatch(/- `cumulative_rig_validation`: persistent, ATFP-off\./);

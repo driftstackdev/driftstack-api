@@ -65,9 +65,30 @@ function makeSession(overrides: Partial<AgentSessionRecord> = {}): AgentSessionR
   };
 }
 
-function makeStubAgentSessionsRepo(session: AgentSessionRecord | null): AgentSessionsRepo {
+/** The stored key's minter, as the mint route records it (security sweep #2). */
+const OWNER_MINTER = {
+  accountId: OTHER_ACCOUNT_ID,
+  apiKeyId: '00000000-0000-4000-8000-00000000ca11',
+  webSessionId: null,
+  membershipId: null,
+};
+
+function makeStubAgentSessionsRepo(
+  session: AgentSessionRecord | null,
+  minter: { live: boolean; cleared: Array<{ id: string; ciphertext: Buffer }> } = {
+    live: true,
+    cleared: [],
+  },
+): AgentSessionsRepo {
   return {
     get: () => Promise.resolve(session),
+    // Security sweep #2 — the live re-check of the key's minter, and the clear the
+    // gate runs when it fails.
+    isGuiControlKeyMinterLive: () => Promise.resolve(minter.live),
+    clearGuiControlKeyIfUnchanged: (a: { id: string; ciphertext: Buffer }) => {
+      minter.cleared.push(a);
+      return Promise.resolve(true);
+    },
   } as unknown as AgentSessionsRepo;
 }
 
@@ -86,6 +107,8 @@ async function buildApp(args: {
   guiControlKeyEncryptionKey?: string;
   /** Captured structured-log lines (route logs via req.log.info). */
   logs?: CapturedLog[];
+  /** Whether the stored key's minter still holds, and where the gate's clears land. */
+  minter?: { live: boolean; cleared: Array<{ id: string; ciphertext: Buffer }> };
 }) {
   const app = Fastify();
   const grantedScopes = args.scopes ?? ['read', 'read:sessions'];
@@ -124,7 +147,7 @@ async function buildApp(args: {
     return Promise.resolve();
   });
   registerAgentSessionsTransportReportRoute(app, {
-    agentSessionsRepo: makeStubAgentSessionsRepo(args.session),
+    agentSessionsRepo: makeStubAgentSessionsRepo(args.session, args.minter),
     ...(args.guiControlKeyEncryptionKey !== undefined
       ? { guiControlKeyEncryptionKey: args.guiControlKeyEncryptionKey }
       : {}),
@@ -356,6 +379,7 @@ describe('ICE.T — POST /v1/agent-sessions/:id/transport-report', () => {
         sessionId: SESSION_ID,
       }),
       guiControlKeyExpiresAt: new Date(Date.now() + 60_000),
+      guiControlKeyMintedBy: OWNER_MINTER,
     });
     const app = await buildApp({
       session,
@@ -374,6 +398,55 @@ describe('ICE.T — POST /v1/agent-sessions/:id/transport-report', () => {
     expect(res.statusCode).toBe(204);
     const line = logs.find((l) => l.obj.component === 'ice-transport-telemetry');
     expect(line?.obj.account_id).toBe(OTHER_ACCOUNT_ID);
+    await app.close();
+  });
+
+  it('401 — a MATCHING gui_control_key whose minter no longer holds (revoked credential, removed member) is refused, and the stored key is cleared (security sweep #2)', async () => {
+    const key = makeKey();
+    const ciphertext = encryptGuiControlKey(CONTROL_KEY, key, {
+      accountId: OTHER_ACCOUNT_ID,
+      sessionId: SESSION_ID,
+    });
+    const session = makeSession({
+      accountId: OTHER_ACCOUNT_ID,
+      guiControlKeyCiphertext: ciphertext,
+      guiControlKeyExpiresAt: new Date(Date.now() + 60_000),
+      guiControlKeyMintedBy: OWNER_MINTER,
+    });
+    const minter = { live: false, cleared: [] as Array<{ id: string; ciphertext: Buffer }> };
+    const app = await buildApp({ session, guiControlKeyEncryptionKey: key, minter, logs });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${SESSION_ID}/transport-report`,
+      headers: { 'x-driftstack-gui-control-key': CONTROL_KEY },
+      payload: VALID_BODY,
+    });
+    expect(res.statusCode).toBe(401);
+    expect(minter.cleared).toEqual([{ id: SESSION_ID, ciphertext }]);
+    expect(logs.find((l) => l.obj.component === 'ice-transport-telemetry')).toBeUndefined();
+    await app.close();
+  });
+
+  it('401 — a matching gui_control_key with NO recorded minter (minted before migration 0142) is refused and cleared', async () => {
+    const key = makeKey();
+    const session = makeSession({
+      accountId: OTHER_ACCOUNT_ID,
+      guiControlKeyCiphertext: encryptGuiControlKey(CONTROL_KEY, key, {
+        accountId: OTHER_ACCOUNT_ID,
+        sessionId: SESSION_ID,
+      }),
+      guiControlKeyExpiresAt: new Date(Date.now() + 60_000),
+    });
+    const minter = { live: true, cleared: [] as Array<{ id: string; ciphertext: Buffer }> };
+    const app = await buildApp({ session, guiControlKeyEncryptionKey: key, minter });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${SESSION_ID}/transport-report`,
+      headers: { 'x-driftstack-gui-control-key': CONTROL_KEY },
+      payload: VALID_BODY,
+    });
+    expect(res.statusCode).toBe(401);
+    expect(minter.cleared).toHaveLength(1);
     await app.close();
   });
 

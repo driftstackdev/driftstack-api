@@ -9,7 +9,7 @@
 // That cost real time twice. Ledger P-29: a customer landing on a 4xx/5xx had the
 // pageState frame "REJECTED and dropped with no log". Ledger P-30: an over-cap
 // `pageState.url` is "silent drop -> GUI address bar freezes", named as one
-// confirmed member of a family of unbounded harness emit sites. A3 confirms the
+// confirmed member of a family of unbounded harness emit sites. The harness side confirms the
 // blindness is mutual — a queued-and-sent frame looks identical to a
 // queued-and-swallowed one from their side too.
 //

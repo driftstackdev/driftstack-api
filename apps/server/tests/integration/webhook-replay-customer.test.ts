@@ -80,7 +80,7 @@ describe('POST /v1/webhook-deliveries/:deliveryId/replay', () => {
     expect(replayed[0]!.targetResourceId).toBe(deliveryPublicId);
   });
 
-  // S32 2026-07-07 (fable-frontend-audit) — replay was the only delivery
+  // S32 2026-07-07 (frontend audit) — replay was the only delivery
   // surface ignoring team act-as: the ownership lookup used the member's
   // own account, so replaying a team-visible delivery 404'd. Locks the
   // fix (200 with the header) AND the scoping (404 without it).
@@ -139,7 +139,7 @@ describe('POST /v1/webhook-deliveries/:deliveryId/replay', () => {
     expect(res.json<{ status: string }>().status).toBe('pending');
   });
 
-  // Fable audit-2 2026-07-08 (C5) — replay RE-FIRES the delivery, so it is a
+  // Audit-2 2026-07-08 (C5) — replay RE-FIRES the delivery, so it is a
   // WRITE and takes the admin-only-on-team gate (same as create/update/delete/
   // rotate). A non-admin member acting-as the owner must be refused, even
   // though the delivery is team-visible to them for reads.

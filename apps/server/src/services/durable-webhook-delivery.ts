@@ -480,7 +480,7 @@ export class DurableWebhookWorker {
     const nowDate = new Date(nowMs);
     // Pre-serialize the Date param per the drizzle-orm 0.38.4
     // transparentParser swap workaround (see
-    // docs/internal/drizzle-date-param-workaround.md). Drizzle replaces
+    // the internal drizzle date-param workaround notes). Drizzle replaces
     // postgres-js's OID 1184 serializer with a no-op identity, so a
     // raw `sql\`\`` template literal interpolating a Date crashes at
     // postgres-js's Bind step with Buffer.byteLength(date). Same
@@ -624,7 +624,7 @@ export class DurableWebhookWorker {
           // endpoint (create-time validation only enforces https://; a 3xx to
           // an internal target like http://169.254.169.254 would bypass it).
           // A 30x surfaces as a failed attempt. See
-          // docs/internal/2026-05-31-webhook-ssrf-outbound-target.md.
+          // the internal 2026-05-31 webhook SSRF outbound-target notes.
           redirect: 'error',
         });
         const successful = response.status >= 200 && response.status < 300;

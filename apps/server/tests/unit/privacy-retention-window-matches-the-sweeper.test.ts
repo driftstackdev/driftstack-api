@@ -13,8 +13,8 @@
 // impossible (`usage_records` cascades from `sessions` and §9 keeps billing data 7 years
 // under AWR Art 52; revoked `api_keys` are RESTRICT-referenced by `admin_audit_log` and the
 // incident tables). So if that sentence is ever edited out of the policy, the sweep silently
-// becomes undisclosed processing — and there would be no other signal. See
-// docs/internal/2026-08-12-retention-anonymisation-design.md.
+// becomes undisclosed processing — and there would be no other signal. See the
+// internal retention-anonymisation design notes (2026-08-12).
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';

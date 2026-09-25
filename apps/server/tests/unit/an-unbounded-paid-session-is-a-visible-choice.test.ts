@@ -7,9 +7,9 @@
 // session that is abandoned, or whose driver dies quietly, bills until someone
 // notices.
 //
-// THE READINESS ASSESSMENT RECORDED THIS AS BLOCKED ON A1/A3, on the grounds
-// that "there is no liveness signal on driver sessions". That premise is wrong,
-// and checking it was A2's to do rather than A3's to answer:
+// THE READINESS ASSESSMENT RECORDED THIS AS BLOCKED ON THE FORK AND THE HARNESS,
+// on the grounds that "there is no liveness signal on driver sessions". That
+// premise is wrong, and checking it was this repo's job rather than the harness's:
 //
 //   • Fleet nodes DO report liveness — `/v1/fleet/events` carries `heartbeat`
 //     frames with `bootId` and `activeSessionStates`, gated on
@@ -22,8 +22,8 @@
 //     that bills — has no equivalent, and no node column to hang one on.
 //
 // So the signal exists and is proven in production code; it simply does not
-// reach the table that bills. That makes this an engineering task in A2's own
-// scope rather than a question for another agent — and a cheap one, because
+// reach the table that bills. That makes this an engineering task in this repo's
+// own scope rather than a cross-repo question — and a cheap one, because
 // `durationCutoffsFor` iterates the whole tier enum and picks up a newly capped
 // tier with no sweep change. Capping a paid tier is one value in one table.
 //

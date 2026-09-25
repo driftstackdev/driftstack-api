@@ -27,8 +27,8 @@ export const ArchetypeSchema = z
 
 /*
  * V-169 — session purpose drives harness configuration in the WebKit
- * driver (per AFP Layer 1 design from Agent 1's Phase 3 work; see
- * `docs/architecture/afp-harness-configuration.md` once Agent 1 lands
+ * driver (per AFP Layer 1 design from the WebKit fork's Phase 3 work; see
+ * `docs/architecture/afp-harness-configuration.md` once the fork lands
  * the cross-reference doc).
  *
  * Semantics:
@@ -36,11 +36,11 @@ export const ArchetypeSchema = z
  *   `_resourceLoadStatisticsEnabled=YES`. ATFP fires per iOS per-site
  *   logic. This is what every paying-customer session uses.
  * - `cumulative_rig_validation`: persistent context, NOT ephemeral.
- *   ATFP doesn't fire (matches the V-179 baseline rig). Used by Agent 1
+ *   ATFP doesn't fire (matches the V-179 baseline rig). Used by the fingerprint work
  *   to validate that the static-fingerprint surface remains
  *   bit-identical across releases.
  * - `test_domain_probe`: ephemeral context on tracker-context URLs.
- *   ATFP fires deterministically. Used by Agent 1 for adversarial
+ *   ATFP fires deterministically. Used by the fingerprint work for adversarial
  *   validation against detection vendors.
  *
  * The MockDriver accepts the field but doesn't act on it (the WebKit
@@ -265,7 +265,7 @@ export const InteractActionSchema = z.discriminatedUnion('kind', [
     text: z.string().max(10_000),
     // Requested inter-key delay in ms; the public contract accepts only 0..500.
     delay_ms: z.number().int().min(0).max(500).optional(),
-    // W1150 (A3 W1149) — mark the field sensitive (card number / OTP / PIN):
+    // W1150 (W1149) — mark the field sensitive (card number / OTP / PIN):
     // the harness suppresses visible typo-corrections while typing it (a
     // momentary wrong digit trips per-keystroke validation or auto-submit-
     // on-length). DOM type=password fields get this automatically; this flag
@@ -331,7 +331,7 @@ export type WaitResponse = z.infer<typeof WaitResponseSchema>;
 // Get state
 // ───────────────────────────────────────────────────────────────────────────
 
-// W615 (GUI-UX item 3, cross-agent contract Addendum 5/7) — page lifecycle
+// W615 (GUI-UX item 3, harness contract Addendum 5/7) — page lifecycle
 // as the harness sees it. The harness owns navigation, so only it knows
 // "loading" vs "loaded" vs "errored (DNS / TLS / HTTP 503 / timeout)";
 // a screenshot can't reveal these. Emitted by the harness on navigation
@@ -363,7 +363,7 @@ export const SessionStateSchema = z.object({
   local_storage: z.record(z.string()),
   // W615 — null until the driver/harness reports a lifecycle event (the
   // mock driver reports 'loaded' after navigate; the real harness emit is
-  // the A3 side of the contract). Additive: pollers that ignore it are
+  // the harness side of the contract). Additive: pollers that ignore it are
   // unaffected.
   page_state: PageStateSchema.nullable().default(null),
   captured_at: Iso8601Schema,
@@ -400,7 +400,7 @@ export const CaptureResponseSchema = z.object({
 export type CaptureResponse = z.infer<typeof CaptureResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
-// Extract (read structured data from the page) — harness intent, A3 W456.
+// Extract (read structured data from the page) — harness intent, W456.
 // POST /v1/sessions/:id/extract: a batch of named extractions, each a
 // selector + how to read it. The harness selects injection-safely (selectors
 // pass as a script arg, never interpolated) and returns the values keyed by
@@ -454,7 +454,7 @@ export type ExtractResponse = z.infer<typeof ExtractResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Search (find the search field, type the query realistically, submit) —
-// harness intent, A3 (bus W244/W245). POST /v1/sessions/:id/search.
+// harness intent (W244/W245). POST /v1/sessions/:id/search.
 // ───────────────────────────────────────────────────────────────────────────
 
 export const SearchRequestSchema = z.object({
@@ -521,7 +521,7 @@ export const SearchResponseSchema = z.discriminatedUnion('query_truncated', [
 export type SearchResponse = z.infer<typeof SearchResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
-// Login (heuristic credential login) — harness intent, A3 (bus W244/W245).
+// Login (heuristic credential login) — harness intent (W244/W245).
 // POST /v1/sessions/:id/login. The password is SENSITIVE: it flows to the
 // harness send-keys path but is never logged (the service records only the
 // operation label on failure). Recipes are capture-only today — there is no

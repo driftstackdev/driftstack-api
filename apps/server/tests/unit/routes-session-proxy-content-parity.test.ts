@@ -70,7 +70,7 @@ describe('routes/session-proxy content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("EG-API-1.2 module-level framing pinned: 'POST /v1/sessions/{id}/proxy + GET /v1/sessions/{id}/proxy. Planning 133 §\"Cross-agent split\" Agent 2 scope: POST /v1/sessions/{id}/proxy — set proxy config for a session + GET /v1/sessions/{id}/proxy — fetch current session's proxy config.' — pinned so the EG-API-1.2 anchor + planning-133-cross-agent-split + 2-verb-roster all stay documented", () => {
+  it("EG-API-1.2 module-level framing pinned: 'POST /v1/sessions/{id}/proxy + GET /v1/sessions/{id}/proxy. Planning 133 server/harness split — server scope: POST /v1/sessions/{id}/proxy — set proxy config for a session + GET /v1/sessions/{id}/proxy — fetch current session's proxy config.' — pinned so the EG-API-1.2 anchor + planning-133-server-harness-split + 2-verb-roster all stay documented", () => {
     expect(body).toMatch(
       /\/\/ EG-API-1\.2 — POST \/v1\/sessions\/\{id\}\/proxy \+ GET \/v1\/sessions\/\{id\}\/proxy\./,
     );
@@ -103,9 +103,9 @@ describe('routes/session-proxy content parity', () => {
     );
   });
 
-  it("Cross-agent contract body-shape framing pinned: '@driftstack/api-types/egress (EG-API-1.1)' + 3-field body shape (session_id matching URL :id + proxy + optional egress_safeguard defaulting safeguards-on). Drift to dropping the session_id-matches-URL check would let a body carry a different id than the URL and create an audit-log mismatch", () => {
+  it("Cross-repo contract body-shape framing pinned: '@driftstack/api-types/egress (EG-API-1.1)' + 3-field body shape (session_id matching URL :id + proxy + optional egress_safeguard defaulting safeguards-on). Drift to dropping the session_id-matches-URL check would let a body carry a different id than the URL and create an audit-log mismatch", () => {
     expect(body).toMatch(
-      /\/\/ The route consumes the cross-agent contract schema from\s*\/\/ `@driftstack\/api-types\/egress` \(EG-API-1\.1\)\. Body shape:/,
+      /\/\/ The route consumes the cross-repo contract schema from\s*\/\/ `@driftstack\/api-types\/egress` \(EG-API-1\.1\)\. Body shape:/,
     );
     expect(body).toMatch(/\/\/\s+"session_id": "ses_xxx",\s+\/\/ must match URL :id/);
     expect(body).toMatch(

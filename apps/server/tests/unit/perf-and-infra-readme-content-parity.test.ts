@@ -7,7 +7,7 @@
 //                      + credential-handling LIVE-vs-TEST boundary.
 //
 // Drift in either would either lose perf-regression definitions or
-// break the credential-handling memory rule that gates live-mode
+// break the credential-handling rule that gates live-mode
 // secrets behind SSH-write-only.
 
 import { existsSync, readFileSync } from 'node:fs';

@@ -114,7 +114,7 @@ describe('W544.A /docs/founder-actions/v243-tauri-updater-keys.md content parity
     );
   });
 
-  it("Rotation + Backup + Related framing pinned: '## Rotation (future, not now)' + 'If the private key is suspected compromised:' + '1. Generate a new keypair (same command).' + '2. Ship a release built with the OLD private key that contains a tauri.conf.json updated to the NEW public key.' + '3. After ~30 days (most customers updated), retire the old key.' + '4. Document the rotation date in `docs/decisions.md` as a follow-up to D-2026-05-06-03.' + 'Store a backup of `~/.driftstack-keys/` in encrypted form (1Password attachment, or encrypted disk image).' + 'If the private key is lost, existing customer installs cannot receive any further updates without also reinstalling — there is no recovery path other than full re-distribution with a new public key.' + '## Related' + 'D-2026-05-06-03 (this decision).' + 'V-243 (V-log entry for the autopilot work landing this scaffold).' + 'Tauri Updater docs: https://tauri.app/v1/guides/distribution/updater/' — pinned so the OLD-key-signs-bridge-release + 30-day-wait + decisions.md follow-up + no-recovery-on-lost-private-key + Tauri-v1-docs-URL commitment survives", () => {
+  it("Rotation + Backup + Related framing pinned: '## Rotation (future, not now)' + 'If the private key is suspected compromised:' + '1. Generate a new keypair (same command).' + '2. Ship a release built with the OLD private key that contains a tauri.conf.json updated to the NEW public key.' + '3. After ~30 days (most customers updated), retire the old key.' + '4. Document the rotation date in `docs/decisions.md` as a follow-up to D-2026-05-06-03.' + 'Store a backup of `~/.driftstack-keys/` in encrypted form (1Password attachment, or encrypted disk image).' + 'If the private key is lost, existing customer installs cannot receive any further updates without also reinstalling — there is no recovery path other than full re-distribution with a new public key.' + '## Related' + 'D-2026-05-06-03 (this decision).' + 'V-243 (V-log entry for the work landing this scaffold).' + 'Tauri Updater docs: https://tauri.app/v1/guides/distribution/updater/' — pinned so the OLD-key-signs-bridge-release + 30-day-wait + decisions.md follow-up + no-recovery-on-lost-private-key + Tauri-v1-docs-URL commitment survives", () => {
     expect(body).toMatch(/## Rotation \(future, not now\)/);
     expect(body).toMatch(/If the private key is suspected compromised:/);
     expect(body).toMatch(/1\. Generate a new keypair \(same command\)\./);
@@ -133,7 +133,7 @@ describe('W544.A /docs/founder-actions/v243-tauri-updater-keys.md content parity
     expect(body).toMatch(/re-distribution with a new public key\./);
     expect(body).toMatch(/## Related/);
     expect(body).toMatch(/- D-2026-05-06-03 \(this decision\)\./);
-    expect(body).toMatch(/- V-243 \(V-log entry for the autopilot work landing this scaffold\)\./);
+    expect(body).toMatch(/- V-243 \(V-log entry for the work landing this scaffold\)\./);
     expect(body).toMatch(
       /- Tauri Updater docs: https:\/\/tauri\.app\/v1\/guides\/distribution\/updater\//,
     );

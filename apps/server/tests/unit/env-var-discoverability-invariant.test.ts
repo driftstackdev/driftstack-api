@@ -30,8 +30,19 @@ import { describe, expect, it } from 'vitest';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const CONFIG = resolve(REPO_ROOT, 'apps/server/src/lib/config.ts');
 
-/** Where an operator would look for a knob. */
-const OPERATOR_SOURCES = ['.env.example', 'README.md', 'docs/runbooks', 'docs/internal'];
+/**
+ * Where an operator would look for a knob. The internal design notes used to be
+ * on this list; they moved to the private repository, and every knob they
+ * documented is also in the public deployment docs and env templates below.
+ */
+const OPERATOR_SOURCES = [
+  '.env.example',
+  'README.md',
+  'docs/runbooks',
+  'docs/deployment',
+  'docs/operations',
+  'infra/env-templates',
+];
 
 /**
  * Env vars readable only from source today. This list may shrink, never grow.
@@ -40,19 +51,9 @@ const OPERATOR_SOURCES = ['.env.example', 'README.md', 'docs/runbooks', 'docs/in
  * built. If any of these ever becomes required, it belongs in `.env.example`
  * that same day, not on this list.
  */
-const UNDOCUMENTED_BASELINE: readonly string[] = [
-  'AGENT_RELAY_MAX_ACCOUNT_INFLIGHT',
-  'AGENT_TURN_MAX_ACCOUNT_INFLIGHT',
-  'AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES',
-  'AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT',
-  'BUNDLED_TURN_MAX_CONCURRENCY',
-  'DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK',
-  'DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY',
-  'DRIFTSTACK_ANTHROPIC_MODEL',
-  'DRIFTSTACK_DEPLOY_ENV',
-  'PLAYWRIGHT_HEADED',
-  'STRIPE_API_VERSION',
-];
+// Empty since the public deployment docs joined the operator sources: every
+// knob that used to sit here is documented in docs/deployment/env-vars.md.
+const UNDOCUMENTED_BASELINE: readonly string[] = [];
 
 function filesUnder(dir: string): string[] {
   if (!existsSync(dir))

@@ -24,9 +24,9 @@ describe('services/byok-anthropic content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Tier-3 LOCKED 2026-05-17 framing pinned: 'AI-CHAT BYOK Anthropic — per-customer key storage service. Tier-3 verdicts LOCKED 2026-05-17 (5 questions, see docs/internal/byok-anthropic-key-storage-design.md).' — pinned so the lock-date anchor + the 5-questions design-SOT reference survive (drift would orphan operators from the verdict trail)", () => {
+  it("Tier-3 LOCKED 2026-05-17 framing pinned: 'AI-CHAT BYOK Anthropic — per-customer key storage service. Tier-3 verdicts LOCKED 2026-05-17 (5 questions, see the internal BYOK key-storage design notes).' — pinned so the lock-date anchor + the 5-questions design-SOT reference survive (drift would orphan operators from the verdict trail)", () => {
     expect(body).toMatch(
-      /\/\/ AI-CHAT BYOK Anthropic — per-customer key storage service\.\s*\/\/ Tier-3 verdicts LOCKED 2026-05-17 \(5 questions, see\s*\/\/ docs\/internal\/byok-anthropic-key-storage-design\.md\)\./,
+      /\/\/ AI-CHAT BYOK Anthropic — per-customer key storage service\.\s*\/\/ Tier-3 verdicts LOCKED 2026-05-17 \(5 questions, see\s*\/\/ the internal BYOK key-storage design notes\)\./,
     );
   });
 

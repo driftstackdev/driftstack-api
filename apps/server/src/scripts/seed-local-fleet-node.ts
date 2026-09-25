@@ -15,7 +15,7 @@
 //
 // Prod node (e.g. the MacStadium worker):
 //   DATABASE_URL=<prod> MFA_ENCRYPTION_KEY=<prod b64-32> \
-//   FLEET_NODE_PUBLIC_KEY_BASE64URL=<the box's ed25519 pubkey, from A3> \
+//   FLEET_NODE_PUBLIC_KEY_BASE64URL=<the box's ed25519 pubkey, from the harness> \
 //   FLEET_NODE_DISPLAY_NAME=mac-macstadium-us-001 FLEET_NODE_REGION=us-east-1 \
 //   FLEET_NODE_HARDWARE_CLASS=mac-mini-m2pro \
 //   [LIVEKIT_API_KEY=… LIVEKIT_API_SECRET=… LIVEKIT_WS_URL=…] \

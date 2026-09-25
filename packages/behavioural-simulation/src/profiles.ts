@@ -48,7 +48,7 @@ function freezeProfile(profile: BehaviouralProfile): BehaviouralProfile {
  * behavioral execution. Do NOT wire this catalogue's values as the prod
  * behavioral source — they diverge (e.g. casual base_wpm 38 here vs 28
  * canonical; 5-param vs the rich shared shape). Tier-2 ML updates the shared
- * JSON, not this. See docs/internal/2026-06-10-behavioral-model-ownership-decision.md.
+ * JSON, not this. See the internal 2026-06-10 behavioral-model ownership decision.
  */
 export const PROFILE_CATALOGUE: readonly BehaviouralProfile[] = Object.freeze([
   freezeProfile({

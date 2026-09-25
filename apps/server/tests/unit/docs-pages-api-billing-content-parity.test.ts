@@ -168,7 +168,7 @@ describe('W765 docs /api/billing content parity', () => {
     expect(p).not.toMatch(/planned|subscription\.changed|subscription\.cancelled/i);
   });
 
-  it("CRITICAL billing act-as framing pinned — GET /v1/billing DOES honor X-Driftstack-Account (V-326c), mutations do NOT. S36 2026-07-07 (fable-truth-audit): the old blanket 'they do NOT honor the header / team members never see the owner's billing state' claim was FALSE — routes/billing.ts GET /v1/billing calls resolveEffectiveAccount(readEffectiveAccountHeader(req)) and returns the OWNER's subscription state to an acting-as team member; only checkout-session / portal-session / billing-portal ignore the header.", () => {
+  it("CRITICAL billing act-as framing pinned — GET /v1/billing DOES honor X-Driftstack-Account (V-326c), mutations do NOT. S36 2026-07-07 (truth audit): the old blanket 'they do NOT honor the header / team members never see the owner's billing state' claim was FALSE — routes/billing.ts GET /v1/billing calls resolveEffectiveAccount(readEffectiveAccountHeader(req)) and returns the OWNER's subscription state to an acting-as team member; only checkout-session / portal-session / billing-portal ignore the header.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(

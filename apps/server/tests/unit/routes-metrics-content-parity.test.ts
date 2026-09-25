@@ -1,5 +1,5 @@
 // Drift guard for apps/server/src/routes/metrics.ts. Pins the Arc 4
-// Wave 2.B sub-slice 8.18 GET /metrics Prometheus scrape — exposition-
+// phase 2.B, slice 8.18 GET /metrics Prometheus scrape — exposition-
 // format content-type + METRICS_SCRAPE_TOKEN bearer auth + 503-on-
 // missing-token + 401-on-mismatch + no-store on every outcome. Drift to a different content-type
 // would make Prometheus / VictoriaMetrics scrapers reject the
@@ -26,9 +26,9 @@ describe('routes/metrics content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Arc 4 Wave 2.B sub-slice 8.18 module-level framing pinned: 'GET /metrics Prometheus scrape. Scraped by VictoriaMetrics / Prometheus / Grafana Agent. The content type is text/plain; version=0.0.4 per the exposition-format spec; scrapers reject anything else.' — pinned so the 8.18 anchor + 3-scraper-roster + exposition-format-spec-content-type contract all stay documented", () => {
+  it("Arc 4 phase 2.B, slice 8.18 module-level framing pinned: 'GET /metrics Prometheus scrape. Scraped by VictoriaMetrics / Prometheus / Grafana Agent. The content type is text/plain; version=0.0.4 per the exposition-format spec; scrapers reject anything else.' — pinned so the 8.18 anchor + 3-scraper-roster + exposition-format-spec-content-type contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Arc 4 Wave 2\.B sub-slice 8\.18 \(v2-#8\) — GET \/metrics Prometheus scrape\./,
+      /\/\/ Arc 4 phase 2\.B, slice 8\.18 \(v2-#8\) — GET \/metrics Prometheus scrape\./,
     );
     expect(body).toMatch(
       /\/\/ Scraped by VictoriaMetrics \/ Prometheus \/ Grafana Agent\. The content\s*\/\/ type is `text\/plain; version=0\.0\.4` per the exposition-format spec;\s*\/\/ scrapers reject anything else\./,

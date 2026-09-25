@@ -4,7 +4,7 @@
 //
 //   V-333b anchor — 'V-333b — Playwright-backed driver. Foundation
 //   for self-hosted local dev + E2E testing on the Mac BEFORE the
-//   WebKit fork (Agent 1) lands the production driver. Selecting via
+//   WebKit fork lands the production driver. Selecting via
 //   DRIVER=playwright + PLAYWRIGHT_BROWSER=webkit|chromium|firefox'.
 //
 //   Trade-offs framing — 3 bullets:
@@ -78,10 +78,10 @@ function read(p: string): string {
 describe('W987 PlaywrightDriver V-333b cross-source invariant', () => {
   // ─── V-333b anchor + selection framing ───────────────────────
 
-  it("CRITICAL apps/server/src/drivers/playwright.ts header pins V-333b anchor — 'V-333b — Playwright-backed driver. Foundation for self-hosted local dev + E2E testing on the Mac BEFORE the WebKit fork (Agent 1) lands the production driver. Selecting via DRIVER=playwright + PLAYWRIGHT_BROWSER=webkit|chromium|firefox'. The V-333b dev-only + before-WebKit-fork + env-var-selection design is the V-333b deferred-Phase-2 contract.", () => {
+  it("CRITICAL apps/server/src/drivers/playwright.ts header pins V-333b anchor — 'V-333b — Playwright-backed driver. Foundation for self-hosted local dev + E2E testing on the Mac BEFORE the WebKit fork lands the production driver. Selecting via DRIVER=playwright + PLAYWRIGHT_BROWSER=webkit|chromium|firefox'. The V-333b dev-only + before-WebKit-fork + env-var-selection design is the V-333b deferred-Phase-2 contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/drivers/playwright.ts'));
     expect(p).toMatch(/V-333b — Playwright-backed driver\. Foundation for self-hosted local/);
-    expect(p).toMatch(/dev \+ E2E testing on the Mac BEFORE the WebKit fork \(Agent 1\) lands/);
+    expect(p).toMatch(/dev \+ E2E testing on the Mac BEFORE the WebKit fork lands/);
     expect(p).toMatch(/the production driver\. Selecting via DRIVER=playwright \+/);
     expect(p).toMatch(/PLAYWRIGHT_BROWSER=webkit\|chromium\|firefox\./);
   });

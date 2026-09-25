@@ -1,4 +1,4 @@
-// Slice 4 (Wave 29-NNN ARC 3) — Zod schema tests for the InputEvent
+// Slice 4 (ARC 3) — Zod schema tests for the InputEvent
 // discriminated union. Pins the 12-variant wire contract (7 mouse/key/wheel/ping
 // + 5 touch) +
 // bounds-checking on coords / button / wheel deltas / key length.

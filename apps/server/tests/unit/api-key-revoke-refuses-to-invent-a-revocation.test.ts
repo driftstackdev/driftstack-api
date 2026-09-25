@@ -58,20 +58,25 @@ function row(over: Record<string, unknown> = {}): Record<string, unknown> {
 }
 
 /**
- * The two chains `revokeApiKeyAtomic` uses, and nothing else:
+ * The chains `revokeApiKeyAtomic` uses, and nothing else:
+ *   transaction(tx => …)  — the conditional UPDATE and, when it wins, the clear of
+ *                           the session control keys the key minted (security
+ *                           sweep #2), run in one transaction on the same handle
  *   update(...).set(...).where(...).returning()
  *   select().from(...).where(...).limit(1)
  * `updated` is what the conditional UPDATE returns, `reread` what the follow-up
  * SELECT returns.
  */
 function stubDatabase(updated: unknown[], reread: unknown[]): Database {
+  const db = {
+    update: () => ({
+      set: () => ({ where: () => ({ returning: () => Promise.resolve(updated) }) }),
+    }),
+    select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve(reread) }) }) }),
+    transaction: <T>(body: (tx: unknown) => Promise<T>): Promise<T> => body(db),
+  };
   return {
-    db: {
-      update: () => ({
-        set: () => ({ where: () => ({ returning: () => Promise.resolve(updated) }) }),
-      }),
-      select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve(reread) }) }) }),
-    },
+    db,
     client: {},
     close: async () => {},
   } as unknown as Database;

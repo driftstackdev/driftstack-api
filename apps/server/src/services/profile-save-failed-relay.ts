@@ -1,4 +1,4 @@
-// Profile save-failure relay (A3 W1364 / A2 contract decision 2026-06-12) —
+// Profile save-failure relay (W1364 / contract decision 2026-06-12) —
 // bridges a harness `profileSaveFailed` HarnessOutbound frame to the
 // customer-facing `session.profile_save_failed` webhook.
 //

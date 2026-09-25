@@ -17,8 +17,9 @@
 //     CRITICAL arm's `frame.exit_identity` is undefined → red;
 //   * drop the `vpnWireType !== null` gate → the socks5 CONTROL sees findOwned
 //     called and an exit_identity it must not carry → red;
-//   * drop the `cachedExit === undefined` gate → the cache-wins CONTROL sees
-//     findOwned called → red;
+//   * drop the `cachedExit === undefined` gate → the cache-wins CONTROL gets the
+//     row's exit instead of the cache's → red (the row IS read on a cache hit
+//     since owner item 9, for its measured QUIC — never for its exit);
 //   * the superseded / no-country / undated refusals live in the shared helper,
 //     and the superseded CONTROL here reds if the dispatch stops honouring it;
 //   * remove the try/catch around findOwned → the throw arm sends NO frame
@@ -189,8 +190,9 @@ describe('dispatchSessionAssignOnCreate — a VPN wire with a COLD exit cache re
     // The row stores no region/city — the wire says so, never invents one.
     expect(identity.region).toBeNull();
     expect(identity.city).toBeNull();
-    // A tunnel carries UDP by nature — the same rule the cache path applies.
-    expect(identity.quic_ok).toBe(true);
+    // Owner item 9 — no stored measurement confirmed QUIC through this tunnel, so
+    // it is not reported (a tunnel carrying UDP is an expectation, not a check).
+    expect(identity.quic_ok).toBe(false);
     // The observation's OWN date, never the dispatch time.
     expect(identity.probed_at).toBe(OBSERVED_AT.toISOString());
   });
@@ -238,7 +240,7 @@ describe('dispatchSessionAssignOnCreate — a VPN wire with a COLD exit cache re
     expect(frame!.exit_identity).toBeUndefined();
   });
 
-  it('CONTROL — a WARM cache wins and the row is not read (the probe’s measurement outranks the stored one)', async () => {
+  it('CONTROL — a WARM cache wins over the row’s stored exit (the probe’s measurement outranks the stored one)', async () => {
     const cache = new InMemoryExitIdentityCache();
     await cache.set('acc_1', 'prx_vpn', {
       ip: '198.51.100.20',
@@ -247,13 +249,13 @@ describe('dispatchSessionAssignOnCreate — a VPN wire with a COLD exit cache re
       city: 'Berlin',
       timezone: 'Europe/Berlin',
     });
-    const { frame, findOwned } = await dispatch({
+    const { frame } = await dispatch({
       resolved: WIREGUARD_WIRE,
       row: rowWith(STORED_EXIT),
       cache,
     });
-    expect(findOwned).not.toHaveBeenCalled();
     expect((frame!.exit_identity as Record<string, unknown>).ip).toBe('198.51.100.20');
+    expect((frame!.exit_identity as Record<string, unknown>).timezone).toBe('Europe/Berlin');
   });
 
   it('a row that cannot be found dispatches without the block (a missing row is not a dropped launch)', async () => {
@@ -271,7 +273,7 @@ describe('dispatchSessionAssignOnCreate — a VPN wire with a COLD exit cache re
     expect(frame!.exit_identity).toBeUndefined();
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({ component: 'agent-session-dispatch', proxyId: 'prx_vpn' }),
-      expect.stringMatching(/stored VPN exit read failed/),
+      expect.stringMatching(/stored proxy row read failed/),
     );
   });
 });

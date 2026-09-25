@@ -195,7 +195,7 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
     });
   });
 
-  it('idempotency REPLAY does NOT re-mint a NowPayments payment; echoes the ORIGINAL address via getPayment (Fable billing re-audit 2026-07-02)', async () => {
+  it('idempotency REPLAY does NOT re-mint a NowPayments payment; echoes the ORIGINAL address via getPayment (billing re-audit 2026-07-02)', async () => {
     const createPayment = vi.fn(
       (): Promise<CreatePaymentResult> =>
         Promise.resolve({
@@ -408,7 +408,7 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
     },
   );
 
-  it('CONCURRENT same-key checkouts never surface an orphaned mint — the loser echoes the BOUND payment (Fable comprehensive audit 2026-07-02)', async () => {
+  it('CONCURRENT same-key checkouts never surface an orphaned mint — the loser echoes the BOUND payment (comprehensive audit 2026-07-02)', async () => {
     // Two overlapping checkouts on one Idempotency-Key both read
     // order.payment_id === null and reach the mint branch (the sequential replay
     // guard doesn't fire yet). Whoever binds first wins; the loser's freshly

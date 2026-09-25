@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.22 (v2-#8) — Grafana dashboard drift guard.
+// Arc 4 phase 2.B, slice 8.22 (v2-#8) — Grafana dashboard drift guard.
 //
 // Pins ops/grafana/*.json against METRIC_NAMES so renaming a counter
 // without updating the dashboard breaks CI before the panel silently
@@ -21,7 +21,7 @@ interface GrafanaDashboard {
   }>;
 }
 
-describe('Arc 4 Wave 2.B sub-slice 8.22 Grafana dashboards drift guard', () => {
+describe('Arc 4 phase 2.B, slice 8.22 Grafana dashboards drift guard', () => {
   const pairModeJson = readFileSync(PAIR_MODE_PATH, 'utf-8');
   const bundledLlmJson = readFileSync(BUNDLED_LLM_PATH, 'utf-8');
   const pairMode = JSON.parse(pairModeJson) as GrafanaDashboard;

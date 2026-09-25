@@ -146,7 +146,7 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
     const postManual = await repo.findEndpoint(ep.id, 'acc_1');
     expect(postManual?.forceRotatedAt).toBeNull();
     expect(postManual?.graceWindowEndsAt).toBeNull();
-    // V-359.G.2 (Fable audit 2026-07-03) — the manual rotation during the still-
+    // V-359.G.2 (audit 2026-07-03) — the manual rotation during the still-
     // live force-rotation grace must PRESERVE the customer's original deployed
     // secret (whsec_aged) in the grace slot, NOT clobber it with the un-deployed
     // server force secret. Otherwise the worker would dual-sign {new, force} and

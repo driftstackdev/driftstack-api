@@ -126,18 +126,11 @@ describe('W844 public-app V-205 attribution sweep', () => {
     }
   });
 
-  // ─── README.md + AGENTS.md + status.md root sweep ────────────
+  // ─── README.md + status.md root sweep ─────────────────────────
 
-  it('CRITICAL root README.md + AGENTS.md + status.md contain ZERO V-205 attribution leaks. These are the canonical first-read documents — drift would attribute the project to AI tooling at the front door.', () => {
-    for (const f of ['README.md', 'AGENTS.md', 'status.md']) {
+  it('CRITICAL root README.md + status.md contain ZERO V-205 attribution leaks. These are the canonical first-read documents — drift would attribute the project to AI tooling at the front door.', () => {
+    for (const f of ['README.md', 'status.md']) {
       const p = read(resolve(REPO_ROOT, f));
-      // AGENTS.md mentions the V-205 rule explicitly so 'Co-Authored-By' may
-      // appear in policy framing — skip THAT specific file from the
-      // strict-pattern scan, but require the rule wording is present.
-      if (f === 'AGENTS.md') {
-        expect(p).toMatch(/co-authored-by/i);
-        continue;
-      }
       for (const { name, regex } of V205_PATTERNS) {
         const m = p.match(regex);
         expect(m, `${f} contains V-205 attribution leak '${name}': '${m?.[0] ?? ''}'`).toBeNull();

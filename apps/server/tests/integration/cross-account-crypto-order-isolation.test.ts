@@ -1,6 +1,6 @@
 // Account B cannot reach account A's crypto order.
 //
-// This resource was MISSED when A2 first called the ownership sweep complete,
+// This resource was MISSED when the ownership sweep was first called complete,
 // and the correction is the reason this file exists. Six id-taking routes carry
 // a customer's financial record — amount, currency, payment id, receipt — and
 // disabling the route-level owner check reddened only two tests, one of which

@@ -7,7 +7,7 @@
 # are declared-but-unshipped. Kept as the intended shape for when the backend lands.
 #
 """Customer-configurable egress — OpenVPN variant (Phase 2 priority
-per planning 133 + ORCHESTRATOR-STATE 2026-05-16).
+per planning 133 + the Tier-3 decisions, 2026-05-16).
 
 Demonstrates the OpenVPN attach flow:
   1. Save a reusable OpenVPN config blob to the customer's library.

@@ -189,7 +189,9 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(/infra\/bootstrap\/deploy-api\.sh production\s+# → root@128\.140\.37\.74/);
     expect(body).toMatch(/infra\/bootstrap\/deploy-api\.sh staging\s+# → root@116\.203\.22\.197/);
     expect(body).toMatch(/bootstrap\.sh has run on the target host \(V-278\.A\)\./);
-    expect(body).toMatch(/The agent's SSH key is authorized for `root` on the target\./);
+    expect(body).toMatch(
+      /The deploy automation's SSH key is authorized for `root` on the target\./,
+    );
     expect(body).toMatch(/Local build is up-to-date \(`npm run build` in repo root\)\./);
     expect(body).toMatch(/`infra\/env-templates\/\$ROLE\.env` exists with REAL secrets/);
     expect(body).toMatch(/Idempotent: re-running deploys the latest local build without/);
@@ -301,7 +303,9 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(/After V-278\.M, Cloudflare's SSL\/TLS mode is set to "Full \(strict\)":/);
     expect(body).toMatch(/the customer-edge leg is HTTPS via Cloudflare's Universal SSL \(auto-/);
     expect(body).toMatch(/issued, auto-renewed\); the Cloudflare-to-origin leg is HTTPS via the/);
-    expect(body).toMatch(/Let's Encrypt cert below \(issued via DNS-01 with the agent's/);
+    expect(body).toMatch(
+      /Let's Encrypt cert below \(issued via DNS-01 with the deploy automation's/,
+    );
     expect(body).toMatch(/Cloudflare API token \+ auto-renewed by certbot's systemd timer\)\./);
     expect(body).toMatch(/Plaintext port 80 is kept as an HTTP→HTTPS redirect/);
     expect(body).toMatch(/# HTTP→HTTPS redirect on port 80\./);
@@ -448,7 +452,7 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(/^SENTRY_ENVIRONMENT=production$/m);
     expect(body).toMatch(/^SENTRY_RELEASE=PLACEHOLDER_GIT_SHA$/m);
     expect(body).toMatch(/^SENTRY_TRACES_SAMPLE_RATE=0\.05$/m);
-    expect(body).toMatch(/TEST mode pre-launch \(per Stripe credential-handling memory rule\)\./);
+    expect(body).toMatch(/TEST mode pre-launch \(per the Stripe credential-handling rule\)\./);
     expect(body).toMatch(/Live keys swap in via SSH-write after BV KvK closure \(~2026-05-21\)\./);
     expect(body).toMatch(/^STRIPE_SECRET_KEY=sk_test_REDACTED$/m);
     expect(body).toMatch(/^STRIPE_PUBLISHABLE_KEY=pk_test_REDACTED$/m);
@@ -627,7 +631,7 @@ describe('W614 infra/ content parity', () => {
       );
       // Required by config.ts's boot-time guard (NODE_ENV=production refuses
       // to boot without it) — missing here since 2026-05-12 crashed staging
-      // in a restart loop until fixed 2026-07-01. See docs/internal/
+      // in a restart loop until fixed 2026-07-01 (internal incident notes).
       // The stable Pages branch alias is the verified staging launch surface.
       // Do not seed the unresolved app-staging placeholder merely to satisfy
       // the boot guard: activation URLs must also be DNS/TLS/browser reachable.

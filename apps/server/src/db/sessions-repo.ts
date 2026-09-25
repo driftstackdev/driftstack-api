@@ -86,7 +86,7 @@ export class DrizzleSessionRepo implements SessionRepo {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${`session-create:${input.accountId}`}))`,
       );
-      // A3 finding #7 (W2979/W2980) — global single-active-session-per-profile
+      // Finding #7 (W2979/W2980) — global single-active-session-per-profile
       // guard. When a profile_id rode the create, take the canonical cross-surface
       // advisory lock + check BOTH legacy sessions (profile_id lives in metadata
       // jsonb) and agent_sessions (dedicated profile_id column). The agent create

@@ -73,13 +73,13 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     expect(body).toMatch(/\| `api_scale`\s+\|\s+24 \|/);
     expect(body).toMatch(/\| `enterprise`\s+\|\s+32 \|/);
     expect(body).toMatch(/Hitting the cap on `POST \/v1\/sessions` returns `429 Too Many/);
-    // S31 2026-07-07 (fable-truth-audit) — concurrency 429 carries no Retry-After (only
+    // S31 2026-07-07 (truth audit) — concurrency 429 carries no Retry-After (only
     // rate-limit 429s do).
     expect(body).toMatch(/Requests` with `current_sessions` and `limit` in the problem body/);
-    // S31 2026-07-07 (fable-truth-audit) — no idle timeout; the real boundary is the
+    // S31 2026-07-07 (truth audit) — no idle timeout; the real boundary is the
     // free-tier duration cap.
     expect(body).toMatch(/free-tier sessions stop at the 20-minute duration/);
-    expect(body).not.toMatch(/tier-default idle timeout/); // S31 2026-07-07 (fable-truth-audit)
+    expect(body).not.toMatch(/tier-default idle timeout/); // S31 2026-07-07 (truth audit)
     expect(existsSync(P('sessions.md'))).toBe(true);
   });
 
@@ -98,7 +98,7 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     expect(body).toMatch(/^title: Profile snapshots$/m);
     expect(body).toMatch(/^# Profile snapshots$/m);
     expect(body).toMatch(/A \*\*profile snapshot\*\* is an immutable/);
-    // S36 2026-07-07 (fable-truth-audit): "copy" → metadata record — v1
+    // S36 2026-07-07 (truth audit): "copy" → metadata record — v1
     // snapshots capture archetype/name/description only, never browser state.
     expect(body).toMatch(/point-in-time record of a saved profile's \*\*metadata\*\*/);
     expect(body).toMatch(/\*\*What a snapshot does NOT capture today: browser state\.\*\*/);

@@ -302,8 +302,8 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
       // delivery — a write — so it takes the same admin-only-on-team gate as
       // create/update/delete/rotate (effectiveAccountIdForWrite throws for a
       // member role), NOT the read-only act-as of listDeliveries. Without it a
-      // non-admin team member could replay the owner's deliveries. (Fable
-      // audit-2 2026-07-08, C5.)
+      // non-admin team member could replay the owner's deliveries. (Audit-2
+      // 2026-07-08, C5.)
       const eff = effectiveAccountIdForWrite(request, ctx);
       const updated = await service.replayDeliveryAsCustomer(ctx, deliveryId, {
         ...(eff !== undefined ? { effectiveAccountId: eff } : {}),

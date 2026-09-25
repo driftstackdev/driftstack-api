@@ -11,8 +11,8 @@
 // It returns a typed result the launch gate maps to a clean 422 on failure or a
 // dispatch on success.
 //
-// Distinct from the GUI-side device probe (docs/internal/2026-06-12-proxy-probe-
-// backend-design.md): THAT probes device-only, locally-stored proxies through the
+// Distinct from the GUI-side device probe (the internal 2026-06-12 proxy-probe
+// backend design notes): THAT probes device-only, locally-stored proxies through the
 // native Rust layer (privacy promise — never uploaded). THIS probes the SEPARATE
 // org-level proxy population the customer uploaded to the control plane on purpose
 // (account_proxies, resolved at dispatch). The design doc itself flags this as the
@@ -27,7 +27,7 @@
 // what the founder asked for: validate the proxy WORKS, not just that the port is
 // open.
 //
-// Forward-compatible with A3's W2931 (post-dispatch box-reported egress failure):
+// Forward-compatible with the harness's W2931 (post-dispatch box-reported egress failure):
 // the same { ok, reason } shape + the same ProxyValidationFailedError problem-type
 // surface a box-reported launch failure the same clean way. See the route gate.
 
@@ -58,7 +58,7 @@ export const DEFAULT_PROBE_TARGET_URL = 'https://api.driftstack.dev/v1/egress/ec
 export const DEFAULT_PROBE_TIMEOUT_MS = 12_000;
 
 /** Machine-readable failure enum. Mirrors ProxyValidationFailedError's `reason`
- *  so the route gate maps one to the other 1:1, and A3's W2931 box-reported
+ *  so the route gate maps one to the other 1:1, and the harness's W2931 box-reported
  *  failure can reuse the same vocabulary. */
 export type ProxyProbeReason = 'unreachable' | 'auth_failed' | 'timeout' | 'egress_blocked';
 

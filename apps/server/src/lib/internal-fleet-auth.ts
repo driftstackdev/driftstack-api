@@ -1,13 +1,13 @@
-// Wave 29-400 §8.5 — internal fleet auth helper (shared-secret bearer).
+// Plan 29-400 §8.5 — internal fleet auth helper (shared-secret bearer).
 //
 // Internal endpoints (/v1/internal/atlas-priority/*) are NOT customer-
-// facing. They're called by Agent 1's harvester + bs-atlas-priority.sh +
+// facing. They're called by the fork's harvester + bs-atlas-priority.sh +
 // atlas-priority-append.py running inside the operator-trusted fleet.
 //
 // Auth: `Authorization: Bearer <DRIFTSTACK_FLEET_INTERNAL_TOKEN>` header.
 // Compared with timingSafeEqual to defeat string-length timing attacks.
 // The token is provisioned via /opt/driftstack/api/.env (operator) and
-// shipped to fleet nodes via the bootstrap config (Agent 1 reads from
+// shipped to fleet nodes via the bootstrap config (the fork side reads from
 // its own env). No customer or unauthenticated traffic can reach these
 // routes — preHandler rejects with 401 before the handler runs.
 //

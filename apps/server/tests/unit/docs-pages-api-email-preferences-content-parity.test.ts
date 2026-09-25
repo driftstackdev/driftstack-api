@@ -128,7 +128,7 @@ describe('W771 docs /api/email-preferences content parity', () => {
     );
   });
 
-  it("CRITICAL GET=account_owner AND PUT=account_owner scope framing pinned. S36 2026-07-07 (fable-truth-audit): BOTH service methods gate on 'account_owner' (email-preferences.ts list() :51 + set() :90 throwIfMissingScope(ctx, 'account_owner')), and hasScope does NOT let a broad `write` key satisfy account_owner (only the legacy admin alias) — the old 'write or account_owner' PUT claim would 403 a write-scoped key. Drift would let SDK consumers send wrong-scoped requests.", () => {
+  it("CRITICAL GET=account_owner AND PUT=account_owner scope framing pinned. S36 2026-07-07 (truth audit): BOTH service methods gate on 'account_owner' (email-preferences.ts list() :51 + set() :90 throwIfMissingScope(ctx, 'account_owner')), and hasScope does NOT let a broad `write` key satisfy account_owner (only the legacy admin alias) — the old 'write or account_owner' PUT claim would 403 a write-scoped key. Drift would let SDK consumers send wrong-scoped requests.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/Required scope: `account_owner` \(a bare `read` key is not sufficient\)\./);

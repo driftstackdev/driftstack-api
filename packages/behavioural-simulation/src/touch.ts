@@ -6,7 +6,7 @@
 //
 // Distributions are class-typical and derived from a synthetic-persona
 // model — NOT from any collected user behaviour. The library carries no
-// behavioural training data per AGENTS.md scope.
+// behavioural training data per the project's scope.
 //
 // Sub-slices deferred:
 //   - V-530.B (W16) — scroll velocity profiles with decay.

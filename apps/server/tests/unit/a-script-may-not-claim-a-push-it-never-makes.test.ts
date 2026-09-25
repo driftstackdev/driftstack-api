@@ -1,8 +1,9 @@
 // V-1009 — an operator script may not TELL the operator it pushed when it does not.
 //
-// `scripts/v528-scrub-violators.sh` rewrites V-205 violator commits out of history
-// with `git filter-repo`. Its only executed git commands are `git bundle create`
-// and `git filter-repo`; every push is a `printf`. Until this commit it also told
+// The V-528 history-scrub script (used when the repository was split, and since
+// moved to the internal tooling) rewrote V-205 violator commits out of history
+// with `git filter-repo`. Its only executed git commands were `git bundle create`
+// and `git filter-repo`; every push was a `printf`. Until V-1009 it also told
 // the operator, at runtime, two things that were not true:
 //
 //   dry run : "Force-push to remote follows automatically after filter-repo completes."
@@ -17,8 +18,8 @@
 //
 // So this guard reads what the operator SEES, not what the file says about itself:
 // only `printf`/`echo` argument text is scanned. Comments are deliberately excluded,
-// because a corrected file records the claim it used to make — that same v528 header
-// quotes the retracted sentence at line 9 — and a guard that could not tell a
+// because a corrected file records the claim it used to make — that same scrub
+// script's header quoted the retracted sentence — and a guard that could not tell a
 // retraction from a live claim would force the record to be deleted to stay green.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -68,7 +69,7 @@ function shellScripts(): string[] {
 describe('V-1009 a script may not claim a push it never makes', () => {
   const scripts = shellScripts();
 
-  it('CRITICAL the scan reaches the scripts and both detectors discriminate. A walk that found nothing, or a claim matcher that never fires, would make the arm below pass for every script in the repo — which is how the v528 runtime message survived its own header being corrected.', () => {
+  it('CRITICAL the scan reaches the scripts and both detectors discriminate. A walk that found nothing, or a claim matcher that never fires, would make the arm below pass for every script in the repo — which is how the runtime message of the scrub script survived its own header being corrected.', () => {
     expect(scripts.length, 'shell scripts under scripts/').toBeGreaterThanOrEqual(5);
 
     // The claim matcher fires on an assertion and not on printed instructions.
@@ -99,44 +100,5 @@ describe('V-1009 a script may not claim a push it never makes', () => {
       'these scripts PRINT that they push and never run a push — either push, or say the push is ' +
         'a manual step the operator must run afterwards:',
     ).toEqual([]);
-  });
-
-  it('CRITICAL the v528 scrub still prints the manual re-add step. `git filter-repo` removes the origin remote by default — its own help describes suppressing "removing of the origin remote" as the non-default case — so the push commands the script prints fail with a missing remote until origin is re-added. Printing a command that cannot work is the same defect one layer down.', () => {
-    const src = readFileSync(resolve(SCRIPTS, 'v528-scrub-violators.sh'), 'utf8');
-    expect(src, 'the scrub script no longer prints a push instruction at all').toMatch(
-      /git push --force origin main/,
-    );
-    expect(
-      printedText(src),
-      'the printed completion steps no longer warn that filter-repo dropped origin',
-    ).toMatch(/git remote add origin/);
-  });
-
-  it('V-1102 CRITICAL the RUNBOOK carries the re-add too, not just the script. The arm above checks what the script prints at the end of a run; this checks the document the operator is actually working through, which listed the rewrite and the force-push as consecutive commands with nothing between them. Following it verbatim fails on a remote filter-repo has just deleted, at the point where the remediation is half-applied — history rewritten locally, violator commits still live on the remote, and a ticked checkbox saying otherwise.', () => {
-    const runbook = readFileSync(
-      resolve(REPO_ROOT, 'docs/internal/v528-repo-privatization-runbook.md'),
-      'utf8',
-    );
-    const at = runbook.indexOf('scripts/v528-scrub-violators.sh --confirm');
-    expect(at, 'the runbook no longer names the scrub invocation').toBeGreaterThan(0);
-    const block = runbook.slice(at, runbook.indexOf('```', at));
-
-    expect(
-      block,
-      'the runbook goes from the rewrite straight to the force-push, but filter-repo removed origin ' +
-        'by default — the push fails and the scrub is left half-applied:',
-    ).toMatch(/git remote add origin/);
-
-    // Order matters as much as presence: a re-add printed after the push is
-    // the same failure with tidier text.
-    const reAdd = block.indexOf('git remote add origin');
-    const push = block.indexOf('git push --force origin main');
-    expect(reAdd, 'the runbook no longer re-adds the remote before pushing').toBeGreaterThan(-1);
-    expect(push, 'the runbook no longer shows the force-push').toBeGreaterThan(-1);
-    expect(
-      reAdd < push,
-      'the runbook re-adds origin AFTER the force-push, so the push still runs against a remote ' +
-        'that does not exist yet',
-    ).toBe(true);
   });
 });

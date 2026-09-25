@@ -230,7 +230,7 @@ describe('metric label cardinality', () => {
     // the device's own text.
     //
     // `verb` arrived when typed steps began carrying the same check on their
-    // focus tap (A3 V-3360): click | send_keys, closed as
+    // focus tap (V-3360): click | send_keys, closed as
     // TAP_UNOCCLUDED_CHECK_VERBS. A typed step's text never reaches a label.
     //
     // `profile_attached` arrived with

@@ -1,6 +1,6 @@
 // A DEVICE WITH THE OWN-LABEL RULE IS TRUSTED, AND ITS TYPING IS CHECKED TOO.
 //
-// The device's single tap verdict (A3 V-3360, harness 7795de230) now reads a
+// The device's single tap verdict (V-3360, harness 7795de230) now reads a
 // hit on the target's own `<label>` — or on a non-interactive part of it — as
 // clear, and a hit on interactive content inside that label (a "terms" link) as
 // covered. perceive(selector) says so with `hit_via_own_label` on every element;

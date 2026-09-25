@@ -126,7 +126,7 @@ describe('the published api-types ships hover docs and no internal notes', () =>
   });
 
   it('CRITICAL the engineering notes are still in the SOURCE — the JS is clean because of the build, not because documentation was deleted', () => {
-    // Each of these is a block this lane demoted out of the `.d.ts` rather than
+    // Each of these is a block that was demoted out of the `.d.ts` rather than
     // removed. If a future edit deletes one instead of demoting it, that is a
     // loss of repository knowledge and this arm is where it shows up.
     expect(read(resolve(SRC, 'common.ts'))).toMatch(
@@ -134,7 +134,7 @@ describe('the published api-types ships hover docs and no internal notes', () =>
     );
     expect(read(resolve(SRC, 'common.ts'))).toMatch(/per-tier rate-limit defaults/u);
     expect(read(resolve(SRC, 'egress.ts'))).toMatch(
-      /Source of truth: docs\/planning\/133-egress-architecture-cross-agent\.md/u,
+      /Source of truth: planning doc 133 \(egress architecture\) in the/u,
     );
     expect(read(resolve(SRC, 'openvpn-directives.ts'))).toMatch(
       /Lower `script-security 2\|3` to 1, and touch NOTHING else\./u,

@@ -74,7 +74,7 @@ export interface RecaptureService {
  * scope for V-179 implementation; the interface is the seam so a
  * future Apple-release-notes scraper / RSS watcher can drop in.
  *
- * Today: when Agent 1 notices a new iOS version, founder triggers
+ * Today: when the fork notices a new iOS version, founder triggers
  * recapture manually via `RecaptureService.triggerRecapture()`.
  */
 export interface IosVersionWatcher {

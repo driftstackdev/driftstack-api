@@ -99,6 +99,13 @@ function integrationSource(): { text: string; files: number } {
  * tests" must not look the same from a green run.
  */
 const NO_PERSISTENCE_CLASS = new Set([
+  // Security sweep #2 — the session control key's minter columns, the live minter read
+  // and the revocation clear, as free functions: four repos call them (agent sessions,
+  // api keys, team members, auth flows — the clear runs INSIDE each one's own
+  // transaction), so none of the four owns them. Every one runs against real Postgres
+  // through those repos in a-session-control-key-dies-with-the-credential-or-membership
+  // -that-minted-it.test.ts.
+  'agent-session-control-key-minter.ts',
   'chunk-ids.ts',
   'client.ts',
   'migrate.ts',

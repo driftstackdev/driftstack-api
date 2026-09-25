@@ -8,7 +8,7 @@
 //   POST   /v1/agent-sessions/{id}/message — run one decompose→execute turn
 //   DELETE /v1/agent-sessions/{id}       — close the agent session
 //
-// Activation gate matches the rest of Wave 1119 — when `agentRuntime`
+// Activation gate matches the rest of Slice 1119.2 — when `agentRuntime`
 // is undefined in AppDeps, `registerAgentSessionsDisabledRoutes`
 // surfaces 503 FeatureUnavailable on every endpoint so SDK + dashboard
 // see a machine-readable "not yet enabled" signal instead of bare 404.
@@ -161,18 +161,25 @@ import type {
 import type {
   CustomerSafeCapabilityReport,
   SessionCapabilityReportStore,
+  SessionOsFingerprint,
 } from '../services/session-capability-report-store.js';
 import { customerSafeCapabilityReport } from '../services/session-capability-report-store.js';
 import type { SessionNetworkLogStore } from '../services/session-network-log-store.js';
 import type { SessionCaptureStore } from '../services/session-capture-store.js';
 import type { AccountTier, SocksProxyConfig, InlineVpnProxyWire } from '@driftstack/api-types';
 import { archetypeAllowedForTier, defaultArchetypeIdForTier } from '@driftstack/api-types';
+import { AccountProxyOsFingerprintSchema } from '@driftstack/api-types';
 import {
   decryptGuiControlKey,
   encryptGuiControlKey,
   generateGuiControlKey,
 } from '../lib/gui-control-key-encryption.js';
-import { validateGuiControlKey } from '../lib/agent-session-control-key.js';
+import {
+  requireLiveGuiControlKeyMinter,
+  sameGuiControlKeyMinter,
+  validateGuiControlKey,
+  type GuiControlKeyMinter,
+} from '../lib/agent-session-control-key.js';
 import {
   AiCreditsExhaustedError,
   BundledLlmBudgetExhaustedError,
@@ -222,7 +229,8 @@ declare module 'fastify' {
     /**
      * Set to `true` by {@link controlKeyOrAccountAuth} ONLY when a
      * valid (decrypt-matched, unexpired) gui_control_key for this
-     * request's `:id` session was presented. When true, the route
+     * request's `:id` session was presented, and the principal that
+     * minted it is still live (security sweep #2). When true, the route
      * handler skips the account-ownership check for that one session
      * (the key is cryptographically bound to it). Never grants any
      * cross-session or account-wide access. Defaults to `false`.
@@ -332,7 +340,7 @@ const CreateAgentSessionRequestSchema = z.object({
         'initial_url must be an absolute http(s) URL; file:, javascript:, data:, etc. are rejected',
     })
     .optional(),
-  // Per-session geolocation OVERRIDE (A3-approved contract 2026-07-01,
+  // Per-session geolocation OVERRIDE (harness-approved contract 2026-07-01,
   // doc-146→07/47). By default the device's navigator.geolocation auto-derives
   // from the proxy-exit IP (geo-coherent, no field needed) — this explicitly
   // overrides that derive with fixed coordinates for the session's lifetime.
@@ -369,7 +377,14 @@ const RunTurnRequestSchema = z.object({
     .optional(),
 });
 
-// Slice 3 (Wave 29-NNN ARC 3) — POST /v1/agent-sessions/:id/mode body.
+// Security sweep #2 — GET /v1/agent-sessions/:id/gui-control-key querystring.
+// `rotate=true` mints a fresh key even when the caller's own live key could be
+// echoed. A repeated key parses to an array and is refused, like any other value.
+const GuiControlKeyMintQuerySchema = z.object({
+  rotate: z.enum(['true', 'false']).optional(),
+});
+
+// Slice 3 (ARC 3) — POST /v1/agent-sessions/:id/mode body.
 const SetModeRequestSchema = z.object({
   mode: z.enum(['manual', 'ai', 'pair']),
 });
@@ -401,6 +416,35 @@ export function callerCanAccessAgentSession(
   return membership !== undefined && membership.role === 'admin';
 }
 
+/**
+ * Security sweep #2 — the principal a gui_control_key minted by this caller is
+ * recorded against: the calling account, the credential it called with (a signed-in
+ * browser's web session, or an API key — a desktop device key and an OAuth grant are
+ * API keys too), and, for a team admin acting on the owner's session, the membership
+ * that grants it. Only for a caller {@link callerCanAccessAgentSession} admitted.
+ */
+export function guiControlKeyMinterFor(
+  ctx: NonNullable<FastifyRequest['account']>,
+  ownerAccountId: string,
+): GuiControlKeyMinter {
+  let membershipId: string | null = null;
+  if (ownerAccountId !== ctx.account.id) {
+    // The role gate is callerCanAccessAgentSession's; this only names the one
+    // membership (owner, member is unique) it admitted.
+    const membership = ctx.teams.find((t) => t.ownerAccountId === ownerAccountId);
+    if (membership === undefined) {
+      throw new Error('guiControlKeyMinterFor called for a caller with no access to the session');
+    }
+    membershipId = membership.membershipId;
+  }
+  return {
+    accountId: ctx.account.id,
+    apiKeyId: ctx.webSession === null ? ctx.apiKey.id : null,
+    webSessionId: ctx.webSession === null ? null : ctx.webSession.id,
+    membershipId,
+  };
+}
+
 interface PublicAgentSession {
   id: string;
   account_id: string;
@@ -430,7 +474,7 @@ interface PublicAgentSession {
   // create-time. Always a real boolean (column default false), so it reads the
   // same on every historical row and every session that did not ask for it.
   stop_on_exit_ip_change: boolean;
-  // Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
+  // Slice 3 (ARC 3) — pair-mode state machine
   // discriminator. NULL when mode != 'pair'; populated with the
   // initialPairModeState() shape on transition INTO pair mode; the
   // takeover/handback routes evolve it through the state machine
@@ -442,7 +486,7 @@ interface PublicAgentSession {
   // credentials is available. Optional so older SDKs ignore it and
   // pre-LK-Mac deployments skip the field entirely.
   livekit?: PublicLivekitInfo;
-  // A2 W2679 — worker-reported per-session liveness, re-based onto
+  // W2679 — worker-reported per-session liveness, re-based onto
   // Heartbeat.activeSessionStates (NOT the server `status` lifecycle,
   // which stays 'active' until DELETE/sweep even if the worker crashed).
   // `state` is the latest worker state; `fresh` is whether the owning
@@ -527,7 +571,7 @@ function progressStepLabel(intent: AgentIntent): string {
 }
 
 /**
- * A2 W2679 — compute the optional `liveness` field for a session from the
+ * W2679 — compute the optional `liveness` field for a session from the
  * worker-liveness store. Returns undefined (= "unknown, trust the binding")
  * when the store isn't wired (prod has no fleet control plane) OR no beat has
  * reported this session yet — NEVER a "dead" default. When the session IS in
@@ -555,7 +599,7 @@ function publicAgentSession(
   // owned proxy, or never measured) → rendered "measuring…", never a placeholder.
   // Every other callsite passes undefined; only the report-carrying customer reads
   // surface it.
-  osFingerprint?: { os: string; confidence: string; at: string } | null,
+  osFingerprint?: SessionOsFingerprint | null,
 ): PublicAgentSession {
   const liveness = sessionLiveness(rec, livenessStore);
   const base: PublicAgentSession = {
@@ -572,7 +616,7 @@ function publicAgentSession(
     // per profile. Storing anything else at insert would uncount a running
     // session against its cap and let two open on one profile.
     //
-    // But it made the read LIE. A3 measured a session reported `active` at +0s
+    // But it made the read LIE. A session was measured reporting `active` at +0s
     // whose VPN bring-up then failed with `no_output`, and on production today a
     // VPN session never reaches a browser at all (their spawn is flag-gated), so
     // it sits until the 90s sweep reaps it — reported `active` the whole time.
@@ -763,7 +807,7 @@ export interface AgentSessionsRoutesDeps {
    */
   pairModeLock?: PairModeTakeoverLock;
   /**
-   * Arc 4 Wave 2.B sub-slice 8.17 (v2-#8) — Sentry breadcrumb sink.
+   * Arc 4 phase 2.B, slice 8.17 (v2-#8) — Sentry breadcrumb sink.
    * When wired, every pair-mode transition logs a breadcrumb tagged
    * with mode + session_id + transition + actor so an exception
    * caught later in the request carries the state-machine context.
@@ -771,7 +815,7 @@ export interface AgentSessionsRoutesDeps {
    */
   sentry?: SentryClient;
   /**
-   * Arc 4 Wave 2.B sub-slice 8.20 (v2-#8) — customer audit log emitter.
+   * Arc 4 phase 2.B, slice 8.20 (v2-#8) — customer audit log emitter.
    * When wired, takeover + handback transitions land
    * `agent_session.pair_mode.takeover|handback` rows on the customer
    * audit log so the customer can review the full state-machine
@@ -779,7 +823,7 @@ export interface AgentSessionsRoutesDeps {
    */
   accountAudit?: AccountAuditService;
   /**
-   * Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics registry.
+   * Arc 4 phase 2.B, slice 8.18 (v2-#8) — Prometheus metrics registry.
    * Increments `driftstack_pair_mode_transition_total{from,to}` on every
    * successful state-machine transition. Omit to skip counter emission
    * (route still functional; metrics surface just doesn't reflect the
@@ -795,7 +839,7 @@ export interface AgentSessionsRoutesDeps {
    */
   turnTelemetry?: Pick<AgentTurnTelemetry, 'begin'>;
   /**
-   * Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
+   * Arc 4 phase 2.B, slice 8.13d (v2-#8) — pair-mode heartbeat
    * tracker. When wired, takeover + handback handlers call
    * `recordHeartbeat({sessionId, at})` so the sweep service (running
    * every 5s) doesn't auto-handback active sessions back to
@@ -825,13 +869,13 @@ export interface AgentSessionsRoutesDeps {
    */
   fleetControlRegistry?: FleetControlRegistry;
   /**
-   * W650/A3-W1254 — latest-pageState-per-agent-session store. When wired (with
+   * W650/W1254 — latest-pageState-per-agent-session store. When wired (with
    * the registry, behind FLEET_CONTROL_PLANE_ENABLED), GET /v1/agent-sessions/
    * :id/page-state serves the stored pageState; absent → the route returns null.
    */
   sessionPageStateStore?: SessionPageStateStore;
   /**
-   * A2 W2679 — latest-worker-liveness-per-agent-session store. When wired (with
+   * W2679 — latest-worker-liveness-per-agent-session store. When wired (with
    * the registry, behind FLEET_CONTROL_PLANE_ENABLED), the agent-session read
    * shape's `liveness` field is populated from it; absent → the field is omitted
    * (= "unknown, trust the binding"; prod has no fleet control plane).
@@ -884,7 +928,7 @@ export interface AgentSessionsRoutesDeps {
    * a clean 422 (ProxyValidationFailed), zero session, zero spin-up. Absent → the
    * gate is skipped (the proxy is still resolved + SSRF-guarded at dispatch as
    * today). VPN schemes (openvpn/wireguard) tunnel at the box, not via a
-   * CP-dialable protocol, so the probe is skipped for them — A3's W2931 box-
+   * CP-dialable protocol, so the probe is skipped for them — the harness's W2931 box-
    * reported failure is their forward-compatible surface (same 422 problem-type).
    */
   proxyConnectivityProbe?: ProxyConnectivityProbe;
@@ -904,8 +948,8 @@ export interface AgentSessionsRoutesDeps {
    *
    * Injectable so the relay path below it keeps its test coverage while the
    * capability is off — the downstream logic is correct and proved, just
-   * unreachable in production. Flip the default (and delete the guard) when A3
-   * lands a mid-session egress handler.
+   * unreachable in production. Flip the default (and delete the guard) when the
+   * harness lands a mid-session egress handler.
    */
   midSessionEgressEnabled?: boolean;
   /**
@@ -1018,11 +1062,11 @@ export interface SessionDispatchConfig {
   proxy?: SocksProxyConfig;
 }
 
-/** Idle-timeout for MANUAL (GUI) sessions (A3 W2813 idleTimeoutSeconds knob). A manual
+/** Idle-timeout for MANUAL (GUI) sessions (W2813 idleTimeoutSeconds knob). A manual
  *  session is interactively WATCHED — the operator may read/watch without touching for a
  *  while — so the box's ~300s default reaps it under the user. 30 min balances that UX
  *  against holding a fleet slot for a truly-abandoned tab. ai/pair sessions keep the box
- *  default (they stay active via API intents). Value is a sensible default; A3 can tune. */
+ *  default (they stay active via API intents). Value is a sensible default; the harness can tune. */
 export const MANUAL_SESSION_IDLE_TIMEOUT_SECONDS = 1800;
 
 /** Max wall-clock lifetime for MANUAL (GUI) sessions. The harness default is
@@ -1032,7 +1076,7 @@ export const MANUAL_SESSION_IDLE_TIMEOUT_SECONDS = 1800;
  *  human at the controls, so it gets a far more generous 4h cap; the idle timeout
  *  (above) still reaps a genuinely-abandoned tab well before this. ai/pair (API-driven)
  *  sessions keep the box default — they're bounded by token budget + the orphan reaper,
- *  not a human's attention span. 14400s = 4h is a sensible default; A3 can tune. */
+ *  not a human's attention span. 14400s = 4h is a sensible default; the harness can tune. */
 export const MANUAL_SESSION_MAX_DURATION_SECONDS = 14400;
 
 /**
@@ -1180,7 +1224,7 @@ export async function dispatchSessionAssignOnCreate(args: {
   // when absent. Already http(s)-validated at the route; serializeSessionAssign
   // re-validates at the wire.
   initialUrl?: string;
-  // Per-session idle-timeout override (A3 W2813 knob). The route sets a generous
+  // Per-session idle-timeout override (W2813 knob). The route sets a generous
   // value for manual (GUI) sessions so a sim the operator is WATCHING but not
   // touching is not idle_timeout-reaped at the box default (~300s); absent → the
   // box default (correct for ai/pair API-driven sessions, which stay active).
@@ -1190,7 +1234,7 @@ export async function dispatchSessionAssignOnCreate(args: {
   // ~1800s default mid-use; absent → the box default (correct for ai/pair sessions,
   // bounded by token budget + the orphan reaper instead of a wall clock).
   maxDurationSeconds?: number;
-  // Explicit geolocation override from the create body (A3-approved contract
+  // Explicit geolocation override from the create body (harness-approved contract
   // 2026-07-01). Absent → the harness keeps its proxy-exit auto-derive (the
   // exit-coherent default); present → the fork's location provider serves
   // exactly these coordinates for the session's lifetime. Already
@@ -1299,7 +1343,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     // Profile-backed (file 57): when a profile is attached + has a DEK, ship the
     // per-profile DEK so the harness can open/seal the encrypted store. With R2
     // wired, buildAssignProfileBlock adds the restore URL (presigned GET, ONLY
-    // when a sealed blob already exists — fail-closed per A3) + the save-back PUT
+    // when a sealed blob already exists — fail-closed per the harness) + the save-back PUT
     // URL. Without R2 → DEK-only (fresh, no restore/persist). getProfileDek is
     // null when the master key is unset or the profile has no DEK → stateless.
     let profile:
@@ -1308,7 +1352,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     // Fingerprint-correctness (2026-06-19) — a bound profile carries its OWN
     // archetype (chosen by the customer); the static sessionDispatch.archetype is
     // an operator-config default for stateless (no-profile) runs. The harness uses
-    // the assign's archetype verbatim (A3 bus W2688), so resolving the profile's
+    // the assign's archetype verbatim (W2688), so resolving the profile's
     // archetype here is the whole fix — otherwise every profile-backed session
     // provisions the WRONG fingerprint. NULL stays undefined → static fallback.
     let profileArchetype: string | undefined;
@@ -1379,7 +1423,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     // internal-reachable host → caught by the outer best-effort wrapper, which
     // skips the dispatch (fail-closed: never run through an unsafe proxy).
     // socks5 operator default OR the customer's resolved socks5/VPN config (the
-    // latter is the FLAT VPN wire for openvpn/wireguard — A3 W2163).
+    // latter is the FLAT VPN wire for openvpn/wireguard — W2163).
     let inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire | undefined =
       sessionDispatch.proxy;
     if (proxyId !== undefined && accountId !== undefined && accountProxiesService !== undefined) {
@@ -1410,9 +1454,10 @@ export async function dispatchSessionAssignOnCreate(args: {
     // proxy probe observed one for THIS (accountId, proxyId). Keyed by proxy, so a
     // miss (probe found no identity / cache cold after a restart / operator-default
     // egress with no proxyId) just omits the optional block — the box keeps today's
-    // behaviour. quic_ok is derived from the RESOLVED egress: a VPN wire tunnels all
-    // IP incl. UDP → QUIC works; a socks5 proxy needs UDP ASSOCIATE actually verified
-    // through it (#46 udp_capable), not merely requested (udp_associate is a wish).
+    // behaviour. quic_ok is a MEASUREMENT (owner item 9): true only when a stored
+    // reading of this proxy confirmed QUIC (see measuredQuicOk). It used to be the
+    // configured `udp_capable` flag, or true for any VPN, which showed QUIC ✓ that
+    // nobody had checked.
     const cachedExit =
       accountId !== undefined && proxyId !== undefined && exitIdentityCache !== undefined
         ? await exitIdentityCache.get(accountId, proxyId)
@@ -1437,26 +1482,29 @@ export async function dispatchSessionAssignOnCreate(args: {
       (inlineProxyConfig.type === 'openvpn' || inlineProxyConfig.type === 'wireguard')
         ? inlineProxyConfig.type
         : null;
-    let storedVpnExit: { identity: ProbeExitIdentity; probedAt: string } | undefined;
+    // The proxy row, read once when the block can be sent at all: a VPN row's
+    // stored exit comes from it, and so does every measured QUIC reading.
+    let storedRow: Awaited<ReturnType<AccountProxiesService['findOwned']>> = null;
     if (
-      cachedExit === undefined &&
-      vpnWireType !== null &&
+      (cachedExit !== undefined || vpnWireType !== null) &&
       accountId !== undefined &&
       proxyId !== undefined &&
       accountProxiesService !== undefined
     ) {
       try {
-        storedVpnExit = storedVpnExitAsSwapIdentity(
-          await accountProxiesService.findOwned(proxyId, accountId),
-        );
+        storedRow = await accountProxiesService.findOwned(proxyId, accountId);
       } catch (err) {
         logger?.warn(
           { component: 'agent-session-dispatch', sessionId, proxyId, err },
-          'stored VPN exit read failed; dispatching without exit_identity',
+          'stored proxy row read failed; dispatching with no stored exit and QUIC not confirmed',
         );
-        storedVpnExit = undefined;
+        storedRow = null;
       }
     }
+    const storedVpnExit =
+      cachedExit === undefined && vpnWireType !== null
+        ? storedVpnExitAsSwapIdentity(storedRow)
+        : undefined;
     const exitSource = cachedExit ?? storedVpnExit;
     const exitIdentity =
       exitSource !== undefined
@@ -1466,17 +1514,10 @@ export async function dispatchSessionAssignOnCreate(args: {
             region: exitSource.identity.region,
             city: exitSource.identity.city,
             timezone: exitSource.identity.timezone,
-            // With no egress configured there is no proxy to be UDP-capable,
-            // so quicOk is false rather than a claim about a config that does
-            // not exist. (A cached exit identity can outlive the proxy that
-            // produced it, so this branch is reachable.)
-            quicOk:
-              inlineProxyConfig === undefined
-                ? false
-                : 'type' in inlineProxyConfig &&
-                    (inlineProxyConfig.type === 'openvpn' || inlineProxyConfig.type === 'wireguard')
-                  ? true
-                  : (inlineProxyConfig as { udp_capable?: boolean | null }).udp_capable === true,
+            // With no egress configured there is no proxy whose QUIC was
+            // measured, so quicOk is false. (A cached exit identity can outlive
+            // the proxy that produced it, so this branch is reachable.)
+            quicOk: inlineProxyConfig === undefined ? false : measuredQuicOk(storedRow),
             probedAt: exitSource.probedAt,
           }
         : undefined;
@@ -1789,7 +1830,7 @@ export const PRELAUNCH_RETRY_BACKOFF_MS = 250;
  * VPN schemes (openvpn/wireguard) are NOT CP-dialable proxies — they tunnel at the
  * box — so resolveForDispatch returns the FLAT VPN wire (with a `type` field) and
  * we SKIP the live probe for them. Their forward-compatible failure surface is
- * A3's W2931 (post-dispatch, box-reported), which raises the SAME 422 problem-type
+ * the harness's W2931 (post-dispatch, box-reported), which raises the SAME 422 problem-type
  * + `reason` enum once the box reports an egress failure. socks5 is the only
  * scheme this gate live-tests pre-launch today (http was already rejected above).
  *
@@ -1992,7 +2033,7 @@ export async function runProxyPrelaunchGate(args: {
 /**
  * Best-effort `sessionEnd` dispatch when an agent-session closes — tells the
  * harness to tear the session down (fork + proxy + capture) and free its
- * concurrency slot (A3 W420 sessionEnd teardown site). Without it, a closed
+ * concurrency slot (W420 sessionEnd teardown site). Without it, a closed
  * session leaks a harness slot until the harness's own idle sweep reclaims it
  * (maxConcurrent is small, so leaked slots → at_capacity refusals).
  *
@@ -2031,7 +2072,7 @@ export async function dispatchSessionEndOnClose(args: {
     }
     const conn = fleetControlRegistry.get(targetNodeId);
     if (conn === undefined) {
-      // Node not connected (control-WSS down/flapping, A3 W2859) — the sessionEnd
+      // Node not connected (control-WSS down/flapping, W2859) — the sessionEnd
       // can't land now. QUEUE it so register() re-dispatches on the node's next
       // reconnect; otherwise the box keeps the browser running (orphan + cost). The
       // robust fix for the founder's "End-session doesn't tear down" symptom,
@@ -2200,6 +2241,23 @@ export function resolveDispatchGeolocation(
     return { latitude: exit.lat, longitude: exit.lon };
   }
   return undefined;
+}
+
+/**
+ * Owner item 9 — the `quic_ok` an exit identity may carry: TRUE only when a stored
+ * MEASUREMENT of this proxy confirmed QUIC, false otherwise (never measured
+ * included). The two measurements the row keeps:
+ *   * `quicProbe` — the proxy Test's relay check found QUIC working (0124);
+ *   * `quicMeasured === 'h3'` — a live session through it negotiated HTTP/3 (0116).
+ * Never the configured `udp_capable` flag, and never "a VPN tunnels UDP": both are
+ * expectations, and the box shows this field as a checked QUIC ✓. The wire field is
+ * a required boolean, so "not measured" is sent as false — "not confirmed", never
+ * "confirmed absent".
+ */
+export function measuredQuicOk(
+  row: { quicProbe?: boolean | null; quicMeasured?: string | null } | null | undefined,
+): boolean {
+  return row?.quicProbe === true || row?.quicMeasured === 'h3';
 }
 
 /**
@@ -2724,7 +2782,7 @@ export function registerAgentSessionsRoutes(
   // proxyId simply reads null. The internal diagnostics on the row never leave here.
   const readSessionProxyOsFingerprint = async (
     rec: AgentSessionRecord,
-  ): Promise<{ os: string; confidence: string; at: string } | null> => {
+  ): Promise<SessionOsFingerprint | null> => {
     if (rec.proxyId === null || accountProxiesService === undefined) return null;
     const proxyRow = await accountProxiesService.findOwned(rec.proxyId, rec.accountId);
     const fp = proxyRow?.osFingerprint ?? null;
@@ -2745,7 +2803,33 @@ export function registerAgentSessionsRoutes(
     // sets both columns in one update.
     const atMs = proxyRow?.osFingerprintAt?.getTime();
     if (atMs === undefined || !Number.isFinite(atMs)) return null;
-    return { os: fp.os, confidence: fp.confidence, at: new Date(atMs).toISOString() };
+    // Owner item 9 — and HOW it was taken, so a client can tell a trustworthy
+    // mismatch (red) from a reading that does not describe the path a website sees
+    // (neutral): `observed_via` and the two path flags, in the names the proxy
+    // Test reply and the proxy list publish, built as the list builds them
+    // (routes/account-me.ts `storedOsFingerprint`): the flags normalised to FALSE
+    // when a stored reading predates them — never promoted to the true a mismatch
+    // claim rests on — and the whole reading parsed with the one published schema,
+    // so a value outside its closed sets drops the reading ("not measured") rather
+    // than reaching a client as something it cannot render. The free-text reason
+    // and the observed address stay here.
+    const parsed = AccountProxyOsFingerprintSchema.safeParse({
+      ...fp,
+      single_host_vantage: fp.single_host_vantage === true,
+      web_port_vantage: fp.web_port_vantage === true,
+    });
+    if (!parsed.success) return null;
+    const reading = parsed.data;
+    return {
+      os: reading.os,
+      confidence: reading.confidence,
+      at: new Date(atMs).toISOString(),
+      observed_via: reading.observed_via,
+      single_host_vantage: reading.single_host_vantage,
+      web_port_vantage: reading.web_port_vantage,
+      direct_reading: reading.single_host_vantage,
+      website_like_reading: reading.web_port_vantage,
+    };
   };
 
   /**
@@ -2983,11 +3067,26 @@ export function registerAgentSessionsRoutes(
     const rec = await sessions.get(sessionId);
     // Shared validator (lib/agent-session-control-key.ts) — single source of
     // truth, also used by the livekit-token re-mint route.
-    return validateGuiControlKey({
+    const result = validateGuiControlKey({
       headerRaw,
       session: rec,
       encryptionKey: guiControlKeyEncryptionKey,
     });
+    if (result.authorized) {
+      // Security sweep #2 — the key dies with whoever minted it: re-check that
+      // principal live (credential, membership, account) on every use, and clear
+      // the stored key when it no longer holds.
+      await requireLiveGuiControlKeyMinter({
+        session: rec,
+        authority: sessions,
+        onClearError: (err) =>
+          req.log.warn(
+            { component: 'gui-control-key', session_id: sessionId, err },
+            'refused control key could not be cleared; it stays refused',
+          ),
+      });
+    }
+    return result;
   }
 
   /**
@@ -3717,7 +3816,7 @@ export function registerAgentSessionsRoutes(
           // default; omitted when absent so the fallback applies. The harness opens
           // this URL on session launch (inert until the box honors initialUrl).
           ...(parsed.data.initial_url !== undefined ? { initialUrl: parsed.data.initial_url } : {}),
-          // Explicit geolocation override from the create body (A3-approved
+          // Explicit geolocation override from the create body (harness-approved
           // contract 2026-07-01) — omitted when absent so the harness keeps its
           // exit-coherent proxy-IP auto-derive.
           ...(parsed.data.geolocation !== undefined
@@ -3726,7 +3825,7 @@ export function registerAgentSessionsRoutes(
           // Manual (GUI) sessions are interactively WATCHED — give them a generous idle
           // timeout AND a generous max-duration so a sim the operator watches without
           // touching isn't reaped at the box ~300s idle default, nor hard-killed at the
-          // box ~1800s wall-clock default mid-use (A3 W2813 knob). ai/pair stay on the box
+          // box ~1800s wall-clock default mid-use (W2813 knob). ai/pair stay on the box
           // defaults (API-driven; bounded by token budget + the orphan reaper).
           ...(created.mode === 'manual'
             ? {
@@ -3874,7 +3973,7 @@ export function registerAgentSessionsRoutes(
     },
   );
 
-  // W650/A3-W1254 — page-state for the AGENT/simulator view. The harness emits
+  // W650/W1254 — page-state for the AGENT/simulator view. The harness emits
   // HarnessOutbound.pageState (loading→loaded|errored) keyed by the AGENT
   // session id on every agent-initiated navigate; this serves the latest so the
   // GUI loading-bar/error-overlay can poll the agent session it drives. (The
@@ -4031,7 +4130,7 @@ export function registerAgentSessionsRoutes(
   // Founder #48 — live cookie-jar view for the simulator drawer. PULLs the
   // running session's full cookie jar (incl. httpOnly) over the node's live
   // control WSS via the connection's CookiesRequestCorrelator (cookiesRequest →
-  // cookiesResult, A2 W2816 / A3 W2817). Returns a DISCRIMINATED body (200 in
+  // cookiesResult, W2816 / W2817). Returns a DISCRIMINATED body (200 in
   // every case) — mirroring GET /:id/page-state's "null when not wired" style —
   // so the GUI Cookies panel renders without treating expected-inert states as
   // HTTP errors.
@@ -4205,14 +4304,14 @@ export function registerAgentSessionsRoutes(
   // (not an array of cookies) is a 422.
   //
   // ⛔ STALE (marked 2026-09-06, P-33), kept rather than deleted because the
-  // sentence did damage worth recording: the "ships gated-inert / A3 handler
+  // sentence did damage worth recording: the "ships gated-inert / harness handler
   // pending" framing below is FALSE. The node handler has landed —
   // `harness/Sources/SessionManager/HarnessCoordinator.swift` `handleSetCookies` at :1638, dispatched
   // at :4203 (read 2026-09-06). A live node DOES reply. Anyone checking
   // whether a defect on this path was reachable would read this comment and
   // conclude the path was dead; it is live. Same correction already applied to
   // the cookies-read route above.
-  // ORIGINAL WORDING, quoted: "Ships gated-inert until A3's harness setCookies
+  // ORIGINAL WORDING, quoted: "Ships gated-inert until the harness setCookies
   // WD-extension lands: until then a live node never replies → status:'timeout',
   // which the GUI surfaces — and a not-live/offline session → status:'unavailable'."
   //   status:'ok'          → write applied
@@ -4352,10 +4451,10 @@ export function registerAgentSessionsRoutes(
   // Measured 2026-09-06 with eight positive controls, one per CP→node frame, against
   // `harness/Sources`: `setCookies`, `cookiesRequest`, `navigateHistory`,
   // `trimProfile`, `uploadFile`, `probeEgress`, `sessionAssign` and `sessionEnd` each
-  // have exactly one `case`; `setEgress` has ZERO — and A3 confirmed by walking
-  // `ControlInbound` brace-by-brace (18 cases) that it was NEVER in their contract.
-  // The frame shape here came from an A2 commit (`413a5f32f`) that the ledger then
-  // recorded as A3's, which is how it read as an agreed dependency eleven days later.
+  // have exactly one `case`; `setEgress` has ZERO — and the harness side confirmed by
+  // walking `ControlInbound` brace-by-brace (18 cases) that it was NEVER in its contract.
+  // The frame shape here came from a server commit (`413a5f32f`) that the ledger then
+  // recorded as a harness one, which is how it read as an agreed dependency eleven days later.
   //
   // ⚠️ A grep does NOT settle this and would say the opposite: `setegress`
   // case-insensitively matches `testStartupConfigInfoOnUnsetEgressProbe` (the
@@ -4373,7 +4472,7 @@ export function registerAgentSessionsRoutes(
   // `sessionAssign` (`egressPhase`); there is no mid-session setter of any kind.
   //
   // TO TURN THIS ON: flip the `midSessionEgressEnabled` default to true and delete
-  // the guard that reads it, once A3 lands a mid-session egress handler. Everything
+  // the guard that reads it, once the harness lands a mid-session egress handler. Everything
   // below it is already correct and tested — the dep is injectable precisely so that
   // coverage survives while the capability is off. Tracked on ledger row P-17.
   const SetEgressBodySchema = z.object({
@@ -4496,13 +4595,17 @@ export function registerAgentSessionsRoutes(
       // ('session'). Read it here as the swap's identity. A socks5 row keeps the
       // cache as its only source — its exit is probed on every launch.
       const hit = await exitIdentityCache?.get(rec.accountId, proxyId);
+      // The row carries a VPN's stored exit and every measured QUIC reading
+      // (owner item 9: quic_ok below is a measurement, never configuration).
+      const swapRow =
+        hit !== undefined || vpnScheme !== null
+          ? await accountProxiesService.findOwned(proxyId, rec.accountId)
+          : null;
       const swapIdentity =
         hit !== undefined
           ? { identity: hit.identity, probedAt: hit.probedAt }
           : vpnScheme !== null
-            ? storedVpnExitAsSwapIdentity(
-                await accountProxiesService.findOwned(proxyId, rec.accountId),
-              )
+            ? storedVpnExitAsSwapIdentity(swapRow)
             : undefined;
       if (swapIdentity === undefined) {
         // Scheme-aware: the instruction must be one THIS scheme can follow. For a
@@ -4529,10 +4632,7 @@ export function registerAgentSessionsRoutes(
         ...(typeof swapIdentity.identity.lon === 'number'
           ? { lon: swapIdentity.identity.lon }
           : {}),
-        quic_ok:
-          vpnScheme !== null
-            ? true
-            : (resolved as { udp_capable?: boolean | null }).udp_capable === true,
+        quic_ok: measuredQuicOk(swapRow),
         probed_at: swapIdentity.probedAt,
       };
       const applyPoint = parsed.data.apply_point ?? 'next_navigation';
@@ -4580,7 +4680,7 @@ export function registerAgentSessionsRoutes(
     },
   );
 
-  // Sim browser back/forward (A3 W2870). Steps the running session's WebKit
+  // Sim browser back/forward (W2870). Steps the running session's WebKit
   // back-forward list one entry in `direction` over the node's live control WSS
   // (navigateHistory → navigateHistoryResult). Returns a DISCRIMINATED 200 body in
   // every relay case (ok / unavailable / timeout / error), mirroring the cookies-import
@@ -4588,14 +4688,14 @@ export function registerAgentSessionsRoutes(
   // HTTP-error noise. Malformed body (direction not 'back'|'forward') is a 422.
   //
   // ⛔ STALE (marked 2026-09-06, P-33), kept rather than deleted because the
-  // sentence did damage worth recording: the "ships gated-inert / A3 handler
+  // sentence did damage worth recording: the "ships gated-inert / harness handler
   // pending" framing below is FALSE. The node handler has landed —
   // `harness/Sources/SessionManager/HarnessCoordinator.swift` `handleNavigateHistory` at :1709, dispatched
   // at :4213 (read 2026-09-06). A live node DOES reply. Anyone checking
   // whether a defect on this path was reachable would read this comment and
   // conclude the path was dead; it is live. Same correction already applied to
   // the cookies-read route above.
-  // ORIGINAL WORDING, quoted: "Ships gated-inert until A3's harness navigateHistory
+  // ORIGINAL WORDING, quoted: "Ships gated-inert until the harness navigateHistory
   // WD-extension lands: until then a live node never replies → status:'timeout',
   // which the GUI surfaces — and a not-live / offline session → status:'unavailable'."
   //   status:'ok'          → step applied
@@ -4725,7 +4825,7 @@ export function registerAgentSessionsRoutes(
     },
   );
 
-  // File-control upload (A3 W2851 / founder "control files"). Relays the customer's
+  // File-control upload (W2851 / founder "control files"). Relays the customer's
   // file bytes (base64) into the running session's isolated 0o700 upload jail over
   // the node's live control WSS (uploadFile → uploadResult), returning an OPAQUE
   // handle {id,name,mime,size} the GUI uses to drive a page's <input type=file> —
@@ -5005,7 +5105,7 @@ export function registerAgentSessionsRoutes(
     },
   );
 
-  // File-control download LIST (A3 W2856 / founder "control files"). Lists the files
+  // File-control download LIST (W2856 / founder "control files"). Lists the files
   // a page wrote into the session's isolated 0o700 download jail (never ~/Downloads).
   // Read-scope; SAME control-auth + ownership + discriminated-200 shape as GET
   // /:id/cookies. `files: []` (status ok) = "no downloads yet" (jail empty until the
@@ -5080,7 +5180,7 @@ export function registerAgentSessionsRoutes(
     },
   );
 
-  // File-control download FETCH (A3 W2856). The compatibility default is the
+  // File-control download FETCH (W2856). The compatibility default is the
   // original discriminated JSON/base64 envelope. Desktop callers opt into
   // `format=binary` so the 64 MiB contract does not expand into an ~85 MiB JSON
   // string and then duplicate itself through JSON.parse + atob in the WebView.
@@ -5349,8 +5449,21 @@ export function registerAgentSessionsRoutes(
   // a full session-reissue. Past TTL: mint fresh (the old plaintext
   // is unrecoverable — purposeful, since the customer should treat
   // it as a single-session token).
+  //
+  // Security sweep #2 — the key is recorded against the principal that minted it
+  // (the calling credential, and the membership a team member acted through), and
+  // every control-key gate re-checks that principal live on each use. So the echo
+  // is kept for the SAME principal only. The desktop app re-mints with its one
+  // keychain credential on every launch, reopen and deep link, and relies on the
+  // echo: on Windows and Linux a second launch only focuses the Simulator window
+  // that already holds the key, and a rotated key would leave that window dead.
+  // A DIFFERENT principal — the owner after a teammate, a teammate after the
+  // owner, a second desktop install — or a stored minter that is no longer live
+  // gets a FRESH key, and the one stored before stops working at once (one key
+  // per session). `?rotate=true` mints a fresh key on purpose: the owner's way to
+  // end a key they believe leaked, without ending the session.
   if (guiControlKeyEncryptionKey !== undefined) {
-    app.get<{ Params: { id: string } }>(
+    app.get<{ Params: { id: string }; Querystring: { rotate?: string } }>(
       '/v1/agent-sessions/:id/gui-control-key',
       // The returned gui_control_key is a CONTROL **and READ** credential, so the mint
       // requires both verbs. Every controlKeyOrAccountAuth route `return`s on a valid
@@ -5382,6 +5495,8 @@ export function registerAgentSessionsRoutes(
       },
       async (req, reply) => {
         const ctx = requireCtx(req);
+        const query = GuiControlKeyMintQuerySchema.safeParse(req.query ?? {});
+        if (!query.success) throw new ValidationError(query.error.flatten());
         const rec = await sessions.get(req.params.id);
         if (rec === null || !callerCanAccessAgentSession(ctx, rec.accountId)) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
@@ -5393,14 +5508,30 @@ export function registerAgentSessionsRoutes(
           );
         }
         const now = new Date();
+        const caller = guiControlKeyMinterFor(ctx, rec.accountId);
+        const stored = rec.guiControlKeyMintedBy ?? null;
         // Mint when no key exists, the existing one has expired, or it is a
         // legacy/corrupt/context-mismatched blob. Only this account-authenticated
         // route may recover a key; control-key authorization always fails closed.
+        // And (security sweep #2) when the caller asked to rotate, the stored key
+        // was minted by another principal or by none (before 0142), or its minter
+        // no longer holds.
         const expired =
           rec.guiControlKeyExpiresAt === null ||
           rec.guiControlKeyExpiresAt.getTime() <= now.getTime();
+        const echoable =
+          query.data.rotate !== 'true' &&
+          !expired &&
+          rec.guiControlKeyCiphertext !== null &&
+          stored !== null &&
+          sameGuiControlKeyMinter(stored, caller) &&
+          (await sessions.isGuiControlKeyMinterLive({
+            minter: stored,
+            ownerAccountId: rec.accountId,
+            now,
+          }));
         let plaintext: string | null = null;
-        if (!expired && rec.guiControlKeyCiphertext !== null) {
+        if (echoable && rec.guiControlKeyCiphertext !== null) {
           try {
             plaintext = decryptGuiControlKey(
               rec.guiControlKeyCiphertext,
@@ -5423,6 +5554,7 @@ export function registerAgentSessionsRoutes(
             id: req.params.id,
             ciphertext,
             expiresAt,
+            mintedBy: caller,
           });
           if (committed === null) {
             // A close won after the owned active read. Do not disclose the
@@ -5437,8 +5569,8 @@ export function registerAgentSessionsRoutes(
             minted: true as const,
           };
         }
-        // Live v2 key: echo. The dashboard treats every call as idempotent
-        // within the TTL.
+        // Live v2 key, same live principal: echo. The desktop app treats every
+        // call as idempotent within the TTL, and its windows share this key.
         return {
           gui_control_key: plaintext,
           expires_at: rec.guiControlKeyExpiresAt!.toISOString(),
@@ -5448,12 +5580,12 @@ export function registerAgentSessionsRoutes(
     );
   }
 
-  // Slice 4 (Wave 29-NNN ARC 3) — POST /v1/agent-sessions/:id/input-event.
+  // Slice 4 (ARC 3) — POST /v1/agent-sessions/:id/input-event.
   // Customer-dashboard ManualControlOverlay raw screen-coord forwarder.
   // Wire shape: { event: <LK.6 InputEvent discriminated union> } per
   // packages/api-types/src/agent-input-event.ts.
   //
-  // Server-side dispatch is harness-gated: until Agent 1's Swift
+  // Server-side dispatch is harness-gated: until the Swift
   // harness end-to-end lands (Tier-3 verdict 2026-05-19 Option A;
   // 6-9 weeks post §10/§11+EG-WK), no transport exists to forward
   // events to the harness. Route returns 503 FeatureUnavailable in
@@ -5533,7 +5665,7 @@ export function registerAgentSessionsRoutes(
         );
       }
 
-      // Slice 5 (Wave 29-NNN ARC 3) — pair-mode takeover-trigger
+      // Slice 5 (ARC 3) — pair-mode takeover-trigger
       // wire. The first input-event in a pair-mode session whose
       // pair_mode_state.kind === 'ai-driving' fires the
       // takeover-request transition (same path the explicit POST
@@ -5701,7 +5833,7 @@ export function registerAgentSessionsRoutes(
 
       // Manual mode OR pair-mode + human-driving: forward to the
       // harness. Pre-harness: no transport exists; return 503 with
-      // FeatureUnavailable. Once Agent 1's Swift harness end-to-end
+      // FeatureUnavailable. Once the Swift harness end-to-end
       // lands, the dispatcher publishes the event via LiveKit
       // DataChannel + returns { kind: 'forwarded', duration_ms }.
       throw new FeatureUnavailableError(
@@ -5711,7 +5843,7 @@ export function registerAgentSessionsRoutes(
     },
   );
 
-  // Slice 3 (Wave 29-NNN ARC 3) — POST /v1/agent-sessions/:id/mode.
+  // Slice 3 (ARC 3) — POST /v1/agent-sessions/:id/mode.
   // Top-level mode setter for the AI-chat / manual / pair toggle on
   // the per-session workbench page. Atomic dual-column write of
   // `mode` + `pair_mode_state` via sessions.setModeIfActive:
@@ -5917,7 +6049,7 @@ export function registerAgentSessionsRoutes(
             waitForWindDown: false,
             logger: req.log,
           });
-          // Arc 4 Wave 2.B sub-slice 8.17 (v2-#8) — Sentry breadcrumb.
+          // Arc 4 phase 2.B, slice 8.17 (v2-#8) — Sentry breadcrumb.
           // Attaches state-machine context so any later exception in
           // this request carries the transition trail.
           sentry?.addBreadcrumb({
@@ -5932,7 +6064,7 @@ export function registerAgentSessionsRoutes(
               actor: parsed.data.client_id,
             },
           });
-          // Arc 4 Wave 2.B sub-slice 8.20 (v2-#8) — customer audit log
+          // Arc 4 phase 2.B, slice 8.20 (v2-#8) — customer audit log
           // entry. Best-effort emit; audit failures don't break the
           // transition (matches the v2-#5 Q.1.f decompose-audit pattern).
           try {
@@ -5951,7 +6083,7 @@ export function registerAgentSessionsRoutes(
           } catch {
             /* swallow */
           }
-          // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus counter.
+          // Arc 4 phase 2.B, slice 8.18 (v2-#8) — Prometheus counter.
           // Best-effort: a registry inc never throws under normal
           // operation (counters validated at registration), but wrap
           // anyway so a stray bug doesn't break the transition.
@@ -5963,7 +6095,7 @@ export function registerAgentSessionsRoutes(
           } catch {
             /* swallow */
           }
-          // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — record a fresh
+          // Arc 4 phase 2.B, slice 8.13d (v2-#8) — record a fresh
           // heartbeat so the 5s sweep doesn't immediately auto-
           // handback a takeover the customer just acquired. The
           // tracker is in-memory; recordHeartbeat doesn't throw.
@@ -6069,7 +6201,7 @@ export function registerAgentSessionsRoutes(
             waitForWindDown: false,
             logger: req.log,
           });
-          // Arc 4 Wave 2.B sub-slice 8.17 (v2-#8) — Sentry breadcrumb.
+          // Arc 4 phase 2.B, slice 8.17 (v2-#8) — Sentry breadcrumb.
           sentry?.addBreadcrumb({
             category: 'agent-session.pair-mode',
             message: `handback-request → ${nextState.kind}`,
@@ -6099,7 +6231,7 @@ export function registerAgentSessionsRoutes(
           } catch {
             /* swallow */
           }
-          // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus counter.
+          // Arc 4 phase 2.B, slice 8.18 (v2-#8) — Prometheus counter.
           try {
             metrics?.inc(METRIC_NAMES.pairModeTransitionTotal, {
               from: currentState.kind,
@@ -6108,7 +6240,7 @@ export function registerAgentSessionsRoutes(
           } catch {
             /* swallow */
           }
-          // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — record a fresh
+          // Arc 4 phase 2.B, slice 8.13d (v2-#8) — record a fresh
           // heartbeat. Handback transitions still represent active
           // customer attention (they're explicitly returning control,
           // not abandoning the session), so the sweep should not
@@ -6747,7 +6879,7 @@ export function registerAgentSessionsRoutes(
         // ticked consent yet. The route surfaces a typed 402 below
         // so the dashboard can render a precise CTA.
         bundledLlmConsentMissing = true;
-        // Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — error counter.
+        // Arc 4 phase 2.B, slice 8.19 (v2-#8) — error counter.
         try {
           metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, { kind: 'consent_missing' });
         } catch {
@@ -6814,7 +6946,7 @@ export function registerAgentSessionsRoutes(
         );
         if (spent >= settings.monthlyCapUsdCents) {
           await assertAgentMessageAdmissionCurrent(req.params.id, admission);
-          // Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — error counter.
+          // Arc 4 phase 2.B, slice 8.19 (v2-#8) — error counter.
           try {
             metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, { kind: 'budget_exhausted' });
           } catch {
@@ -6864,7 +6996,7 @@ export function registerAgentSessionsRoutes(
           bundledSlotAcquired = true;
         }
         bundledLlmKey = deploymentFallbackKey;
-        // Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — request counter
+        // Arc 4 phase 2.B, slice 8.19 (v2-#8) — request counter
         // fires when the bundled-LLM leg actually resolves a key
         // (consent + under cap). Distinct from the error counters
         // above so a single dashboard panel can ratio
@@ -8151,7 +8283,7 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   // 404 (same rationale as the takeover/handback/mode stubs below).
   app.get('/v1/agent-sessions', stub);
   app.get('/v1/agent-sessions/:id', stub);
-  // W650/A3-W1254 — the page-state read is gated too (machine-readable 503, not
+  // W650/W1254 — the page-state read is gated too (machine-readable 503, not
   // a bare 404) so the GUI overlay's poll surfaces the documented activation state.
   app.get('/v1/agent-sessions/:id/page-state', stub);
   // T-9 — the network-log read is gated too (machine-readable 503, not a bare
@@ -8171,13 +8303,13 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   // instead of "this deployment does not run the agent". Found by the route's
   // own gated-503 arm, which is why that arm exists.
   app.post('/v1/agent-sessions/:id/egress', stub);
-  // Sim back/forward (A3 W2870) — the history step is gated too (machine-readable 503,
+  // Sim back/forward (W2870) — the history step is gated too (machine-readable 503,
   // not a bare 404) so the GUI's back/forward buttons surface the documented state.
   app.post('/v1/agent-sessions/:id/history', stub);
-  // File-control (A3 W2851) — the upload write is gated too (machine-readable 503)
+  // File-control (W2851) — the upload write is gated too (machine-readable 503)
   // so the GUI file picker surfaces the documented activation state.
   app.post('/v1/agent-sessions/:id/files', stub);
-  // File-control download (A3 W2856) — list + fetch gated too (machine-readable 503)
+  // File-control download (W2856) — list + fetch gated too (machine-readable 503)
   // so the GUI download bar surfaces the documented activation state.
   app.get('/v1/agent-sessions/:id/downloads', stub);
   app.get('/v1/agent-sessions/:id/downloads/content', stub);
@@ -8204,9 +8336,9 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   app.get('/v1/agent-sessions/:id/gui-control-key', stub);
   app.post('/v1/agent-sessions/:id/takeover', stub);
   app.post('/v1/agent-sessions/:id/handback', stub);
-  // Slice 3 (Wave 29-NNN ARC 3) — POST /:id/mode also gated.
+  // Slice 3 (ARC 3) — POST /:id/mode also gated.
   app.post('/v1/agent-sessions/:id/mode', stub);
-  // Slice 4 (Wave 29-NNN ARC 3) — POST /:id/input-event also gated.
+  // Slice 4 (ARC 3) — POST /:id/input-event also gated.
   app.post('/v1/agent-sessions/:id/input-event', stub);
   // W393 — POST /:id/resume also gated (same activation message).
   app.post('/v1/agent-sessions/:id/resume', stub);

@@ -40,7 +40,7 @@ describe('W390.B apps/server/src/lib/cost-estimator.ts content parity', () => {
 
   it('V-658 + V-541.B framing pinned in module comment', () => {
     expect(body).toMatch(/V-658 — cost estimator \(V-541\.B foundation\)\./);
-    expect(body).toMatch(/docs\/internal\/v541-cost-monitoring-design\.md/);
+    expect(body).toMatch(/the internal V-541 cost-monitoring design\. The downstream/);
   });
 
   it('zero-DB-dependencies framing pinned (so the estimator can be tested/tuned independently)', () => {

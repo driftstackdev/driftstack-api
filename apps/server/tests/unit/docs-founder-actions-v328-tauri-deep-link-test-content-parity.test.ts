@@ -33,18 +33,18 @@ function read(p: string): string {
 describe('W545.B /docs/founder-actions/v328-tauri-deep-link-test.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + V-328 + driftstack:// + V-268-polling-replacement framing pinned: '# V-328 — Tauri custom URL scheme deep-link (founder validation)' + 'V-328 wires the GUI client to register a `driftstack://` URL scheme, so the dashboard's auth-confirmation page can hand off to the desktop app via OS deep-link instead of the V-268 polling loop.' + 'This document captures the founder action items that the autopilot slice could not run / could not validate. Code is on `main`; the native bundle path needs an actual run on each OS before release.' — pinned so the V-328 + driftstack://-scheme + V-268-polling-replacement + autopilot-slice-cannot-validate-per-platform + code-on-main-needs-actual-OS-run commitment survives", () => {
+  it("Header + V-328 + driftstack:// + V-268-polling-replacement framing pinned: '# V-328 — Tauri custom URL scheme deep-link (founder validation)' + 'V-328 wires the GUI client to register a `driftstack://` URL scheme, so the dashboard's auth-confirmation page can hand off to the desktop app via OS deep-link instead of the V-268 polling loop.' + 'This document captures the founder action items that the implementation slice could not run / could not validate. Code is on `main`; the native bundle path needs an actual run on each OS before release.' — pinned so the V-328 + driftstack://-scheme + V-268-polling-replacement + implementation-slice-cannot-validate-per-platform + code-on-main-needs-actual-OS-run commitment survives", () => {
     expect(body).toMatch(/# V-328 — Tauri custom URL scheme deep-link \(founder validation\)/);
     expect(body).toMatch(/V-328 wires the GUI client to register a `driftstack:\/\/` URL scheme,/);
     expect(body).toMatch(/so the dashboard's auth-confirmation page can hand off to the desktop/);
     expect(body).toMatch(/app via OS deep-link instead of the V-268 polling loop\./);
-    expect(body).toMatch(/This document captures the founder action items that the autopilot/);
+    expect(body).toMatch(/This document captures the founder action items that the implementation/);
     expect(body).toMatch(/slice could not run \/ could not validate\. Code is on `main`; the/);
     expect(body).toMatch(/native bundle path needs an actual run on each OS before release\./);
   });
 
   it("Code-already-on-main inventory framing pinned: '`apps/gui-client/src-tauri/Cargo.toml`: added `tauri-plugin-deep-link = \"2.0\"` dependency.' + '`apps/gui-client/src-tauri/src/lib.rs`: registered `tauri_plugin_deep_link::init()` in the Tauri builder.' + '`apps/gui-client/src-tauri/tauri.conf.json`: declared the URL scheme under `plugins.deep-link.desktop.schemes`.' + '`apps/gui-client/src/lib/browser-sign-in.ts`: registered the `onOpenUrl` listener BEFORE arming the poll loop. Deep-link arrival fires the exchange; polling continues as a fallback for installs where the URL scheme registration didn't take.' + '`apps/gui-client/tests/unit/use-browser-sign-in.test.tsx`: 3 new tests cover the deep-link primary path + state mismatch silent-skip + polling fallback when `onOpenUrl` throws.' — pinned so the tauri-plugin-deep-link-v2.0 + lib.rs-init-registration + tauri.conf.json-schemes + browser-sign-in-onOpenUrl-BEFORE-poll-loop + polling-fallback + 3-test-coverage (primary + state-mismatch + onOpenUrl-throws) commitment survives", () => {
-    expect(body).toMatch(/## Code already on main \(autopilot slice\)/);
+    expect(body).toMatch(/## Code already on main \(implementation slice\)/);
     expect(body).toMatch(/- `apps\/gui-client\/src-tauri\/Cargo\.toml`: added/);
     expect(body).toMatch(/`tauri-plugin-deep-link = "2\.0"` dependency\./);
     expect(body).toMatch(/- `apps\/gui-client\/src-tauri\/src\/lib\.rs`: registered/);

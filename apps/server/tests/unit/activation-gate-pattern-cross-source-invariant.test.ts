@@ -17,7 +17,7 @@
 //   disabled-stub variant — the dashboard / SDK would see 404 instead
 //   of 503 + machine-readable problem-type.
 // - Drift on (2) (e.g. using a 404 NotFoundError instead) breaks the
-//   client-side activation-detection pattern (Wave 1119 / Slice 1119.2
+//   client-side activation-detection pattern (Slice 1119.2
 //   dashboard leg + the matching EGRESS dashboard leg).
 // - Drift on (3) — forgetting the else clause — leaves routes
 //   unregistered when the service is absent, which silently 404s.
@@ -248,7 +248,7 @@ describe('activation-gate pattern cross-source invariant', () => {
     const errorsBody = read(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'));
     expect(errorsBody).toMatch(/export class FeatureUnavailableError extends ApiError/);
     // The class MUST use HTTP 503 — the dashboard activation-detection
-    // pattern (Wave 1119 / Slice 1119.2 + EGRESS + AI-D) keys on 503.
+    // pattern (Slice 1119.2 + EGRESS + AI-D) keys on 503.
     expect(errorsBody).toMatch(/FeatureUnavailableError[\s\S]{0,300}status: 503/);
   });
 });

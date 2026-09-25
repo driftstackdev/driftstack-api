@@ -16,7 +16,7 @@ function repoFor(rows: Record<string, { status: string } | null | 'throw'>): Age
 
 const logger = { info: vi.fn(), warn: vi.fn() } as never;
 
-describe('reconcileWorkerReportedOrphans (CP↔daemon reconcile, A2 W2808)', () => {
+describe('reconcileWorkerReportedOrphans (CP↔daemon reconcile, W2808)', () => {
   it('re-issues sessionEnd for an EXISTING non-active (CP-terminal) row', async () => {
     const sent: string[] = [];
     await reconcileWorkerReportedOrphans({

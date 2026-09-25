@@ -32,7 +32,7 @@ describe('services/agent-decomposer content parity', () => {
 
   it("v1.1 → v1.0 scope-reversal framing pinned: 'founder verdict 2026-05-16 moved this from v1.1 → v1.0 launch arc (close to finishing all tasks earlier on, and can work on these things just fine, so we should just do it before launch — a great feature that can attract many customers).' — pinned so the 2026-05-16 verdict + the founder-quote rationale stay documented as the trail for AI-chat being v1.0 instead of v1.1", () => {
     expect(body).toMatch(
-      /\/\/ Design doc: docs\/internal\/ai-chat-agent-layer-design\.md\s*\/\/ Scope reversal: founder verdict 2026-05-16 moved this from v1\.1\s*\/\/ → v1\.0 launch arc \("close to finishing all tasks earlier on, and\s*\/\/ can work on these things just fine, so we should just do it\s*\/\/ before launch — a great feature that can attract many customers"\)\./,
+      /\/\/ Design doc: the internal AI-chat agent-layer design notes\s*\/\/ Scope reversal: founder verdict 2026-05-16 moved this from v1\.1\s*\/\/ → v1\.0 launch arc \("close to finishing all tasks earlier on, and\s*\/\/ can work on these things just fine, so we should just do it\s*\/\/ before launch — a great feature that can attract many customers"\)\./,
     );
   });
 
@@ -88,7 +88,7 @@ describe('services/agent-decomposer content parity', () => {
     );
   });
 
-  it('AgentIntent 6-kind locked vocabulary pinned: navigate + interact (5-action: tap/type/scroll/swipe/press, W540 press added per A3-W677) + wait (2-condition) + capture (3-kind) + scroll (W140: direction up|down, amount_px?) + behavioral_pause (W140: duration_ms?, reading_word_count?). The agent cannot invent new verbs (the prompt template includes the vocabulary as a constraint); the two W140 behavioural verbs map server-side onto the harness scroll/behavioral_pause control-plane intents — pinned so the api-types↔server lockstep + the closed vocabulary stay documented', () => {
+  it('AgentIntent 6-kind locked vocabulary pinned: navigate + interact (5-action: tap/type/scroll/swipe/press, W540 press added per W677) + wait (2-condition) + capture (3-kind) + scroll (W140: direction up|down, amount_px?) + behavioral_pause (W140: duration_ms?, reading_word_count?). The agent cannot invent new verbs (the prompt template includes the vocabulary as a constraint); the two W140 behavioural verbs map server-side onto the harness scroll/behavioral_pause control-plane intents — pinned so the api-types↔server lockstep + the closed vocabulary stay documented', () => {
     expect(body).toMatch(/export type AgentIntent =/);
     expect(body).toMatch(/\{ kind: 'navigate'; url: string \}/);
     expect(body).toMatch(

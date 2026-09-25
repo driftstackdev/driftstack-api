@@ -18,7 +18,7 @@ import type { AlertThresholds, CostRates } from './cost-estimator.js';
 /**
  * V-541.F — production cost rates. Currency: EUR cents.
  *
- * Source spreadsheet: `docs/internal/v541-cost-monitoring-design.md`,
+ * Source spreadsheet: the internal V-541 cost-monitoring design,
  * "Default rate card v1 (W44 review)." Rates re-reviewed quarterly
  * against actual invoices from Hetzner / Cloudflare R2 / Postmark /
  * OpenAI; bump this constant + add an entry to the cost-monitoring

@@ -534,7 +534,7 @@ export class TeamMembersService {
     // member in ONE atomic transaction (TOCTOU fix 2026-07-10). This both stops
     // a re-join via a still-pending invite (e.g. one created by a role-change
     // re-invite before the removal — the single-use accept guard only blocks
-    // REPLAY of a used token, Fable auth re-audit 2026-07-02) AND closes the
+    // REPLAY of a used token, auth re-audit 2026-07-02) AND closes the
     // membership-resurrection race: an accept that read the invite before this
     // removal can no longer slip its membership upsert between the membership
     // delete and the invite delete, because both delete statements and the

@@ -13,6 +13,7 @@ import type {
 import type { Database } from './client.js';
 import { apiKeys } from './schema.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
+import { clearGuiControlKeysMintedBy } from './agent-session-control-key-minter.js';
 
 export class DrizzleApiKeysRepo implements ApiKeysRepo {
   constructor(private readonly database: Database) {}
@@ -74,11 +75,20 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
       eq(apiKeys.id, input.id),
       input.accountId === null ? undefined : eq(apiKeys.accountId, input.accountId),
     );
-    const [revoked] = await this.database.db
-      .update(apiKeys)
-      .set({ revokedAt: input.revokedAt })
-      .where(and(scope, isNull(apiKeys.revokedAt)))
-      .returning();
+    // Security sweep #2 — the session control keys this key minted go in the SAME
+    // transaction as the revocation, so a committed revoke never leaves one live.
+    // (Every control-key use also re-checks its minter; this is what makes the key
+    // gone rather than merely refused, and lets the next mint issue a fresh one.)
+    const revoked = await this.database.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(apiKeys)
+        .set({ revokedAt: input.revokedAt })
+        .where(and(scope, isNull(apiKeys.revokedAt)))
+        .returning();
+      if (row === undefined) return undefined;
+      await clearGuiControlKeysMintedBy(tx, { apiKeyIds: [row.id] }, input.revokedAt);
+      return row;
+    });
     if (revoked) return { kind: 'revoked', key: toApiKeyRow(revoked) };
 
     // A concurrent first revoke can make the conditional update lose. Read

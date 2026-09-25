@@ -13,15 +13,14 @@
 // passes that same truth table through assertCorsPosture(), which refuses
 // production boot instead of continuing with the allow-list bypassed.
 //
-// See docs/internal/2026-05-31-permissive-cors-in-prod.md.
+// See the internal permissive-CORS-in-production notes (2026-05-31).
 export function corsPostureWarning(permissiveCors: boolean, nodeEnv: string): string | null {
   if (permissiveCors && nodeEnv === 'production') {
     return (
       'INSECURE CORS: PERMISSIVE_CORS=true in production echoes any request ' +
       'Origin with Access-Control-Allow-Credentials:true — any site can make ' +
       'credentialed cross-origin requests. Set PERMISSIVE_CORS=false and rely on ' +
-      'the CORS_ALLOWED_ORIGINS allow-list. ' +
-      'See docs/internal/2026-05-31-permissive-cors-in-prod.md'
+      'the CORS_ALLOWED_ORIGINS allow-list.'
     );
   }
   return null;

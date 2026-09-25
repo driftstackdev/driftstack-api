@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — GET /metrics Prometheus scrape.
+// Arc 4 phase 2.B, slice 8.18 (v2-#8) — GET /metrics Prometheus scrape.
 //
 // Scraped by VictoriaMetrics / Prometheus / Grafana Agent. The content
 // type is `text/plain; version=0.0.4` per the exposition-format spec;

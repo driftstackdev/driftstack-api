@@ -9,9 +9,9 @@
 //   • V-533.A framing pinned + 'First sub-slice of V-533 per the
 //     anti-substitution clause' + 3-method scope (expandCaptureMatrix
 //     + dedupComparisons + groupComparisonsByCategory).
-//   • Cross-agent contract framing: 'Agent 1's fork-side capture code
-//     calls into the RecaptureService (V-179) interface' +
-//     `docs/internal/v533-cross-agent-contract.md` reference.
+//   • Cross-repo contract framing: 'the fork's capture code calls
+//     into the RecaptureService (V-179) interface' + the V-533
+//     contract reference.
 //   • V-533.B/.C sub-slice references pinned (atlas builder service
 //     API + scheduled-job driver).
 //   • CaptureMatrixSpec: 5-field (archetypeIds readonly string[] +
@@ -61,9 +61,9 @@ describe('W460.A packages/recapture-automation/src/matrix.ts content parity', ()
     );
   });
 
-  it("Cross-agent contract framing pinned: 'Agent 1's fork-side capture code calls into the RecaptureService (V-179) interface; this matrix layer wraps that service for multi-archetype orchestration on this side.' + `docs/internal/v533-cross-agent-contract.md` reference", () => {
+  it("Cross-repo contract framing pinned: 'the fork's capture code calls into the RecaptureService (V-179) interface; this matrix layer wraps that service for multi-archetype orchestration on this side' + the V-533 contract reference", () => {
     expect(body).toMatch(
-      /\/\/ Cross-agent contract: Agent 1's fork-side capture code calls into the\s*\/\/ `RecaptureService` \(V-179\) interface; this matrix layer wraps that\s*\/\/ service for multi-archetype orchestration on this side\. See\s*\/\/ `docs\/internal\/v533-cross-agent-contract\.md`\./,
+      /\/\/ Cross-repo contract: the fork's capture code calls into the\s*\/\/ `RecaptureService` \(V-179\) interface; this matrix layer wraps that\s*\/\/ service for multi-archetype orchestration on this side \(V-533\s*\/\/ contract, kept in the internal design notes\)\./,
     );
   });
 

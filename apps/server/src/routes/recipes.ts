@@ -4,7 +4,7 @@
 // pulled forward from the v1.1 D2/D3 defer (V-530.I/.J); recipe
 // EXECUTION stays v1.1 (gated on the harness-wired AgentExecutor).
 //
-// Activation gate matches the rest of Wave 1119+: when both
+// Activation gate matches the rest of Slice 1119.2+: when both
 // recipesRepo + agentSessionsRepo are wired in AppDeps,
 // registerRecipesRoutes runs. When omitted, registerRecipesDisabledRoutes
 // surfaces 503 FeatureUnavailable so SDK + dashboard get a machine-

@@ -414,7 +414,7 @@ const OBSERVER_NOT_CONFIGURED_REASON = 'observer not configured';
  * having a moment": the row KEPT its last green verdict and its stale exit /
  * timezone, and no amount of retrying could ever change the sentence.
  *
- * The node's tokens are a CLOSED static set (A3 `cf1343076`) and they split in two:
+ * The node's tokens are a CLOSED static set (harness `cf1343076`) and they split in two:
  *   * a VERDICT about the tunnel — `handshake_failed`, `endpoint_unreachable`,
  *     `egress_leak_detected`: the node DID try to bring the tunnel up and it did
  *     not come up (or came up leaking). `not_run` is ABSENT so a client renders
@@ -867,7 +867,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       //
       // Left as-is rather than quietly changed: making this number include
       // trashed rows alters what a PUBLISHED field means, which is the owner's
-      // call, not a sweep's. Recorded in docs/internal/OPEN-ITEMS.md.
+      // call, not a sweep's. Recorded in the internal open-items ledger.
       const [activeSessions, profileCount, r2AvatarUrl, mfaStatus, oauthFallback, onboardingAt] =
         await Promise.all([
           sessionRepo.countActiveSessions(accountId),
@@ -1353,7 +1353,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       }
       const { config_blob: submittedBlob, username, password } = input.openvpn;
       // ⛔ (V-217) `script-security 2` is LOWERED to 1 here, not refused. Measured
-      // 2026-09-14 (A3): every OpenVPN profile the owner's provider issues carries it
+      // 2026-09-14 on the device: every OpenVPN profile the owner's provider issues carries it
       // at line 46, so EVERY upload was a 400 and the only way in was hand-editing
       // each download — this was the "OpenVPN profiles won't save".
       //
@@ -1385,7 +1385,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // no inline block: the session renders only client.ovpn + auth.txt, so such a
       // file cannot exist and openvpn dies late as an opaque "Options error". Fail
       // here naming the directive. Cross-source pin with the node's parse-reject
-      // (A3 8a03a3929) — both read findUnresolvableOpenvpnFileReferences.
+      // (harness 8a03a3929) — both read findUnresolvableOpenvpnFileReferences.
       if (findUnresolvableOpenvpnFileReferences(config_blob).length > 0) {
         throw new BadRequestError(unresolvableOpenvpnFileReferenceDetail(config_blob));
       }

@@ -52,7 +52,7 @@ describe('W777 docs /sdk/versioning content parity', () => {
     expect(p).not.toMatch(/\*\*Effective date:\*\* 2026-05-05 \(V-177\)/);
   });
 
-  it('CRITICAL 3-SDK applies-to set pinned — @driftstack/sdk (TS) + driftstack-sdk (Python dist name) + sdk-go (Go). S36 2026-07-07 (fable-truth-audit): the Python PyPI distribution is `driftstack-sdk` (packages/sdk-python/pyproject.toml name), `driftstack` is only the import name — pinning `driftstack` targets a different (potentially squatted) PyPI package. Matches installation.md + sdk/index.astro which state the correct dist name.', () => {
+  it('CRITICAL 3-SDK applies-to set pinned — @driftstack/sdk (TS) + driftstack-sdk (Python dist name) + sdk-go (Go). S36 2026-07-07 (truth audit): the Python PyPI distribution is `driftstack-sdk` (packages/sdk-python/pyproject.toml name), `driftstack` is only the import name — pinning `driftstack` targets a different (potentially squatted) PyPI package. Matches installation.md + sdk/index.astro which state the correct dist name.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
@@ -182,7 +182,7 @@ describe('W777 docs /sdk/versioning content parity', () => {
     );
   });
 
-  it('CRITICAL 3-language version-pinning recommendations pinned, and each number is DERIVED from the package it pins. TS caret (pre-1.0 minor pin) + Python PEP 440 on the REAL dist name driftstack-sdk (S36 2026-07-07 fable-truth-audit: pinning `driftstack` would target a different PyPI package) + Go go.mod + go get -u. A literal here went stale for four months while this guard stayed green — the page recommended ^0.1.5 with 0.1.6 on npm.', () => {
+  it('CRITICAL 3-language version-pinning recommendations pinned, and each number is DERIVED from the package it pins. TS caret (pre-1.0 minor pin) + Python PEP 440 on the REAL dist name driftstack-sdk (S36 2026-07-07 truth audit: pinning `driftstack` would target a different PyPI package) + Go go.mod + go get -u. A literal here went stale for four months while this guard stayed green — the page recommended ^0.1.5 with 0.1.6 on npm.', () => {
     const p = read(PAGE);
     const ts = typescriptSdkVersion();
     const py = pythonSdkVersion();

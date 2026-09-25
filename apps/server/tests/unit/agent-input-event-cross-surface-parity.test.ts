@@ -1,4 +1,4 @@
-// Slice 4 (Wave 29-NNN ARC 3) — cross-surface parity drift guard.
+// Slice 4 (ARC 3) — cross-surface parity drift guard.
 //
 // The LK.6 InputEvent wire contract lives in 3 places that MUST
 // stay in lock-step:
@@ -14,7 +14,7 @@
 // A drift between any pair would either let the dashboard send an
 // event the harness can't decode, OR have the SDK type-check accept
 // an event the route rejects with 400. The harness side (Swift) is
-// out of scope here — Agent 1's repo holds the matching enum, pinned
+// out of scope here — the WebKit fork's repo holds the matching enum, pinned
 // via a separate cross-repo content-parity test once harness work
 // lands per Tier-3 Option A 2026-05-19.
 

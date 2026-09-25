@@ -176,7 +176,7 @@ describe('W773 docs /api/legal content parity', () => {
     );
   });
 
-  it("CRITICAL scope-required per-endpoint pinned. The two GET endpoints (GET /v1/legal/documents + GET /v1/legal/required) are auth-only — their handlers use requireAuth with no requireScope (legal.ts) — so the doc must NOT overstate a read/account_owner scope. S36 2026-07-07 (fable-truth-audit): POST /v1/legal/accept requires the account_owner scope (legal.ts:93 requireScope('account_owner')) and hasScope does NOT let a broad `write` key satisfy account_owner (only exact match or the V-174 admin alias) — the old 'write or account_owner' claim would 403 a write-scoped key.", () => {
+  it("CRITICAL scope-required per-endpoint pinned. The two GET endpoints (GET /v1/legal/documents + GET /v1/legal/required) are auth-only — their handlers use requireAuth with no requireScope (legal.ts) — so the doc must NOT overstate a read/account_owner scope. S36 2026-07-07 (truth audit): POST /v1/legal/accept requires the account_owner scope (legal.ts:93 requireScope('account_owner')) and hasScope does NOT let a broad `write` key satisfy account_owner (only exact match or the V-174 admin alias) — the old 'write or account_owner' claim would 403 a write-scoped key.", () => {
     const p = read(PAGE);
 
     const authOnlyMatches = (

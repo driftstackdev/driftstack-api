@@ -1,7 +1,7 @@
 // LK.2 — empirical proof that POST /v1/mac-nodes/register emits
 // the `mac_node.livekit_registered` admin-audit row.
 //
-// Rule L — drift guards (`lk2-mac-nodes-audit-parity.test.ts`) pin
+// Drift guards (`lk2-mac-nodes-audit-parity.test.ts`) pin
 // the WIRING. This unit test pins the BEHAVIOUR: when an operator
 // registers credentials, the AdminAuditService.record() call lands
 // with the LK.2 action + the non-sensitive payload (ws_url +
@@ -177,7 +177,7 @@ describe('LK.2 POST /v1/mac-nodes/register — admin-audit emission', () => {
   // counters and audit rows). The route's own comment states the contract:
   //
   //   Response is intentionally minimal — never echoes the api_key
-  //   (treated as secret-equivalent per the orchestrator brief)
+  //   (treated as secret-equivalent per the LK.2 design)
   //   and obviously never echoes the api_secret.
   //
   // The credentials arrive in the REQUEST, so echoing them back is the easy

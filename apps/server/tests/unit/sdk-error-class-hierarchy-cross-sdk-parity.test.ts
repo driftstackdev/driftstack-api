@@ -134,7 +134,7 @@ describe('W817 cross-SDK error class hierarchy parity', () => {
     expect(read(GO)).toMatch(/RecordType/);
   });
 
-  // Arc 4 Wave 2.B sub-slice 8.20.k.4 (v2-#8) — TS TierLimitError
+  // Arc 4 phase 2.B, slice 8.20.k.4 (v2-#8) — TS TierLimitError
   // parity with Python+Go QuotaExceededError. Pins the field
   // exposure across all three SDKs so a future TS refactor that
   // drops these properties breaks CI before customers lose typed

@@ -3,11 +3,11 @@
 // backends land in follow-up slices (EG-API-1.6 SOCKS5 propagation,
 // later phases for OpenVPN + WireGuard per planning 133).
 //
-// Design source of truth: `docs/planning/133-egress-architecture-
-// cross-agent.md` in the driftstack repo (founder-locked 2026-05-16).
-// The earlier `docs/internal/customer-configurable-egress-design.md`
-// was SUPERSEDED by planning 133 (~56h Agent-2-only estimate was
-// undersized; real cross-agent + harness scope is 7-12 weeks per
+// Design source of truth: planning doc 133 (egress architecture)
+// in the driftstack repo (founder-locked 2026-05-16).
+// The earlier internal customer-configurable-egress design notes
+// were SUPERSEDED by planning 133 (~56h server-only estimate was
+// undersized; real cross-repo + harness scope is 7-12 weeks per
 // planning 133).
 //
 // Activation pattern follows the same all-or-nothing posture as
@@ -22,7 +22,7 @@
 // 555d8001). This file no longer redeclares them — it re-exports
 // `SessionEgressConfig` + `ProxyConfig` for legacy callers and types
 // `EgressHandle` against `ProxyType` from api-types so the cross-
-// agent contract has one source of truth.
+// repo contract has one source of truth.
 
 import type { ProxyType, SessionEgressConfig } from '@driftstack/api-types';
 
@@ -60,7 +60,7 @@ export interface EgressHandle {
  * bootstrap wiring + storage layer). Bootstrap wires the
  * orchestrating concrete class once Phase 1 SOCKS5 is reachable.
  *
- * Args shape matches the cross-agent contract from planning 133's
+ * Args shape matches the cross-repo contract from planning 133's
  * §"Per-session config schema" — a SessionEgressConfig envelope with
  * session_id + proxy discriminator + egress_safeguard.
  */

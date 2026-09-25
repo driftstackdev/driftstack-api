@@ -1,10 +1,10 @@
 // W443 — threshold_action_detected (v1.0-minimal): consequential-action
-// classifier. The #1 autonomous-agent safety guardrail (A3 W785/W797): before
+// classifier. The #1 autonomous-agent safety guardrail (W785/W797): before
 // the executor dispatches a consequential action (purchase / payment / account
-// deletion), the run pauses for human confirmation (A3's stop-conditions hook
+// deletion), the run pauses for human confirmation (the harness's stop-conditions hook
 // `threshold_action_detected` + the challenge pause/resume machinery, W740-743).
 //
-// This module is the DETECTION half (loop-side, A2). The executor calls
+// This module is the DETECTION half (loop-side, server). The executor calls
 // `classifyConsequentialAction(intent)` before dispatch; a `requiresConfirmation`
 // verdict halts the plan and surfaces the action for approval (next slice).
 //
@@ -12,7 +12,7 @@
 // text, normalized first (W808) to defeat zero-width / bidi / fullwidth evasion.
 // False NEGATIVES (a consequential action whose button text doesn't match) are
 // acceptable for v1.0 — the full page-rep-element-label semantic classifier is
-// v1.1 (needs A3's typed page-rep). False POSITIVES (spurious confirmation
+// v1.1 (needs the harness's typed page-rep). False POSITIVES (spurious confirmation
 // prompts) erode trust, so the patterns stay tight + clearly consequential.
 
 import type { AgentIntent, ConsequentialActionCategory } from '@driftstack/api-types';
@@ -53,7 +53,7 @@ const PATTERNS: ReadonlyArray<readonly [ConsequentialActionCategory, RegExp]> = 
 
 const NO_CONFIRMATION: ConsequentialActionVerdict = { requiresConfirmation: false };
 
-// W808 (A3) — normalize the target text before the keyword match so invisible /
+// W808 — normalize the target text before the keyword match so invisible /
 // compatibility-form evasion can't slip a consequential action past the guard:
 //   - NFKC folds fullwidth + compatibility forms ("Ｄｅｌｅｔｅ" → "Delete") and
 //     no-break / exotic spaces → regular spaces.

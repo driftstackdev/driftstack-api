@@ -1,4 +1,4 @@
-// File-DOWNLOAD correlator (A3 W2856 — the founder's "control files" download).
+// File-DOWNLOAD correlator (W2856 — the founder's "control files" download).
 // The transport-agnostic CORE of GET /v1/agent-sessions/:id/downloads (list) and
 // GET /v1/agent-sessions/:id/downloads/:name (fetch): it issues a `listDownloads`
 // or `fetchDownload` over the node's LIVE control WSS and awaits the matching

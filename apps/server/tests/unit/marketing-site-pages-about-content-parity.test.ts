@@ -83,7 +83,7 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // gone; the hidden-test-image check is explained in one plain clause,
     // the canvas glossary link survives, and the same-value-as-millions
     // contrast + the WebKit-source-code claim are unchanged.
-    // 2026-09-15 truth pass (A1 fingerprint sheet): a real iPhone does NOT
+    // 2026-09-15 truth pass (fork fingerprint sheet): a real iPhone does NOT
     // return one identical canvas value — Safari deliberately varies the
     // noise-protected surfaces per read, and the fixed ones stay fixed. The
     // contrast now says that (the homepage matrix footnote's wording), the
@@ -177,7 +177,7 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // input engine, per-profile persona) and the v1.0 version talk are
     // gone; the shipped facts (recorded human input, per-profile habits,
     // save/replay/view/delete recipes) are unchanged.
-    // 2026-09-15 truth pass (A3 harness sheet): human-like motion is a MODE
+    // 2026-09-15 truth pass (harness sheet): human-like motion is a MODE
     // available per profile — a flat non-behavioural input path exists — so
     // "move like a real hand" as a blanket is gone; the homepage's "patterns
     // taken from real human movement" wording is used instead. Recipe

@@ -692,7 +692,7 @@ export async function createProductionDeps(
   // Rate limit store.
   const rateLimitStore = new RedisRateLimitStore(redis);
 
-  // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics
+  // Arc 4 phase 2.B, slice 8.18 (v2-#8) — Prometheus metrics
   // registry. Constructed eagerly so downstream services can
   // accept a reference at construction time (audit service /
   // AgentRuntime / etc.); the `/metrics` route registration is
@@ -1540,7 +1540,7 @@ export async function createProductionDeps(
   const legalService = new LegalService(legalCatalog, legalRepo);
 
   // V-218 — continuous validation harness.
-  // The recapture bridge is a stub until Agent 1's V-203 Phase 2A
+  // The recapture bridge is a stub until the fork's V-203 Phase 2A
   // vendor probes land. Until then, dispatched runs return synthetic
   // run ids and don't execute actual probe traffic. The schedule +
   // ledger logic is real; only the validation execution is mocked.
@@ -1924,14 +1924,14 @@ export async function createProductionDeps(
     set: (key, value, _nx, _ex, ttl) => redis.set(key, value, 'EX', ttl, 'NX'),
     get: (key) => redis.get(key),
     del: (key) => redis.del(key),
-    // Arc 4 Wave 2.B sub-slice 8.20.j (v2-#8) — atomic CAS-DEL on
+    // Arc 4 phase 2.B, slice 8.20.j (v2-#8) — atomic CAS-DEL on
     // release via Lua script. ioredis.eval signature is (script,
     // numKeys, ...args); the adapter shape matches our
     // RedisLikeClient.eval contract.
     eval: (script, numKeys, ...args) =>
       redis.eval(script, numKeys, ...args) as Promise<string | number | null>,
   });
-  // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — heartbeat tracker +
+  // Arc 4 phase 2.B, slice 8.13d (v2-#8) — heartbeat tracker +
   // sweep wire. In-memory tracker (single-replica today); the sweep
   // walks stale sessions every 5s + fires the heartbeat-timeout
   // state-machine transition + agent_session.pair_mode.timeout
@@ -1980,7 +1980,7 @@ export async function createProductionDeps(
       'could not seed the pair-mode heartbeat tracker — sessions parked before this boot will not auto-revert until a client sends input',
     );
   }
-  // Arc 4 Wave 2.B sub-slice 8.18 — metrics registry is now constructed
+  // Arc 4 phase 2.B, slice 8.18 — metrics registry is now constructed
   // earlier (before the audit service) so every downstream service can
   // accept it at construction time. See the construction block above.
   // W592 — task-refusal start-gate ACTIVATION path (file-06 guardrail #3).
@@ -2186,8 +2186,8 @@ export async function createProductionDeps(
 
   // 2026-05-20 — auth-tokens sweeper. Periodic DELETE of stale rows
   // across email_verify_tokens / magic_link_tokens / password_reset_
-  // tokens. Closes the audit follow-up from docs/internal/2026-05-20-
-  // stale-row-audit.md (consumeAuthToken sets consumed_at but never
+  // tokens. Closes the audit follow-up from the internal 2026-05-20
+  // stale-row audit (consumeAuthToken sets consumed_at but never
   // deletes; same shape of bug as the 2026-05-19 scheduled_jobs
   // accumulation incident, pre-scale today). Daily 03:00 UTC cadence;
   // re-arms itself after each successful run. See docs/runbooks/auth-
@@ -3043,8 +3043,8 @@ export async function createProductionDeps(
 
   // notificationEventBus moved earlier in bootstrap so AccountAudit
   // can publish high-severity actions onto it. See the construction
-  // site near accountAuditService above. Full design: docs/internal/
-  // driftstack-telemetry-event-schema-for-gui-panel.md.
+  // site near accountAuditService above. Full design: the internal
+  // telemetry event schema notes for the GUI panel.
 
   // 2026-05-20 — V-541.E nightly cost-recompute. Per-account spend
   // evaluated at UTC midnight; threshold transitions fire alerts via
@@ -3336,11 +3336,11 @@ export async function createProductionDeps(
           },
           'fleet control plane ENABLED',
         );
-        // W650/A3-W1254 — latest pageState per AGENT session, written by the
+        // W650/W1254 — latest pageState per AGENT session, written by the
         // registry's onPageState consumer + read by GET /v1/agent-sessions/
         // :id/page-state (the GUI loading-bar/error-overlay source).
         const sessionPageStateStore = new SessionPageStateStore();
-        // A2 W2679 re-base — latest worker-liveness per AGENT session, written
+        // W2679 re-base — latest worker-liveness per AGENT session, written
         // by the registry's onHeartbeat consumer (below, alongside
         // recordHeartbeat) from Heartbeat.activeSessionStates + read by the
         // agent-sessions `liveness` read-shape field. Lets the GUI tell a
@@ -3354,7 +3354,21 @@ export async function createProductionDeps(
         // session. Public agent-session reads expose the view-only/streaming/
         // egress state to the installed GUI; the same relay persists the raw +
         // derived report on its linked driver session.
-        const sessionCapabilityReportStore = new SessionCapabilityReportStore();
+        //
+        // Owner item 7 — written through to Redis (TTL tied to the session) and
+        // reloaded here, so a restart no longer empties it: before this, every
+        // live Simulator window went back to "Waiting on the phone" after a
+        // deploy, until each phone's next periodic report. Reads stay in
+        // memory; a read that misses fetches the stored copy for the next one.
+        const sessionCapabilityReportStore = new SessionCapabilityReportStore(undefined, {
+          redis,
+          onError: (err, op) =>
+            logger.warn(
+              { component: 'session-capability-report-store', op, err },
+              'capability report store: redis operation failed (kept in memory)',
+            ),
+        });
+        void sessionCapabilityReportStore.hydrate();
         // T-9 — per-agent-session bounded ring of network-log entries, written
         // by the registry's onNetworkRequests consumer (below) + read by GET
         // /v1/agent-sessions/:id/network (the simulator's Network pane). The fork
@@ -3382,7 +3396,7 @@ export async function createProductionDeps(
           sessionCapabilityReportStore,
           sessionNetworkLogStore,
           sessionCaptureStore,
-          // Profile-backed session persistence (A3 W417): when R2 is configured,
+          // Profile-backed session persistence (W417): when R2 is configured,
           // a `profileSaved` frame from a node writes the customer's sealed store
           // to R2; without R2 the frame is accepted + ignored (stateless).
           // W393 challenge-handling: a `challengeDetected` frame relays to the
@@ -3396,11 +3410,11 @@ export async function createProductionDeps(
                 })
               : undefined,
             makeChallengeRelay(agentSessionsRepo, webhooksService, logger),
-            // W650/A3-W1254: a pageState frame (agent-initiated navigate) → store
+            // W650/W1254: a pageState frame (agent-initiated navigate) → store
             // the latest per agent session for GET /v1/agent-sessions/:id/page-state.
             // audit M1 — gated so a non-owning node can't fake another session's overlay.
             makeSessionPageStateRelay(agentSessionsRepo, sessionPageStateStore, logger),
-            // A3 W1364: a profileSaveFailed frame (save-back failed at teardown)
+            // W1364: a profileSaveFailed frame (save-back failed at teardown)
             // → relay as the customer-facing session.profile_save_failed webhook.
             makeProfileSaveFailedRelay(agentSessionsRepo, webhooksService, logger),
             // Fleet-admin panel (file-48 §A5): a heartbeat (macNodeId already
@@ -3442,7 +3456,7 @@ export async function createProductionDeps(
                   ...(frame.harnessVersion !== undefined && {
                     harnessVersion: frame.harnessVersion,
                   }),
-                  // A3 2026-09-19 — the MEASURED digests beside the DECLARED
+                  // 2026-09-19 — the MEASURED digests beside the DECLARED
                   // `harnessVersion` above. Persisted in the same jsonb snapshot,
                   // so no column and no migration; an older node's beat simply
                   // lacks the keys and the drift report reads that as absent.
@@ -3488,7 +3502,7 @@ export async function createProductionDeps(
                   );
                 }
               },
-              // A2 W2679 re-base — feed the per-session liveness map into the
+              // W2679 re-base — feed the per-session liveness map into the
               // store the agent-sessions `liveness` field reads. Stamp receive
               // time from the server clock, never the node's wall clock.
               recordLiveness: (frame) => {
@@ -3535,7 +3549,7 @@ export async function createProductionDeps(
             // status='active' sessions (reason='worker-disconnected').
             (nodeId) => workerDisconnectReaper.onNodeRegistered(nodeId),
             (nodeId) => workerDisconnectReaper.onNodeDisconnected(nodeId),
-            // Worker-CONNECTED orphan auto-close (A3 W2682, positional arg 8): a
+            // Worker-CONNECTED orphan auto-close (W2682, positional arg 8): a
             // TERMINAL sessionStatus frame (status ∈ {ended, errored}) from a
             // still-connected worker → close the matching agent_sessions row in
             // seconds (frees the slot, clears the GUI's phantom "open session").
@@ -3653,7 +3667,7 @@ export async function createProductionDeps(
   // "every page is frozen", and it shipped once already behind a comment
   // claiming the block was inert in production. So it is stated LOUDLY at boot
   // rather than left for someone to find in a per-session transport log.
-  // Mirrors the box-side per-session warning A3 added in 4149f6080.
+  // Mirrors the box-side per-session warning the harness added in 4149f6080.
   if (config.fleetControlPlaneEnabled) {
     const defaultEgress = (
       fleetControlPlaneDeps as { sessionDispatch?: { proxy?: { host?: string } } }
@@ -3767,7 +3781,7 @@ export async function createProductionDeps(
     // V-820 — fleet control-plane WS deps (empty unless
     // FLEET_CONTROL_PLANE_ENABLED=true; see fleetControlPlaneDeps above).
     ...fleetControlPlaneDeps,
-    // Wave 29-400 §8.5 — atlas-priority observability surface. Repo
+    // Plan 29-400 §8.5 — atlas-priority observability surface. Repo
     // is always constructed (Drizzle path against the migrated
     // atlas_priority_events table); the InternalFleetAuth activation
     // flag is what gates route registration in app.ts. When the env
@@ -3796,7 +3810,7 @@ export async function createProductionDeps(
     // error that the route layer maps to 503). When this wire lands,
     // the W247.A drift-sweep gate flips hasEgressImpl=true and the
     // marketing copy can update from "roadmap" to "live" per the
-    // Path-1 autoflip plan (orchestrator handoff 2026-05-17). 2026-05-22 —
+    // Path-1 autoflip plan (2026-05-17 decision). 2026-05-22 —
     // explicit `key: key` form so the W247.A regex matches (shorthand
     // syntax silently failed the gate detection).
     sessionEgressService: sessionEgressService,
@@ -3830,7 +3844,7 @@ export async function createProductionDeps(
     notificationEventBus,
     pairModeLock,
     pairModeHeartbeatTracker,
-    // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics
+    // Arc 4 phase 2.B, slice 8.18 (v2-#8) — Prometheus metrics
     // registry. Activated when METRICS_SCRAPE_TOKEN is wired; routes
     // emit counters into it + /metrics returns the rendered text.
     // Without the token, the registry is omitted and counter call
@@ -4214,7 +4228,7 @@ export async function createProductionDeps(
     : null;
   statusSnapshotTimer?.unref();
 
-  // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
+  // Arc 4 phase 2.B, slice 8.13d (v2-#8) — pair-mode heartbeat
   // sweep. Tick every 5 seconds: walks tracker.findStaleSessions()
   // + fires heartbeat-timeout transition + agent_session.pair_mode.timeout
   // audit emit on each. The 5s cadence is much tighter than the

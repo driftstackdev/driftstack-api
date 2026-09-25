@@ -1,4 +1,4 @@
-// Public-surface resolution guard (A2, 2026-07-30).
+// Public-surface resolution guard (2026-07-30).
 //
 // Content-parity guards prove a page matches what the guard EXPECTS. They
 // cannot prove the page is TRUE. This one closes that gap for the two claims a

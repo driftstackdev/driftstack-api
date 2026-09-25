@@ -1,7 +1,7 @@
 // W724 — GitHub Actions deploy.yml workflow parity. REWRITTEN
 // 2026-05-17 to mirror Option B verdict (drop Docker, match prod
 // systemd+node reality per
-// docs/internal/2026-05-16-deploy-yml-verdict-design.md).
+// the 2026-05-16 deploy.yml verdict design notes).
 //
 // Pins `.github/workflows/deploy.yml` as the authoritative deploy
 // pipeline (Workstream A spec V-051 — REVISED 2026-05-17):

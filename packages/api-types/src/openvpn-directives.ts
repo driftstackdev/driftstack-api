@@ -4,7 +4,7 @@
 // The set is the rejection list the control plane enforces at ingress
 // (apps/server/src/lib/webhook-target-guard.ts): every directive here invokes
 // an external program once `script-security` is >=2 — the class the P0
-// root-RCE (A3 118722821) exploited, when a customer blob carrying
+// root-RCE (118722821) exploited, when a customer blob carrying
 // `up /path/script` ran as root on the userspace egress host. The box now
 // forces `--script-security 1` (user scripts disabled), but the CP REJECTS a
 // config carrying any of these so a weaponized blob is never stored or
@@ -87,12 +87,12 @@ export const DANGEROUS_OPENVPN_DIRECTIVES: ReadonlySet<string> = new Set([
   // blob that references a second file is a screen bypass by construction: we
   // would validate the file we were given and openvpn would run the union. The
   // session renders only client.ovpn + auth.txt anyway, so no legitimate
-  // customer config can resolve one. ⭐ Measured by A3 on the egress node against
+  // customer config can resolve one. ⭐ Measured on the egress node against
   // the shipped 2.7.0: `config /etc/passwd` makes openvpn PARSE /etc/passwd as
   // configuration (it errors at /etc/passwd:11), so the directive reads an
   // arbitrary file on our host and interprets it. Not theoretical.
   'config',
-  // PROCESS CONTROL — matched to the node's own screen (A3, same day) so the two
+  // PROCESS CONTROL — matched to the node's own screen (same day) so the two
   // halves refuse the same set. None of these execute a customer program, which
   // is why they are grouped apart from the six above, but none has any business
   // in a customer's tunnel config either: they change what the openvpn PROCESS
@@ -387,7 +387,7 @@ export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsuppor
  *
  * ⛔ This exists because the control plane REFUSED a config for a directive that
  * cannot, by itself, run anything — and that refusal was the owner's "can't open
- * OpenVPN profiles". Measured 2026-09-14 (A3): every profile their provider
+ * OpenVPN profiles". Measured 2026-09-14: every profile their provider
  * issues carries `script-security 2` at line 46, so every upload was a 400 and
  * the workaround was hand-editing each download. Removing the line by hand and
  * re-posting through the real API produced a working session in about a second
@@ -527,7 +527,7 @@ export const OPENVPN_INLINE_REQUIRED_DIRECTIVES: ReadonlySet<string> = new Set([
  * fails at upload naming the directive, so the customer knows to paste the
  * inline / "unified" .ovpn their provider offers.
  *
- * ⭐ CROSS-SOURCE PIN with the node-side reject (A3 `8a03a3929`,
+ * ⭐ CROSS-SOURCE PIN with the node-side reject (harness `8a03a3929`,
  * VPNProxyConfigParser.openvpnExternalFileReference). Upload-reject (here) and
  * parse-reject (node) enforce the same rule on the four points below, with ONE
  * measured exception named after them — ⛔ "by construction" is what this comment
@@ -608,7 +608,7 @@ export function findUnresolvableOpenvpnFileReferences(
   // Inline WINS, so a directive with a block is never flagged below. CASE-SENSITIVE
   // (no toLowerCase): OpenVPN matches inline tags against its case-sensitive option
   // table, so `<CA>` is NOT the `ca` block — treating it as one would ACCEPT a config
-  // the node still can't resolve (the miss A3's cross-language diff caught). Matches
+  // the node still can't resolve (the miss the harness's cross-language diff caught). Matches
   // the node parser (8a03a3929).
   const inlineBlocks = new Set<string>();
   for (const raw of lines) {
@@ -628,7 +628,7 @@ export function findUnresolvableOpenvpnFileReferences(
     const tokens = text.split(/[ \t]+/);
     // CASE-SENSITIVE keyword, matching the node parser (8a03a3929) and OpenVPN's
     // own option table (streq against lowercase names — assumed from behaviour, not
-    // read from options.c this session): `CA ca.crt` is an unrecognised option that
+    // verified against options.c): `CA ca.crt` is an unrecognised option that
     // fails LOUD at openvpn startup, a DIFFERENT class from the SILENT file-not-found
     // this guard exists to catch, so we deliberately only guard the lowercase form.
     // `--` is still stripped (>=3 chars) so `--ca ca.crt` cannot bypass; a bare `--`

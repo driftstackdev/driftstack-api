@@ -193,7 +193,7 @@ describe('W763 docs /api/profiles content parity', () => {
     );
   });
 
-  it("CRITICAL snapshots-are-immutable-METADATA framing pinned. S36 2026-07-07 (fable-truth-audit): 'copies' → 'metadata records' — v1 snapshots capture archetype/name/description only, never browser state (services/profile-snapshots.ts stateBlob {}), so the section now says so and points at /api/profile-snapshots for the full contract.", () => {
+  it("CRITICAL snapshots-are-immutable-METADATA framing pinned. S36 2026-07-07 (truth audit): 'copies' → 'metadata records' — v1 snapshots capture archetype/name/description only, never browser state (services/profile-snapshots.ts stateBlob {}), so the section now says so and points at /api/profile-snapshots for the full contract.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
@@ -241,7 +241,7 @@ describe('W763 docs /api/profiles content parity', () => {
     );
   });
 
-  it("CRITICAL snapshot-orphans-on-parent-delete framing pinned. S36 2026-07-07 (fable-truth-audit): '+ state remain restorable' → '+ description remain restorable' — no state is ever captured at v1 (stateBlob always {}), so only archetype/name/description survive into a restore. Matches W756 dashboard '(parent profile deleted)' inline indicator.", () => {
+  it("CRITICAL snapshot-orphans-on-parent-delete framing pinned. S36 2026-07-07 (truth audit): '+ state remain restorable' → '+ description remain restorable' — no state is ever captured at v1 (stateBlob always {}), so only archetype/name/description survive into a restore. Matches W756 dashboard '(parent profile deleted)' inline indicator.", () => {
     const p = read(PAGE);
 
     // This pin used to require "Deleting the parent profile sets the snapshot's

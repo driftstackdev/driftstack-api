@@ -111,6 +111,7 @@ import { randomUUID as testRandomUUID } from 'node:crypto';
 import { InMemoryAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { InMemoryAuthRepo } from './in-memory-auth-repo.js';
+import { inMemoryGuiControlKeyMinterCheck } from './in-memory-agent-session-control-key-minter.js';
 import { InMemorySessionsRepo } from './in-memory-sessions-repo.js';
 import { InMemoryApiKeysRepo } from './in-memory-api-keys-repo.js';
 import { InMemoryUsageRepo } from './in-memory-usage-repo.js';
@@ -392,7 +393,7 @@ export interface TestAppOptions {
     fetch?: typeof fetch;
   };
   /**
-   * Wave 1119 / Slice 1119.2 — when `true`, omits `billingService` from
+   * Slice 1119.2 — when `true`, omits `billingService` from
    * the AppDeps so `registerBillingDisabledRoutes` runs in place of
    * `registerBillingRoutes`. Matches the prod posture before
    * STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS land in
@@ -680,14 +681,14 @@ export interface TestAppFixture {
   adminAuditRepo: InMemoryAdminAuditLogRepo;
   /** V-281 — exposed so tests can assert customer-audit rows post admin action. */
   accountAuditRepo: InMemoryAccountAuditRepo;
-  /** Arc 4 Wave 2.B 8.18/8.19 — exposed so tests can scrape /metrics
+  /** Arc 4 phase 2.B, slices 8.18/8.19 — exposed so tests can scrape /metrics
    *  + read counter values directly via registry.getValue(). */
   metricsRegistry: MetricsRegistry;
   /** Per-request AI telemetry. `flush()` it before reading the repo: rows are
    *  written after the response, off the request path. */
   agentTurnTelemetry: AgentTurnTelemetry;
   agentTurnTelemetryRepo: InMemoryAgentTurnTelemetryRepo;
-  /** Arc 4 Wave 2.B sub-slice 8.13d — exposed so tests can assert
+  /** Arc 4 phase 2.B, slice 8.13d — exposed so tests can assert
    *  the takeover route called recordHeartbeat and the handback
    *  route called forget. */
   pairModeHeartbeatTracker: InMemoryPairModeHeartbeatTracker;
@@ -963,7 +964,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const usageRepo = new InMemoryUsageRepo();
   const usageService = new UsageService(usageRepo);
 
-  // Arc 4 Wave 2.B sub-slice 8.18/8.19 (v2-#8) — Prometheus metrics
+  // Arc 4 phase 2.B, slices 8.18/8.19 (v2-#8) — Prometheus metrics
   // registry. Pre-registers every counter so call sites can inc()
   // blindly without first checking registration. Constructed BEFORE
   // the audit service so emit-on-event services downstream can take
@@ -1359,7 +1360,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   let agentTurnReceiptsRepoForTests: InMemoryAgentTurnReceiptsRepo | undefined;
   // Arc 2 sub-slice 8.8 (v2-#8) — in-memory takeover lock for tests.
   const pairModeLock = new InMemoryPairModeTakeoverLock();
-  // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — heartbeat tracker for tests.
+  // Arc 4 phase 2.B, slice 8.13d (v2-#8) — heartbeat tracker for tests.
   const pairModeHeartbeatTracker = new InMemoryPairModeHeartbeatTracker();
   // AI-B4 — in-memory recipes repo for tests; production path uses
   // DrizzleRecipesRepo. Always wired so the /v1/recipes route
@@ -1376,7 +1377,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const fleetNonceCache = new InMemoryFleetNonceCache();
   const fleetNodeAuth = new FleetNodeAuthImpl(fleetNodesRepo, fleetNonceCache);
   const fleetControlRegistry = new FleetControlRegistry();
-  // Arc 4 Wave 2.B sub-slice 8.18 — metrics registry is now
+  // Arc 4 phase 2.B, slice 8.18 — metrics registry is now
   // constructed earlier (before the audit service), see above.
 
   // v2-#18 — capturing usage recorder for the AgentRuntime end-to-end
@@ -1966,6 +1967,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ...(opts.enableAgentRuntime === true
       ? (() => {
           const agentSessionsRepo = new InMemoryAgentSessionsRepo();
+          // Security sweep #2 — a control key is live only while its minter is, read
+          // from the same credential stores this fixture's bearer auth reads.
+          agentSessionsRepo.setGuiControlKeyMinterCheck(
+            inMemoryGuiControlKeyMinterCheck({ authRepo, authFlowsRepo }),
+          );
           agentSessionsRepoForTests = agentSessionsRepo;
           const agentTurnReceiptsRepo =
             opts.disableAgentTurnReceipts === true
@@ -2071,7 +2077,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // V-1347 — `disablePairModeLock` leaves it out on purpose, which is the
     // only way to reach the route's own "lock not wired" refusal.
     ...(opts.disablePairModeLock === true ? {} : { pairModeLock }),
-    // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — heartbeat tracker so
+    // Arc 4 phase 2.B, slice 8.13d (v2-#8) — heartbeat tracker so
     // takeover/handback handlers can record activity. The sweep
     // service itself isn't wired in the test fixture (tests would
     // become time-flaky); integration tests for the sweep live in
@@ -2083,7 +2089,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // pattern. Recipes track agent-session snapshots so customers
     // can replay the same flow without re-paying decompose cost.
     recipesRepo,
-    // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics
+    // Arc 4 phase 2.B, slice 8.18 (v2-#8) — Prometheus metrics
     // registry + scrape token. Wired by default so /metrics + pair-mode
     // counters can be asserted; an explicit null exercises fail-closed
     // missing-config behavior.

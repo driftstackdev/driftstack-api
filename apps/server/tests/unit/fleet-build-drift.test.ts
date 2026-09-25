@@ -1,4 +1,4 @@
-// The declared-vs-measured build report (A3 2026-09-19 ~18:45Z / ~19:10Z).
+// The declared-vs-measured build report (2026-09-19 ~18:45Z / ~19:10Z).
 //
 // The device team added two MEASURED keys because the DECLARED ones beside them
 // were caught lying: `harnessVersion` named a commit the running binary was not
@@ -236,7 +236,7 @@ describe('(a) two devices declaring one harnessVersion and running two binaries'
 
 describe('(b) one declared webkitForkBuild, different measured frameworks', () => {
   it('CRITICAL names WHICH framework drifted and leaves the matching ones out', () => {
-    // A3's actual finding: the box's JavaScriptCore was five days older than its
+    // The measured finding: the box's JavaScriptCore was five days older than its
     // WebCore. One combined digest could only have said "something moved".
     const drift = computeFleetBuildDrift({
       devices: [

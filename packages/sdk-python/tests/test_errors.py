@@ -71,7 +71,7 @@ def test_subclass_relationships() -> None:
     assert issubclass(InvalidCredentialsError, AuthError)
     assert issubclass(InvalidAuthTokenError, DriftstackError)
     assert issubclass(EmailNotVerifiedError, ForbiddenError)
-    # A3 finding #7 — ProfileInUseError IS a 409 conflict, so it subclasses
+    # Harness finding #7 — ProfileInUseError IS a 409 conflict, so it subclasses
     # ConflictError; existing `except ConflictError` handlers still catch it.
     assert issubclass(ProfileInUseError, ConflictError)
 
@@ -168,7 +168,7 @@ def test_quota_exceeded_extracts_fields() -> None:
 
 
 def test_pair_mode_state_invalid_transition_extracts_from_and_transition() -> None:
-    """Arc 4 Wave 2.B sub-slice 8.20.k (v2-#8) — Python SDK parity with TS+Go
+    """Arc 4 phase 2.B, slice 8.20.k (v2-#8) — Python SDK parity with TS+Go
     on the typed extension fields of the 409 pair-mode error. TS exposes
     ``err.from`` + ``err.transition``; Go exposes ``err.From`` +
     ``err.Transition``; Python (this slice) exposes ``err.from_`` +
@@ -189,7 +189,7 @@ def test_pair_mode_state_invalid_transition_extracts_from_and_transition() -> No
 
 
 def test_pair_mode_conflict_extracts_winner_client_id() -> None:
-    """Arc 4 Wave 2.B sub-slice 8.20.k.3 (v2-#8) — TS exposes
+    """Arc 4 phase 2.B, slice 8.20.k.3 (v2-#8) — TS exposes
     ``err.winnerClientId``; Go exposes ``err.WinnerClientID``; Python
     parity-fix exposes snake_case ``err.winner_client_id``."""
     body = (
@@ -204,7 +204,7 @@ def test_pair_mode_conflict_extracts_winner_client_id() -> None:
 
 
 def test_bundled_llm_budget_exhausted_extracts_spent_and_cap() -> None:
-    """Arc 4 Wave 2.B sub-slice 8.20.k.3 (v2-#8) — TS exposes
+    """Arc 4 phase 2.B, slice 8.20.k.3 (v2-#8) — TS exposes
     ``err.spentCents`` + ``err.capCents``; Go exposes ``err.SpentCents``
     + ``err.CapCents``; Python parity-fix exposes snake_case
     ``err.spent_cents`` + ``err.cap_cents``."""
@@ -288,7 +288,7 @@ def test_proxy_validation_failed_reason_absent_is_none() -> None:
 
 
 def test_profile_in_use_extracts_active_session_id() -> None:
-    # A3 finding #7 — single-active-session-per-profile guard 409. The server
+    # Harness finding #7 — single-active-session-per-profile guard 409. The server
     # spreads `active_session_id` to the problem top level; the SDK surfaces it as
     # a first-class attribute (cross-SDK parity with TS err.activeSessionId / Go
     # err.ActiveSessionID).

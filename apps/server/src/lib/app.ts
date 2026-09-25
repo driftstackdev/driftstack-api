@@ -283,7 +283,7 @@ export interface AppDeps {
   /** V-216: customer-facing audit log. */
   accountAuditService: AccountAuditService;
   /**
-   * Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics registry.
+   * Arc 4 phase 2.B, slice 8.18 (v2-#8) — Prometheus metrics registry.
    * Optional: when wired, the /metrics route exposes the rendered text
    * format + agent-sessions + bundled-llm routes emit counters into it.
    * Omit to skip both — /metrics returns 404 + counters are silently
@@ -291,7 +291,7 @@ export interface AppDeps {
    */
   metricsRegistry?: MetricsRegistry;
   /**
-   * Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — bearer token for /metrics
+   * Arc 4 phase 2.B, slice 8.18 (v2-#8) — bearer token for /metrics
    * scrape auth. Required when metricsRegistry is wired (the registry
    * is exposed publicly + the token gates access).
    */
@@ -303,7 +303,7 @@ export interface AppDeps {
    */
   metricsRefreshGauges?: () => Promise<void>;
   /**
-   * Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
+   * Arc 4 phase 2.B, slice 8.13d (v2-#8) — pair-mode heartbeat
    * tracker. Routes record customer activity here so the
    * PairModeHeartbeatSweep (also driven by bootstrap) can fire the
    * heartbeat-timeout transition on stale sessions.
@@ -568,7 +568,7 @@ export interface AppDeps {
    */
   pairModeLock?: PairModeTakeoverLock;
   /**
-   * AI-B4 — write-only recipe library (orchestrator handoff #3 Q.5).
+   * AI-B4 — write-only recipe library (design decision #3, Q.5).
    * POST /v1/recipes snapshots a finished agent_session's
    * intent_log + transcript. When omitted, /v1/recipes registers
    * as 503 FeatureUnavailable per the activation-gate pattern.
@@ -580,7 +580,7 @@ export interface AppDeps {
    * V-820 — fleet-node JWT verifier (foundation slice 95353f2a +
    * nonce-cache integration f2a6c603). Optional. When wired,
    * registers `/v1/fleet/events` WebSocket route (pending the SQL
-   * migration; see docs/internal/fleet-nodes-sql-migration-design.md
+   * migration; see the internal fleet-nodes SQL migration design
    * for the Tier-2 founder review proposal). Until then leave
    * undefined.
    */
@@ -601,14 +601,14 @@ export interface AppDeps {
    */
   fleetControlRegistry?: FleetControlRegistry;
   /**
-   * Latest-pageState-per-agent-session store (W650/A3-W1254). Present alongside
+   * Latest-pageState-per-agent-session store (W650/W1254). Present alongside
    * the registry when the fleet control plane is enabled; the registry's
    * onPageState consumer writes it + GET /v1/agent-sessions/:id/page-state reads
    * it (the GUI loading-bar/error-overlay source for the agent/simulator view).
    */
   sessionPageStateStore?: SessionPageStateStore;
   /**
-   * Latest-worker-liveness-per-agent-session store (A2 W2679 re-base). Present
+   * Latest-worker-liveness-per-agent-session store (W2679 re-base). Present
    * alongside the registry when the fleet control plane is enabled; the
    * registry's onHeartbeat consumer feeds it Heartbeat.activeSessionStates +
    * the agent-sessions `liveness` read-shape field reads it (so the GUI can tell
@@ -648,7 +648,7 @@ export interface AppDeps {
   drizzleFleetNodesRepo?: DrizzleFleetNodesRepo;
   livekitSecretEncryptionKey?: string;
   /**
-   * Wave 29-400 §8.5 — atlas-priority observability surface. The repo
+   * Plan 29-400 §8.5 — atlas-priority observability surface. The repo
    * is always Drizzle-backed (constructed in bootstrap.ts); the
    * activation gate is `internalFleetAuth.isEnabled()` driven by the
    * DRIFTSTACK_FLEET_INTERNAL_TOKEN env var. When the auth is enabled
@@ -1357,7 +1357,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // build-order step 1). Unauthenticated by design + IP-rate-limited.
   registerEgressEchoRoutes(app, { rateLimitStore: deps.rateLimitStore });
 
-  // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus /metrics scrape.
+  // Arc 4 phase 2.B, slice 8.18 (v2-#8) — Prometheus /metrics scrape.
   // Registers only when the registry is wired (deps.metricsRegistry).
   // The route lives at /metrics (no /v1 prefix — scrape conventions
   // expect the well-known path). Bearer-token gated via
@@ -1620,7 +1620,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   if (deps.billingService !== undefined) {
     registerBillingRoutes(app, { service: deps.billingService });
   } else {
-    // Wave 1119 / Slice 1119.2 — when Stripe env is missing, expose
+    // Slice 1119.2 — when Stripe env is missing, expose
     // 503 + FeatureUnavailable on /v1/billing/* instead of leaving
     // the routes unregistered (which 404s). See registerBilling-
     // DisabledRoutes for the full reason.
@@ -1648,12 +1648,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.agentTurnReceiptsRepo !== undefined
         ? { agentTurnReceipts: deps.agentTurnReceiptsRepo }
         : {}),
-      // W650/A3-W1254 — agent-session pageState read (GUI loading-bar/overlay).
+      // W650/W1254 — agent-session pageState read (GUI loading-bar/overlay).
       // Present only when the fleet control plane wired the store.
       ...(deps.sessionPageStateStore !== undefined
         ? { sessionPageStateStore: deps.sessionPageStateStore }
         : {}),
-      // A2 W2679 re-base — agent-session worker-liveness read (GUI re-bases
+      // W2679 re-base — agent-session worker-liveness read (GUI re-bases
       // open-session liveness onto this). Present only when the fleet control
       // plane wired the store; absent → `liveness` defaults to "unknown".
       ...(deps.sessionLivenessStore !== undefined
@@ -1757,14 +1757,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // Arc 2 sub-slice 8.8/8.9 (v2-#8) — pair-mode takeover/handback
       // routes register only when the lock is wired (prod gates on env).
       ...(deps.pairModeLock !== undefined ? { pairModeLock: deps.pairModeLock } : {}),
-      // Arc 4 Wave 2.B sub-slice 8.17 (v2-#8) — Sentry breadcrumb sink.
+      // Arc 4 phase 2.B, slice 8.17 (v2-#8) — Sentry breadcrumb sink.
       ...(deps.sentry !== undefined ? { sentry: deps.sentry } : {}),
-      // Arc 4 Wave 2.B sub-slice 8.20 (v2-#8) — customer audit log.
+      // Arc 4 phase 2.B, slice 8.20 (v2-#8) — customer audit log.
       ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
-      // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics.
+      // Arc 4 phase 2.B, slice 8.18 (v2-#8) — Prometheus metrics.
       ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
       ...(deps.agentTurnTelemetry !== undefined ? { turnTelemetry: deps.agentTurnTelemetry } : {}),
-      // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
+      // Arc 4 phase 2.B, slice 8.13d (v2-#8) — pair-mode heartbeat
       // tracker. Routes call recordHeartbeat on takeover / forget on
       // handback so the sweep doesn't auto-handback an active session.
       ...(deps.pairModeHeartbeatTracker !== undefined
@@ -1857,7 +1857,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerFleetEventsDisabledRoutes(app);
   }
 
-  // Wave 29-400 §8.5 — /v1/internal/atlas-priority/* observability
+  // Plan 29-400 §8.5 — /v1/internal/atlas-priority/* observability
   // endpoints. Activation gate: BOTH the Drizzle-backed repo
   // (always wired in bootstrap.ts when DB is up) AND the InternalFleet
   // Auth being enabled (DRIFTSTACK_FLEET_INTERNAL_TOKEN env var set).
@@ -1901,7 +1901,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.fleetControlRegistry !== undefined
         ? { controlRegistry: deps.fleetControlRegistry }
         : {}),
-      // A3 2026-09-19 — the per-SESSION half of the build-drift report: which
+      // 2026-09-19 — the per-SESSION half of the build-drift report: which
       // frameworks a live session was actually spawned from, so a device
       // redeployed under it can be named. Wired from the same store the
       // agent-session read uses; absent → the device half still reports and

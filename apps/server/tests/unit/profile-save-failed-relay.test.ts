@@ -1,4 +1,4 @@
-// A3 W1364 — profile save-failure relay. makeProfileSaveFailedRelay resolves
+// W1364 — profile save-failure relay. makeProfileSaveFailedRelay resolves
 // the owning account from the harness `profileSaveFailed` frame's session id
 // and enqueues a `session.profile_save_failed` webhook (the customer-visible
 // half of the save-failure asymmetry fix: restore-failure errors the session,
@@ -26,7 +26,7 @@ const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Lo
 // then()), so settle the chain before asserting.
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
-describe('A3-W1364 makeProfileSaveFailedRelay', () => {
+describe('W1364 makeProfileSaveFailedRelay', () => {
   it('resolves accountId from the session + enqueues session.profile_save_failed', async () => {
     const sessions = {
       get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node_1', profileId: 'prof_1' }),

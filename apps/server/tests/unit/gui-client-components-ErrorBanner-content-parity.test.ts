@@ -40,7 +40,7 @@ describe('W478.A apps/gui-client/src/components/ErrorBanner.tsx content parity',
 
   it('ErrorBannerProps keeps message + onDismiss required while recovery remains optional', () => {
     expect(body).toMatch(
-      /export interface ErrorBannerProps \{[\s\S]*?message: string;\s*onDismiss: \(\) => void;[\s\S]*?onRetry\?: \(\) => void;[\s\S]*?retrying\?: boolean;\s*\}/,
+      /export interface ErrorBannerProps \{[\s\S]*?message: string;\s*onDismiss: \(\) => void;[\s\S]*?onRetry\?: \(\) => void;[\s\S]*?retrying\?: boolean;[\s\S]*?logLevel\?: 'warn' \| 'error';\s*\}/,
     );
   });
 
@@ -63,10 +63,14 @@ describe('W478.A apps/gui-client/src/components/ErrorBanner.tsx content parity',
     );
   });
 
-  it("W609 — every visible error mirrors into Dev Logs: useEffect keyed on message calls record('error', ['[ui] ' + message]) — pinned so the banner stays the chokepoint that makes the Dev Logs panel useful during user-facing failures (views render friendly messages without touching console.*)", () => {
-    expect(body).toMatch(/import \{ record \} from '\.\.\/lib\/log-buffer';/);
+  it("W609 — every visible error mirrors into Dev Logs: useEffect keyed on message records '[ui] ' + message — pinned so the banner stays the chokepoint that makes the Dev Logs panel useful during user-facing failures (views render friendly messages without touching console.*). 2026-09-24: at the level of what it shows — WARN after a 4xx the server answered (a handled refusal), ERROR otherwise — or the caller's own logLevel; every banner at ERROR buried the real failures", () => {
+    expect(body).toMatch(/import \{ record, type LogLevel \} from '\.\.\/lib\/log-buffer';/);
+    expect(body).toMatch(/import \{ recentApiFailure \} from '\.\.\/lib\/client';/);
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*record\('error', \['\[ui\] ' \+ message\]\);\s*\}, \[message\]\);/,
+      /useEffect\(\(\) => \{\s*record\(logLevel \?\? bannerLogLevel\(recentApiFailure\(\)\), \['\[ui\] ' \+ message\]\);[\s\S]*?\}, \[message\]\);/,
+    );
+    expect(body).toMatch(
+      /return failure !== null && failure\.status >= 400 && failure\.status < 500 \? 'warn' : 'error';/,
     );
   });
 

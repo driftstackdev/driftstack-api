@@ -29,7 +29,7 @@
 // reading the code — it was found because a customer clear did not take effect.
 //
 // The better fix is to move the eviction inside the service so it cannot be
-// forgotten. That is a wiring change through bootstrap, which another agent is
+// forgotten. That is a wiring change through bootstrap, which another change is
 // editing, and it is worth doing deliberately rather than as a side effect of a
 // drift guard. Recorded here as the reason this file exists rather than that
 // change.

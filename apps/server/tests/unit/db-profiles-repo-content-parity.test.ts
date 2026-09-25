@@ -63,8 +63,8 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
   });
 
   it('toRecord: full ProfileRecord (id + accountId + name + archetype + description + folder + tags + icon + note + lastUsedAt + sizeBytes + lastSavedAt + created/updated_at + deletedAt)', () => {
-    // Per-field toContain (no long \s* chains — see
-    // feedback_no_long_chain_parity_regex).
+    // Per-field toContain (no long \s* chains — they backtrack
+    // pathologically and are hard to debug).
     expect(body).toMatch(
       /function toRecord\(r: typeof profiles\.\$inferSelect\): ProfileRecord \{/,
     );
@@ -94,7 +94,7 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
   it("insert: preallocated identity + metadata + wrappedDek; returning(); throws 'insert profile: no row returned'", () => {
     // Per-field toContain rather than one long \s*-chained regex (the
     // chain backtracks pathologically past ~5 groups; the wrapped_dek field
-    // pushed it over — see feedback_no_long_chain_parity_regex).
+    // pushed it over).
     expect(body).toContain('...preallocatedProfileId(input),');
     expect(body).toContain('accountId: input.accountId,');
     expect(body).toContain('name: input.name,');
@@ -150,7 +150,7 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
   it('list cursor framing pinned: cursor lookup is ACCOUNT-SCOPED via and(eq(id, cursor), eq(accountId, args.accountId)) — prevents cross-account cursor probe; the cursor-anchor lookup deliberately OMITS notDeleted (a keyset POSITION is well-defined even if the boundary row was trashed between pages → no reset-to-page-1); composite OR(lt(createdAt, c.createdAt), and(eq(createdAt, c.createdAt), lt(id, c.id)))', () => {
     // Per-fragment toContain (no long \s* chain — it backtracks
     // pathologically AND breaks when prettier wraps the .where() across lines;
-    // see feedback_no_long_chain_parity_regex). The security-relevant pin is the
+    // a long chain is also hard to debug). The security-relevant pin is the
     // account-scoped cursor lookup (cross-account probe blocked) + the composite
     // tiebreak. FIX 3 (2026-06-25) dropped notDeleted from the cursor-anchor
     // lookup ONLY (the RESULT set below stays notDeleted): a cursor pointing at a

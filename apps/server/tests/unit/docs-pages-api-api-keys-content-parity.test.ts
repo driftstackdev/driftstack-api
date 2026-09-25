@@ -178,7 +178,7 @@ describe('W762 docs /api/api-keys content parity', () => {
     expect(p).toMatch(/Internal Driftstack staff scope; never granted to customer accounts\./);
   });
 
-  it("CRITICAL no-default-scopes + account_owner-only-for-dashboard framing pinned. S36 2026-07-07 (fable-truth-audit): the old 'read + write is the default for new keys' claim was FALSE — CreateApiKeyRequestSchema requires scopes: z.array(...).min(1) (packages/api-types/src/api-keys.ts) and no code path fills in a default; omitting scopes is a 400. Also pins the write-scope row's does-NOT-include-read truth (hasScope never lets `write` satisfy `read`/`read:X`).", () => {
+  it("CRITICAL no-default-scopes + account_owner-only-for-dashboard framing pinned. S36 2026-07-07 (truth audit): the old 'read + write is the default for new keys' claim was FALSE — CreateApiKeyRequestSchema requires scopes: z.array(...).min(1) (packages/api-types/src/api-keys.ts) and no code path fills in a default; omitting scopes is a 400. Also pins the write-scope row's does-NOT-include-read truth (hasScope never lets `write` satisfy `read`/`read:X`).", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(

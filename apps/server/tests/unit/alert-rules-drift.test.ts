@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.21 (v2-#8) — alert rules drift guard.
+// Arc 4 phase 2.B, slice 8.21 (v2-#8) — alert rules drift guard.
 //
 // Pins ops/alerts/driftstack.yml against METRIC_NAMES so renaming a
 // counter without updating the alert rule breaks CI before the alert
@@ -11,7 +11,7 @@ import { METRIC_NAMES } from '../../src/services/metrics-registry.js';
 
 const ALERT_YAML_PATH = resolve(__dirname, '../../../../ops/alerts/driftstack.yml');
 
-describe('Arc 4 Wave 2.B sub-slice 8.21 alert rules drift guard', () => {
+describe('Arc 4 phase 2.B, slice 8.21 alert rules drift guard', () => {
   const yamlText = readFileSync(ALERT_YAML_PATH, 'utf-8');
 
   it('alert rules file mentions every counter from METRIC_NAMES at least once', () => {

@@ -1,4 +1,4 @@
-// Live EGRESS swap correlator (A3 P-17). The transport-agnostic CORE of moving a
+// Live EGRESS swap correlator (P-17). The transport-agnostic CORE of moving a
 // RUNNING session onto a different exit: it issues a `setEgress` over the node's
 // LIVE control WSS and awaits the matching `setEgressResult`, correlated by
 // `requestId`. A direct mirror of SetCookiesRequestCorrelator — one-shot

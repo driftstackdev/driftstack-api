@@ -197,7 +197,7 @@ const ConfigSchema = z.object({
     })
     .optional(),
   // Q.1 verdicts 2026-05-17 — agent-decomposer bootstrap selection
-  // controls. See docs/internal/ai-b1b-activation-design.md §"verdicts".
+  // controls. See the internal AI-B1b activation design, §"verdicts".
   agentDecomposer: z
     .object({
       /**
@@ -394,7 +394,7 @@ const ConfigSchema = z.object({
     })
     .optional(),
   /**
-   * Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus /metrics
+   * Arc 4 phase 2.B, slice 8.18 (v2-#8) — Prometheus /metrics
    * scrape bearer token. Required for the /metrics endpoint to
    * activate; without it the route returns 503 + the registry is
    * dropped from AppDeps (counters silently no-op).
@@ -405,9 +405,9 @@ const ConfigSchema = z.object({
    */
   metricsScrapeToken: z.string().min(16).optional(),
   /**
-   * Wave 29-400 §8.5 — internal fleet bearer token. Gates the
+   * Plan 29-400 §8.5 — internal fleet bearer token. Gates the
    * /v1/internal/atlas-priority/* observability endpoints called by
-   * Agent 1's harvester + bs-atlas-priority.sh + atlas-priority-
+   * the fork's harvester + bs-atlas-priority.sh + atlas-priority-
    * append.py callbacks. NOT customer-facing. When unset, those
    * routes return 503 (registerInternalAtlasPriorityDisabledRoutes
    * path); when set, the routes activate with constant-time bearer
@@ -961,10 +961,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
               : {}),
           }
         : undefined,
-    // AI-D BYOK Anthropic — read from env only (per memory rule
-    // "Credentials via env vars only"). Founder shared the fallback
-    // key 2026-05-17 (orchestrator handoff post-AUTO #1). Canonical
-    // env var name is BYOK_ANTHROPIC_FALLBACK_KEY (per the handoff);
+    // AI-D BYOK Anthropic — read from env only (per the credential-handling
+    // rule "Credentials via env vars only"). Founder shared the fallback
+    // key 2026-05-17. Canonical env var name is
+    // BYOK_ANTHROPIC_FALLBACK_KEY (per that 2026-05-17 decision);
     // DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY accepted as a deprecation-
     // window alias for existing dev shells.
     byokAnthropic:

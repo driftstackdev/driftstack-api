@@ -397,7 +397,13 @@ describe('migration 0132 changes exactly three guards, and pins each one', () =>
     expect(journal.entries[at + 9]?.when).toBeGreaterThan(
       journal.entries[at + 8]?.when ?? Infinity,
     );
-    expect(journal.entries, 'and 0141 is the last one').toHaveLength(142);
+    // 0142 (security sweep #2 — a session's GUI control key records who minted
+    // it) follows 0141; its own guard pins its shape.
+    expect(journal.entries[at + 10]?.tag).toBe('0142_agent_session_control_key_minter');
+    expect(journal.entries[at + 10]?.when).toBeGreaterThan(
+      journal.entries[at + 9]?.when ?? Infinity,
+    );
+    expect(journal.entries, 'and 0142 is the last one').toHaveLength(143);
   });
 
   it('CRITICAL schema.ts mirrors the CHECK and the index this migration adds, by name, and its prose names the trigger it installs and the guard it relaxes', () => {

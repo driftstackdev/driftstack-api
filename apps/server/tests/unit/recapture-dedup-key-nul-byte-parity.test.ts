@@ -107,10 +107,10 @@ describe('W717 recapture-automation dedupKey NUL-byte delimiter parity', () => {
     expect(src).toMatch(/First sub-slice of V-533 per the anti-substitution clause/);
   });
 
-  it('CRITICAL cross-agent-contract framing pinned. The doc reference tells engineers Agent 1 + Agent 2 are coordinating via the contract doc; drift to dropping the reference would lose the cross-agent provenance.', () => {
+  it('CRITICAL cross-repo-contract framing pinned. The contract reference tells engineers the fork and this repo coordinate through the V-533 contract; drift to dropping the reference would lose the contract provenance.', () => {
     const src = read(MATRIX);
-    expect(src).toMatch(/Cross-agent contract:/);
-    expect(src).toMatch(/docs\/internal\/v533-cross-agent-contract\.md/);
+    expect(src).toMatch(/Cross-repo contract:/);
+    expect(src).toMatch(/\(V-533\s*\/\/ contract, kept in the internal design notes\)/);
   });
 
   it('CRITICAL expandCaptureMatrix at-least-1-archetype guard pinned — `if (spec.archetypeIds.length === 0) { throw new Error(...) }`. Drift to allowing zero archetypes would let a no-op matrix run silently fan out to nothing.', () => {

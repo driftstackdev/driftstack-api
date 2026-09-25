@@ -18,7 +18,7 @@
 //
 // CI is unaffected — `npm run build` runs `build:apps` across every app
 // workspace before `vitest run`, so CI always has a fresh artifact. This exists
-// for the local runs that agents gate their commits on.
+// for the local runs that contributors gate their commits on.
 //
 // Whole-app `src` granularity is deliberate and matches the precedent: a
 // changed shared Layout restales every page while no page source moved, which

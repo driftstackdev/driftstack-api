@@ -544,7 +544,7 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
     accountId: string;
     at: Date;
   }): Promise<{ previousTier: AccountTier | null; appliedTier: AccountTier | null }> {
-    // Fable last-hours audit 2026-07-07 (C4) — same FOR UPDATE serialization as
+    // Last-hours audit 2026-07-07 (C4) — same FOR UPDATE serialization as
     // the sibling account-tier writers. Set the account to its HIGHEST-RANKED
     // active/trialing subscription so a routine update on a superseded LOWER
     // subscription can't downgrade an account that still holds a HIGHER active

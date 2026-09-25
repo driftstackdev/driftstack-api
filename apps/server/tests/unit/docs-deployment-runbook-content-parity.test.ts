@@ -1,7 +1,7 @@
 // W553.C — drift guard for /docs/deployment/runbook.md.
 // Operational runbook for routine triage. Drift here either
-// weakens the V-195-standing-baseline + AGENTS.md-publish-vs-
-// commercial-activation gating, drops the 5-quick-triage step
+// weakens the V-195-standing-baseline + publish-vs-commercial-
+// activation policy gating, drops the 5-quick-triage step
 // (would slow first-customer-day MTTR), drops a standard-
 // incident response (Postgres + Redis + Stripe + DLQ + Account
 // abuse), or weakens the founder-authorize-on-decision policy.
@@ -32,7 +32,7 @@ function read(p: string): string {
 describe('W553.C /docs/deployment/runbook.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + V-195-pre-launch + AGENTS.md-publish-vs-commercial framing pinned: '# Driftstack API — operational runbook' + 'Drafted V-195 as the standing baseline for incident response and ops plays. Pre-launch — most procedures are forward-looking until real production traffic exists' + '**Status**: pre-launch. Everything in `[TODO]` is a known gap' + 'see AGENTS.md \"publish vs commercial activation\" — commercial activation is gated on entity registration, but ops infra needs to be ready when that gate opens' — pinned so the V-195-baseline + pre-launch-forward-looking + AGENTS.md-publish-vs-commercial + entity-registration-gate commitment survives", () => {
+  it("Header + V-195-pre-launch + publish-vs-commercial-policy framing pinned: '# Driftstack API — operational runbook' + 'Drafted V-195 as the standing baseline for incident response and ops plays. Pre-launch — most procedures are forward-looking until real production traffic exists' + '**Status**: pre-launch. Everything in `[TODO]` is a known gap' + 'see the policy on \"publish vs commercial activation\" — commercial activation is gated on entity registration, but ops infra needs to be ready when that gate opens' — pinned so the V-195-baseline + pre-launch-forward-looking + publish-vs-commercial-policy + entity-registration-gate commitment survives", () => {
     expect(body).toMatch(/^# Driftstack API — operational runbook$/m);
     expect(body).toMatch(/Drafted V-195 as the standing baseline for incident response and ops/);
     expect(body).toMatch(/plays\. Pre-launch — most procedures are forward-looking until real/);
@@ -40,7 +40,7 @@ describe('W553.C /docs/deployment/runbook.md content parity', () => {
     expect(body).toMatch(
       /> \*\*Status\*\*: pre-launch\. Everything in `\[TODO\]` is a known gap and/,
     );
-    expect(body).toMatch(/> should be filled before the first paying customer \(see AGENTS\.md/);
+    expect(body).toMatch(/> should be filled before the first paying customer \(see the policy on/);
     expect(body).toMatch(/> "publish vs commercial activation" — commercial activation is gated/);
     expect(body).toMatch(/> on entity registration, but ops infra needs to be ready when that/);
     expect(body).toMatch(/> gate opens\)\./);
@@ -103,11 +103,11 @@ describe('W553.C /docs/deployment/runbook.md content parity', () => {
     expect(body).toMatch(/Pino log line via `request\.id`\./);
   });
 
-  it("Founder-authorize + V-249 log-PII-posture framing pinned: '## What to do if you can't reach the founder' + 'wait for the founder to authorize. Document the issue, take read-only diagnostic steps, and surface for explicit approval per the locked decision-authority policy in AGENTS.md.' + '## Log-handling — PII posture' + 'V-249 / V-246-P1-002 — operationally Pino logs may contain customer PII (email addresses) for the following intentional cases' + '`magic-link requested for unknown email` — `auth-flows.ts` line ~406. Logged at `info` so abuse patterns (enumeration attempts, password-spray scout traffic) are visible.' + '`password-reset requested for unknown email` — same shape, same posture.' + 'Raw Pino logs from production are Driftstack-internal-only. Don't share with non-Driftstack-staff (customers, support contractors) without scrubbing.' + 'Sentry breadcrumbs are scrubbed at emit time (V-242 `beforeSend` for the GUI client; existing apps/server Sentry config strips request bodies).' — pinned so the founder-authorize-decision-policy + V-249/V-246-P1-002-Pino-PII-posture + magic-link-enumeration-info + Driftstack-internal-only + V-242-Sentry-beforeSend-strip commitment survives", () => {
+  it("Founder-authorize + V-249 log-PII-posture framing pinned: '## What to do if you can't reach the founder' + 'wait for the founder to authorize. Document the issue, take read-only diagnostic steps, and surface for explicit approval per the locked decision-authority policy.' + '## Log-handling — PII posture' + 'V-249 / V-246-P1-002 — operationally Pino logs may contain customer PII (email addresses) for the following intentional cases' + '`magic-link requested for unknown email` — `auth-flows.ts` line ~406. Logged at `info` so abuse patterns (enumeration attempts, password-spray scout traffic) are visible.' + '`password-reset requested for unknown email` — same shape, same posture.' + 'Raw Pino logs from production are Driftstack-internal-only. Don't share with non-Driftstack-staff (customers, support contractors) without scrubbing.' + 'Sentry breadcrumbs are scrubbed at emit time (V-242 `beforeSend` for the GUI client; existing apps/server Sentry config strips request bodies).' — pinned so the founder-authorize-decision-policy + V-249/V-246-P1-002-Pino-PII-posture + magic-link-enumeration-info + Driftstack-internal-only + V-242-Sentry-beforeSend-strip commitment survives", () => {
     expect(body).toMatch(/## What to do if you can't reach the founder/);
     expect(body).toMatch(/wait for the founder to authorize\. Document the/);
     expect(body).toMatch(/issue, take read-only diagnostic steps, and surface for explicit/);
-    expect(body).toMatch(/approval per the locked decision-authority policy in AGENTS\.md\./);
+    expect(body).toMatch(/approval per the locked decision-authority policy\./);
     expect(body).toMatch(/## Log-handling — PII posture/);
     expect(body).toMatch(/V-249 \/ V-246-P1-002 — operationally Pino logs may contain customer/);
     expect(body).toMatch(/PII \(email addresses\) for the following intentional cases:/);

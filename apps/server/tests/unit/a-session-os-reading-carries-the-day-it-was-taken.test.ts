@@ -169,7 +169,7 @@ describe("a session's projected OS reading says when it was measured", () => {
       await projected(
         proxyRow({ osFingerprint: { ...FINGERPRINT }, osFingerprintAt: MEASURED_AT }),
       ),
-    ).toEqual({
+    ).toMatchObject({
       os: 'windows',
       confidence: 'high',
       at: MEASURED_AT.toISOString(),
@@ -190,14 +190,23 @@ describe("a session's projected OS reading says when it was measured", () => {
     expect(await projected(null)).toBeNull();
   });
 
-  it('CRITICAL the internal diagnostics stay server-side — `reason`, `observed_ip` and `observed_via` name an address and a method, and adding a field to this projection is exactly how one would cross by accident', async () => {
+  // Owner item 9 (2026-09-24) moved HOW the reading was taken across — `observed_via`
+  // and the two path flags, which a client needs to tell a real mismatch from a weak
+  // reading (a-session-os-reading-says-how-it-was-taken.test.ts pins them). The
+  // exact key set is still pinned, so a field can still not cross by accident.
+  it('CRITICAL the internal diagnostics stay server-side — `reason` and `observed_ip` are free text and an address, and the key set is exact, so adding a field to this projection is still a deliberate act', async () => {
     const value = await projected(
       proxyRow({ osFingerprint: { ...FINGERPRINT }, osFingerprintAt: MEASURED_AT }),
     );
     expect(Object.keys(value as Record<string, unknown>).sort()).toEqual([
       'at',
       'confidence',
+      'direct_reading',
+      'observed_via',
       'os',
+      'single_host_vantage',
+      'web_port_vantage',
+      'website_like_reading',
     ]);
   });
 });

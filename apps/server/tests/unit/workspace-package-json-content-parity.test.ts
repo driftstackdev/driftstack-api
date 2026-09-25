@@ -91,9 +91,9 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     expect(pkg.scripts['bench:check-regression']).toBe('node scripts/check-bench-regression.mjs');
     expect(pkg.scripts.typecheck).toBe('npm run typecheck --workspaces --if-present');
     // 2026-09-14 — `gen-archetype-registry.mjs --check` joined the lint chain. It
-    // is the half of the archetype freshness gate that lives on THIS side: A1's
-    // gate reds when their catalog drifts from their archetype configs, this one
-    // reds when our registry drifts from their catalog. Neither existed for the
+    // is the half of the archetype freshness gate that lives on THIS side: the fork's
+    // gate reds when its catalog drifts from its archetype configs, this one
+    // reds when our registry drifts from its catalog. Neither existed for the
     // join, and the registry sat 24 entries behind while both sides looked green.
     // It SKIPS (exit 0, loudly) when the sibling repo is not checked out, which
     // is the CI case; the pre-push gate runs locally where it can actually see.
@@ -148,7 +148,7 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     );
   });
 
-  it("Critical devDep + lint-staged + husky framing pinned: 7-tooling devDeps (eslint + prettier + vitest + drizzle-kit + drizzle-orm + tsx + typescript) + 'prepare: husky' + lint-staged 2-pattern (ts/tsx/js/jsx/mjs/cjs → eslint --fix + prettier; json/md/yml/yaml/css → prettier only), both invoking prettier through node with --max-old-space-size=8192 — pinned so the toolchain dep-set + husky-prepare-hook + lint-staged 2-pattern commitment survives (drift to dropping eslint --fix would let unfixable lint errors slip into commits; drift back to a bare `prettier --write` reinstates the V-774 OOM that blocked every commit touching docs/verification-log.md, since the repo's own format scripts alreadyneed the 8 GB heap)", () => {
+  it("Critical devDep + lint-staged + husky framing pinned: 7-tooling devDeps (eslint + prettier + vitest + drizzle-kit + drizzle-orm + tsx + typescript) + 'prepare: husky' + lint-staged 2-pattern (ts/tsx/js/jsx/mjs/cjs → eslint --fix + prettier; json/md/yml/yaml/css → prettier only), both invoking prettier through node with --max-old-space-size=8192 — pinned so the toolchain dep-set + husky-prepare-hook + lint-staged 2-pattern commitment survives (drift to dropping eslint --fix would let unfixable lint errors slip into commits; drift back to a bare `prettier --write` reinstates the V-774 OOM that blocked every commit touching the then in-repo verification log, since the repo's own format scripts alreadyneed the 8 GB heap)", () => {
     expect(pkg.devDependencies).toHaveProperty('eslint');
     expect(pkg.devDependencies).toHaveProperty('prettier');
     expect(pkg.devDependencies).toHaveProperty('vitest');

@@ -276,7 +276,7 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
       /Not every iPhone in that span is included: there is no iPhone SE, 16e, or Air profile\./,
     );
     expect(body).not.toMatch(/every iPhone from the\s+13/);
-    // Blanket identity claims retired (A1 sheet: per-surface, noise-protected surfaces vary by design).
+    // Blanket identity claims retired (fingerprint sheet: per-surface, noise-protected surfaces vary by design).
     expect(body).not.toMatch(/bit for bit|all the way down|vanishingly rare|kernel timings/);
     expect(body).not.toMatch(/the same browser code Apple ships/);
     // 2026-09-16 readability pass (verifier re-pin): the 52-word measurement

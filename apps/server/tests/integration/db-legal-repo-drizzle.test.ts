@@ -32,7 +32,7 @@
 //   DISTINCT ON removed (all history returned, not the latest)  2 red
 //
 // Ledger written 2026-08-15. The proof was run when this file was written, but
-// the result went to the agent bus instead of into the file, so nothing in the
+// the result was posted elsewhere instead of into the file, so nothing in the
 // repository evidenced it — and an unrecorded proof is indistinguishable from
 // an unperformed one to the next reader. Re-measured rather than transcribed
 // from memory, which would have reintroduced exactly that problem.

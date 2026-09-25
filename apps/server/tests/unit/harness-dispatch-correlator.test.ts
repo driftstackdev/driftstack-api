@@ -1,5 +1,5 @@
 // Increment-2 — unit tests for IntentDispatchCorrelator (the WSS sender's
-// transport-agnostic correlation + timeout core). Pins the A3 W106 contract:
+// transport-agnostic correlation + timeout core). Pins the W106 harness contract:
 // 1:1 intentId correlation, fast-fail on intent_dispatch_no_session, per-intent
 // timeout max(30s, cap+15s), idempotent settle, never-rejects.
 

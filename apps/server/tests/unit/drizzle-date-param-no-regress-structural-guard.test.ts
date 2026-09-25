@@ -1,6 +1,6 @@
 // Structural drift guard for the drizzle-orm 0.38.4 Date-param-in-
-// raw-sql crash class (see docs/internal/drizzle-date-param-
-// workaround.md for the empirical bisection + ISO-string workaround).
+// raw-sql crash class (see the internal drizzle Date-param workaround
+// notes for the empirical bisection + ISO-string workaround).
 //
 // 2026-05-19 swept this codebase for the bug:
 //   • Fixed `DrizzleScheduledJobsRepo.claimDue` in commit 1b2001c8 (the
@@ -265,8 +265,8 @@ describe('drizzle-orm Date-param-in-raw-sql structural drift guard', () => {
           `interpolation(s) found in raw sql template literals. Either ` +
           `pre-serialise via .toISOString() at the call site OR add the ` +
           `expression to the ALLOW_LIST in this test if you've audited ` +
-          `the call site. See docs/internal/drizzle-date-param-workaround` +
-          `.md for the empirical background.${lines.join('')}`,
+          `the call site. See the internal drizzle Date-param workaround notes ` +
+          `for the empirical background.${lines.join('')}`,
       );
     }
     expect(findings).toEqual([]);

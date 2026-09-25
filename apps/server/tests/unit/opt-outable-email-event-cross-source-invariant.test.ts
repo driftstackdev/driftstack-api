@@ -241,11 +241,10 @@ describe('W864 OptOutableEmailEvent cross-source invariant', () => {
     expect(unexplained, 'template-less entr(ies) without a stated reason:').toEqual([]);
   });
 
-  it('CRITICAL no customer- or vendor-facing surface lists a cancellation email as always-sent while no template can send one. Derived from the TEMPLATES map rather than pinned as prose, so the day a cancellation template is actually added, the copy is free to say so.', () => {
-    const SURFACES = [
-      'apps/customer-dashboard/src/pages/settings.astro',
-      'docs/internal/postmark-approval-request.md',
-    ] as const;
+  it('CRITICAL no customer-facing surface lists a cancellation email as always-sent while no template can send one. Derived from the TEMPLATES map rather than pinned as prose, so the day a cancellation template is actually added, the copy is free to say so.', () => {
+    // The vendor-facing Postmark request that also carried this sentence now lives with the
+    // internal notes in the private repository; the customer surface is the one checked here.
+    const SURFACES = ['apps/customer-dashboard/src/pages/settings.astro'] as const;
     const hasCancellationTemplate = [...templateKeys()].some((k) => /cancel/i.test(k));
 
     const offenders: string[] = [];

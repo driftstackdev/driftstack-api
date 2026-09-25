@@ -150,7 +150,7 @@ describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)'
     expect(res.statusCode).toBe(503);
   });
 
-  it('GET /v1/agent-sessions/:id/page-state → 503 (W650/A3-W1254 — gated like the others, not a bare 404)', async () => {
+  it('GET /v1/agent-sessions/:id/page-state → 503 (W650/W1254 — gated like the others, not a bare 404)', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'GET',
@@ -170,7 +170,7 @@ describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)'
     expect(res.statusCode).toBe(503);
   });
 
-  // Arc 4 Wave 2.B sub-slice 8.20.h (v2-#8) — without this regression
+  // Arc 4 phase 2.B, slice 8.20.h (v2-#8) — without this regression
   // pin, the disabled-routes stub was missing /takeover + /handback.
   // The SDK + dashboard would see a generic 404 instead of the
   // documented 503 FeatureUnavailable problem type — confusing
@@ -199,7 +199,7 @@ describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)'
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
   });
 
-  it('Slice 3 (Wave 29-NNN ARC 3) POST /v1/agent-sessions/:id/mode → 503 FeatureUnavailable when runtime not wired', async () => {
+  it('Slice 3 (ARC 3) POST /v1/agent-sessions/:id/mode → 503 FeatureUnavailable when runtime not wired', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'POST',
@@ -211,7 +211,7 @@ describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)'
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
   });
 
-  it('Slice 4 (Wave 29-NNN ARC 3) POST /v1/agent-sessions/:id/input-event → 503 FeatureUnavailable when runtime not wired', async () => {
+  it('Slice 4 (ARC 3) POST /v1/agent-sessions/:id/input-event → 503 FeatureUnavailable when runtime not wired', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'POST',
@@ -355,7 +355,7 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode).toBe(201);
   });
 
-  it('geolocation override: valid coordinates → 201; out-of-range → 400 (A3 contract 2026-07-01)', async () => {
+  it('geolocation override: valid coordinates → 201; out-of-range → 400 (harness contract 2026-07-01)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const ok = await fx.app.inject({
       method: 'POST',
@@ -538,7 +538,7 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(await fx.agentSessionsRepo!.countActive(fx.accountId)).toBe(0);
   });
 
-  it('#63 TRANSIENT unreachable then ok → retried ONCE → 201 (rotating-exit resilience, A3 W2949)', async () => {
+  it('#63 TRANSIENT unreachable then ok → retried ONCE → 201 (rotating-exit resilience, W2949)', async () => {
     let calls = 0;
     const seqProbe = {
       probe: () => {
@@ -2773,7 +2773,7 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('Slice 3 (Wave 29-NNN ARC 3) POST /:id/mode ai → pair → manual round-trip; pair_mode_state surfaces on GET; idempotent same-mode call preserves state', async () => {
+  it('Slice 3 (ARC 3) POST /:id/mode ai → pair → manual round-trip; pair_mode_state surfaces on GET; idempotent same-mode call preserves state', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({
       method: 'POST',
@@ -2927,7 +2927,7 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('Slice 4 (Wave 29-NNN ARC 3) POST /:id/input-event with mode=manual → 503 FeatureUnavailable (pre-harness; Mac fleet Swift work pending per Tier-3 Option A 2026-05-19)', async () => {
+  it('Slice 4 (ARC 3) POST /:id/input-event with mode=manual → 503 FeatureUnavailable (pre-harness; Mac fleet Swift work pending per Tier-3 Option A 2026-05-19)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({
       method: 'POST',
@@ -3008,7 +3008,7 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.ValidationFailed);
   });
 
-  it('Slice 5 (Wave 29-NNN ARC 3) POST /:id/input-event on mode=pair + ai-driving fires takeover-request transition → 200 with kind:"pair-mode-takeover-fired" + pair_mode_state', async () => {
+  it('Slice 5 (ARC 3) POST /:id/input-event on mode=pair + ai-driving fires takeover-request transition → 200 with kind:"pair-mode-takeover-fired" + pair_mode_state', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({
       method: 'POST',

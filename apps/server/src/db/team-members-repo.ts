@@ -12,6 +12,7 @@ import type {
 } from '../services/team-members.js';
 import type { Database } from './client.js';
 import { accounts, apiKeys, teamInvites, teamMembers, teams } from './schema.js';
+import { clearGuiControlKeysMintedBy } from './agent-session-control-key-minter.js';
 
 type InviteDb = typeof teamInvites.$inferSelect;
 type MemberDb = typeof teamMembers.$inferSelect;
@@ -179,7 +180,7 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
     // row + token valid until the original 7-day expiry, and removeMember didn't
     // touch invites). Filtering here makes accept()'s existing not-found path
     // ("Invite not found or already used.") fire on any replay of a used token.
-    // (Fable auth re-audit 2026-07-02.)
+    // (Auth re-audit 2026-07-02.)
     const [row] = await this.database.db
       .select()
       .from(teamInvites)
@@ -418,6 +419,16 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
           ),
         )
         .returning({ id: apiKeys.id, name: apiKeys.name });
+      // Security sweep #2 — and every session control key the member minted on the
+      // owner's sessions: through this membership (their own desktop app acting for
+      // the owner), or with a key the removal just revoked. Same transaction, for
+      // the same reason: a committed removal must not leave the member a key that
+      // skips every ownership check on the owner's live sessions.
+      await clearGuiControlKeysMintedBy(
+        tx,
+        { membershipIds: [membershipId], apiKeyIds: revoked.map((r) => r.id) },
+        now,
+      );
       return {
         memberAccountId,
         revokedApiKeyIds: revoked.map((r) => r.id),

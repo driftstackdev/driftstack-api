@@ -569,6 +569,37 @@
               },
               "observed_at": {
                 "type": ["string", "null"]
+              },
+              "os_fingerprint": {
+                "type": ["object", "null"],
+                "properties": {
+                  "os": {
+                    "type": "string"
+                  },
+                  "confidence": {
+                    "type": "string"
+                  },
+                  "at": {
+                    "type": "string"
+                  },
+                  "observed_via": {
+                    "type": "string",
+                    "enum": ["proxy_host", "exit_ip"]
+                  },
+                  "single_host_vantage": {
+                    "type": "boolean"
+                  },
+                  "web_port_vantage": {
+                    "type": "boolean"
+                  },
+                  "direct_reading": {
+                    "type": "boolean"
+                  },
+                  "website_like_reading": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["os", "confidence", "at"]
               }
             },
             "required": [
@@ -4335,6 +4366,37 @@
                       },
                       "observed_at": {
                         "type": ["string", "null"]
+                      },
+                      "os_fingerprint": {
+                        "type": ["object", "null"],
+                        "properties": {
+                          "os": {
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "type": "string"
+                          },
+                          "observed_via": {
+                            "type": "string",
+                            "enum": ["proxy_host", "exit_ip"]
+                          },
+                          "single_host_vantage": {
+                            "type": "boolean"
+                          },
+                          "web_port_vantage": {
+                            "type": "boolean"
+                          },
+                          "direct_reading": {
+                            "type": "boolean"
+                          },
+                          "website_like_reading": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["os", "confidence", "at"]
                       }
                     },
                     "required": [
@@ -5174,6 +5236,37 @@
                       },
                       "observed_at": {
                         "type": ["string", "null"]
+                      },
+                      "os_fingerprint": {
+                        "type": ["object", "null"],
+                        "properties": {
+                          "os": {
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "type": "string"
+                          },
+                          "observed_via": {
+                            "type": "string",
+                            "enum": ["proxy_host", "exit_ip"]
+                          },
+                          "single_host_vantage": {
+                            "type": "boolean"
+                          },
+                          "web_port_vantage": {
+                            "type": "boolean"
+                          },
+                          "direct_reading": {
+                            "type": "boolean"
+                          },
+                          "website_like_reading": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["os", "confidence", "at"]
                       }
                     },
                     "required": [
@@ -5445,6 +5538,37 @@
                       },
                       "observed_at": {
                         "type": ["string", "null"]
+                      },
+                      "os_fingerprint": {
+                        "type": ["object", "null"],
+                        "properties": {
+                          "os": {
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "type": "string"
+                          },
+                          "observed_via": {
+                            "type": "string",
+                            "enum": ["proxy_host", "exit_ip"]
+                          },
+                          "single_host_vantage": {
+                            "type": "boolean"
+                          },
+                          "web_port_vantage": {
+                            "type": "boolean"
+                          },
+                          "direct_reading": {
+                            "type": "boolean"
+                          },
+                          "website_like_reading": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["os", "confidence", "at"]
                       }
                     },
                     "required": [
@@ -5716,6 +5840,37 @@
                       },
                       "observed_at": {
                         "type": ["string", "null"]
+                      },
+                      "os_fingerprint": {
+                        "type": ["object", "null"],
+                        "properties": {
+                          "os": {
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "type": "string"
+                          },
+                          "observed_via": {
+                            "type": "string",
+                            "enum": ["proxy_host", "exit_ip"]
+                          },
+                          "single_host_vantage": {
+                            "type": "boolean"
+                          },
+                          "web_port_vantage": {
+                            "type": "boolean"
+                          },
+                          "direct_reading": {
+                            "type": "boolean"
+                          },
+                          "website_like_reading": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["os", "confidence", "at"]
                       }
                     },
                     "required": [
@@ -6529,6 +6684,37 @@
                       },
                       "observed_at": {
                         "type": ["string", "null"]
+                      },
+                      "os_fingerprint": {
+                        "type": ["object", "null"],
+                        "properties": {
+                          "os": {
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "type": "string"
+                          },
+                          "observed_via": {
+                            "type": "string",
+                            "enum": ["proxy_host", "exit_ip"]
+                          },
+                          "single_host_vantage": {
+                            "type": "boolean"
+                          },
+                          "web_port_vantage": {
+                            "type": "boolean"
+                          },
+                          "direct_reading": {
+                            "type": "boolean"
+                          },
+                          "website_like_reading": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["os", "confidence", "at"]
                       }
                     },
                     "required": [
@@ -37161,6 +37347,37 @@
                         },
                         "observed_at": {
                           "type": ["string", "null"]
+                        },
+                        "os_fingerprint": {
+                          "type": ["object", "null"],
+                          "properties": {
+                            "os": {
+                              "type": "string"
+                            },
+                            "confidence": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "type": "string"
+                            },
+                            "observed_via": {
+                              "type": "string",
+                              "enum": ["proxy_host", "exit_ip"]
+                            },
+                            "single_host_vantage": {
+                              "type": "boolean"
+                            },
+                            "web_port_vantage": {
+                              "type": "boolean"
+                            },
+                            "direct_reading": {
+                              "type": "boolean"
+                            },
+                            "website_like_reading": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["os", "confidence", "at"]
                         }
                       },
                       "required": [
@@ -37618,6 +37835,37 @@
                               },
                               "observed_at": {
                                 "type": ["string", "null"]
+                              },
+                              "os_fingerprint": {
+                                "type": ["object", "null"],
+                                "properties": {
+                                  "os": {
+                                    "type": "string"
+                                  },
+                                  "confidence": {
+                                    "type": "string"
+                                  },
+                                  "at": {
+                                    "type": "string"
+                                  },
+                                  "observed_via": {
+                                    "type": "string",
+                                    "enum": ["proxy_host", "exit_ip"]
+                                  },
+                                  "single_host_vantage": {
+                                    "type": "boolean"
+                                  },
+                                  "web_port_vantage": {
+                                    "type": "boolean"
+                                  },
+                                  "direct_reading": {
+                                    "type": "boolean"
+                                  },
+                                  "website_like_reading": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": ["os", "confidence", "at"]
                               }
                             },
                             "required": [
@@ -38058,6 +38306,37 @@
                         },
                         "observed_at": {
                           "type": ["string", "null"]
+                        },
+                        "os_fingerprint": {
+                          "type": ["object", "null"],
+                          "properties": {
+                            "os": {
+                              "type": "string"
+                            },
+                            "confidence": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "type": "string"
+                            },
+                            "observed_via": {
+                              "type": "string",
+                              "enum": ["proxy_host", "exit_ip"]
+                            },
+                            "single_host_vantage": {
+                              "type": "boolean"
+                            },
+                            "web_port_vantage": {
+                              "type": "boolean"
+                            },
+                            "direct_reading": {
+                              "type": "boolean"
+                            },
+                            "website_like_reading": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["os", "confidence", "at"]
                         }
                       },
                       "required": [
@@ -39917,6 +40196,37 @@
                         },
                         "observed_at": {
                           "type": ["string", "null"]
+                        },
+                        "os_fingerprint": {
+                          "type": ["object", "null"],
+                          "properties": {
+                            "os": {
+                              "type": "string"
+                            },
+                            "confidence": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "type": "string"
+                            },
+                            "observed_via": {
+                              "type": "string",
+                              "enum": ["proxy_host", "exit_ip"]
+                            },
+                            "single_host_vantage": {
+                              "type": "boolean"
+                            },
+                            "web_port_vantage": {
+                              "type": "boolean"
+                            },
+                            "direct_reading": {
+                              "type": "boolean"
+                            },
+                            "website_like_reading": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["os", "confidence", "at"]
                         }
                       },
                       "required": [
@@ -42961,7 +43271,7 @@
     },
     "/v1/agent-sessions/{id}/livekit-token": {
       "post": {
-        "summary": "Mint a LiveKit join token for the agent session's live-view room (requires `write` or `account_owner`)",
+        "summary": "Mint a LiveKit join token for the agent session's live-view room (requires `write` and `read:sessions`, or `account_owner`)",
         "tags": ["agent-chat"],
         "security": [
           {

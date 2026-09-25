@@ -68,14 +68,14 @@ describe('W595.B packages/behavioural-simulation/src/interfaces.ts content parit
       /generateScrollPattern\(opts: GenerateScrollPatternOpts\): ScrollPattern;/,
     );
     expect(body).toMatch(
-      /\* V-530\.A — added in Wave 15\. Sub-slices C \(dwell \+ click-position\),/,
+      /\* V-530\.A — initial touch surface\. Sub-slices C \(dwell \+ click-position\),/,
     );
     expect(body).toMatch(/\* D \(idle jitter \+ multi-touch sequencing\) extend the touch surface/);
     expect(body).toMatch(/generateTouchEvent\(opts: GenerateTouchEventOpts\): TouchEvent;/);
     expect(body).toMatch(/\* Produce a scroll velocity profile with exponential decay starting/);
     expect(body).toMatch(/\* from a finger-flick initial velocity\./);
     expect(body).toMatch(/\* `generateScrollPattern` surface — this is the realistic finger-flick/);
-    expect(body).toMatch(/\* model\. V-530\.B — added in Wave 16\./);
+    expect(body).toMatch(/\* model\. V-530\.B\./);
     expect(body).toMatch(
       /generateScrollVelocityProfile\(opts: GenerateScrollVelocityProfileOpts\): ScrollVelocityProfile;/,
     );

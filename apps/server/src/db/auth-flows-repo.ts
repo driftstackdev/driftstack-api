@@ -27,6 +27,7 @@ import {
   webSessions,
 } from './schema.js';
 import type { AccountTier } from '@driftstack/api-types';
+import { clearGuiControlKeysMintedBy } from './agent-session-control-key-minter.js';
 
 function tableForKind(kind: AuthFlowKind) {
   switch (kind) {
@@ -499,6 +500,14 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
           ),
         )
         .returning({ id: apiKeys.id, name: apiKeys.name });
+      // Security sweep #2 — and the session control keys those credentials minted,
+      // in the same transaction: a reset that signs the desktop app out must not
+      // leave its per-session control keys driving the account's live sessions.
+      await clearGuiControlKeysMintedBy(
+        tx,
+        { apiKeyIds: keys.map((k) => k.id), webSessionIds: sessions.map((w) => w.id) },
+        at,
+      );
       return {
         webSessions: sessions.length,
         deviceKeys: [...keys].sort((a, b) => a.id.localeCompare(b.id)),

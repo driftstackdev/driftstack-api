@@ -83,9 +83,9 @@ export interface BehaviouralSimulator {
   /**
    * Produce a touch event sampled from the per-class distribution.
    *
-   * V-530.A — added in Wave 15. Sub-slices C (dwell + click-position),
+   * V-530.A — initial touch surface. Sub-slices C (dwell + click-position),
    * D (idle jitter + multi-touch sequencing) extend the touch surface
-   * in later waves.
+   * in later slices.
    */
   generateTouchEvent(opts: GenerateTouchEventOpts): TouchEvent;
 
@@ -93,7 +93,7 @@ export interface BehaviouralSimulator {
    * Produce a scroll velocity profile with exponential decay starting
    * from a finger-flick initial velocity. Distinct from the constant-tick
    * `generateScrollPattern` surface — this is the realistic finger-flick
-   * model. V-530.B — added in Wave 16.
+   * model. V-530.B.
    */
   generateScrollVelocityProfile(opts: GenerateScrollVelocityProfileOpts): ScrollVelocityProfile;
 

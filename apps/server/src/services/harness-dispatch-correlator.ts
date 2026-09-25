@@ -2,13 +2,13 @@
 //
 // The transport-agnostic CORE of the (gated) /v1/fleet/events WSS sender: it
 // owns the request/response correlation + timeout state machine, built to the
-// contract A3 settled in bus W106 (2026-06-05). The live socket binding (the WS
+// contract the harness settled in W106 (2026-06-05). The live socket binding (the WS
 // route that calls `send` + feeds `onResultFrame`/`onSessionError`) is the only
 // part still gated on the fleet_nodes migration + key provisioning; this core is
 // pure logic over an injected transport, so it's unit-testable now and slots
 // straight under the socket when it lands.
 //
-// Contract (A3 W106 — harness IntentExecutor):
+// Contract (W106 — harness IntentExecutor):
 //   - Correlate IntentResult → IntentDispatch by `intentId`. For a LIVE session
 //     the harness emits EXACTLY ONE IntentResult per dispatch (echoes intentId);
 //     never zero, never two.

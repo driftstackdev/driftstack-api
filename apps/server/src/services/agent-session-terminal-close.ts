@@ -1,4 +1,4 @@
-// 2026-06-19 — worker-CONNECTED orphan auto-close (A3 W2682).
+// 2026-06-19 — worker-CONNECTED orphan auto-close (W2682).
 //
 // The PRECISE, fast complement to the worker-DISCONNECT reaper
 // (worker-disconnect-reaper.ts) and the 12h orphan sweeper: when a STILL-
@@ -12,7 +12,7 @@
 // concurrent-session slot and showing the GUI a phantom "open session".
 //
 // frame.sessionId IS the agt_ agent-session id (== the sessionAssign.sessionId
-// == created.id, A3 W2682) — NO ses_/agt_ translation. The close reason is the
+// == created.id, W2682) — NO ses_/agt_ translation. The close reason is the
 // frame's clean snake_case `reason` (idle_timeout / max_duration /
 // browser_crashed / …); a terminal frame that omits it (e.g. a provisioning-
 // failure errored frame carries reason:nil — but those are assign-time

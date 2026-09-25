@@ -6,7 +6,7 @@ import { codeOnly } from './_helpers/code-only.js';
 
 /**
  * The harness dispatches on `intent.intentName` with NO allowlist — it runs
- * whatever the control plane sends (A3, 2026-08-31). That makes the CP the only
+ * whatever the control plane sends (confirmed against the harness, 2026-08-31). That makes the CP the only
  * thing standing between a malformed dispatch and execution, and `execute_script`
  * — arbitrary JS in a customer session — is in the declared vocabulary.
  *

@@ -101,7 +101,7 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
 
   it('createCustomer: email required + optional name + metadata flattened to metadata[k] form fields + optional idempotencyKey forwarded to post()', () => {
     // Discrete pins (no long \s*\n? chain — the JSDoc on idempotencyKey would
-    // break a single mega-regex; see feedback_no_long_chain_parity_regex).
+    // break a single mega-regex, and a long chained regex is hard to debug).
     expect(body).toMatch(/async createCustomer\(args: \{/);
     expect(body).toMatch(/email: string;/);
     expect(body).toMatch(/name\?: string \| null;/);

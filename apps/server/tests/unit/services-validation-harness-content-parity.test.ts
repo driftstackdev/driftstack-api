@@ -5,7 +5,7 @@
 //
 //   • V-218 framing pinned: schedule table ownership + processTick finds
 //     due rows + dispatches to RecaptureService.triggerRecapture().
-//   • Cross-repo dep pinned: Agent 1's V-203 Phase 2A vendor probes
+//   • Cross-repo dep pinned: the device side's V-203 Phase 2A vendor probes
 //     wire behind the same triggerRecapture interface; until then the
 //     mock from packages/recapture-automation is the dispatch target.
 //   • Bootstrap responsibility pinned: setInterval(tick, 60_000) loop
@@ -46,9 +46,9 @@ describe('W409.C apps/server/src/services/validation-harness.ts content parity',
     );
   });
 
-  it('Cross-repo dep pinned: Agent 1 V-203 Phase 2A vendor probes; mock from packages/recapture-automation until then', () => {
+  it('Cross-repo dep pinned: device-side V-203 Phase 2A vendor probes; mock from packages/recapture-automation until then', () => {
     expect(body).toMatch(
-      /Cross-repo dep: when Agent 1's V-203 Phase 2A vendor probes land,\s*\/\/\s*the production RecaptureService can wire vendor-probe execution\s*\/\/\s*behind the same triggerRecapture interface\. Until then, the mock\s*\/\/\s*from packages\/recapture-automation is the dispatch target\./,
+      /Cross-repo dep: when the device side's V-203 Phase 2A vendor probes land,\s*\/\/\s*the production RecaptureService can wire vendor-probe execution\s*\/\/\s*behind the same triggerRecapture interface\. Until then, the mock\s*\/\/\s*from packages\/recapture-automation is the dispatch target\./,
     );
   });
 

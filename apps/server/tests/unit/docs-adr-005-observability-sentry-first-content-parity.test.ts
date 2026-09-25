@@ -14,7 +14,7 @@
 //   • Sentry 90d issues + 30d transactions retention default.
 //   • OTel-only NOT abandoned — scaffolding follow-on, separate.
 //   • Decision authority: Architectural → founder review per
-//     AGENTS.md.
+//     the project's decision-authority policy.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

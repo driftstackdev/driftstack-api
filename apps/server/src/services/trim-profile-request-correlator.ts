@@ -21,7 +21,7 @@
 // Marked rather than deleted: a "never emitted" claim is a deployment fact written
 // from a source file, and that wording hid two production defects tonight by making
 // a live path read as dead. Original text:
-// "Ships gated-inert until A3's harness `trimProfile` handler lands: until then a live
+// "Ships gated-inert until the harness's `trimProfile` handler lands: until then a live
 // node never emits `trimResult`, so a wired request resolves `timeout`.
 
 import type { Logger } from '../lib/logger.js';
@@ -40,7 +40,7 @@ export interface TrimProfileTransport {
 /** A trim is a blob→blob transform on the node (open, map-filter, re-seal, PUT) —
  *  it touches R2 twice (GET + PUT) for a blob up to the 256 MiB harness backstop, so
  *  it gets a more generous bound than the 10s in-session reads. Still hard-bounded so
- *  a silent (pre-A3) or wedged node can't hang the POST indefinitely. */
+ *  a silent (pre-handler) or wedged node can't hang the POST indefinitely. */
 export const TRIM_PROFILE_REQUEST_TIMEOUT_MS = 60_000;
 
 /** Uniform outcome — never rejects, so the route maps each case to a status. */

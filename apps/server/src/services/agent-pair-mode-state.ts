@@ -7,12 +7,12 @@
 // AgentSessionsRepo.setPairModeState.
 //
 // States + transitions (founder verdict 2026-05-18 implicit in the
-// queue spec; Wave 2.A 8.11 adds the mid-runTurn queue path):
+// queue spec; phase 2.A 8.11 adds the mid-runTurn queue path):
 //
 //   ai-driving         ── takeover-request          ─→  takeover-pending
-//   ai-driving         ── takeover-request-queued   ─→  takeover-queued     (Wave 2.A 8.11)
-//   takeover-queued    ── decompose-settled         ─→  takeover-pending    (Wave 2.A 8.11)
-//   takeover-queued    ── takeover-decline          ─→  ai-driving          (Wave 2.A 8.11)
+//   ai-driving         ── takeover-request-queued   ─→  takeover-queued     (phase 2.A 8.11)
+//   takeover-queued    ── decompose-settled         ─→  takeover-pending    (phase 2.A 8.11)
+//   takeover-queued    ── takeover-decline          ─→  ai-driving          (phase 2.A 8.11)
 //   takeover-pending   ── takeover-grant            ─→  human-driving
 //   human-driving      ── handback-request          ─→  handback-pending
 //   handback-pending   ── handback-complete         ─→  ai-driving
@@ -35,7 +35,7 @@ export type PairModeState =
       sinceAt?: string;
     }
   /**
-   * Arc 4 Wave 2.A sub-slice 8.11 (v2-#8) — intermediate state when a
+   * Arc 4 phase 2.A, slice 8.11 (v2-#8) — intermediate state when a
    * takeover request lands while AgentRuntime.runTurn is mid-flight
    * (decompose still resolving). The state machine holds the request
    * here until the runtime fires `decompose-settled`, at which point
@@ -48,7 +48,7 @@ export type PairModeState =
    */
   | { kind: 'takeover-queued'; requestedByClientId: string; queuedAt: string }
   /**
-   * Arc 4 Wave 2.A sub-slice 8.12 (v2-#8) — symmetric to 8.11's
+   * Arc 4 phase 2.A, slice 8.12 (v2-#8) — symmetric to 8.11's
    * takeover-queued. When a handback request arrives while a
    * decompose is mid-flight (e.g. the brief window after takeover-grant
    * where lingering AI bookkeeping is still resolving), the route
@@ -73,27 +73,27 @@ export type PairModeTransition =
   | { kind: 'handback-complete' }
   | { kind: 'handback-cancel' }
   /**
-   * Arc 4 Wave 2.A sub-slice 8.11 — fired by the route layer when a
+   * Arc 4 phase 2.A, slice 8.11 — fired by the route layer when a
    * takeover request arrives while decompose_in_flight=true. The
    * state machine is pure; the runtime separately knows about
    * decompose state and decides which transition to fire.
    */
   | { kind: 'takeover-request-queued'; clientId: string; at: string }
   /**
-   * Arc 4 Wave 2.A sub-slice 8.11 — fired by AgentRuntime when the
+   * Arc 4 phase 2.A, slice 8.11 — fired by AgentRuntime when the
    * in-flight decompose settles (plan-executed / clarify / refuse /
    * runtime-error / transient-retry-fallback). Promotes a queued
    * takeover to takeover-pending.
    */
   | { kind: 'decompose-settled'; at: string }
   /**
-   * Arc 4 Wave 2.A sub-slice 8.12 — symmetric handback-while-mid-
+   * Arc 4 phase 2.A, slice 8.12 — symmetric handback-while-mid-
    * decompose deferral. Route fires this when decompose_in_flight=true
    * AND the active state is human-driving.
    */
   | { kind: 'handback-request-queued'; clientId: string; at: string }
   /**
-   * Arc 4 Wave 2.A sub-slice 8.13 (v2-#8) — auto-handback to ai-driving
+   * Arc 4 phase 2.A, slice 8.13 (v2-#8) — auto-handback to ai-driving
    * after 30s of no client heartbeat. The state-machine accepts this
    * transition from any non-ai-driving state so the timer service can
    * fire it without inspecting the current state first. Idempotent on
@@ -137,7 +137,7 @@ export function applyPairModeTransition(
         };
       }
       if (transition.kind === 'takeover-request-queued') {
-        // Arc 4 Wave 2.A sub-slice 8.11 — defer the takeover until
+        // Arc 4 phase 2.A, slice 8.11 — defer the takeover until
         // decompose settles. The runtime's settle path fires
         // 'decompose-settled' which moves us forward.
         return {
@@ -152,14 +152,14 @@ export function applyPairModeTransition(
       // contract simple (the route doesn't have to inspect state
       // before firing). Same idempotent posture as queue-decline below.
       if (transition.kind === 'decompose-settled') return state;
-      // Arc 4 Wave 2.A 8.13 — auto-handback on heartbeat timeout. Any
+      // Arc 4 phase 2.A 8.13 — auto-handback on heartbeat timeout. Any
       // non-ai-driving state goes back to ai-driving when the client
       // hasn't heartbeated in 30s.
       if (transition.kind === 'heartbeat-timeout') return { kind: 'ai-driving' };
       throw new PairModeStateInvalidTransitionError(state.kind, transition.kind);
 
     case 'takeover-queued':
-      // Arc 4 Wave 2.A sub-slice 8.11 — only two transitions out:
+      // Arc 4 phase 2.A, slice 8.11 — only two transitions out:
       // promote on decompose settle, or rollback on decline.
       if (transition.kind === 'decompose-settled') {
         return {
@@ -171,7 +171,7 @@ export function applyPairModeTransition(
       if (transition.kind === 'takeover-decline') {
         return { kind: 'ai-driving' };
       }
-      // Arc 4 Wave 2.A 8.13 — heartbeat-timeout discards the queued
+      // Arc 4 phase 2.A 8.13 — heartbeat-timeout discards the queued
       // takeover (human never fully took over; AI continues).
       if (transition.kind === 'heartbeat-timeout') return { kind: 'ai-driving' };
       throw new PairModeStateInvalidTransitionError(state.kind, transition.kind);
@@ -187,10 +187,10 @@ export function applyPairModeTransition(
       if (transition.kind === 'takeover-decline') {
         return { kind: 'ai-driving' };
       }
-      // Arc 4 Wave 2.A 8.11 — silent no-op so the runtime can fire
+      // Arc 4 phase 2.A 8.11 — silent no-op so the runtime can fire
       // unconditionally without inspecting state.
       if (transition.kind === 'decompose-settled') return state;
-      // Arc 4 Wave 2.A 8.13 — auto-handback on heartbeat timeout. Any
+      // Arc 4 phase 2.A 8.13 — auto-handback on heartbeat timeout. Any
       // non-ai-driving state goes back to ai-driving when the client
       // hasn't heartbeated in 30s.
       if (transition.kind === 'heartbeat-timeout') return { kind: 'ai-driving' };
@@ -206,7 +206,7 @@ export function applyPairModeTransition(
         };
       }
       if (transition.kind === 'handback-request-queued') {
-        // Arc 4 Wave 2.A 8.12 — defer until decompose-settled fires.
+        // Arc 4 phase 2.A 8.12 — defer until decompose-settled fires.
         return {
           kind: 'handback-queued',
           queuedByClientId: transition.clientId,
@@ -215,7 +215,7 @@ export function applyPairModeTransition(
         };
       }
       if (transition.kind === 'decompose-settled') return state;
-      // Arc 4 Wave 2.A 8.13 — auto-handback on heartbeat timeout. Any
+      // Arc 4 phase 2.A 8.13 — auto-handback on heartbeat timeout. Any
       // non-ai-driving state goes back to ai-driving when the client
       // hasn't heartbeated in 30s.
       if (transition.kind === 'heartbeat-timeout') return { kind: 'ai-driving' };
@@ -241,7 +241,7 @@ export function applyPairModeTransition(
           sinceAt: state.sinceAt ?? state.queuedAt,
         };
       }
-      // Arc 4 Wave 2.A 8.13 — heartbeat-timeout completes the
+      // Arc 4 phase 2.A 8.13 — heartbeat-timeout completes the
       // requested handback even without a decompose-settle event
       // (the client is gone anyway).
       if (transition.kind === 'heartbeat-timeout') return { kind: 'ai-driving' };
@@ -252,7 +252,7 @@ export function applyPairModeTransition(
         return { kind: 'ai-driving' };
       }
       if (transition.kind === 'decompose-settled') return state;
-      // Arc 4 Wave 2.A 8.13 — auto-handback on heartbeat timeout.
+      // Arc 4 phase 2.A 8.13 — auto-handback on heartbeat timeout.
       if (transition.kind === 'heartbeat-timeout') return { kind: 'ai-driving' };
       if (transition.kind === 'handback-cancel') {
         // New states preserve the exact controller identity + original takeover

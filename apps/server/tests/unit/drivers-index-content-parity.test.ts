@@ -58,7 +58,7 @@ describe('W431.A apps/server/src/drivers/index.ts content parity', () => {
 
   it('V-333b Playwright branch: lazy import via await import("./playwright.js") so prod builds skip @playwright/test devDependency; browserKind + headed passed', () => {
     expect(body).toMatch(
-      /\/\/ V-333b — Playwright driver\. Dev \/ E2E only; the production\s*\/\/ driver is the WebKit fork \(DRIVER=webkit\), which lands when\s*\/\/ Agent 1's WebKit Phase 2 closes\. Loaded lazily so prod builds\s*\/\/ don't pull in @playwright\/test \(a devDependency\)\./,
+      /\/\/ V-333b — Playwright driver\. Dev \/ E2E only; the production\s*\/\/ driver is the WebKit fork \(DRIVER=webkit\), which lands when\s*\/\/ the fork's WebKit Phase 2 closes\. Loaded lazily so prod builds\s*\/\/ don't pull in @playwright\/test \(a devDependency\)\./,
     );
     expect(body).toMatch(
       /if \(config\.driver === 'playwright'\) \{\s*const \{ PlaywrightDriver \} = await import\('\.\/playwright\.js'\);\s*return new PlaywrightDriver\(\{\s*browserKind: config\.playwrightBrowser,\s*headed: config\.playwrightHeaded,\s*\}\);\s*\}/,

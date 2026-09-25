@@ -1,4 +1,4 @@
-// Unit tests for SessionPageStateStore (W650/A3-W1254): latest-pageState-per-
+// Unit tests for SessionPageStateStore (W650/W1254): latest-pageState-per-
 // agent-session, bounded (oldest-evicted), customer-facing slice (drops the
 // wire-routing type/sessionId).
 

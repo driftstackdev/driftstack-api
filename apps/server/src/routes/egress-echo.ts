@@ -3,8 +3,8 @@
 // The GUI's proxy capability probe CONNECTs through a customer's SOCKS5
 // proxy to this endpoint and reads back the IP (and country) the world
 // sees — exit-geo for the proxy-health board, without leaking customer
-// exit IPs to a third-party echo service (design:
-// docs/internal/2026-06-12-proxy-probe-backend-design.md; F1 decided
+// exit IPs to a third-party echo service (design: the internal
+// proxy-probe backend design, 2026-06-12; F1 decided
 // per the doc's recommendation under the founder's blanket greenlight).
 //
 // UNAUTHENTICATED by design (F1: exit IPs never tied to accounts —

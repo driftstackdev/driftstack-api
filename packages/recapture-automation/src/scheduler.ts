@@ -84,8 +84,8 @@ const DEFAULT_ERRORING_THRESHOLD = 0.25;
 
 // Fix 3 (2026-07-01 audit): how long an in-flight (`queued` / `in_progress`)
 // run is trusted before it's treated as abandoned. Captures are expensive,
-// multi-surface WKWebView walks (docs/internal/v533-cross-agent-contract.md
-// — Agent 1's fork worker opens a WKWebView per archetype and walks the
+// multi-surface WKWebView walks (per the internal V-533 fork contract notes,
+// the fork's worker opens a WKWebView per archetype and walks the
 // whole file-121 surface catalogue), so a healthy run can legitimately take
 // a while; this is deliberately generous (hours, not minutes — an order of
 // magnitude above e.g. the 5-minute in-flight reclaim window used for fast

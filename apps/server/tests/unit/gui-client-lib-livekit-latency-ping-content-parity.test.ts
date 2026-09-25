@@ -23,12 +23,12 @@ describe('gui-client/lib/livekit-latency-ping content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("LK.6.e module-level framing pinned: 'synthetic-ping RTT measurement over the LiveKit DataChannel. The gui-client sends a ping InputEvent at LIVEKIT_PING_INTERVAL_MS cadence; Agent 1's harness-side RoomDataDispatcher + LatencyCollector echoes it back as a ping DataReceived event. gui-client measures the round-trip and exposes it via a React hook.' — pinned so the LK.6.e anchor + cross-agent RoomDataDispatcher + LatencyCollector cross-reference + React-hook surface contract all stay documented", () => {
+  it("LK.6.e module-level framing pinned: 'synthetic-ping RTT measurement over the LiveKit DataChannel. The gui-client sends a ping InputEvent at LIVEKIT_PING_INTERVAL_MS cadence; the harness-side RoomDataDispatcher + LatencyCollector echoes it back as a ping DataReceived event. gui-client measures the round-trip and exposes it via a React hook.' — pinned so the LK.6.e anchor + cross-repo RoomDataDispatcher + LatencyCollector cross-reference + React-hook surface contract all stay documented", () => {
     expect(body).toMatch(
       /\/\/ LK\.6\.e — synthetic-ping RTT measurement over the LiveKit\s*\/\/ DataChannel\./,
     );
     expect(body).toMatch(
-      /The gui-client sends a `ping` InputEvent at\s*\/\/ LIVEKIT_PING_INTERVAL_MS cadence; Agent 1's harness-side\s*\/\/ RoomDataDispatcher \+ LatencyCollector echoes it back as a\s*\/\/ `ping` DataReceived event\./,
+      /The gui-client sends a `ping` InputEvent at\s*\/\/ LIVEKIT_PING_INTERVAL_MS cadence; the harness-side\s*\/\/ RoomDataDispatcher \+ LatencyCollector echoes it back as a\s*\/\/ `ping` DataReceived event\./,
     );
   });
 

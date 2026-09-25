@@ -3,7 +3,7 @@
 // Why this is an anonymisation sweep and not a delete sweep, why `usage_records` must
 // survive it, and why a revoked API key cannot be deleted at all, are recorded on
 // `db/retention-scrub-repo.ts` and in
-// docs/internal/2026-08-12-retention-anonymisation-design.md. Read one of those before
+// the internal 2026-08-12 retention-anonymisation design notes. Read one of those before
 // changing the semantics here.
 //
 // Scheduling mirrors crypto-entitlement-expiry-sweeper EXACTLY: bootstrap enqueues the

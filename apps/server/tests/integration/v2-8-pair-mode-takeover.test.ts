@@ -90,7 +90,7 @@ describe('Arc 2 v2-#8 sub-slice 8.9 pair-mode takeover + handback routes', () =>
     expect(res.statusCode).toBe(400);
   });
 
-  // Arc 4 Wave 2.A sub-slice 8.16 (v2-#8) — Wave 2.A integration
+  // Arc 4 phase 2.A, slice 8.16 (v2-#8) — phase 2.A integration
   // smoke: end-to-end exercise of the typed 409 path with from +
   // transition extensions surfaced on the wire.
   it('v2-#8 sub-slice 8.16 double-takeover surfaces 409 PairModeStateInvalidTransition with from + transition extensions', async () => {
@@ -129,7 +129,7 @@ describe('Arc 2 v2-#8 sub-slice 8.9 pair-mode takeover + handback routes', () =>
     expect(body.transition).toBe('takeover-request');
   });
 
-  // Arc 4 Wave 2.B sub-slice 8.20 (v2-#8) — audit log emission.
+  // Arc 4 phase 2.B, slice 8.20 (v2-#8) — audit log emission.
   it('v2-#8 sub-slice 8.20 takeover emits agent_session.pair_mode.takeover row with from/to/client_id payload', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const id = await createPairSession();

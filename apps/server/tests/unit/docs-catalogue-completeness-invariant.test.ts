@@ -1,4 +1,4 @@
-// Catalogue-completeness invariant (A2, 2026-07-31).
+// Catalogue-completeness invariant (2026-07-31).
 //
 // The converse of `docs-public-surface-resolves`. That guard proves the docs
 // never name something that does not exist. This one proves the docs never

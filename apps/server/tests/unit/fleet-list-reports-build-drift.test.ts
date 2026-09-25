@@ -1,5 +1,5 @@
 // GET /v1/mac-nodes — the OPERATOR fleet list, and the surface the admin panel's
-// Fleet page reads. A3 2026-09-19 added two MEASURED build digests to the device
+// Fleet page reads. 2026-09-19 added two MEASURED build digests to the device
 // frames; this is where they, and the contradictions they expose, become visible.
 //
 // ⛔ THE ROUTE JOINS; IT DOES NOT JUDGE. Everything about who contradicts whom is

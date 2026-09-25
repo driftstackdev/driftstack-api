@@ -107,8 +107,10 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     // advertises was unreachable. Pin the latch + the onComplete that clears
     // BOTH flags so the fix can't silently regress.
     expect(body).toMatch(/\/\/ V-244 — first-run gate\. Show the wizard when there's no key/);
+    // 2026-09-24 — the wizard renders under the notice that says why the
+    // customer was signed out (a revoked / unrecognised key), when there is one.
     expect(body).toMatch(
-      /if \(\(settings\.apiKey === null \|\| wizardActive\) && !wizardDismissed\) \{\s*return \(\s*<FirstRunWizard\s*onComplete=\{\(\) => \{\s*setWizardActive\(false\);\s*setWizardDismissed\(true\);\s*\}\}\s*\/>\s*\);\s*\}/,
+      /if \(\(settings\.apiKey === null \|\| wizardActive\) && !wizardDismissed\) \{\s*return \(\s*<>\s*\{keyRefusedNotice\}\s*<FirstRunWizard\s*onComplete=\{\(\) => \{\s*setWizardActive\(false\);\s*setWizardDismissed\(true\);\s*\}\}\s*\/>\s*<\/>\s*\);\s*\}/,
     );
     expect(body).toMatch(
       /\/\/ V-244 — track wizard state\. Customer with no apiKey on boot\s*\/\/ sees the wizard; once apiKey is set \(via wizard or any other\s*\/\/ path\) the regular shell takes over\. `wizardDismissed` lets the\s*\/\/ customer skip the wizard mid-flow without leaving them stuck on\s*\/\/ it forever; once true, they get the normal shell \+ can still\s*\/\/ configure via Settings\./,

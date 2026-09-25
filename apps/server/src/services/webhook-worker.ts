@@ -558,7 +558,7 @@ export class WebhookDeliveryWorker {
         // endpoint (create-time validation only enforces https://; a 3xx to
         // an internal target like http://169.254.169.254 would bypass it).
         // A 30x surfaces as a failed delivery. See
-        // docs/internal/2026-05-31-webhook-ssrf-outbound-target.md.
+        // the internal 2026-05-31 webhook SSRF outbound-target notes.
         redirect: 'error',
       });
       // Read the failure-response excerpt HERE, before the finally clears the

@@ -1,5 +1,5 @@
 // Drizzle-backed integration test: the single-active-session-per-profile guard
-// (A3 finding #7, W2979/W2980) enforced ATOMICALLY under concurrency against a
+// (finding #7, W2979/W2980) enforced ATOMICALLY under concurrency against a
 // REAL Postgres, across and within BOTH session-create paths:
 //   - DrizzleSessionRepo.insertSessionIfUnderLimit (driver /v1/sessions; the
 //     profile_id lives in metadata.profile_id jsonb)

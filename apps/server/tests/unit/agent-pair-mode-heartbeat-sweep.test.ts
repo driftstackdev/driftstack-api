@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.13c (v2-#8) — heartbeat sweep tests.
+// Arc 4 phase 2.B, slice 8.13c (v2-#8) — heartbeat sweep tests.
 
 import { describe, expect, it, vi } from 'vitest';
 import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
@@ -35,7 +35,7 @@ async function setupPairSession(args: { state: 'ai-driving' | 'human-driving' })
   return { sessions, sessionId: rec.id, accountId };
 }
 
-describe('Arc 4 Wave 2.B sub-slice 8.13c PairModeHeartbeatSweep', () => {
+describe('Arc 4 phase 2.B, slice 8.13c PairModeHeartbeatSweep', () => {
   it('zero stale sessions → tick is a no-op', async () => {
     const tracker = new InMemoryPairModeHeartbeatTracker();
     const { sessions } = await setupPairSession({ state: 'human-driving' });
@@ -209,7 +209,7 @@ describe('Arc 4 Wave 2.B sub-slice 8.13c PairModeHeartbeatSweep', () => {
     ).toEqual([ids[2]]);
   });
 
-  // Arc 4 Wave 2.B sub-slice 8.13c.2 — closed-session defensive
+  // Arc 4 phase 2.B, slice 8.13c.2 — closed-session defensive
   // guard. A session that closed BEFORE the heartbeat went stale
   // should NOT emit an `agent_session.pair_mode.timeout` audit row
   // — closed sessions can't transition state and the row would be

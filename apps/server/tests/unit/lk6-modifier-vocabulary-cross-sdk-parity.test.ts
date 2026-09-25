@@ -1,4 +1,4 @@
-// Slice 6 (Wave 29-NNN ARC 3) cross-SDK parity for the LK.6 InputEvent
+// Slice 6 (ARC 3) cross-SDK parity for the LK.6 InputEvent
 // modifier vocabulary. The 4 canonical names (cmd / ctrl / shift /
 // option) map 1:1 onto Quartz CGEventFlags on the macOS harness side;
 // any of the 3 SDKs documenting a different vocabulary would lead a

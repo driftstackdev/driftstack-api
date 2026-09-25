@@ -37,7 +37,7 @@ const TURN_ENTRY_POINTS = [
  *
  * ⛔ WHY THE IMPORT CLOSURE AND NOT "every agent-*.ts". The first version hashed
  * every agent service by name, and flagged a run as changed-under-it because
- * another agent's session was writing an unrelated watchdog file in the same
+ * another process was writing an unrelated watchdog file in the same
  * shared tree. A stamp that moves for code the turn never loads is as useless as
  * one that does not move for code it does. Derived, so a file added to the turn
  * path tomorrow is covered without anyone remembering this list.

@@ -28,7 +28,7 @@ export async function createDriver(
   }
   // V-333b — Playwright driver. Dev / E2E only; the production
   // driver is the WebKit fork (DRIVER=webkit), which lands when
-  // Agent 1's WebKit Phase 2 closes. Loaded lazily so prod builds
+  // the fork's WebKit Phase 2 closes. Loaded lazily so prod builds
   // don't pull in @playwright/test (a devDependency).
   if (config.driver === 'playwright') {
     const { PlaywrightDriver } = await import('./playwright.js');

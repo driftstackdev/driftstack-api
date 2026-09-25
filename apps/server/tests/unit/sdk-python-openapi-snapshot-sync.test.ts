@@ -35,7 +35,7 @@
 //   npm run sdk:python:dump-spec && npx prettier --write packages/sdk-python/openapi.json
 // committed in the SAME change as the openapi.ts edit. (A new schema here
 // also implies a pending datamodel-codegen run for models.py — see
-// docs/internal/2026-05-31-autopilot-findings-and-open-decisions.md.)
+// the internal 2026-05-31 findings and open-decisions notes.)
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

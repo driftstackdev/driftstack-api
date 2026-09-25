@@ -1,4 +1,4 @@
-// File-control download (A3 W2856 / founder "control files") — integration tests
+// File-control download (W2856 / founder "control files") — integration tests
 // for GET /v1/agent-sessions/:id/downloads (list) + GET /:id/downloads/content?name=
 // (fetch). Pins the discriminated body contract the GUI download bar relies on (200
 // in every relay case, never an HTTP error for an expected-inert state), the gated
@@ -39,7 +39,7 @@ async function createSession(fx: TestAppFixture): Promise<string> {
 }
 
 /** Register a node whose socket echoes a downloadsList for listDownloads and a
- *  downloadData for fetchDownload — exactly what A3's harness will do live. */
+ *  downloadData for fetchDownload — exactly what the harness will do live. */
 function registerEchoNode(fx: TestAppFixture, nodeId: string): void {
   const conn = fx.fleetControlRegistry.register(nodeId, (data) => {
     const frame = JSON.parse(data) as {

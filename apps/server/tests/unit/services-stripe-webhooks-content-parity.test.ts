@@ -113,7 +113,7 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
     expect(body).toMatch(
       /\/\/ V-202b — lifecycle dispatcher fans this out into audit emit \+\s*\/\/ tier-changed email at one call site\./,
     );
-    // Fable last-hours audit 2026-07-07 (C4) — the active/trialing branch sets
+    // Last-hours audit 2026-07-07 (C4) — the active/trialing branch sets
     // the account to its BEST active/trialing tier (rank-aware reconcile), not
     // blindly the event's own tier, so a multi-active account isn't downgraded
     // by a routine update on a lower sub. The emit therefore carries the

@@ -2,7 +2,7 @@
 // Postgres.
 //
 // Why this exists: the repo had ZERO line coverage (measured 2026-08-15, see
-// A2-PRODUCTION-READINESS-ASSESSMENT item 5e). It backs the admin surface that
+// the production-readiness assessment, item 5e). It backs the admin surface that
 // changes a customer's tier and suspends or deletes their account — the SQL
 // nobody had executed under vitest. The service above it is covered against an
 // in-memory double, which exercises the decision and not the statement.

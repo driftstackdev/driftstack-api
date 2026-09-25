@@ -156,7 +156,7 @@ describe('W768 docs /api/audit-log content parity', () => {
     expect(p).toMatch(/keys created before this was recorded are not listed/);
   });
 
-  it("CRITICAL account.login payload method 4-enum pinned — password/magic_link/mfa_totp/mfa_recovery, plus the oauth_callback variant. S36 2026-07-07 (fable-truth-audit): the old 5-enum was FALSE — auth-flows.ts emitted only method 'password' or 'mfa_totp'/'mfa_recovery'; password-reset confirm emits account.password_changed {via:'password_reset'}, and the OAuth callback emits account.login with {kind:'oauth_callback', provider, session_id} and no method field. Sign-in audit #9 (2026-09-24) made magic-link consume emit account.login {method:'magic_link'} — it had created a session with no row — so magic_link is now TRUE and pinned here, while password_reset stays retired.", () => {
+  it("CRITICAL account.login payload method 4-enum pinned — password/magic_link/mfa_totp/mfa_recovery, plus the oauth_callback variant. S36 2026-07-07 (truth audit): the old 5-enum was FALSE — auth-flows.ts emitted only method 'password' or 'mfa_totp'/'mfa_recovery'; password-reset confirm emits account.password_changed {via:'password_reset'}, and the OAuth callback emits account.login with {kind:'oauth_callback', provider, session_id} and no method field. Sign-in audit #9 (2026-09-24) made magic-link consume emit account.login {method:'magic_link'} — it had created a session with no row — so magic_link is now TRUE and pinned here, while password_reset stays retired.", () => {
     const p = read(PAGE);
     const src = read(resolve(REPO_ROOT, 'apps/server/src/services/auth-flows.ts'));
 
@@ -249,7 +249,7 @@ describe('W768 docs /api/audit-log content parity', () => {
     );
   });
 
-  it('CRITICAL export response headers pinned — Content-Type csv|json + Content-Disposition attachment; filename="driftstack-audit-log-<YYYY-MM-DD>.{ext}". S36 2026-07-07 (fable-truth-audit): the route builds filenameBase = `driftstack-audit-log-${new Date().toISOString().slice(0, 10)}` (routes/account-audit.ts:192); the old "audit-log.{ext}" claim never matched.', () => {
+  it('CRITICAL export response headers pinned — Content-Type csv|json + Content-Disposition attachment; filename="driftstack-audit-log-<YYYY-MM-DD>.{ext}". S36 2026-07-07 (truth audit): the route builds filenameBase = `driftstack-audit-log-${new Date().toISOString().slice(0, 10)}` (routes/account-audit.ts:192); the old "audit-log.{ext}" claim never matched.', () => {
     const p = read(PAGE);
     const route = read(ROUTE);
 
@@ -311,7 +311,7 @@ describe('W768 docs /api/audit-log content parity', () => {
     expect(p).toMatch(/client\.AuditLog\.Export\(ctx\)/);
   });
 
-  it("CRITICAL read:audit-scope + X-Driftstack-Account team-RBAC honored framing pinned. S36 2026-07-07 (fable-truth-audit): V-553.B-21 WIDENED the audit read gate from the old hard account_owner requirement to the granular read:audit scope (services/account-audit.ts list() → throwIfMissingScope(ctx, 'read:audit')), which a bare broad `read` key satisfies via the V-481 broad-satisfies-granular rule — the doc's old 'a bare read key is not sufficient' claim described retired behavior. The 'X-Driftstack-Account header is honored for team scopes' wording matches W766 /api/team header-honoring endpoint list.", () => {
+  it("CRITICAL read:audit-scope + X-Driftstack-Account team-RBAC honored framing pinned. S36 2026-07-07 (truth audit): V-553.B-21 WIDENED the audit read gate from the old hard account_owner requirement to the granular read:audit scope (services/account-audit.ts list() → throwIfMissingScope(ctx, 'read:audit')), which a bare broad `read` key satisfies via the V-481 broad-satisfies-granular rule — the doc's old 'a bare read key is not sufficient' claim described retired behavior. The 'X-Driftstack-Account header is honored for team scopes' wording matches W766 /api/team header-honoring endpoint list.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(

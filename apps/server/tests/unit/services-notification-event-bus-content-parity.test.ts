@@ -10,8 +10,8 @@
 //       audit.high_severity / session.errored.
 //   • Bus shape: subscribe + publish + subscriberCount.
 //   • Best-effort handler isolation: try/catch swallow.
-//   • Design doc cross-ref: docs/internal/driftstack-telemetry-event-
-//     schema-for-gui-panel.md.
+//   • Design-notes cross-ref in the header comment (the design notes
+//     themselves are internal and not part of this repository).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -21,10 +21,6 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/server/src/services/notification-event-bus.ts');
-const DESIGN = resolve(
-  REPO_ROOT,
-  'docs/internal/driftstack-telemetry-event-schema-for-gui-panel.md',
-);
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -43,7 +39,7 @@ describe('services/notification-event-bus.ts content parity', () => {
       /\/\/ Subscriber keying: per-`accountId`\. Cross-account leakage is\s*\/\/ impossible by construction/,
     );
     expect(body).toMatch(
-      /\/\/ Full design at `docs\/internal\/driftstack-telemetry-event-schema-\s*\/\/ for-gui-panel\.md`\./,
+      /\/\/ Full design in the internal GUI-panel telemetry event-schema\s*\/\/ notes\./,
     );
   });
 
@@ -91,19 +87,6 @@ describe('services/notification-event-bus.ts content parity', () => {
     expect(body).toMatch(
       /publish\(event: NotificationEvent\): void \{\s*const set = this\.subscribers\.get\(event\.accountId\);\s*if \(!set\) return;/,
     );
-  });
-
-  it('design doc exists at canonical path so the bus schema has a single source of truth for cross-file drift', () => {
-    expect(existsSync(DESIGN)).toBe(true);
-    const designBody = read(DESIGN);
-    expect(designBody).toMatch(/# GUI panel telemetry event schema/);
-    expect(designBody).toMatch(/NotificationEventBus/);
-    // Pin the v0 event-kind list in the design doc itself so a
-    // refactor can't widen the bus without updating both.
-    expect(designBody).toMatch(/'cost\.threshold_alert'/);
-    expect(designBody).toMatch(/'incident\.broadcast'/);
-    expect(designBody).toMatch(/'audit\.high_severity'/);
-    expect(designBody).toMatch(/'session\.errored'/);
   });
 
   it('file exists at canonical path', () => {

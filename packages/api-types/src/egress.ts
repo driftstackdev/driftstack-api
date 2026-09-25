@@ -1,9 +1,9 @@
 // EG-API-1.1 — per-session customer-configurable egress schema (Phase 1).
 //
-// Source of truth: docs/planning/133-egress-architecture-cross-agent.md
-// in the driftstack repo. The planning file LOCKED this schema as binding
-// cross-agent contract on 2026-05-16; Agent 1 (WebKit fork) + Agent 2 (this
-// repo / API + dashboard) + harness (Mac fleet session manager) all
+// Source of truth: planning doc 133 (egress architecture) in the
+// driftstack repo. The planning file LOCKED this schema as binding
+// cross-repo contract on 2026-05-16; the WebKit fork + this repo (API +
+// dashboard) + harness (Mac fleet session manager) all
 // read/write per this shape.
 //
 // ⛔ 2026-09-20 — an absolute path to a working copy of the PRIVATE repo used
@@ -16,17 +16,17 @@
 //   - Customer dashboard reads + writes this shape.
 //   - SDK consumers (TS / Python / Go) deserialize it when fetching
 //     POST /v1/sessions/{id}/proxy.
-//   - Cross-agent contract requires a single Zod source — server-internal
+//   - Cross-repo contract requires a single Zod source — server-internal
 //     shapes would diverge from harness/WebKit consumption.
 //
 // Versioning: any breaking change here is a breaking change to the
-// cross-agent contract — coordinate with Agent 1 + harness AND update
-// planning file 133 in the SAME PR (per CLAUDE.md "specifications drive
-// code"; planning 133 is the spec for this schema).
+// cross-repo contract — coordinate with the WebKit fork + harness AND update
+// planning file 133 in the SAME PR (specifications drive code; planning
+// 133 is the spec for this schema).
 //
 // SUPERSEDES the earlier `apps/server/src/services/session-egress.ts`
-// SessionProxyConfig discriminated union (commit f7bab517, design doc
-// docs/internal/customer-configurable-egress-design.md). The earlier
+// SessionProxyConfig discriminated union (commit f7bab517, internal
+// customer-configurable egress design notes). The earlier
 // shape used a single `url: socks5://host:port` field; planning 133
 // requires the host / port / username / password / udp_associate fields
 // to be addressable independently (so the dashboard editor can validate
@@ -92,7 +92,7 @@ export type SocksProxyConfig = z.infer<typeof SocksProxyConfigSchema>;
 
 /**
  * OpenVPN proxy config (Phase 2 — founder priority focus area
- * 2026-05-16 per planning 133 + ORCHESTRATOR-STATE Tier-3 verdicts).
+ * 2026-05-16 per planning 133 + the Tier-3 decisions).
  *
  * `config_blob` is the full .ovpn file contents (uploaded by the
  * customer; the dashboard does NOT introspect it server-side beyond
@@ -252,7 +252,7 @@ export const WireGuardProxyConfigSchema = z.object({
     })
     .default('0.0.0.0/0'),
   // [Interface] Address (e.g. 10.7.0.2/32) — the harness userspace WireGuard
-  // ifconfig needs it to bring up the tunnel (A3 W2109). REQUIRED: the dispatch
+  // ifconfig needs it to bring up the tunnel (W2109). REQUIRED: the dispatch
   // wire (`InlineWireGuardWireSchema` below) has always required it, so a row
   // saved without one passed this schema and then failed closed at EVERY
   // dispatch — the session simply ran without its proxy and nothing told the
@@ -299,7 +299,7 @@ export type ProxyConfig = z.infer<typeof ProxyConfigSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Inline VPN dispatch wire (FLAT) — what serializeSessionAssign base64-JSONs
-// into `inlineProxyConfig` for a VPN session. A3 (W2163/W2164) code-verified the
+// into `inlineProxyConfig` for a VPN session. W2163/W2164 code-verified that the
 // harness `parseVPNProxyConfig` reads `obj["type"]` then the VPN fields as DIRECT
 // SIBLINGS of `type` — NOT nested under obj["openvpn"]/obj["wireguard"] (a nested
 // payload fails closed at provision). socks5 keeps its existing SocksProxyConfig
@@ -358,7 +358,7 @@ export const EgressSafeguardSchema = z.object({
 export type EgressSafeguard = z.infer<typeof EgressSafeguardSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
-// Per-session config (binding cross-agent contract)
+// Per-session config (binding cross-repo contract)
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -398,7 +398,7 @@ export const SavedProxyConfigSchema = z.object({
 export type SavedProxyConfig = z.infer<typeof SavedProxyConfigSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
-// Egress capabilities (cross-agent contract commit 7d5992d9)
+// Egress capabilities (cross-repo contract commit 7d5992d9)
 // ───────────────────────────────────────────────────────────────────────────
 
 /**

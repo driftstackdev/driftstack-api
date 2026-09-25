@@ -56,7 +56,7 @@
 // guides, not API-reference resources — the children-integrity suite
 // only extracts from the API reference + Webhooks sections).
 //
-// S33 2026-07-07 (fable-truth-audit) — 9 live-but-undocumented
+// S33 2026-07-07 (truth audit) — 9 live-but-undocumented
 // endpoints registered in openapi.ts + documented: agent-sessions
 // gains the 7 live-session control sub-nodes (page-state / cookie
 // read+import / history step / file upload / downloads list+fetch),

@@ -1,6 +1,6 @@
 // LK.6.e — drift guard for the synthetic-ping RTT-measurement hook.
 // Pins the protocol the harness-side RoomDataDispatcher +
-// LatencyCollector echoes against (Agent 1 owns the harness side;
+// LatencyCollector echoes against (the harness owns that side;
 // this is the gui-client end).
 
 import { readFileSync, existsSync } from 'node:fs';

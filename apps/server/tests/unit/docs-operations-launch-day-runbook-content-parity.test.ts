@@ -134,8 +134,8 @@ describe('W552.B /docs/operations/launch-day-runbook.md content parity', () => {
     expect(body).not.toMatch(/STRIPE_TRIAL_PACK_PRICE_ID/);
   });
 
-  it("V-516 launch-day amendments framing pinned: '## V-516 launch-day amendments (post-Wave-11 state)' + '### T-24h additions' + '### T-0 additions' + '## Related docs' — pinned so the V-516-Wave-11-amendments + T-24h-additions + T-0-additions + Related-docs commitment survives", () => {
-    expect(body).toMatch(/## V-516 launch-day amendments \(post-Wave-11 state\)/);
+  it("V-516 launch-day amendments framing pinned: '## V-516 launch-day amendments (pre-launch batch state)' + '### T-24h additions' + '### T-0 additions' + '## Related docs' — pinned so the V-516-pre-launch-batch-amendments + T-24h-additions + T-0-additions + Related-docs commitment survives", () => {
+    expect(body).toMatch(/## V-516 launch-day amendments \(pre-launch batch state\)/);
     expect(body).toMatch(/### T-24h additions/);
     expect(body).toMatch(/### T-0 additions/);
     expect(body).toMatch(/## Related docs/);

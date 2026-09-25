@@ -1,5 +1,5 @@
 // Unit test (app.inject, no Drizzle DB) for the agent-session read-shape
-// `liveness` field (A2 W2679). The load-bearing regression guard is the
+// `liveness` field (W2679). The load-bearing regression guard is the
 // prod-no-fleet-control-plane case: when the SessionLivenessStore is NOT wired
 // (prod has no fleet control plane), the field must be OMITTED (= "unknown,
 // trust the binding"), NEVER defaulted to a dead/idle value — else every

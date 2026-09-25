@@ -3,7 +3,7 @@
 // Periodic DELETE of stale rows across the three auth-flow token
 // tables (email_verify_tokens / magic_link_tokens / password_reset_
 // tokens). Per the 2026-05-20 stale-row audit
-// (docs/internal/2026-05-20-stale-row-audit.md), consumeAuthToken()
+// (internal audit notes), consumeAuthToken()
 // only marks rows as consumed; nothing currently deletes them. Same
 // shape of bug as the 2026-05-19 scheduled_jobs accumulation incident
 // but pre-scale (~10 rows at 10 customers; ~70K rows at 10K). This

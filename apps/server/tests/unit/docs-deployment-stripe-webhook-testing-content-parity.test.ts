@@ -92,11 +92,11 @@ describe('W554.C /docs/deployment/stripe-webhook-testing.md content parity', () 
     expect(body).not.toMatch(/Set this in your \.env as STRIPE_WEBHOOK_SIGNING_SECRET/);
     expect(body).not.toMatch(/\(`STRIPE_WEBHOOK_SIGNING_SECRET=whsec_/);
     expect(body).toMatch(/leaves the endpoint UNREGISTERED/);
-    expect(body).toMatch(/per the locked stripe-credential-handling memory — never paste/);
+    expect(body).toMatch(/per the locked stripe-credential-handling rule — never paste/);
     expect(body).toMatch(/webhook secrets into chat or PR diffs\./);
   });
 
-  it("Production cutover + Replay procedures framing pinned: 'After commercial activation (entity registered + KvK + BV in place)' + '**Live-mode** webhook endpoint in the Stripe Dashboard pointed at `https://api.driftstack.dev/v1/webhooks/stripe`.' + 'Live-mode signing secret goes via SSH-write to the prod .env per the stripe-credential-handling memory (live keys NEVER through chat or PR).' + '**Before** enabling the endpoint, send a test webhook from the Dashboard's \"Send test webhook\" UI. Confirm 200 + ledger row before flipping the endpoint to `enabled` in Stripe.' + '## Replay procedures' + 'If transient (network blip / our server briefly down), Stripe auto-retries with exponential backoff for ~3 days.' + 'To force-replay manually: Stripe Dashboard → event detail → \"Resend webhook\". Our endpoint returns `outcome=duplicate` if the first delivery did get recorded' — pinned so the commercial-activation-entity-registered + live-mode-api.driftstack.dev + SSH-write-live-keys-NEVER-chat-or-PR + Send-test-webhook-before-enable + ~3-day-auto-retry + outcome=duplicate-on-replay commitment survives", () => {
+  it("Production cutover + Replay procedures framing pinned: 'After commercial activation (entity registered + KvK + BV in place)' + '**Live-mode** webhook endpoint in the Stripe Dashboard pointed at `https://api.driftstack.dev/v1/webhooks/stripe`.' + 'Live-mode signing secret goes via SSH-write to the prod .env per the stripe-credential-handling rule (live keys NEVER through chat or PR).' + '**Before** enabling the endpoint, send a test webhook from the Dashboard's \"Send test webhook\" UI. Confirm 200 + ledger row before flipping the endpoint to `enabled` in Stripe.' + '## Replay procedures' + 'If transient (network blip / our server briefly down), Stripe auto-retries with exponential backoff for ~3 days.' + 'To force-replay manually: Stripe Dashboard → event detail → \"Resend webhook\". Our endpoint returns `outcome=duplicate` if the first delivery did get recorded' — pinned so the commercial-activation-entity-registered + live-mode-api.driftstack.dev + SSH-write-live-keys-NEVER-chat-or-PR + Send-test-webhook-before-enable + ~3-day-auto-retry + outcome=duplicate-on-replay commitment survives", () => {
     expect(body).toMatch(
       /After commercial activation \(entity registered \+ KvK \+ BV in place\):/,
     );
@@ -105,7 +105,7 @@ describe('W554.C /docs/deployment/stripe-webhook-testing.md content parity', () 
     );
     expect(body).toMatch(/`https:\/\/api\.driftstack\.dev\/v1\/webhooks\/stripe`/);
     expect(body).toMatch(/Live-mode signing secret goes via SSH-write to the prod \.env per/);
-    expect(body).toMatch(/the stripe-credential-handling memory \(live keys NEVER through/);
+    expect(body).toMatch(/the stripe-credential-handling rule \(live keys NEVER through/);
     expect(body).toMatch(/chat or PR\)\./);
     expect(body).toMatch(/\*\*Before\*\* enabling the endpoint, send a test webhook from the/);
     expect(body).toMatch(/Dashboard's "Send test webhook" UI\. Confirm 200 \+ ledger row/);

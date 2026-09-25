@@ -1,4 +1,4 @@
-// P-2 — the Wave 6 demos may not drift from what the product is.
+// P-2 — the marketing demos may not drift from what the product is.
 //
 // Its sibling `the-marketing-demo-cannot-show-a-verb-the-api-lacks` pins the
 // agent-plan demo to the closed intent union. These two are the same argument for

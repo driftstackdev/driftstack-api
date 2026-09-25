@@ -199,7 +199,7 @@ describe('W809 changelog pipeline + dev-bootstrap parity', () => {
     expect(p).toMatch(/AUTH_EXPOSE_DEBUG_TOKEN=true npm run dev --workspace apps\/server/);
   });
 
-  it('CRITICAL dev-bootstrap.sh 4-legal-document for-loop pinned — tos + privacy + dpa + aup. Matches the V-NNN four-doc set (no terms.md long-form per legal-filename memory rule); each is accepted with version + content_hash from the server.', () => {
+  it('CRITICAL dev-bootstrap.sh 4-legal-document for-loop pinned — tos + privacy + dpa + aup. Matches the V-NNN four-doc set (no terms.md long-form, per the legal-filename convention); each is accepted with version + content_hash from the server.', () => {
     const p = read(DEV_BOOT);
     expect(p).toMatch(/for k in tos privacy dpa aup; do/);
     expect(p).toMatch(

@@ -179,7 +179,7 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     expect(body).toMatch(/triggered_by_account_id: `acc_\$\{ctx\.account\.id\}`,/);
   });
 
-  // S32 2026-07-07 (fable-frontend-audit) — replay now honours team act-as like every other
+  // S32 2026-07-07 (frontend audit) — replay now honours team act-as like every other
   // delivery surface (it was the only one scoping ownership to the
   // member's own account, so team replays 404'd). Scope check is
   // skipped when the route resolved an effective team account

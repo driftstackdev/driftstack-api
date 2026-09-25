@@ -539,7 +539,7 @@ const nextItem =
         anchor jumps unless the visitor prefers reduced motion. Labels
         come from the heading's FULL textContent with the appended "#"
         anchor element stripped (clone + remove [data-anchor]) — S35
-        2026-07-07 (fable-frontend-audit): the old first-text-node read
+        2026-07-07 (frontend audit): the old first-text-node read
         truncated any heading that STARTS with inline code to just that
         code span (18 of 30 rail entries on /webhooks/events lost their
         [LIVE]/[PLANNED] tags). The spy also re-syncs on hashchange and
@@ -586,7 +586,7 @@ const nextItem =
           var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
           h.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
           history.pushState(null, '', '#' + h.id);
-          /* S35 2026-07-07 (fable-frontend-audit) — pushState fires no
+          /* S35 2026-07-07 (frontend audit) — pushState fires no
              hashchange and an instant (reduced-motion) jump may cross no
              observed heading, leaving the rail unhighlighted; the click
              names the target, so mark it directly. */
@@ -617,7 +617,7 @@ const nextItem =
          nothing intersects the band (mid-section scroll, or an instant
          anchor jump that crossed no heading) fall back to the last
          heading that has scrolled above it. Callable outside the IO
-         callback (S35 2026-07-07 fable-frontend-audit: hashchange
+         callback (S35 2026-07-07 frontend audit: hashchange
          re-sync) because a jump that fires zero IO entries used to
          leave no rail entry highlighted. */
       function resolveSpy() {
@@ -650,7 +650,7 @@ const nextItem =
       headings.forEach(function (h) {
         observer.observe(h);
       });
-      /* S35 2026-07-07 (fable-frontend-audit) — in-article deep links
+      /* S35 2026-07-07 (frontend audit) — in-article deep links
          and manual #edits navigate via real hash changes: highlight the
          named heading directly when it's a rail entry, else re-run the
          positional spy. */

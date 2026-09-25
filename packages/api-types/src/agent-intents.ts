@@ -15,7 +15,7 @@ export const AgentIntentSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('navigate'), url: z.string() }),
   z.object({
     kind: z.literal('interact'),
-    // W540 — 'press' (A3-W677): value carries the key name (e.g. "Enter").
+    // W540 — 'press' (W677): value carries the key name (e.g. "Enter").
     action: z.enum(['tap', 'type', 'scroll', 'swipe', 'press']),
     selector: z.string().optional(),
     value: z.string().optional(),
@@ -37,7 +37,7 @@ export const AgentIntentSchema = z.discriminatedUnion('kind', [
     kind: z.literal('capture'),
     capture: z.enum(['screenshot', 'dom_snapshot', 'pdf']),
   }),
-  // Behavioural intents (Agent-3 API-gap, shapes A3-confirmed bus W140) — map
+  // Behavioural intents (harness API gap; shapes confirmed against the harness in W140) — map
   // server-side onto the harness scroll / behavioral_pause control-plane intents
   // (ScrollParamsSchema / BehavioralPauseParamsSchema). Distinct from
   // `interact:scroll` (bare, persona-default) — this carries explicit direction.

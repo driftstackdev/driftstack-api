@@ -94,7 +94,7 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(body).toMatch(/await client\.sessions\.navigate\(session\.id, \{/);
     expect(body).toMatch(/await client\.sessions\.capture\(session\.id, \{/);
     expect(body).toMatch(/await client\.sessions\.destroy\(session\.id\);/);
-    // S36 2026-07-07 (fable-truth-audit): the per-tier idle timeout was
+    // S36 2026-07-07 (truth audit): the per-tier idle timeout was
     // fictional — no idle timeout exists on any tier; only the free tier's
     // 20-minute duration cap auto-destroys.
     expect(body).toMatch(/There is no idle timeout on any tier/);
@@ -154,7 +154,7 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(body).toMatch(/^# SDK versioning \+ deprecation policy$/m);
     expect(body).toMatch(/\*\*Status:\*\* Active/);
     expect(body).toMatch(/\*\*Effective date:\*\* 2026-05-05$/m);
-    // S36 2026-07-07 (fable-truth-audit): the Python PyPI distribution name
+    // S36 2026-07-07 (truth audit): the Python PyPI distribution name
     // is driftstack-sdk (pyproject.toml); `driftstack` is only the import name.
     expect(body).toMatch(
       /\*\*Applies to:\*\* `@driftstack\/sdk` \(TypeScript\), `driftstack-sdk`\s*\n?\(Python — that's the PyPI distribution name; the import name is\s*\n?`driftstack`\),/,

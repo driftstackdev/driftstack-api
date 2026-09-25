@@ -1,5 +1,5 @@
 // Durable direct-operation fences against real Postgres (slice 1 of
-// docs/internal/durable-direct-operation-design.md).
+// the internal durable direct-operation design notes).
 //
 // These fences exist because a direct login runs to a 600,000 ms producer wall
 // that no default public path survives, so the customer's connection WILL drop

@@ -1,9 +1,9 @@
 // doc-150 §7.2 / §7.3 / §7.5 — the browser-style multi-tab wire contract
-// (the A2↔A3 multi-tab redesign). These three ops ride the LiveKit DATA
+// (the server↔harness multi-tab redesign). These three ops ride the LiveKit DATA
 // CHANNEL directly between the GUI (Tauri shell) and the box (Mac harness) —
 // they are NOT a REST route and NOT part of the SDK-exposed `InputEvent`
-// union (agent-input-event.ts). A3's harness defines the matching Swift
-// structs; A2 mirrors them HERE as the canonical typed contract so the
+// union (agent-input-event.ts). The harness defines the matching Swift
+// structs; this repo mirrors them HERE as the canonical typed contract so the
 // gui-client encoder + the harness decoder share one source of truth.
 //
 // Layering (why these live in api-types but stay off the SDKs):

@@ -107,7 +107,7 @@ describe('W558.A /docs/architecture/api-versioning.md content parity', () => {
     expect(body).toMatch(/Same external-facing breaking-change discipline as/);
   });
 
-  it("What-we-don't-do + Related framing pinned: '## What customers should do' + 'Pin to a specific major in their integration.' + 'Subscribe explicitly to webhook events they handle; ignore +' + 'continue on unknown event types (defensive parsing).' + 'Watch the `Deprecation` + `Sunset` response headers' + '## What we don't do' + '**Header-based versioning** (`API-Version: 2024-05-01`) —' + 'considered but rejected. URL-prefix is more discoverable' + '**Date-based versioning per-account** (Stripe's \"API version' + 'pinning\")' + '**Continuous breaking changes** — pre-1.0 SDKs ship them' + '(V-201 broke AccountTier; documented + intended).' + '## Related' + 'SDK versioning policy: `docs/architecture/sdk-versioning.md` (V-177).' + 'OpenAPI spec generation: `apps/server/src/lib/openapi.ts`.' + 'Locked tech-stack: `AGENTS.md` (Zod single-source-of-truth).' + 'Webhook event catalog: `docs/api/webhook-events.md` (V-203).' — pinned so the 3-customer-action + 3-we-don't-do (header + date-pinning + continuous-breaking) + V-201-AccountTier + 4-Related-link commitment survives", () => {
+  it("What-we-don't-do + Related framing pinned: '## What customers should do' + 'Pin to a specific major in their integration.' + 'Subscribe explicitly to webhook events they handle; ignore +' + 'continue on unknown event types (defensive parsing).' + 'Watch the `Deprecation` + `Sunset` response headers' + '## What we don't do' + '**Header-based versioning** (`API-Version: 2024-05-01`) —' + 'considered but rejected. URL-prefix is more discoverable' + '**Date-based versioning per-account** (Stripe's \"API version' + 'pinning\")' + '**Continuous breaking changes** — pre-1.0 SDKs ship them' + '(V-201 broke AccountTier; documented + intended).' + '## Related' + 'SDK versioning policy: `docs/architecture/sdk-versioning.md` (V-177).' + 'OpenAPI spec generation: `apps/server/src/lib/openapi.ts`.' + 'Locked tech-stack: the contributor guidelines (Zod single-source-of-truth).' + 'Webhook event catalog: `docs/api/webhook-events.md` (V-203).' — pinned so the 3-customer-action + 3-we-don't-do (header + date-pinning + continuous-breaking) + V-201-AccountTier + 4-Related-link commitment survives", () => {
     expect(body).toMatch(/## What customers should do/);
     expect(body).toMatch(/- Pin to a specific major in their integration\./);
     expect(body).toMatch(/- Subscribe explicitly to webhook events they handle; ignore \+/);
@@ -125,7 +125,9 @@ describe('W558.A /docs/architecture/api-versioning.md content parity', () => {
       /- SDK versioning policy: `docs\/architecture\/sdk-versioning\.md` \(V-177\)\./,
     );
     expect(body).toMatch(/- OpenAPI spec generation: `apps\/server\/src\/lib\/openapi\.ts`\./);
-    expect(body).toMatch(/- Locked tech-stack: `AGENTS\.md` \(Zod single-source-of-truth\)\./);
+    expect(body).toMatch(
+      /- Locked tech-stack: the contributor guidelines \(Zod single-source-of-truth\)\./,
+    );
     expect(body).toMatch(/- Webhook event catalog: `docs\/api\/webhook-events\.md` \(V-203\)\./);
   });
 

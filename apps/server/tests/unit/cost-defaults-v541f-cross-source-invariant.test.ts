@@ -28,8 +28,8 @@
 //     - llmCentsPer1kInputTokens: 0.5 (Anthropic Claude Opus 4.7 $5/1M).
 //     - llmCentsPer1kOutputTokens: 2.5 (Anthropic Claude Opus 4.7 $25/1M).
 //
-//   Source-spreadsheet framing — 'Source spreadsheet: docs/internal/
-//   v541-cost-monitoring-design.md, Default rate card v1 (W44
+//   Source-spreadsheet framing — 'Source spreadsheet: the internal
+//   V-541 cost-monitoring design, Default rate card v1 (W44
 //   review). Rates re-reviewed quarterly against actual invoices
 //   from Hetzner / Cloudflare R2 / Postmark / OpenAI; bump this
 //   constant + add an entry to the cost-monitoring runbook when a
@@ -118,10 +118,10 @@ describe('W973 V-541.F cost-defaults cross-source invariant', () => {
 
   // ─── DEFAULT_COST_RATES source-spreadsheet framing ───────────
 
-  it("CRITICAL DEFAULT_COST_RATES source-spreadsheet framing — 'V-541.F — production cost rates. Currency: EUR cents. Source spreadsheet: docs/internal/v541-cost-monitoring-design.md, Default rate card v1 (W44 review). Rates re-reviewed quarterly against actual invoices from Hetzner / Cloudflare R2 / Postmark / OpenAI; bump this constant + add an entry to the cost-monitoring runbook when a sub-processor price changes meaningfully'. The quarterly-review + invoice-anchor + runbook-update design is the rate-maintenance contract.", () => {
+  it("CRITICAL DEFAULT_COST_RATES source-spreadsheet framing — 'V-541.F — production cost rates. Currency: EUR cents. Source spreadsheet: the internal V-541 cost-monitoring design, Default rate card v1 (W44 review). Rates re-reviewed quarterly against actual invoices from Hetzner / Cloudflare R2 / Postmark / OpenAI; bump this constant + add an entry to the cost-monitoring runbook when a sub-processor price changes meaningfully'. The quarterly-review + invoice-anchor + runbook-update design is the rate-maintenance contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/cost-defaults.ts'));
     expect(p).toMatch(/V-541\.F — production cost rates\. Currency: EUR cents\./);
-    expect(p).toMatch(/Source spreadsheet: `docs\/internal\/v541-cost-monitoring-design\.md`,/);
+    expect(p).toMatch(/Source spreadsheet: the internal V-541 cost-monitoring design,/);
     expect(p).toMatch(/"Default rate card v1 \(W44 review\)\." Rates re-reviewed quarterly/);
     expect(p).toMatch(/against actual invoices from Hetzner \/ Cloudflare R2 \/ Postmark \//);
     expect(p).toMatch(/OpenAI; bump this constant \+ add an entry to the cost-monitoring/);

@@ -70,7 +70,7 @@
 // sections. The superseded "exactly 5 Guides entries / exactly 2 Get
 // started entries / 50 routes" pins below were re-pinned in lockstep.
 //
-// S33 SUPERSESSION 2026-07-07 (fable-truth-audit) — children census
+// S33 SUPERSESSION 2026-07-07 (truth audit) — children census
 // 130 → 139 (131 API + 8 webhooks): 9 live-but-undocumented endpoints
 // were registered in openapi.ts + documented, so agent-sessions gains
 // 7 sub-nodes (page-state / cookie read+import / history step / file

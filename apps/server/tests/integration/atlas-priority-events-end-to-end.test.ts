@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-// Wave 29-400 §8.4 — Drizzle-backed end-to-end test for the
+// 29-400 §8.4 — Drizzle-backed end-to-end test for the
 // /v1/internal/atlas-priority/* surface. Lint disables apply only to
 // the .json()-result `any` accesses inherent to Fastify inject responses.
 //

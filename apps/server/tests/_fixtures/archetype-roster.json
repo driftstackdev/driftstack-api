@@ -7,7 +7,7 @@
       "id": "iphone17_ios18_7_safari26_4",
       "display_label": "iPhone 17 / iOS 18.7 / Safari 26.4",
       "status": "locked",
-      "notes": "v1.0 launch archetype; cutover from iphone16pro 2026-06-11 — the single real-device-verified (validator-PASS) archetype per Agent-1's atlas catalog."
+      "notes": "v1.0 launch archetype; cutover from iphone16pro 2026-06-11 — the single real-device-verified (validator-PASS) archetype per the fork's atlas catalog."
     },
     {
       "id": "iphone16pro_ios18_7_safari26_4",

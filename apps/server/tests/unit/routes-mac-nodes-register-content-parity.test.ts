@@ -25,10 +25,10 @@ describe('routes/mac-nodes-register content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("LK.2 module-level framing pinned: 'POST /v1/mac-nodes/register. Each Mac mini in the fleet stores its own LiveKit API key + secret (provisioned by Agent 1's launchd LiveKit Server install) and POSTs them to the control plane on harness boot. The control plane stores them encrypted under MFA_ENCRYPTION_KEY so the JWT mint path (LK.3 — POST /v1/agent-sessions/:id/livekit-token) can decrypt + sign without any RPC back to the Mac.' — pinned so the LK.2 anchor + per-Mac credential ownership + MFA_ENCRYPTION_KEY-shared envelope + LK.3 cross-reference + no-RPC-back-to-Mac contract all stay documented", () => {
+  it("LK.2 module-level framing pinned: 'POST /v1/mac-nodes/register. Each Mac mini in the fleet stores its own LiveKit API key + secret (provisioned by the device side's launchd LiveKit Server install) and POSTs them to the control plane on harness boot. The control plane stores them encrypted under MFA_ENCRYPTION_KEY so the JWT mint path (LK.3 — POST /v1/agent-sessions/:id/livekit-token) can decrypt + sign without any RPC back to the Mac.' — pinned so the LK.2 anchor + per-Mac credential ownership + MFA_ENCRYPTION_KEY-shared envelope + LK.3 cross-reference + no-RPC-back-to-Mac contract all stay documented", () => {
     expect(body).toMatch(/\/\/ LK\.2 — POST \/v1\/mac-nodes\/register/);
     expect(body).toMatch(
-      /\/\/ Each Mac mini in the fleet stores its own LiveKit API key \+ secret\s*\/\/ \(provisioned by Agent 1's launchd LiveKit Server install\) and\s*\/\/ POSTs them to the control plane on harness boot\. The control\s*\/\/ plane stores them encrypted under MFA_ENCRYPTION_KEY so the JWT\s*\/\/ mint path \(LK\.3 — POST \/v1\/agent-sessions\/:id\/livekit-token\) can\s*\/\/ decrypt \+ sign without any RPC back to the Mac\./,
+      /\/\/ Each Mac mini in the fleet stores its own LiveKit API key \+ secret\s*\/\/ \(provisioned by the device side's launchd LiveKit Server install\) and\s*\/\/ POSTs them to the control plane on harness boot\. The control\s*\/\/ plane stores them encrypted under MFA_ENCRYPTION_KEY so the JWT\s*\/\/ mint path \(LK\.3 — POST \/v1\/agent-sessions\/:id\/livekit-token\) can\s*\/\/ decrypt \+ sign without any RPC back to the Mac\./,
     );
   });
 
@@ -45,14 +45,14 @@ describe('routes/mac-nodes-register content parity', () => {
     );
   });
 
-  it("RegisterBodySchema 2-section shape pinned: mac_node_id UUID + livekit { api_key string min 1 max 256 + api_secret string min 1 max 1024 + ws_url url } + 'Wide URL bound — accepts wss://mac-NNN.driftstack.dev:8443 form per the orchestrator brief.' framing. Drift to dropping the api_secret max-1024 cap would let a customer POST a multi-MB string through; drift to dropping the UUID validator would break the fleet_nodes mac_node_id contract", () => {
+  it("RegisterBodySchema 2-section shape pinned: mac_node_id UUID + livekit { api_key string min 1 max 256 + api_secret string min 1 max 1024 + ws_url url } + 'Wide URL bound — accepts wss://mac-NNN.driftstack.dev:8443 form per the LK.2 design.' framing. Drift to dropping the api_secret max-1024 cap would let a customer POST a multi-MB string through; drift to dropping the UUID validator would break the fleet_nodes mac_node_id contract", () => {
     expect(body).toMatch(
       /mac_node_id: z\.string\(\)\.uuid\('mac_node_id must be the UUID of a registered machine\.'\),/,
     );
     expect(body).toMatch(/api_key: z\.string\(\)\.min\(1\)\.max\(256\),/);
     expect(body).toMatch(/api_secret: z\.string\(\)\.min\(1\)\.max\(1024\),/);
     expect(body).toMatch(
-      /\/\/ Wide URL bound — accepts wss:\/\/mac-NNN\.driftstack\.dev:8443\s*\/\/ form per the orchestrator brief\.\s*ws_url: z\.string\(\)\.url\(\),/,
+      /\/\/ Wide URL bound — accepts wss:\/\/mac-NNN\.driftstack\.dev:8443\s*\/\/ form per the LK\.2 design\.\s*ws_url: z\.string\(\)\.url\(\),/,
     );
   });
 
@@ -117,9 +117,9 @@ describe('routes/mac-nodes-register content parity', () => {
     );
   });
 
-  it("Response-3-field-no-api_key-echo framing pinned: 'Response is intentionally minimal — never echoes the api_key (treated as secret-equivalent per the orchestrator brief) and obviously never echoes the api_secret.' + { mac_node_id, livekit_registered_at, ws_url } — pinned so the api_key-treated-as-secret-equivalent + api_secret-never-echoed contract stays documented", () => {
+  it("Response-3-field-no-api_key-echo framing pinned: 'Response is intentionally minimal — never echoes the api_key (treated as secret-equivalent per the LK.2 design) and obviously never echoes the api_secret.' + { mac_node_id, livekit_registered_at, ws_url } — pinned so the api_key-treated-as-secret-equivalent + api_secret-never-echoed contract stays documented", () => {
     expect(body).toMatch(
-      /\/\/ Response is intentionally minimal — never echoes the api_key\s*\/\/ \(treated as secret-equivalent per the orchestrator brief\)\s*\/\/ and obviously never echoes the api_secret\./,
+      /\/\/ Response is intentionally minimal — never echoes the api_key\s*\/\/ \(treated as secret-equivalent per the LK\.2 design\)\s*\/\/ and obviously never echoes the api_secret\./,
     );
     expect(body).toMatch(
       /return reply\.code\(200\)\.send\(\{\s*mac_node_id: updated\.id,\s*livekit_registered_at: updated\.livekit\?\.registeredAt\.toISOString\(\) \?\? now\(\)\.toISOString\(\),\s*ws_url: updated\.livekit\?\.wsUrl \?\? body\.livekit\.ws_url,\s*\}\);/,

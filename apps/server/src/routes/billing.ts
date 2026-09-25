@@ -202,7 +202,7 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
   );
 }
 
-// Wave 1119 / Slice 1119.2 B1 server-side leg — when Stripe env is not
+// Slice 1119.2 B1 server-side leg — when Stripe env is not
 // configured (no STRIPE_SECRET_KEY / DRIFTSTACK_TIER_PRICE_IDS),
 // `registerBillingRoutes` doesn't run and the `/v1/billing/*` paths
 // fall through to the global 404 handler.

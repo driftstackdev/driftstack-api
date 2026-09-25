@@ -115,12 +115,12 @@ describe('W547.A /docs/onboarding-for-future-developers.md content parity', () =
     expect(body).toMatch(/public schema at test-suite start, so they're hermetic\./);
   });
 
-  it("3-decision-doc + AGENTS.md anchor framing pinned: '## How the codebase makes decisions' + 'Three docs you'll consult:' + '`docs/decisions.md` — D-NNN entries.' + '`docs/verification-log.md` — V-NNN entries. Append-only empirical log of every substantive change.' + '`docs/adr/` — long-form ADRs for architectural deviations from the planned approach.' + 'ADR-001 hosting, ADR-002 Stripe-only, ADR-003 trial pack, ADR-004 two-ladder pricing, ADR-005 observability draft, ADR-006 audit retention draft' + 'AGENTS.md at the repo root captures the full operational discipline: test standards, marketing-copy review cadence, decision-authority levels (Routine / Architectural / Contractual), commit pattern (push-to-main with V-NNN tag), what's in scope vs out of scope.' — pinned so the 3-decision-doc (decisions.md + verification-log.md + adr/) + 6-ADR-anchor (ADR-001 through ADR-006) + AGENTS.md-as-operational-discipline + 3-tier-decision-authority commitment survives", () => {
+  it("3-decision-doc + contributor-guidelines anchor framing pinned: '## How the codebase makes decisions' + 'Three docs you'll consult:' + '`docs/decisions.md` — D-NNN entries.' + 'The V-NNN verification records (kept internally) — V-NNN entries. Append-only empirical log of every substantive change.' + '`docs/adr/` — long-form ADRs for architectural deviations from the planned approach.' + 'ADR-001 hosting, ADR-002 Stripe-only, ADR-003 trial pack, ADR-004 two-ladder pricing, ADR-005 observability draft, ADR-006 audit retention draft' + 'The contributor guidelines capture the full operational discipline: test standards, marketing-copy review cadence, decision-authority levels (Routine / Architectural / Contractual), commit pattern (push-to-main with V-NNN tag), what's in scope vs out of scope.' — pinned so the 3-decision-doc (decisions.md + internal verification records + adr/) + 6-ADR-anchor (ADR-001 through ADR-006) + contributor-guidelines-as-operational-discipline + 3-tier-decision-authority commitment survives", () => {
     expect(body).toMatch(/## How the codebase makes decisions/);
     expect(body).toMatch(/Three docs you'll consult:/);
     expect(body).toMatch(/- \*\*`docs\/decisions\.md`\*\* — D-NNN entries\./);
     expect(body).toMatch(
-      /- \*\*`docs\/verification-log\.md`\*\* — V-NNN entries\. Append-only empirical log of every substantive change\./,
+      /- \*\*The V-NNN verification records\*\* \(kept internally\) — V-NNN entries\. Append-only empirical log of every substantive change\./,
     );
     expect(body).toMatch(
       /- \*\*`docs\/adr\/`\*\* — long-form ADRs for architectural deviations from the planned approach\./,
@@ -129,7 +129,7 @@ describe('W547.A /docs/onboarding-for-future-developers.md content parity', () =
     expect(body).toMatch(
       /ADR-004 two-ladder pricing, ADR-005 observability draft, ADR-006 audit retention draft/,
     );
-    expect(body).toMatch(/AGENTS\.md at the repo root captures the full operational discipline:/);
+    expect(body).toMatch(/The contributor guidelines capture the full operational discipline:/);
     expect(body).toMatch(
       /test standards, marketing-copy review cadence, decision-authority levels/,
     );

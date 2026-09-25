@@ -40,7 +40,7 @@ export type WebhookEventType =
   // bot-check + the control plane relays it to the customer (session.challenge_
   // detected webhook + transcript SSE). Migration 0070 ALTERs the pgEnum.
   | 'session.challenge_detected'
-  // A3 W1364 / 2026-06-12 — profile save-back failed at session teardown; the
+  // W1364 / 2026-06-12 — profile save-back failed at session teardown; the
   // control plane relays the harness profileSaveFailed frame so customers
   // relying on persisted profile state know not to trust the next restore.
   // Terminal (no retry path); the session itself stays succeeded. Migration
@@ -806,7 +806,7 @@ export class WebhooksService {
   ): Promise<ListDeliveriesPage> {
     // Reading delivery history (event payloads + endpoint response excerpts) is a
     // read:webhooks operation — gate it like list()/get()/listWithCounts() so a
-    // narrowly-scoped key can't page delivery data it wasn't granted (Fable audit
+    // narrowly-scoped key can't page delivery data it wasn't granted (audit
     // 2026-07-02; the sibling reads all enforce this, this one was the oversight).
     throwIfMissingScope(ctx, 'read:webhooks');
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
@@ -839,7 +839,7 @@ export class WebhooksService {
     deliveryId: string,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<WebhookDeliveryRow> {
-    // S32 2026-07-07 (fable-frontend-audit) — replay was the ONLY delivery surface that
+    // S32 2026-07-07 (frontend audit) — replay was the ONLY delivery surface that
     // ignored team act-as: the dashboard sends x-driftstack-account and
     // listDeliveries honours it, but replay scoped the ownership lookup
     // to the member's own account, so every replay of a team-visible

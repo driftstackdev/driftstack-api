@@ -58,7 +58,33 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
     return Promise.resolve(row ? { ...row } : null);
   }
 
+  /**
+   * Test seam, not part of AccountAuthRepo: the key row by id, as the live control-key
+   * minter check reads it (in-memory-agent-session-control-key-minter.ts).
+   * This map is the fixture's one view of every key — keys minted, revoked or rotated
+   * through InMemoryApiKeysRepo are re-upserted here.
+   */
+  findApiKeyById(id: string): Promise<ApiKeyRow | null> {
+    const row = this.keysById.get(id);
+    return Promise.resolve(row ? { ...row } : null);
+  }
+
   async getAccount(id: string): Promise<AccountRow | null> {
+    return this.accountRow(id);
+  }
+
+  /**
+   * Test seam, not part of AccountAuthRepo: the account row as the store holds it,
+   * the way a SQL join reads `accounts` — for the live control-key minter check, whose
+   * production form is one join query and never calls `getAccount`. Kept off
+   * `getAccount` so a test counting the rate limiter's owner lookups through that
+   * method still counts only those.
+   */
+  peekAccount(id: string): Promise<AccountRow | null> {
+    return this.accountRow(id);
+  }
+
+  private async accountRow(id: string): Promise<AccountRow | null> {
     const local = this.accounts.get(id);
     if (local) return local;
     if (this.webSessionFinder?.getAccount) {

@@ -102,10 +102,10 @@ export const PROBLEM_TYPES = {
   // the box. The `reason` extension is a machine-readable enum
   // (`unreachable` | `auth_failed` | `timeout` | `egress_blocked`) so the
   // dashboard + SDK can render a specific "fix your proxy" message; `detail`
-  // carries a human one-liner. Forward-compatible with A3's W2931 post-dispatch
+  // carries a human one-liner. Forward-compatible with the harness's W2931 post-dispatch
   // box-reported egress failure (same problem-type, surfaced post-launch).
   ProxyValidationFailed: 'https://errors.driftstack.dev/proxy-validation-failed',
-  // A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard. Fires
+  // Harness finding #7 (W2979/W2980) — single-active-session-per-profile guard. Fires
   // at session-create (both the agent-session create and the driver /v1/sessions
   // create) when the request carries a `profile_id` that already has a NON-
   // TERMINAL session for the account: two concurrent sessions on the SAME profile

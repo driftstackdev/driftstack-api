@@ -70,11 +70,11 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(/const IPHONE_16_PRO_ASPECT_RATIO = 1206 \/ 2622; \/\/ ≈ 0\.46/);
     expect(body).toMatch(/Defaults to iPhone 16/);
     expect(body).toMatch(/Pro \(1206×2622 px\) since that's the locked archetype/);
-    expect(body).toMatch(/\(iphone17_ios18_7_safari26_4\) for v1\.0 per the orchestrator brief/);
+    expect(body).toMatch(/\(iphone17_ios18_7_safari26_4\) for v1\.0 per the launch scope/);
   });
 
   it('Scale-to-fit container sizing pinned: the panel box is `h-full max-h-full max-w-full` + aspectRatio style (fills available HEIGHT, derives width from the iPhone aspect, centered by the parent), NOT `w-full`. Drift back to w-full re-introduces the stretched-giant view (height = width × 2.17 on a wide window); the <video> object-contain fills the box exactly', () => {
-    // No white border (founder 2026-06-23 / A3 W2827): a white rim outlined the
+    // No white border (founder 2026-06-23 / W2827): a white rim outlined the
     // object-contain-shrunken view. bg-black + no border → flush in bezel-black.
     //
     // ⛔ `asp-box` PREFIXED 2026-09-20 (AI-view stage 7), and the pin follows it
@@ -114,7 +114,7 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).not.toMatch(/className="relative w-full overflow-hidden/);
   });
 
-  it('Fixed-canonical box aspect pinned (founder 2026-06-23 / A3 W2840): the box aspect is the FIXED canonical device aspect (effectiveAspectRatio = aspectRatio, default 1206/2622 ≡ 402:874), NOT the SFU-downscaled live track aspect — driving the box from videoWidth/videoHeight (≈ but ≠ 402:874) letterboxed the view a few px inside the exactly-402:874 screen-host = "iPhone rendered smaller". The <video> object-contain absorbs the tiny SFU drift sub-pixel. onVideoDimensions still reports the REAL dims for the one-time WINDOW resize. Regression-guard: do NOT revert the BOX aspect to liveAspect.', () => {
+  it('Fixed-canonical box aspect pinned (founder 2026-06-23 / W2840): the box aspect is the FIXED canonical device aspect (effectiveAspectRatio = aspectRatio, default 1206/2622 ≡ 402:874), NOT the SFU-downscaled live track aspect — driving the box from videoWidth/videoHeight (≈ but ≠ 402:874) letterboxed the view a few px inside the exactly-402:874 screen-host = "iPhone rendered smaller". The <video> object-contain absorbs the tiny SFU drift sub-pixel. onVideoDimensions still reports the REAL dims for the one-time WINDOW resize. Regression-guard: do NOT revert the BOX aspect to liveAspect.', () => {
     expect(body).toMatch(/const effectiveAspectRatio = aspectRatio;/);
     expect(body).toMatch(/style=\{\{ aspectRatio: effectiveAspectRatio\.toString\(\) \}\}/);
     // The real dims still flow to the parent's window-resize (NOT the box aspect).
@@ -140,7 +140,7 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     // The hook now receives the <video> element via STATE (videoEl, lifted from
     // the ref callback so the effect re-runs when it mounts), an onPublishError
     // forwarded up to surface a dead-control-channel badge, and the per-archetype
-    // captured-frame `logical` dims (A3 84de32ad4d content-only fork) so the tap/
+    // captured-frame `logical` dims (84de32ad4d content-only fork) so the tap/
     // scroll mapping adapts to the dispatched device — still wired through the
     // ../lib/livekit-input-capture helper, not inlined SDK calls.
     expect(body).toMatch(/useInputCapture\(\{/);
@@ -231,7 +231,7 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body.match(/className="asp-actions flex flex-wrap/g)).toHaveLength(2);
   });
 
-  it("#1 publisher-lost debounce pinned: a track drop (TrackUnsubscribed / ParticipantDisconnected) does NOT flip publisher→'none' instantly — A3's idle frame-pump down-clock + brief SFU re-negotiations drop+re-add the track within ~1-2s, and an instant flip slammed the scary launch-failed alarm over the last good frame ('reconnecting, happens too often'). Within PUBLISHER_LOST_GRACE_MS a CALM 'reconnecting…' pill shows over the last frame (data-overlay=publisher-reconnecting); only if no TrackSubscribed re-arrives does it escalate to 'none'. Regression-guard: do NOT re-introduce the instant `setPublisher((p) => (p === 'publishing' ? 'none' : p))` flip.", () => {
+  it("#1 publisher-lost debounce pinned: a track drop (TrackUnsubscribed / ParticipantDisconnected) does NOT flip publisher→'none' instantly — the harness's idle frame-pump down-clock + brief SFU re-negotiations drop+re-add the track within ~1-2s, and an instant flip slammed the scary launch-failed alarm over the last good frame ('reconnecting, happens too often'). Within PUBLISHER_LOST_GRACE_MS a CALM 'reconnecting…' pill shows over the last frame (data-overlay=publisher-reconnecting); only if no TrackSubscribed re-arrives does it escalate to 'none'. Regression-guard: do NOT re-introduce the instant `setPublisher((p) => (p === 'publishing' ? 'none' : p))` flip.", () => {
     expect(body).toMatch(/export const PUBLISHER_LOST_GRACE_MS = 2_000;/);
     // The calm pill renders during the grace (not the full-screen alarm).
     expect(body).toMatch(/data-overlay="publisher-reconnecting"/);
@@ -255,7 +255,7 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     // The Disconnected handler schedules a backoff bump of retryNonce. The
     // attempt counter is a component-level REF (autoReconnectAttemptRef) so it
     // survives the effect re-run each reconnect triggers — a plain effect-local
-    // reset every reconnect, defeating the backoff+cap (Fable GUI re-audit).
+    // reset every reconnect, defeating the backoff+cap (GUI re-audit).
     expect(body).toMatch(/autoReconnectAttemptRef\.current < AUTO_RECONNECT_BACKOFF_MS\.length/);
     expect(body).toMatch(/const autoReconnectAttemptRef = useRef\(0\);/);
     expect(body).toMatch(/setRetryNonce\(\(n\) => n \+ 1\);/);

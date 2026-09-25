@@ -5,7 +5,7 @@
 // 401 BEFORE the WebSocket opens. A fleet node authenticates with an Ed25519 JWT
 // in `Authorization: Bearer <jwt>` (verified via the audited FleetNodeAuth +
 // the Redis nonce cache wired into it) and declares its node id in the
-// `X-Driftstack-Mac-Node-Id` header (== the JWT iss=sub; A3 bus W121
+// `X-Driftstack-Mac-Node-Id` header (== the JWT iss=sub; W121
 // control-plane-owns routing). Returns the verified nodeId for the route to key
 // its FleetControlRegistry connection on.
 //
@@ -74,7 +74,7 @@ export async function authenticateFleetUpgrade(
     // Uniform 401 to the CLIENT — never echo the FleetJwtVerifyError reason
     // (anti-enumeration). But log the reason SERVER-SIDE so ops can tell an
     // unknown_node from a replayed_nonce / signature_invalid / expired when a
-    // node can't connect (the diagnostic A3 needed for the box bring-up).
+    // node can't connect (the diagnostic the harness side needed for the box bring-up).
     deps.logger?.warn(
       {
         component: 'fleet-upgrade-auth',

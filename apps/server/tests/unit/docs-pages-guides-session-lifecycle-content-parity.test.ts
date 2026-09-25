@@ -32,7 +32,7 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
       /^---\nlayout: \.\.\/\.\.\/layouts\/DocLayout\.astro\ntitle: Session lifecycle\n/,
     );
     expect(p).toMatch(
-      // S31 2026-07-07 (fable-truth-audit) — no idle timeout exists; the boundary is the
+      // S31 2026-07-07 (truth audit) — no idle timeout exists; the boundary is the
       // free-tier duration cap.
       /description: The full lifecycle of a Driftstack session — create, drive, capture, destroy, and how concurrency and duration caps shape the boundaries\./,
     );
@@ -56,7 +56,7 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     expect(p).toMatch(/│ ready │/);
     expect(p).toMatch(/│ busy │/);
     expect(p).toMatch(/│ destroyed │/);
-    // S31 2026-07-07 (fable-truth-audit) — the diagram edge is the free-tier duration cap.
+    // S31 2026-07-07 (truth audit) — the diagram edge is the free-tier duration cap.
     expect(p).toMatch(/│ OR free-tier 20-min cap/);
     expect(p).not.toMatch(/idle ≥ idle_timeout/);
     expect(p).toMatch(/`errored` if the browser fails/);
@@ -93,7 +93,7 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      // S31 2026-07-07 (fable-truth-audit) — no Retry-After on concurrency 429s (only
+      // S31 2026-07-07 (truth audit) — no Retry-After on concurrency 429s (only
       // rate-limit 429s carry it) and no idle timeout exists.
       /Exceeding the cap returns `429 Too Many Requests` on `sessions\.create\(\)`, with `current_sessions` and `limit` in the problem body\./,
     );
@@ -191,7 +191,7 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      // S31 2026-07-07 (fable-truth-audit) — captures were NEVER stored server-side:
+      // S31 2026-07-07 (truth audit) — captures were NEVER stored server-side:
       // CaptureResponseSchema is inline {kind, data, encoding,
       // byte_size, duration_ms} (packages/api-types/src/sessions.ts).
       // The old pin locked a fictional R2 + signed-URL flow.
@@ -211,7 +211,7 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     );
   });
 
-  // S31 2026-07-07 (fable-truth-audit) — no idle timeout; slots are held until an explicit
+  // S31 2026-07-07 (truth audit) — no idle timeout; slots are held until an explicit
   // destroy (free tier alone stops at its 20-min duration cap).
   it("CRITICAL 'Always destroy.' try/finally framing pinned — forgotten sessions hold their slot until destroyed.", () => {
     const p = read(PAGE);
@@ -230,7 +230,7 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     );
   });
 
-  // S31 2026-07-07 (fable-truth-audit) — the old pin locked a FICTIONAL idle-cleanup
+  // S31 2026-07-07 (truth audit) — the old pin locked a FICTIONAL idle-cleanup
   // contract: no idle timeout exists on any tier (the only auto-stop is
   // the free-tier 20-minute duration sweep, session-duration-sweeper.ts),
   // and the webhook enum has no session.destroyed event at all
@@ -247,7 +247,7 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     expect(p).not.toMatch(/idle_timeout/);
   });
 
-  // S31 2026-07-07 (fable-truth-audit) — the keep-alive idiom was retired with the
+  // S31 2026-07-07 (truth audit) — the keep-alive idiom was retired with the
   // fictional idle timeout: there is nothing to keep alive against, so
   // the page no longer teaches a heartbeat. Pin its absence.
   it('heartbeat idiom removed with the fictional idle timeout', () => {
@@ -296,7 +296,7 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
   it("CRITICAL session.completed + session.failed webhook events pinned. The 2-terminal-event set + 'Intermediate state transitions (e.g. a hypothetical session.created) are not on the bus today' wording explains the no-intermediate-events contract.", () => {
     const p = read(PAGE);
 
-    // S36 2026-07-07 (fable-truth-audit) — the idle-timeout clause was the retired
+    // S36 2026-07-07 (truth audit) — the idle-timeout clause was the retired
     // fiction; the real second path is the free-tier duration cap.
     // V-749 2026-08-08 — there is a THIRD path that audit did not reach:
     // destroyAllForAccount() emits session.completed when an account is suspended
@@ -325,7 +325,7 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     );
   });
 
-  // S36 2026-07-07 (fable-truth-audit) — the idle-timeout reference + keep-alive advice were
+  // S36 2026-07-07 (truth audit) — the idle-timeout reference + keep-alive advice were
   // the retired fiction; the not-resumable contract is what matters.
   it('CRITICAL sessions-not-resumable-after-destroy framing pinned (S36: idle-timeout wording retired).', () => {
     const p = read(PAGE);

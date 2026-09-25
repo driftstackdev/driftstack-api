@@ -156,7 +156,7 @@ export interface SessionRecord {
   metadata: Record<string, unknown> | null;
   /**
    * Harness-reported egress capabilities for SOCKS5 sessions (migration
-   * 0045, cross-agent contract commit 7d5992d9; EG-WK-1.9 extension
+   * 0045, cross-repo contract commit 7d5992d9; EG-WK-1.9 extension
    * 2026-05-17 adds dns_remote_resolve). Null until the harness emits
    * the `egress.capability_report` event after proxy wire-up; non-
    * SOCKS5 sessions stay null permanently.
@@ -248,7 +248,7 @@ export interface SessionRepo {
    * TOCTOU). The slow driver.createSession runs BEFORE this call, never under
    * the lock.
    *
-   * A3 finding #7 (W2979/W2980) — single-active-session-per-profile guard. When
+   * Finding #7 (W2979/W2980) — single-active-session-per-profile guard. When
    * `opts.profileId` is supplied, the same atomic transaction ALSO takes a per-
    * profile advisory lock + refuses a second bind against a NON-TERMINAL
    * (status NOT IN destroyed/errored AND destroyed_at IS NULL) session whose
@@ -551,7 +551,7 @@ export class SessionsService {
     // dispatch failure the reservation row is marked destroyed so it stops
     // counting against the cap (and a DB-tracked row means even a missed
     // teardown is reapable, unlike the old orphan).
-    // A3 finding #7 (W2979/W2980) — the atomic reserve ALSO enforces the
+    // Finding #7 (W2979/W2980) — the atomic reserve ALSO enforces the
     // single-active-session-per-profile guard, under the same per-profile
     // advisory lock. Absent (no profile-backed create) → no guard.
     //
@@ -976,7 +976,7 @@ export class SessionsService {
     return result;
   }
 
-  /** Read structured data from the page (harness `extract` intent, A3 W456).
+  /** Read structured data from the page (harness `extract` intent, W456).
    *  A read-op like capture but returns the extracted value map; no session
    *  event is recorded (it's a non-mutating read). */
   async extract(
@@ -997,7 +997,7 @@ export class SessionsService {
   }
 
   /** Find the search field, type the query realistically, submit (harness
-   *  `search` intent, A3). A driver write-op; no session event recorded. */
+   *  `search` intent). A driver write-op; no session event recorded. */
   async search(
     ctx: AccountContext,
     sessionId: string,
@@ -1040,7 +1040,7 @@ export class SessionsService {
     return result;
   }
 
-  /** Heuristic credential login (harness `login` intent, A3). A driver
+  /** Heuristic credential login (harness `login` intent). A driver
    *  write-op; no session event recorded. The password flows to the driver but
    *  is never logged (failure capture records only the operation label). */
   async login(

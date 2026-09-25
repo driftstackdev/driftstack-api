@@ -108,6 +108,15 @@ country and timezone, and whether live video is streaming). Both are absent
 until the browser has reported; treat an absent field as "not known yet", never
 as "not running".
 
+`capability_report.os_fingerprint` is the last OS reading Driftstack took of the
+session's proxy — the same reading as the proxy's own `os_fingerprint` (see
+[Proxies](/api/proxies/)): `os`, `confidence`, `at` (when it was taken; it can be
+any age), and how it was taken — `observed_via`, `single_host_vantage` and
+`web_port_vantage`, with `direct_reading` and `website_like_reading` as the
+customer names of the last two. Read a missing or false value on either pair as
+"this reading does not describe the path a website sees". `null` means not
+measured, never "no OS".
+
 The `error_event` field is **optional and nullable** — it carries the most
 recent launch or runtime failure recorded for the session, and is
 absent or `null` when none has been reported. Branch on its two booleans
@@ -803,6 +812,10 @@ server gave them: `agentSessions.getCapture(id, captureId)` in TypeScript,
 Get a LiveKit token for a WebRTC client (the dashboard, the desktop
 app, or any LiveKit-aware SDK) to subscribe to this session's video
 stream.
+
+The token both shows the session's screen and sends it input, so an
+API key needs the `write` and `read:sessions` scopes. Broad `read` and
+`write` together, or `account_owner`, satisfy both.
 
 Response (`200`):
 

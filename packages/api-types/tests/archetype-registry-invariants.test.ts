@@ -4,11 +4,11 @@
 // What existed before this file was a source-text pin asserting that a
 // representative spread of slugs appears and that each status literal appears
 // SOMEWHERE. That cannot see an entry being added, removed, or re-statused —
-// which is exactly the change this registry is expected to undergo: A1's
-// catalog carries three chrome-iOS slugs my registry does not, and 27 slugs on
+// which is exactly the change this registry is expected to undergo: the fork's
+// catalog carries three chrome-iOS slugs this registry does not, and 27 slugs on
 // the 26.0/26.3 bands are pending a decision to move to `planned`.
 //
-// The same pin's prose said "the full 81-slug Agent-1 catalog folds in". Both
+// The same pin's prose said "the full 81-slug catalog folds in". Both
 // numbers were stale: the registry holds 82 entries (a naive grep says 81
 // because the launch entry uses LOCKED_ARCHETYPE_ID rather than a literal) and
 // the catalog holds 84. Counting by hand from a regex is how that drifted.
@@ -81,7 +81,7 @@ describe('the archetype registry keeps its shape', () => {
 
   it('the registry population is pinned, so an add or a removal is deliberate', () => {
     // Deliberately a bare count, and it stays bare now that the registry is
-    // GENERATED (scripts/gen-archetype-registry.mjs) from Agent-1's catalog.
+    // GENERATED (scripts/gen-archetype-registry.mjs) from the fork's catalog.
     // The generator has its own `--check` proving the registry matches the
     // catalog; this pins the number a HUMAN last agreed to, so a catalog change
     // that regenerates cleanly still has to be acknowledged here rather than
@@ -89,7 +89,7 @@ describe('the archetype registry keeps its shape', () => {
     //
     // 2026-09-14: 82 -> 106 when the registry became generated. The registry had
     // sat at 81 catalog slugs while the catalog reached 105, and nothing on
-    // either side could see the gap: A1's gate proved the catalog matched the
+    // either side could see the gap: the fork's gate proved the catalog matched the
     // archetype configs, ours proved the registry compiled, and neither watched
     // the join.
     //

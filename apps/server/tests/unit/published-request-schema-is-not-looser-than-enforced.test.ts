@@ -79,10 +79,10 @@
 // drifted for 631 commits and six days with nothing failing, and nothing could
 // have. It surfaced only because a peer measured the real number by hand.
 //
-// ⛔ Both agents first attributed this by ELIMINATION — each ruling out their own
-// change and inferring the other's — and both were wrong, within an hour of
-// separately writing down the rule that a search proves something only about its
-// own scope. Enumeration settled it; inference did not.
+// ⛔ It was first attributed by ELIMINATION — each of the two candidate changes
+// ruled out by its own author and the other inferred — and both inferences were
+// wrong: a search proves something only about its own scope. Enumeration settled
+// it; inference did not.
 //
 // COVERAGE, measured rather than assumed, and lower than it first looked. Of 43
 // published request field names, 34 have a same-named declaration in a route

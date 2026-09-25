@@ -66,7 +66,7 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     expect(cfg?.require_remote_dns).toBe(true);
   });
 
-  // Proxy UDP pre-detection (A3 W2756): resolveForDispatch emits a VERIFIED,
+  // Proxy UDP pre-detection (W2756): resolveForDispatch emits a VERIFIED,
   // FRESH (within the 7-day TTL) udp_capable on the wire so the harness can skip
   // the per-session ~3s probe; stale/absent → omitted → fork async-probe (today).
   const recentIso = (): string => new Date(Date.now() - 60_000).toISOString();
@@ -189,7 +189,7 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     expect(cfg?.username).toBeUndefined();
   });
 
-  // OVPN/WG slice 4 — VPN rows resolve to the FLAT inline wire (A3 W2163), with
+  // OVPN/WG slice 4 — VPN rows resolve to the FLAT inline wire (W2163), with
   // the secret unwrapped under the owner TMK + cross-account isolation preserved.
   it('resolves a WireGuard proxy to the FLAT wire (type sibling fields, secret unwrapped)', async () => {
     const repo = new InMemoryAccountProxiesRepo();

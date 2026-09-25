@@ -387,7 +387,7 @@ export function registerCryptoCheckoutRoutes(
           // these null (the first IPN backfills them), so it must not fail the
           // checkout response.
           //
-          // CONCURRENCY (Fable audit 2026-07-02): the sequential idempotency
+          // CONCURRENCY (audit 2026-07-02): the sequential idempotency
           // replay is guarded above, but two checkouts sharing one
           // Idempotency-Key that overlap in the createPayment window BOTH reach
           // this mint branch (each read order.payment_id === null before either

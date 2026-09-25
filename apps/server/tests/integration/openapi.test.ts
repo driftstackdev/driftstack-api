@@ -258,7 +258,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/auth/refresh',
         '/v1/auth/signup',
         '/v1/auth/verify-email',
-        // S33 2026-07-07 (fable-truth-audit) — #187 verification re-send
+        // S33 2026-07-07 (truth audit) — #187 verification re-send
         '/v1/auth/resend-verification',
         // V-402 — magic-link + password-reset
         '/v1/auth/magic-link/consume',
@@ -282,7 +282,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/profiles/import',
         // V-666 profile ownership transfer
         '/v1/profiles/{id}/transfer',
-        // S33 2026-07-07 (fable-truth-audit) — doc-150 §8 storage trim
+        // S33 2026-07-07 (truth audit) — doc-150 §8 storage trim
         '/v1/profiles/{id}/trim',
         // L4b recycle bin (soft delete → trash → restore / purge)
         '/v1/profiles/trash',
@@ -323,7 +323,7 @@ describe('OpenAPI spec generation', () => {
         // B2 — stop the running turn.
         '/v1/agent-sessions/{id}/stop',
         '/v1/agent-sessions/{id}/takeover',
-        // S33 2026-07-07 (fable-truth-audit) — live-session control surface
+        // S33 2026-07-07 (truth audit) — live-session control surface
         // (page-state poll / cookies read+import / history step / file
         // upload / downloads list+fetch), live routes previously absent
         // from the spec.

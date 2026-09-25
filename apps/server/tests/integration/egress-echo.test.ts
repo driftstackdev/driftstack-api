@@ -75,7 +75,7 @@ describe('GET /v1/egress/echo', () => {
     expect(n.timezone).toBeNull();
   });
 
-  // T-11 (exit lat/lon — A2 half of live geolocation spoofing): "even live
+  // T-11 (exit lat/lon — the server half of live geolocation spoofing): "even live
   // geolocation API spoofing matching our IP … exactly like a real location". The
   // echo SHIPS the exit coordinates the fork answers navigator.geolocation from.
   // MEASURED mechanism: the same "Add visitor location headers" managed transform

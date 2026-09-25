@@ -161,7 +161,7 @@ describe('W439.A apps/server/src/routes/webhooks.ts content parity', () => {
       // owner's delivery. Six surfaces said "the calling account".
       /\/\/ V-307 — customer self-service replay\. Different from the admin\s*\/\/ \/v1\/admin\/webhook-deliveries\/:id\/replay \(which can replay any\s*\/\/ account's delivery\): this one is scoped to the EFFECTIVE account/,
     );
-    // Fable audit-2 2026-07-08 (C5) — replay RE-FIRES the delivery (a write), so
+    // Audit-2 2026-07-08 (C5) — replay RE-FIRES the delivery (a write), so
     // it takes the admin-only-on-team gate (effectiveAccountIdForWrite throws for
     // a member role), NOT the read-only act-as S32 originally wired. Same gate as
     // create/update/delete/rotate.

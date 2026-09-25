@@ -4,7 +4,7 @@
 // B2 intent executor against existing session API, B3 per-session
 // token budget enforcer, B4 recipe-library writer).
 //
-// Design doc: docs/internal/ai-chat-agent-layer-design.md
+// Design doc: the internal AI-chat agent-layer design notes
 // Scope reversal: founder verdict 2026-05-16 moved this from v1.1
 // → v1.0 launch arc ("close to finishing all tasks earlier on, and
 // can work on these things just fine, so we should just do it
@@ -42,7 +42,7 @@ export interface TranscriptEntry {
   body: string;
   /**
    * Structured plan intents for plan-executed agent turns
-   * (Q.5.c, orchestrator handoff #3 follow-up). Undefined for
+   * (Q.5.c follow-up). Undefined for
    * user turns + clarify/refuse agent turns. The recipes route
    * assembles a recipe's intent_log by flatMapping transcript[]
    * for this field so replay-as-script becomes possible without
@@ -427,7 +427,7 @@ export type AgentIntent =
   | { kind: 'navigate'; url: string }
   | {
       kind: 'interact';
-      // W540 — 'press' added (A3-W677 contract-first): the agent could type
+      // W540 — 'press' added (W677 contract-first): the agent could type
       // text but never press a key (Enter to submit, Escape to dismiss).
       // `value` carries the key name; maps onto the driver interact press.
       action: 'tap' | 'type' | 'scroll' | 'swipe' | 'press';
@@ -438,7 +438,7 @@ export type AgentIntent =
     }
   | { kind: 'wait'; condition: 'idle' | 'selector_visible'; selector?: string; timeoutMs?: number }
   | { kind: 'capture'; capture: 'screenshot' | 'dom_snapshot' | 'pdf' }
-  // Behavioural intents (Agent-3 API-gap, W140) — map server-side onto the
+  // Behavioural intents (harness API-gap, W140) — map server-side onto the
   // harness scroll / behavioral_pause control-plane intents.
   | { kind: 'scroll'; direction: 'up' | 'down'; amount_px?: number }
   | { kind: 'behavioral_pause'; duration_ms?: number; reading_word_count?: number };

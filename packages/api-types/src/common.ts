@@ -381,7 +381,7 @@ export const TIER_RATE_LIMIT_DEFAULTS: Record<
     // human typing speed but rejects machine-loops". 20 turn burst
     // + 1 / 5s refill is comfortable conversational.
     'agent_sessions:message': { capacity: 20, refill_per_second: 1 / 5 },
-    // Slice 4 (Wave 29-NNN ARC 3) — ManualControlOverlay raw screen-
+    // Slice 4 (ARC 3) — ManualControlOverlay raw screen-
     // coord stream from the customer dashboard. Client-side 120Hz
     // cap; server-side burst of ~2 seconds of un-throttled mousemove
     // + sustained 60Hz refill. Free tier gets a deliberately tight
@@ -625,7 +625,7 @@ export function tierHasFeature(tier: AccountTier, feature: TierBooleanFeature): 
  */
 // 2026-06-11 launch-archetype cutover: the v1.0 launch DEFAULT moved from
 // iphone16pro_ios18_7_safari26_4 to iphone17_ios18_7_safari26_4 — the single
-// real-device-verified ("PASS") archetype per Agent-1's atlas validator
+// real-device-verified ("PASS") archetype per the fork's atlas validator
 // (operations/archetype-catalog.json: status=ready). iphone16pro is now a
 // scaffolded `reference` baseline (coming_soon), retained below for back-compat
 // label resolution on already-created profiles.
@@ -647,9 +647,9 @@ export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 17 / iOS 18.7 / Safari 26.
  *   - 'planned'   — recognized slug, atlas not yet populated (placeholder)
  * The customer-selectable set the GUI/dashboard offers = status 'launch' | 'available'.
  *
- * Slugs MUST match Agent-1's atlas naming `<device>_ios<X_Y>_safari<X_Y>`
+ * Slugs MUST match the fork's atlas naming `<device>_ios<X_Y>_safari<X_Y>`
  * (docs/architecture/archetype-naming-convention.md). The catalogue below is
- * synced from Agent-1's authoritative, real-device-verified catalog
+ * synced from the fork's authoritative, real-device-verified catalog
  * (`driftstack/operations/archetype-catalog.json`): all 81 catalog slugs
  * (status `ready`, bit-identical-verified across canvas/fonts/screen/
  * inner_height/config) appear here. The one entry whose id ==
@@ -659,7 +659,7 @@ export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 17 / iOS 18.7 / Safari 26.
  * (`iphone15pro_ios17_5_safari17_5`) is retained at the tail so already-
  * created profiles on that slug still resolve a label.
  *
- * `canvasFamily` is the CANVAS pipeline family (Wave 29-408 A/B split),
+ * `canvasFamily` is the CANVAS pipeline family (the 29-408 A/B split),
  * derived from the Safari version exactly as the fork's `s_isFamilyAArchetype`
  * gate does (HTMLCanvasElement.cpp): Safari 17/18/19 + 26.0–26.3 ⇒ 'A' (old
  * pipeline); 26.4+ ⇒ 'B' (new pipeline). NB the WebGPU-exposure axis is
@@ -771,30 +771,30 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
 };
 
 /*
- * ⛔ CHROME-ON-iOS ARCHETYPES ARE HELD OUT of this registry on A1's direct
- * instruction (2026-08-30). The held-out set, as of 2026-09-02, is SIX:
+ * ⛔ CHROME-ON-iOS ARCHETYPES ARE HELD OUT of this registry on the fingerprint
+ * work's direct instruction (2026-08-30). The held-out set, as of 2026-09-02, is SIX:
  *
  *     iphone17_ios18_7_chrome148/149/150   (original)
- *     iphone17_ios18_7_chrome151/152/153   (added 2026-09-02, A3 4799420bc)
+ *     iphone17_ios18_7_chrome151/152/153   (added 2026-09-02, 4799420bc)
  *
  * 151/152/153 are version-invariant CLONES of the corrected chrome150 — UA
  * token and version pin only, 14 differing leaves on a path-keyed diff — and
  * they inherit every reason below unchanged, because a clone is not a render:
- * nothing about them has been measured on a device. A3 holds them out on their
- * side too (registry guard + catalog `held_out` with `verified:false`).
+ * nothing about them has been measured on a device. The harness holds them out on
+ * its side too (registry guard + catalog `held_out` with `verified:false`).
  * ⛔ UN-HOLD AS A SET. Clearing one milestone does not clear a sibling that
  * differs from it only by a version string; the defects below are in the fork's
  * slug PREDICATES, which cannot distinguish 151 from 153.
  *
  * THREE independent reasons — do not add them when only one clears:
  *
- *  1. A1's browser-family gate: the chrome family is OPEN (distribution-policy
+ *  1. The fingerprint work's browser-family gate: the chrome family is OPEN (distribution-policy
  *     weights + founder ATP reference not finalized). A family must be CLOSED
  *     before its archetypes are sellable.
  *  2. A measured fingerprint defect, ADJUDICATED 2026-08-30 on two real device
  *     models (iPhone 15 + iPhone 17 Pro, CriOS, both md5 57186fab = Family B):
  *     the CONFIG is right and the fork's predicate is the defect. The real
- *     mechanism (A1, corrected): driftstackArchetypeIsFamilyB() takes a
+ *     mechanism (corrected): driftstackArchetypeIsFamilyB() takes a
  *     "no _safari token → Family A" FALLBACK whose comment justifies it as
  *     "legacy pre-26.4 slug" — true for the ONLY slug class that existed when it
  *     was written. Chrome archetypes are 26.4-era yet carry no _safari token, so
@@ -806,13 +806,13 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
  *     resolver already exists unused; the fix wires the predicate to consult it
  *     and stops Unknown collapsing to A. Boundary registry stays sole authority,
  *     no slug renames, and it needs the on-box bit-identical run before chrome
- *     is sellable. A1 confirmed this fix behaviourally on the box (2026-08-30,
+ *     is sellable. The fix was confirmed behaviourally on the box (2026-08-30,
  *     commit f204f294e): 18 surfaces flip chrome149 to byte-identical with
  *     safari26_4, and the regression bar held — glyphHash unchanged, no critical
  *     cumrig diffs. Canvas is closed on BOTH halves, which is exactly why
  *     reason 3 exists: closing canvas is not closing chrome.
  *  3. A SECOND, CHEAPER-TO-DETECT DEFECT on a different axis, found while
- *     confirming reason 2 (A1, 2026-08-30). `performance.observerEntryTypes`:
+ *     confirming reason 2 (2026-08-30). `performance.observerEntryTypes`:
  *     chrome149 serves the OLD Safari API surface (mark, measure, navigation,
  *     paint, resource) while DECLARING 26.4 — missing event, first-input and
  *     largest-contentful-paint, which safari26_4 exposes. Same shape as the
@@ -828,15 +828,15 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
  *     ⚠️ WORSE than the canvas tell for our purposes: reading
  *     PerformanceObserver.supportedEntryTypes is ONE property access — no
  *     canvas, no timing, no sampling, no statistics. A detector gets it free.
- *     A1 is applying the same resolution and collapsing the four copies into
+ *     The fork is applying the same resolution and collapsing the four copies into
  *     one (four definitions of a predicate are four places for the next fix to
  *     miss — which is what just happened). Needs its own build and the same
  *     two-sided verification.
  *
  * ⛔ SO: "canvas is fixed" IS NOT "chrome is sellable". All three must clear.
- * The flip event is A1 saying so — a direct message to A2 or a `[for A2]` line
- * in operations/agent-bus/live/A1.md. `operations/archetype-catalog.json` is
- * STALE (June 2026 numbers, per A1) and must not be treated as a readiness feed.
+ * The flip event is the fingerprint work saying so explicitly, in a note to this
+ * repo. `operations/archetype-catalog.json` is
+ * STALE (June 2026 numbers, per the fork) and must not be treated as a readiness feed.
  */
 /**
  * Every device this platform models, with its identifier, display label and
@@ -1925,7 +1925,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     lifecycle: 'available',
   },
   // </generated:archetype-registry>
-  // ── Legacy reference baseline (NOT in Agent-1's catalog) ──────────────────
+  // ── Legacy reference baseline (NOT in the fork's catalog) ─────────────────
   // iPhone 15 Pro / iOS 17.5 (Family A baseline). Not a catalog archetype;
   // retained as a non-selectable `reference` entry so already-created profiles
   // referencing this slug still resolve a display label. The other former

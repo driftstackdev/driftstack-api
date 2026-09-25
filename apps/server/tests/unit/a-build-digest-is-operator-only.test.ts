@@ -1,4 +1,4 @@
-// A3 2026-09-19 ~19:10Z — `webkitFrameworkSha256` is an OPERATOR fact: it
+// 2026-09-19 ~19:10Z — `webkitFrameworkSha256` is an OPERATOR fact: it
 // identifies the digests of OUR fork's frameworks on OUR fleet. It tells a
 // customer nothing about their own session, and it must not appear on any
 // customer-visible surface.

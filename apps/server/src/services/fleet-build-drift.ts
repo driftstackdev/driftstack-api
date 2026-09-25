@@ -1,15 +1,15 @@
 // Build drift between what a device DECLARES it is running and what it MEASURED.
 //
-// The device team (A3, 2026-09-19 ~18:45Z and ~19:10Z) added two measured keys
+// The device team (2026-09-19 ~18:45Z and ~19:10Z) added two measured keys
 // to the harness frames because the declared ones beside them were observed
 // lying:
 //
-//   • `harnessVersion` is typed into the node's env at deploy time. A3 observed
-//     it naming a commit the running binary was not built from. `harnessBinarySha256`
+//   • `harnessVersion` is typed into the node's env at deploy time. It was observed
+//     naming a commit the running binary was not built from. `harnessBinarySha256`
 //     is a sha256 prefix of the bytes actually executing, so it cannot go stale.
-//   • `webkitForkBuild` names a checkout A3 measured at 20 commits behind the
+//   • `webkitForkBuild` names a checkout measured at 20 commits behind the
 //     real build. `webkitFrameworkSha256` is measured at the spawn path, per
-//     framework, so it says WHICH of the three moved — A3 found the box's
+//     framework, so it says WHICH of the three moved — the device team found the box's
 //     JavaScriptCore five days older than its WebCore, which one combined digest
 //     could only have reported as "something changed".
 //

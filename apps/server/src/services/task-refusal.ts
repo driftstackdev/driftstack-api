@@ -1,9 +1,9 @@
-// Task-refusal start-gate — A2's contract-mirror of the file-06 §Safety
+// Task-refusal start-gate — this repo's contract-mirror of the file-06 §Safety
 // guardrail-#3 MECHANISM (W582).
 //
-// The canonical mechanism + contract live with Agent 3:
+// The canonical mechanism + contract live on the harness side:
 //   driftstack/agent-service/src/task-refusal.ts (W1027/W1028/W1051)
-//   driftstack/docs/internal/task-refusal-contract.md (W1038)
+//   the driftstack task-refusal contract notes (W1038)
 // Cross-repo imports aren't a thing here, so this file MIRRORS the contract
 // semantics exactly; the parity test pins this module's behavior to the
 // contract (normalize order, bias-to-allow, bounds, loader skip rules).
@@ -29,7 +29,7 @@
 // DANGEROUS_UNICODE (page-representation.ts, W1019/W1112): control chars (can
 // split a keyword), zero-width chars (invisible splitters), bidi overrides
 // (reorder what a reviewer sees), BOM. The parity test pins this source
-// string against A3's definition so the two can't drift apart silently.
+// string against the harness's definition so the two can't drift apart silently.
 import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
 
 const DANGEROUS_UNICODE =

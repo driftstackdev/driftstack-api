@@ -1,4 +1,4 @@
-// Sim back/forward (A3 W2870) — unit tests for the navigate-history correlator + the
+// Sim back/forward (W2870) — unit tests for the navigate-history correlator + the
 // FleetControlConnection navigate-history request/reply path (the sibling of the
 // set-cookies tests). Pins: a navigateHistory goes out as JSON carrying the direction;
 // the matching navigateHistoryResult (by requestId) resolves `ok` on ok:true; an

@@ -53,9 +53,9 @@ describe('W452.C packages/behavioural-simulation/src/touch.ts content parity', (
     );
   });
 
-  it("NO-collected-behavioural-data framing pinned: 'Distributions are class-typical and derived from a synthetic-persona model — NOT from any collected user behaviour. The library carries no behavioural training data per AGENTS.md scope.'", () => {
+  it("NO-collected-behavioural-data framing pinned: 'Distributions are class-typical and derived from a synthetic-persona model — NOT from any collected user behaviour. The library carries no behavioural training data per the project's scope.'", () => {
     expect(body).toMatch(
-      /\/\/ Distributions are class-typical and derived from a synthetic-persona\s*\/\/ model — NOT from any collected user behaviour\. The library carries no\s*\/\/ behavioural training data per AGENTS\.md scope\./,
+      /\/\/ Distributions are class-typical and derived from a synthetic-persona\s*\/\/ model — NOT from any collected user behaviour\. The library carries no\s*\/\/ behavioural training data per the project's scope\./,
     );
   });
 

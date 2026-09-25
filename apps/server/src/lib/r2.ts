@@ -227,7 +227,7 @@ export function recordingKey(accountId: string, sessionId: string): string {
 }
 
 /**
- * Profile-backed sessions (A3 W177/W417) — R2 object key for a profile's
+ * Profile-backed sessions (W177/W417) — R2 object key for a profile's
  * encrypted sealed-blob store. Keyed by profile_id alone (a uuid, globally
  * unique): the dispatch loads it as `sealed_blob`/`sealed_blob_url` on assign,
  * and the profileSaved consumer overwrites it on session end. The blob is

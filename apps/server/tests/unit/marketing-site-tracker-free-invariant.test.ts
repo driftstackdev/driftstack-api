@@ -1,7 +1,7 @@
 // Marketing-site tracker-free invariant (ePrivacy/GDPR drift-guard).
 //
 // Pins the privacy property verified in the 2026-06-03 cookie/tracker audit
-// (auto-memory project_cookie_tracker_disclosure_clean): the public
+// (which found the disclosure clean): the public
 // marketing site loads NO third-party analytics/tracker scripts, so it sets
 // no non-essential cookies → no EU ePrivacy consent-banner obligation and no
 // cookie-disclosure gap. (Auth is Bearer-only; any Cloudflare Web Analytics

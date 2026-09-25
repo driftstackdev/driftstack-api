@@ -1,4 +1,4 @@
-// File-control (A3 W2851) — unit tests for the file-UPLOAD correlator + the
+// File-control (W2851) — unit tests for the file-UPLOAD correlator + the
 // FleetControlConnection upload request/reply path. Pins: an uploadFile goes out as
 // JSON; the matching uploadResult (by requestId) resolves `ok` with the opaque
 // handle; an `error` result (or a success-shaped result missing the handle) resolves
@@ -144,7 +144,7 @@ describe('UploadRequestCorrelator', () => {
   });
 });
 
-describe('FleetControlConnection file upload (A3 W2851)', () => {
+describe('FleetControlConnection file upload (W2851)', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 

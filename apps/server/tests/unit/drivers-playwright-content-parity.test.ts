@@ -6,7 +6,7 @@
 // posture warning (PRODUCTION rejection note disappears and we
 // accidentally ship PlaywrightDriver to customer traffic).
 //
-//   • V-333b framing pinned + WebKit fork (Agent 1) successor.
+//   • V-333b framing pinned + WebKit fork successor.
 //   • DRIVER=playwright + PLAYWRIGHT_BROWSER selector framing.
 //   • Trade-offs framing pinned: Playwright WebKit ≠ Driftstack-
 //     modified WebKit + no iPhone-archetype mapping (viewport + UA
@@ -56,9 +56,9 @@ function read(p: string): string {
 describe('W454.C apps/server/src/drivers/playwright.ts content parity', () => {
   const body = read(LIB);
 
-  it("V-333b framing pinned: 'V-333b — Playwright-backed driver. Foundation for self-hosted local dev + E2E testing on the Mac BEFORE the WebKit fork (Agent 1) lands the production driver. Selecting via DRIVER=playwright + PLAYWRIGHT_BROWSER=webkit|chromium|firefox.'", () => {
+  it("V-333b framing pinned: 'V-333b — Playwright-backed driver. Foundation for self-hosted local dev + E2E testing on the Mac BEFORE the WebKit fork lands the production driver. Selecting via DRIVER=playwright + PLAYWRIGHT_BROWSER=webkit|chromium|firefox.'", () => {
     expect(body).toMatch(
-      /\/\/ V-333b — Playwright-backed driver\. Foundation for self-hosted local\s*\/\/ dev \+ E2E testing on the Mac BEFORE the WebKit fork \(Agent 1\) lands\s*\/\/ the production driver\. Selecting via DRIVER=playwright \+\s*\/\/ PLAYWRIGHT_BROWSER=webkit\|chromium\|firefox\./,
+      /\/\/ V-333b — Playwright-backed driver\. Foundation for self-hosted local\s*\/\/ dev \+ E2E testing on the Mac BEFORE the WebKit fork lands\s*\/\/ the production driver\. Selecting via DRIVER=playwright \+\s*\/\/ PLAYWRIGHT_BROWSER=webkit\|chromium\|firefox\./,
     );
   });
 
@@ -76,7 +76,7 @@ describe('W454.C apps/server/src/drivers/playwright.ts content parity', () => {
 
   it('What-this-driver-IS-for framing pinned: founder local dev + CI E2E without spinning up WebKit fork', () => {
     expect(body).toMatch(
-      /\/\/ What this DRIVER IS for:\s*\/\/\s*- Founder running the API \+ GUI on their Mac and verifying the\s*\/\/\s*full session create\/navigate\/destroy flow against a real\s*\/\/\s*browser without waiting on Agent 1\./,
+      /\/\/ What this DRIVER IS for:\s*\/\/\s*- Founder running the API \+ GUI on their Mac and verifying the\s*\/\/\s*full session create\/navigate\/destroy flow against a real\s*\/\/\s*browser without waiting on the fork\./,
     );
     expect(body).toMatch(
       /\/\/\s*- CI E2E tests of the route layer \+ service layer against a\s*\/\/\s*real browser, without spinning up the WebKit fork\./,

@@ -1,6 +1,6 @@
 // W895 — Session lifecycle schemas cross-source invariant. Two-
-// hundred-twenty-first in the drift-guard series (100th wave of
-// the W796-W895 session). Pins the Session lifecycle:
+// hundred-twenty-first in the drift-guard series (the 100th in
+// the W796-W895 range). Pins the Session lifecycle:
 //
 //   ArchetypeSchema: regex /^[a-z0-9_]+$/ + 3-60 chars.
 //   Session (12 fields): id + account_id + api_key_id + status +
@@ -141,7 +141,7 @@ describe('W895 Session lifecycle schemas cross-source invariant', () => {
 
   // ─── 14-field cardinality (Arc 5 EGRESS eg.1.c added egress_capability_report)
 
-  it('CRITICAL Session = EXACTLY 14 fields. Migration 0045 added egress_capabilities (cross-agent contract 7d5992d9); migration 0054 + eg.1.c added egress_capability_report (raw harness payload). Drift to adding/removing without coordinated SDK + dashboard updates would break the session-lifecycle audit-style read contract.', () => {
+  it('CRITICAL Session = EXACTLY 14 fields. Migration 0045 added egress_capabilities (cross-repo contract 7d5992d9); migration 0054 + eg.1.c added egress_capability_report (raw harness payload). Drift to adding/removing without coordinated SDK + dashboard updates would break the session-lifecycle audit-style read contract.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
     const m = p.match(/SessionSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(m).not.toBeNull();

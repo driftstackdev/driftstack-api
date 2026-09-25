@@ -1,4 +1,4 @@
-// Wave 29-400 §8.1.b — Drizzle implementation of AtlasPriorityEventsRepo
+// Plan 29-400 §8.1.b — Drizzle implementation of AtlasPriorityEventsRepo
 // (migration 0058).
 //
 // Tracks each Mac-fork-emitted probe signature through its auto-learn

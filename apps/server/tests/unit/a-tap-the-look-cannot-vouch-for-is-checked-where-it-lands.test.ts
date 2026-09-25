@@ -5,14 +5,14 @@
 // band of the viewport and jitters the tap. So a control below the fold was
 // tapped UNCHECKED, and a consequential tap was checked only at its unjittered,
 // unscrolled centre. The device now offers click `{ require_unoccluded: true }`
-// (A3 V-3358): its occlusion test at the ACTUAL tap point, refusing a covered
+// (V-3358): its occlusion test at the ACTUAL tap point, refusing a covered
 // tap before any touch.
 //
 //   · what is sent   → the check rides on a tap whose look said outside the
 //                      viewport, and on every tap the gate releases on an
 //                      approval. Never on an ordinary clear tap. The device
 //                      here answers WITHOUT `hit_via_own_label` — a build
-//                      before A3 V-3360 — so typing is never sent it and the
+//                      before V-3360 — so typing is never sent it and the
 //                      own-label exemptions hold (the capable device is
 //                      a-device-with-the-own-label-rule-is-trusted-…test.ts)
 //   · what comes back → every refusal reason is a cover, EXCEPT an element that

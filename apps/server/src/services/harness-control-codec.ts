@@ -6,7 +6,7 @@
 //   - parseIntentResult — decodes a HarnessOutbound.IntentResult back into the
 //     logical result (outputData base64-decoded to its per-intent JSON).
 //
-// Wire codec (A3-confirmed 2026-06-05): inputParams / outputData are Swift
+// Wire codec (confirmed against the harness 2026-06-05): inputParams / outputData are Swift
 // `Data` and cross the wire as a BASE64 string of UTF-8 JSON (Codable's default
 // `Data` encoding). Envelope keys are camelCase. This module is the single
 // place that encodes/decodes that base64-JSON, so the rest of the server works
@@ -69,7 +69,7 @@ import {
 import { z } from 'zod';
 import { pruneUnknownKeys, type UnknownResultKeysObserver } from './harness-result-unknown-keys.js';
 
-/** Proxy UDP pre-detection (A3 W2756) — the dispatch WIRE carries a verified
+/** Proxy UDP pre-detection (W2756) — the dispatch WIRE carries a verified
  *  per-proxy `udp_capable` that the harness maps to env DRIFTSTACK_PROXY_UDP_CAPABLE.
  *  It is INTERNAL to the server->harness wire ONLY: kept OFF the customer-facing
  *  SocksProxyConfigSchema (which feeds the public OpenAPI via SessionEgressConfig)
@@ -145,7 +145,7 @@ export function serializeIntentDispatch(args: {
 /**
  * Build a wire-ready ControlInbound.sessionAssign (EG-API-1.6). Mirrors
  * serializeIntentDispatch: validates the logical SocksProxyConfig against its
- * canonical schema and base64-encodes it into `inlineProxyConfig` (A3 W136:
+ * canonical schema and base64-encodes it into `inlineProxyConfig` (W136:
  * `Data` field → base64 of utf8 JSON, NOT a nested object / raw JSON string),
  * maps the camelCase `livekit` input to its lone-snake_case wire shape, then
  * re-validates the whole envelope (required fields + the initialUrl http(s) guard)
@@ -159,19 +159,19 @@ export function serializeSessionAssign(args: {
   sessionId: string;
   archetype: string;
   behaviorProfile: string;
-  // Optional (A3 W138): omit → harness defaults (h2-and-h3 / 300s idle / 1800s max).
+  // Optional (W138): omit → harness defaults (h2-and-h3 / 300s idle / 1800s max).
   transportMode?: SessionAssignTransportMode;
   idleTimeoutSeconds?: number;
   maxDurationSeconds?: number;
   proxyConfigId?: string;
   /** Logical socks5 config OR a FLAT VPN wire object ({type:openvpn|wireguard,…});
    *  base64-encoded into the wire `inlineProxyConfig`. socks5 keeps its existing
-   *  (type-less) shape; VPN uses the flat sibling-field shape A3 W2163 verified. */
+   *  (type-less) shape; VPN uses the flat sibling-field shape verified in W2163. */
   inlineProxyConfig?: SocksProxyConfig | InlineVpnProxyWire;
   initialUrl?: string;
   /** camelCase in; emitted as the snake_case wire object (room/token/ws_url/expires_at). */
   livekit?: { room: string; token: string; wsUrl: string; expiresAt: string };
-  /** Profile-backed session (A3 W417). camelCase in; emitted snake_case
+  /** Profile-backed session (W417). camelCase in; emitted snake_case
    *  (profile_id/dek/sealed_blob/sealed_blob_url/sealed_blob_put_url). Only
    *  profileId + dek required; blob fields optional (fresh profile ships none). */
   profile?: {
@@ -181,7 +181,7 @@ export function serializeSessionAssign(args: {
     sealedBlobUrl?: string;
     sealedBlobPutUrl?: string;
   };
-  /** Explicit geolocation OVERRIDE (A3 verdict 2026-07-01). Absent ⇒ the
+  /** Explicit geolocation OVERRIDE (harness verdict 2026-07-01). Absent ⇒ the
    *  harness keeps its proxy-exit auto-derive (exit-coherent default);
    *  present ⇒ the fork's location provider serves exactly these coordinates.
    *  accuracy is meters; omitted → harness default 35.0. */
@@ -279,7 +279,7 @@ export function serializeSessionAssign(args: {
 /**
  * Build a wire-ready ControlInbound.sessionEnd — the trivial teardown envelope
  * sent when an agent-session closes so the harness frees the session (fork +
- * proxy + capture) and its concurrency slot (A3 W420 sessionEnd teardown site).
+ * proxy + capture) and its concurrency slot (W420 sessionEnd teardown site).
  * Re-validated so a malformed envelope never leaves the server.
  */
 export function serializeSessionEnd(sessionId: string): SessionEnd {
@@ -317,7 +317,7 @@ export function serializeResumeSession(args: {
  * node-level operator action (cordon / uncordon / drain / restart), sent over
  * that node's own WSS connection. `reason` is operator free text for the node's
  * logs + the audit trail. Re-validated so a malformed envelope never leaves the
- * server. (A2-A3-BUS W2203: command-frame control-signal path; harness builds
+ * server. (W2203: command-frame control-signal path; harness builds
  * the matching receiver per W2197.)
  */
 export function serializeControlCommand(args: {
@@ -334,7 +334,7 @@ export function serializeControlCommand(args: {
 /**
  * Founder #48 (cookies live-view) — build a wire-ready `cookiesRequest` to PULL a
  * session's full cookie jar over that node's own WSS. Correlated by `requestId`
- * (the harness echoes it on the `cookiesResult` reply, A2 W2816 / A3 W2817 PULL
+ * (the harness echoes it on the `cookiesResult` reply, W2816 / W2817 PULL
  * contract). Re-validated so a malformed envelope never leaves the server.
  */
 export function serializeCookiesRequest(args: {
@@ -370,7 +370,7 @@ export function serializeSetCookies(args: {
 }
 
 /**
- * Live egress swap (A3 P-17) — build a wire-ready `setEgress` to move a RUNNING
+ * Live egress swap (P-17) — build a wire-ready `setEgress` to move a RUNNING
  * session onto a different exit over that node's WSS. Correlated by `requestId`
  * (the harness echoes it on the `setEgressResult` reply). Re-validated so a
  * malformed envelope never leaves the server.
@@ -459,7 +459,7 @@ export function serializeProbeEgress(args: {
 }
 
 /**
- * History-navigation (sim back/forward — A3 W2870) — build a wire-ready
+ * History-navigation (sim back/forward — W2870) — build a wire-ready
  * `navigateHistory` to step the running session's WebKit back-forward list one entry
  * in `direction` over that node's live WSS. The sibling of serializeSetCookies;
  * `direction` is the closed enum ['back','forward']. Correlated by `requestId` (the
@@ -482,7 +482,7 @@ export function serializeNavigateHistory(args: {
 }
 
 /**
- * File-control (A3 W2851) — build a wire-ready `uploadFile` to relay a customer's
+ * File-control (W2851) — build a wire-ready `uploadFile` to relay a customer's
  * file bytes (base64) into the session's isolated upload jail over that node's WSS.
  * Correlated by `requestId` (the harness echoes it on the `uploadResult` reply).
  * Re-validated so a malformed envelope never leaves the server. The 64 MiB cap is
@@ -506,7 +506,7 @@ export function serializeUploadFile(args: {
 }
 
 /**
- * File-control download (A3 W2856) — build a wire-ready `listDownloads` asking the
+ * File-control download (W2856) — build a wire-ready `listDownloads` asking the
  * node for the files in the session's download jail. Correlated by `requestId` (the
  * harness echoes it on the `downloadsList` reply). Re-validated before it leaves.
  */
@@ -522,7 +522,7 @@ export function serializeListDownloads(args: {
 }
 
 /**
- * File-control download (A3 W2856) — build a wire-ready `fetchDownload` to pull one
+ * File-control download (W2856) — build a wire-ready `fetchDownload` to pull one
  * jailed file's bytes (base64) by basename. Correlated by `requestId`; 64 MiB cap +
  * basename re-sanitization + jail-confinement enforced harness-side.
  */

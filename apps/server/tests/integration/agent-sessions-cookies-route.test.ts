@@ -107,7 +107,7 @@ describe('GET /v1/agent-sessions/:id/cookies (wired)', () => {
       { domain: 'example.com', name: 'pref', value: 'dark' },
     ];
     // Register a node connection whose socket synchronously echoes a cookiesResult
-    // for the request the route sends — exactly what A3's harness will do live.
+    // for the request the route sends — exactly what the harness will do live.
     const conn = fx.fleetControlRegistry.register(nodeId, (data) => {
       const frame = JSON.parse(data) as { type?: string; requestId?: string; sessionId?: string };
       if (frame.type === 'cookiesRequest') {

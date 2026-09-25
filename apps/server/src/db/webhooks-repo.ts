@@ -531,7 +531,7 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     //     new secret — the docs' own advice is "rotate the secret" — get
     //     another one instead of waiting out the window.
     //   - a customer rotation under a live server FORCE-rotation window
-    //     (V-359.G.2, Fable audit 2026-07-03): the current secret is the
+    //     (V-359.G.2, audit 2026-07-03): the current secret is the
     //     server's force-rotated value, which the customer only ever saw as a
     //     12-char prefix and never deployed, while the prev slot holds the one
     //     they run. Keep that one, and give it a fresh customer window
@@ -719,8 +719,8 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
           // graceWindowEndsAt within (now, now + windowHours] — not yet
           // expired (> now) and due within the notice horizon (<= horizon).
           // Uses drizzle's gt/lte helpers, NOT a raw `sql` template with a
-          // Date interpolated directly — see docs/internal/
-          // drizzle-date-param-workaround.md (a raw-sql Date param silently
+          // Date interpolated directly — see the drizzle Date-param
+          // workaround notes (a raw-sql Date param silently
           // crashes via drizzle's transparentParser OID swap; gt/lte handle
           // Date params correctly, matching findEndpointsNeedingForceRotation's
           // lt(...) sibling call above).

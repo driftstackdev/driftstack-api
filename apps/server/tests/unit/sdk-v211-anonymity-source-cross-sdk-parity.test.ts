@@ -1,21 +1,23 @@
 // W841 — cross-SDK V-211 anonymity check on SDK source. One-hundred-
 // sixty-seventh in the drift-guard series. Pins that no SDK source
-// contains V-211 anonymity-violator tokens (founder / Joel /
-// Theunissen / Joeltheunissen). Matches V-527 commit-msg hook
-// enforcement (W807) but at the source-tree level — SDK source is
-// public-facing, so a slip would publish founder identity globally.
+// contains V-211 anonymity-violator tokens (founder framing, or a
+// personal name). Matches V-527 commit-msg hook enforcement (W807) but
+// at the source-tree level — SDK source is public-facing, so a slip
+// would publish founder identity globally.
 //
-// The V-211 reject patterns from V-527 (with word-boundary guards
-// to allow compounds like 'foundered' / 'foundation' / 'Joeline'):
-//   - (^|[^[:alnum:]])[Ff]ounder([^[:alnum:]]|$)
-//   - (^|[^[:alnum:]])[Jj]oel([^[:alnum:]]|$)
-//   - (^|[^[:alnum:]])[Tt]heunissen([^[:alnum:]]|$)
-//   - (^|[^[:alnum:]])[Jj]oeltheunissen([^[:alnum:]]|$)
+// Two checks, the same two the V-527 hook applies:
+//   - (^|[^[:alnum:]])[Ff]ounder([^[:alpha:]]|$) — word-boundary guarded
+//     so compounds like 'foundered' / 'foundation' pass;
+//   - personal names, matched by scripts/personal-names.mjs against a list
+//     that lives outside the repo (never spelled out or hashed here), so a
+//     longer word containing a name passes and a name beside digits or an
+//     `@` does not.
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { CANARY_WORD, personalNameHits } from '../../../../scripts/personal-names.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -49,20 +51,23 @@ function listFiles(dir: string, exts: string[]): string[] {
   return out;
 }
 
-// V-211 reject patterns (mirror V-527 hook from W807).
-// JavaScript regex syntax — \b word boundary handles the [^[:alnum:]]
-// + start/end-of-string equivalents.
-const V211_PATTERNS = [
-  { name: 'Founder', regex: /\b[Ff]ounder\b/ },
-  { name: 'Joel', regex: /\b[Jj]oel\b/ },
-  { name: 'Theunissen', regex: /\b[Tt]heunissen\b/ },
-  { name: 'Joeltheunissen', regex: /\b[Jj]oeltheunissen\b/ },
-];
+// V-211 founder pattern (mirrors the V-527 hook from W807). JavaScript regex
+// syntax — \b handles the [^[:alnum:]] + start/end-of-string equivalents.
+const FOUNDER = /\b[Ff]ounder\b/;
+
+/** Every V-211 violation in `text`: founder framing, then personal names. */
+function violations(text: string): string[] {
+  const out: string[] = [];
+  const m = text.match(FOUNDER);
+  if (m) out.push(`founder framing '${m[0]}'`);
+  for (const { word } of personalNameHits(text)) out.push(`personal name '${word}'`);
+  return out;
+}
 
 describe('W841 cross-SDK V-211 anonymity source check', () => {
   // ─── SDK source scan ─────────────────────────────────────────
 
-  it('CRITICAL no SDK source (runtime + examples + tests) contains V-211 anonymity-violator tokens (Founder / Joel / Theunissen / Joeltheunissen). SDK source is public-facing — a slip would publish founder identity globally. Matches V-527 commit-msg hook patterns (W807).', () => {
+  it('CRITICAL no SDK source (runtime + examples + tests) contains V-211 anonymity-violator tokens (founder framing, or a personal name from the out-of-repo list). SDK source is public-facing — a slip would publish founder identity globally. Matches V-527 commit-msg hook patterns (W807).', () => {
     const dirs = [
       resolve(REPO_ROOT, 'packages/sdk-typescript'),
       resolve(REPO_ROOT, 'packages/sdk-python'),
@@ -81,69 +86,39 @@ describe('W841 cross-SDK V-211 anonymity source check', () => {
         !f.includes('_pycache__'),
     );
 
+    expect(filtered.length, 'the SDK walk found files to sweep').toBeGreaterThan(0);
+    const leaks: string[] = [];
     for (const f of filtered) {
-      const p = read(f);
-      const rel = relative(REPO_ROOT, f);
-      for (const { name, regex } of V211_PATTERNS) {
-        const m = p.match(regex);
-        expect(
-          m,
-          `${rel} contains V-211 anonymity violator '${name}': '${m?.[0] ?? ''}'`,
-        ).toBeNull();
-      }
+      for (const v of violations(read(f))) leaks.push(`${relative(REPO_ROOT, f)}: ${v}`);
     }
+    expect(leaks, 'V-211 anonymity violator(s) in SDK source').toEqual([]);
   });
 
   // ─── Word-boundary guard does NOT catch compounds ─────────────
 
-  it("CRITICAL the V-211 word-boundary regex correctly allows compounds — 'foundered' / 'foundation' / 'Joeline'. Drift to a regex without \\b would create false positives that block legit text.", () => {
-    // Sanity: 'foundation' is a legit word and must NOT match the Founder pattern.
-    for (const compound of ['foundation', 'foundered', 'Joeline', 'theunissenia']) {
-      let matchedBadly = false;
-      for (const { regex } of V211_PATTERNS) {
-        if (regex.test(compound)) {
-          matchedBadly = true;
-          break;
-        }
-      }
-      expect(matchedBadly, `regex falsely flagged compound '${compound}'`).toBe(false);
+  it("CRITICAL the V-211 checks correctly allow compounds — 'foundered' / 'foundation', and a listed name plus 'ine'. Drift to a check without word boundaries would create false positives that block legit text.", () => {
+    for (const compound of ['foundation', 'foundered', `${CANARY_WORD}ine`, `x${CANARY_WORD}`]) {
+      expect(violations(compound), `falsely flagged compound '${compound}'`).toEqual([]);
     }
   });
 
-  it('CRITICAL the V-211 regex DOES match the canonical violators. Sanity-check the regex shape against the literal tokens that V-527 hook rejects.', () => {
-    const violators = [
-      'Founder',
-      'founder',
-      'Joel',
-      'joel',
-      'Theunissen',
-      'theunissen',
-      'Joeltheunissen',
-    ];
-    for (const v of violators) {
-      let matchedSomething = false;
-      for (const { regex } of V211_PATTERNS) {
-        if (regex.test(v)) {
-          matchedSomething = true;
-          break;
-        }
-      }
-      expect(matchedSomething, `regex failed to match V-211 violator '${v}'`).toBe(true);
+  it('CRITICAL the V-211 checks DO match the canonical violators — founder in either case, and a listed name in any casing or beside digits (driven through the real matcher by its canary word).', () => {
+    const cap = CANARY_WORD[0]!.toUpperCase() + CANARY_WORD.slice(1);
+    for (const v of ['Founder', 'founder', CANARY_WORD, cap, `${CANARY_WORD}89`]) {
+      expect(violations(v).length, `failed to match V-211 violator '${v}'`).toBeGreaterThan(0);
     }
   });
 
   // ─── V-527 hook reject-pattern source consistency ─────────────
 
-  it('CRITICAL V-527 commit-msg hook (scripts/git-hooks/commit-msg) declares the SAME 4 V-211 reject patterns. Drift between this test and the hook would create an inconsistency where commits get rejected but source slips through (or vice versa).', () => {
+  it('CRITICAL V-527 commit-msg hook (scripts/git-hooks/commit-msg) applies the SAME two checks — the founder pattern and the shared personal-name matcher. Drift between this test and the hook would create an inconsistency where commits get rejected but source slips through (or vice versa).', () => {
     const hook = read(resolve(REPO_ROOT, 'scripts/git-hooks/commit-msg'));
-    // Each of the 4 violator tokens must appear as a regex pattern in the hook.
     expect(hook).toMatch(/\[Ff\]ounder/);
-    expect(hook).toMatch(/\[Jj\]oel/);
-    expect(hook).toMatch(/\[Tt\]heunissen/);
-    expect(hook).toMatch(/\[Jj\]oeltheunissen/);
+    expect(hook).toMatch(/PERSONAL_NAMES="\$HOOK_DIR\/\.\.\/personal-names\.mjs"/);
+    expect(hook).toMatch(/node "\$PERSONAL_NAMES" "\$MSG_FILE"/);
   });
 
-  // ─── No-public-leak invariant for AGENTS.md + memory rules ────
+  // ─── Both commit policies live in the hook ───────────────────
 
   it('CRITICAL the V-211 anonymity rule + V-205 attribution rule are both in V-527 hook. The dual-policy enforcement is what W807 + this test together pin — drift to dropping either would let a class of leak through.', () => {
     const hook = read(resolve(REPO_ROOT, 'scripts/git-hooks/commit-msg'));

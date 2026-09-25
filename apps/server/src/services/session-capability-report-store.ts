@@ -5,8 +5,50 @@
 // and ignore those frames, leaving view-only input, blank/failed capture, and a
 // dead upstream proxy invisible to the GUI. This bounded store is the live read
 // side for PublicAgentSession; the ownership-gated relay is the only writer.
+//
+// ⛔ IT MUST OUTLIVE THE PROCESS (owner item 7, 2026-09-24: "IN a active
+// session i randomly got this; Waiting on the phone — it has not reported yet
+// whether it can accept taps"). The store was a Map and nothing else. A restart
+// or deploy emptied it; the session read then leaves `capability_report` out,
+// and the phone re-sends only on its next state change or its periodic refresh,
+// minutes later — so every live Simulator window went back to "Waiting on the
+// phone" and lost the right to tap. With Redis configured, every report is
+// written through with a TTL tied to the session (the agent-session lifetime
+// cap, refreshed on each report), deleted with the session, reloaded by the
+// next process (`hydrate()`) and fetched on a miss. Reads stay synchronous and
+// in memory — the read path is a projection that cannot await — so Redis is
+// the durable copy, never the read path. Without Redis this is the in-memory
+// store it always was.
 
+import type { Redis } from 'ioredis';
 import type { CapabilityReport } from '../schemas/harness-control-protocol.js';
+import { resolveMaxLifetimeHours } from './agent-session-orphan-sweeper.js';
+
+/** Where the durable copy lives. One key per session: `<prefix><sessionId>`. */
+export const CAPABILITY_REPORT_REDIS_PREFIX = 'driftstack:agent-session:capability-report:';
+
+/** The Redis commands the store uses (an ioredis client satisfies it). */
+export type CapabilityReportRedis = Pick<Redis, 'set' | 'get' | 'del' | 'scan' | 'mget'>;
+
+export interface CapabilityReportPersistence {
+  redis: CapabilityReportRedis;
+  /** Key prefix; tests pass a unique one. Defaults to CAPABILITY_REPORT_REDIS_PREFIX. */
+  keyPrefix?: string;
+  /**
+   * How long a stored report may outlive its last refresh. Defaults to the
+   * agent-session lifetime cap (DRIFTSTACK_AGENT_SESSION_MAX_LIFETIME_HOURS,
+   * 12 h), after which the backstop closes the session anyway: a report can
+   * never outlive the session it describes. A live session re-reports well
+   * inside it (every state change, and a periodic refresh).
+   */
+  ttlSeconds?: number;
+  /** Failures are logged here, never thrown: a report must never fail a relay. */
+  onError?: (err: unknown, op: string) => void;
+}
+
+/** How long a Redis miss is remembered before a read asks again. The GUI reads
+ *  every few seconds; one Redis round-trip per session per window is plenty. */
+const MISS_MEMORY_MS = 10_000;
 
 export interface SessionCapabilityReport {
   timestamp: string;
@@ -82,9 +124,9 @@ export interface SessionCapabilityReport {
    */
   streaming_health: NonNullable<CapabilityReport['streamingHealth']> | null;
   /**
-   * A3 2026-09-19 ~19:10Z — build identity for THIS session, declared and measured.
+   * 2026-09-19 ~19:10Z — build identity for THIS session, declared and measured.
    *
-   * `webkit_fork_build` is the node's declared checkout; A3 measured it naming a
+   * `webkit_fork_build` is the node's declared checkout; it was measured naming a
    * checkout 20 commits behind the real build. `webkit_framework_sha256` is the
    * raw `wc:…,wk:…,jsc:…` string measured at the spawn path — the frameworks this
    * session is actually running. Kept RAW: the decoder
@@ -123,7 +165,7 @@ export interface SessionCapabilityReport {
  */
 export type CustomerSafeCapabilityReport = Omit<
   SessionCapabilityReport,
-  // A3 2026-09-19 — the three build-identity fields are fleet-internal: they name
+  // 2026-09-19 — the three build-identity fields are fleet-internal: they name
   // OUR deploy, not the customer's session. Omitted here AND stripped from the
   // raw frame in the relay, because this type only governs the agent-session
   // projection while the relay's `raw` spread reaches the public sessions API.
@@ -145,12 +187,39 @@ export type CustomerSafeCapabilityReport = Omit<
    * it (proxy /:id/test) and persists it on the proxy row, and the serve path
    * reads it back here. `null` means NOT OBSERVED — never measured, or the session
    * has no owned proxy to read — and must render as "measuring…", never a
-   * placeholder OS (the same absent-until-measured contract as exit_ip). The
-   * internal diagnostics (reason / observed_ip / observed_via) are deliberately
-   * NOT here.
+   * placeholder OS (the same absent-until-measured contract as exit_ip).
+   *
+   * Owner item 9 — HOW the reading was taken crosses too (see
+   * {@link SessionOsFingerprint}); the free-text reason and the observed address
+   * are deliberately NOT here.
    */
-  os_fingerprint: { os: string; confidence: string; at: string } | null;
+  os_fingerprint: SessionOsFingerprint | null;
 };
+
+/**
+ * The session's projection of its exit proxy's stored OS reading.
+ *
+ * `{os, confidence, at}` is the reading and when it was taken. The rest is HOW it
+ * was taken, in the exact names the proxy Test reply and the proxy list publish
+ * (`observed_via`, `single_host_vantage`, `web_port_vantage`, and the customer
+ * names `direct_reading` / `website_like_reading` for the last two): whether an OS
+ * that differs from the phone's is a real mismatch or a reading that does not
+ * describe the path a website sees is decided from exactly these, and without them
+ * a client reading the session can never show the first. The serve path always
+ * fills them (the path flags FALSE when a stored reading predates them); they are
+ * optional in this type only because the projection itself is a pass-through.
+ * `reason` and `observed_ip` stay on the server.
+ */
+export interface SessionOsFingerprint {
+  os: string;
+  confidence: string;
+  at: string;
+  observed_via?: 'proxy_host' | 'exit_ip';
+  single_host_vantage?: boolean;
+  web_port_vantage?: boolean;
+  direct_reading?: boolean;
+  website_like_reading?: boolean;
+}
 
 /**
  * Did every safeguard the node expects actually report, and did all of them pass?
@@ -189,7 +258,7 @@ export function missingSafeguardLayers(frame: CapabilityReport): string[] {
 
 export function customerSafeCapabilityReport(
   report: SessionCapabilityReport,
-  osFingerprint?: { os: string; confidence: string; at: string } | null,
+  osFingerprint?: SessionOsFingerprint | null,
 ): CustomerSafeCapabilityReport {
   return {
     timestamp: report.timestamp,
@@ -223,19 +292,137 @@ export function customerSafeCapabilityReport(
     webrtc_candidate_ips: report.webrtc_candidate_ips,
     observed_at: report.observed_at,
     // N-2 — a DELIBERATE allowlist addition (like exit_ip above), but sourced from
-    // the proxy row rather than the harness frame: the {os, confidence} subset of
-    // the exit's cached TCP/IP OS fingerprint. `?? null` keeps a miss a miss —
-    // NOT OBSERVED, rendered "measuring…", never a placeholder OS. The internal
-    // diagnostics (reason / observed_ip / observed_via) are NOT crossed to the
-    // customer.
+    // the proxy row rather than the harness frame: the customer-safe subset of
+    // the exit's cached TCP/IP OS fingerprint (SessionOsFingerprint). `?? null`
+    // keeps a miss a miss — NOT OBSERVED, rendered "measuring…", never a
+    // placeholder OS. The free-text reason and the observed address are NOT
+    // crossed to the customer.
     os_fingerprint: osFingerprint ?? null,
   };
 }
 
+/** A stored record, validated just enough to serve it: anything else is
+ *  treated as absent (never served, never thrown). */
+function reportFromStored(raw: string | null): SessionCapabilityReport | null {
+  if (raw === null) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    const r = parsed as Record<string, unknown>;
+    if (typeof r.timestamp !== 'string') return null;
+    if (r.manual_input_available !== null && typeof r.manual_input_available !== 'boolean') {
+      return null;
+    }
+    return parsed as SessionCapabilityReport;
+  } catch {
+    return null;
+  }
+}
+
 export class SessionCapabilityReportStore {
   private readonly map = new Map<string, SessionCapabilityReport>();
+  private readonly persistence:
+    | (Required<Omit<CapabilityReportPersistence, 'onError'>> &
+        Pick<CapabilityReportPersistence, 'onError'>)
+    | null;
+  /** In-flight read-through fetches, by session. A set/delete for the session
+   *  removes its entry, which voids the fetch: an older stored copy must never
+   *  overwrite a newer report or resurrect a deleted one. */
+  private readonly loads = new Map<string, symbol>();
+  /** Sessions Redis recently had nothing for, and when. */
+  private readonly misses = new Map<string, number>();
 
-  constructor(private readonly maxEntries = 5_000) {}
+  constructor(
+    private readonly maxEntries = 5_000,
+    persistence?: CapabilityReportPersistence,
+  ) {
+    this.persistence =
+      persistence === undefined
+        ? null
+        : {
+            redis: persistence.redis,
+            keyPrefix: persistence.keyPrefix ?? CAPABILITY_REPORT_REDIS_PREFIX,
+            ttlSeconds: Math.max(
+              1,
+              Math.round(persistence.ttlSeconds ?? resolveMaxLifetimeHours() * 3_600),
+            ),
+            onError: persistence.onError,
+          };
+  }
+
+  private keyOf(sessionId: string): string {
+    return `${this.persistence?.keyPrefix ?? CAPABILITY_REPORT_REDIS_PREFIX}${sessionId}`;
+  }
+
+  private fail(err: unknown, op: string): void {
+    this.persistence?.onError?.(err, op);
+  }
+
+  /** Insert in memory, evicting the oldest past the bound. */
+  private remember(sessionId: string, report: SessionCapabilityReport): void {
+    this.map.delete(sessionId);
+    this.map.set(sessionId, report);
+    if (this.map.size > this.maxEntries) {
+      const oldest = this.map.keys().next().value;
+      if (oldest !== undefined) this.map.delete(oldest);
+    }
+  }
+
+  /**
+   * Reload every report the previous process stored — call once at start-up,
+   * before serving. Memory wins over the stored copy (it can only be newer).
+   * Never rejects: an unreachable Redis leaves the store empty, exactly as a
+   * restart always did.
+   */
+  async hydrate(): Promise<void> {
+    const p = this.persistence;
+    if (p === null) return;
+    try {
+      let cursor = '0';
+      do {
+        const [next, keys] = await p.redis.scan(cursor, 'MATCH', `${p.keyPrefix}*`, 'COUNT', 200);
+        cursor = next;
+        if (keys.length === 0) continue;
+        const values = await p.redis.mget(...keys);
+        keys.forEach((key, i) => {
+          const sessionId = key.slice(p.keyPrefix.length);
+          if (sessionId === '' || this.map.has(sessionId)) return;
+          if (this.map.size >= this.maxEntries) return;
+          const report = reportFromStored(values[i] ?? null);
+          if (report !== null) this.map.set(sessionId, report);
+        });
+      } while (cursor !== '0');
+    } catch (err) {
+      this.fail(err, 'hydrate');
+    }
+  }
+
+  /** Fetch one session's stored copy into memory, in the background. */
+  private loadInBackground(sessionId: string): void {
+    const p = this.persistence;
+    if (p === null || this.loads.has(sessionId)) return;
+    const missedAt = this.misses.get(sessionId);
+    if (missedAt !== undefined && Date.now() - missedAt < MISS_MEMORY_MS) return;
+    const token = Symbol(sessionId);
+    this.loads.set(sessionId, token);
+    void p.redis.get(this.keyOf(sessionId)).then(
+      (raw) => {
+        if (this.loads.get(sessionId) !== token) return; // superseded by a set/delete
+        this.loads.delete(sessionId);
+        const report = reportFromStored(raw);
+        if (report === null) {
+          if (this.misses.size >= this.maxEntries) this.misses.clear();
+          this.misses.set(sessionId, Date.now());
+          return;
+        }
+        if (!this.map.has(sessionId)) this.remember(sessionId, report);
+      },
+      (err: unknown) => {
+        if (this.loads.get(sessionId) === token) this.loads.delete(sessionId);
+        this.fail(err, 'get');
+      },
+    );
+  }
 
   /**
    * `reportingNodeId` is OPTIONAL so every existing caller (and every test fake)
@@ -246,8 +433,7 @@ export class SessionCapabilityReportStore {
    * which is how a session gets attributed to the wrong device.
    */
   set(frame: CapabilityReport, reportingNodeId?: string): void {
-    this.map.delete(frame.sessionId);
-    this.map.set(frame.sessionId, {
+    const record: SessionCapabilityReport = {
       timestamp: frame.timestamp,
       manual_input_available: frame.manualInputAvailable ?? null,
       streaming_state: frame.streamingState ?? null,
@@ -301,22 +487,34 @@ export class SessionCapabilityReportStore {
       safeguards_passed: safeguardsPassed(frame),
       // `?? null` and never `?? {}` — see the field doc. Absent stays absent.
       streaming_health: frame.streamingHealth ?? null,
-      // A3 2026-09-19 — declared + measured build identity, both kept RAW. `?? null`
+      // 2026-09-19 — declared + measured build identity, both kept RAW. `?? null`
       // preserves absent-until-measured exactly as every field above: a harness
       // that predates the key, and one whose framework files could not be read,
       // both arrive with nothing, and neither may render as a digest.
       webkit_fork_build: frame.webkitForkBuild ?? null,
       webkit_framework_sha256: frame.webkitFrameworkSha256 ?? null,
       reporting_node_id: reportingNodeId ?? null,
-    });
-    if (this.map.size > this.maxEntries) {
-      const oldest = this.map.keys().next().value;
-      if (oldest !== undefined) this.map.delete(oldest);
+    };
+    this.remember(frame.sessionId, record);
+    this.loads.delete(frame.sessionId);
+    this.misses.delete(frame.sessionId);
+    const p = this.persistence;
+    if (p !== null) {
+      // Best-effort and in order on one connection: a later delete for the
+      // same session is issued after this and wins.
+      void p.redis
+        .set(this.keyOf(frame.sessionId), JSON.stringify(record), 'EX', p.ttlSeconds)
+        .catch((err: unknown) => this.fail(err, 'set'));
     }
   }
 
   get(sessionId: string): SessionCapabilityReport | null {
-    return this.map.get(sessionId) ?? null;
+    const hit = this.map.get(sessionId);
+    if (hit !== undefined) return hit;
+    // Not in memory: this process may not have seen the report the previous
+    // one stored. Fetch it for the next read; this one says "not reported".
+    this.loadInBackground(sessionId);
+    return null;
   }
 
   /**
@@ -337,6 +535,12 @@ export class SessionCapabilityReportStore {
 
   delete(sessionId: string): void {
     this.map.delete(sessionId);
+    this.loads.delete(sessionId);
+    this.misses.delete(sessionId);
+    const p = this.persistence;
+    if (p !== null) {
+      void p.redis.del(this.keyOf(sessionId)).catch((err: unknown) => this.fail(err, 'del'));
+    }
   }
 
   get size(): number {

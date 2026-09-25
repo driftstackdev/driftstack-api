@@ -13,7 +13,7 @@
 //
 //   V-333b lazy-import framing — 'V-333b — Playwright driver. Dev /
 //   E2E only; the production driver is the WebKit fork
-//   (DRIVER=webkit), which lands when Agent 1's WebKit Phase 2
+//   (DRIVER=webkit), which lands when the fork's WebKit Phase 2
 //   closes. Loaded lazily so prod builds don't pull in @playwright/
 //   test (a devDependency)'.
 //
@@ -73,11 +73,11 @@ describe('W985 drivers factory + WebKit cross-source invariant', () => {
     expect(p).toMatch(/interactLatencyMs: config\.mockInteractLatencyMs,/);
   });
 
-  it("CRITICAL V-333b lazy-import framing — 'V-333b — Playwright driver. Dev / E2E only; the production driver is the WebKit fork (DRIVER=webkit), which lands when Agent 1's WebKit Phase 2 closes. Loaded lazily so prod builds don't pull in @playwright/test (a devDependency)'. The dev-only + lazy-import + no-prod-bundle design is the V-333b prod-cleanliness contract.", () => {
+  it("CRITICAL V-333b lazy-import framing — 'V-333b — Playwright driver. Dev / E2E only; the production driver is the WebKit fork (DRIVER=webkit), which lands when the fork's WebKit Phase 2 closes. Loaded lazily so prod builds don't pull in @playwright/test (a devDependency)'. The dev-only + lazy-import + no-prod-bundle design is the V-333b prod-cleanliness contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/drivers/index.ts'));
     expect(p).toMatch(/V-333b — Playwright driver\. Dev \/ E2E only; the production/);
     expect(p).toMatch(/driver is the WebKit fork \(DRIVER=webkit\), which lands when/);
-    expect(p).toMatch(/Agent 1's WebKit Phase 2 closes\. Loaded lazily so prod builds/);
+    expect(p).toMatch(/the fork's WebKit Phase 2 closes\. Loaded lazily so prod builds/);
     expect(p).toMatch(/don't pull in @playwright\/test \(a devDependency\)\./);
   });
 

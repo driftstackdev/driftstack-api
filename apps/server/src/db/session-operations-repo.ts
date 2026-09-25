@@ -1,5 +1,5 @@
-// Durable direct-operation repository (slice 1 of
-// docs/internal/durable-direct-operation-design.md). No route consumes this
+// Durable direct-operation repository (slice 1 of the internal
+// durable direct-operation design). No route consumes this
 // yet, by design: the slice is schema + repository + the three fences, and it
 // is independently reviewable precisely because nothing is wired to it.
 //

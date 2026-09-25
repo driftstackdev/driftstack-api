@@ -36,10 +36,10 @@ describe('W735 customer-dashboard verify-email.astro page parity', () => {
     expect(p).toMatch(/<p class="section-label">Step 2 of 4<\/p>/);
   });
 
-  it("V-184a.B + Issue 3 wave 1085+ URL-token auto-prefill pinned — reads the link token via new URLSearchParams(window.location.search).get('token'). The form is HIDDEN by default and a spinner shows during auto-verify; the form is revealed only as a fallback when auto-verify fails or when the page is reached without a token (founder feedback: prior implementation kept the code-input visible during auto-verify which read as 'type your code' UX).", () => {
+  it("V-184a.B + Issue 3 URL-token auto-prefill pinned — reads the link token via new URLSearchParams(window.location.search).get('token'). The form is HIDDEN by default and a spinner shows during auto-verify; the form is revealed only as a fallback when auto-verify fails or when the page is reached without a token (founder feedback: prior implementation kept the code-input visible during auto-verify which read as 'type your code' UX).", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Issue 3 wave 1085\+ — when the user clicks the link in the verify/);
+    expect(p).toMatch(/Issue 3 — when the user clicks the link in the verify/);
     expect(p).toMatch(/email, the token is already in `\?token=…`/);
     expect(p).toMatch(/Auto-submit\s*\/\/ immediately and HIDE the form/);
 
@@ -48,7 +48,7 @@ describe('W735 customer-dashboard verify-email.astro page parity', () => {
     expect(p).toMatch(/const linkToken = params\.get\('token'\)/);
   });
 
-  it('Issue 3 wave 1085+ — form is hidden by default + revealed via showFallback() when auto-verify fails OR when no ?token= URL param is present. Replaces the prior "form stays mounted as fallback" pattern where the code input was always visible.', () => {
+  it('Issue 3 — form is hidden by default + revealed via showFallback() when auto-verify fails OR when no ?token= URL param is present. Replaces the prior "form stays mounted as fallback" pattern where the code input was always visible.', () => {
     const p = read(PAGE);
     expect(p).toMatch(/data-form-fallback/);
     expect(p).toMatch(/function showFallback\(\)/);

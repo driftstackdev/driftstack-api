@@ -48,7 +48,7 @@ export interface CreateSessionInput {
    * V-169 — harness purpose. Drives WebKit driver's harness-config
    * selection (persistent vs ephemeral context, _resourceLoad
    * StatisticsEnabled flag, ATFP firing). See
-   * `docs/architecture/afp-harness-configuration.md` (Agent 1
+   * `docs/architecture/afp-harness-configuration.md` (fork-side
    * cross-reference, Phase 3 work).
    *   - `production_customer` (default): ephemeral + ATFP-on.
    *   - `cumulative_rig_validation`: persistent, ATFP-off.
@@ -129,7 +129,7 @@ export interface SessionStateResult {
    * W615 — page lifecycle (loading/loaded/errored + error detail) as the
    * driver/harness sees it. null = the driver has nothing to report yet
    * (pre-navigation, or a driver that doesn't track lifecycle — the real
-   * harness emit is the A3 side of the cross-agent contract).
+   * harness emit is the harness side of the server↔harness contract).
    */
   pageState: PageState | null;
   capturedAt: Date;

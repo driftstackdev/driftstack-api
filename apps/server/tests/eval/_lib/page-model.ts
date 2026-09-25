@@ -150,7 +150,7 @@ export interface FixturePage {
    * Visually hidden inputs — a styled checkbox or radio — whose tap point lands
    * on their OWN `<label>` (wrapping them, or pointing at them with `for`). A tap
    * there toggles the input, as a browser forwards a label's click. A device
-   * with the own-label verdict (A3 V-3360, the default) reports the label as a
+   * with the own-label verdict (V-3360, the default) reports the label as a
    * CLEAR hit — `occluded: false`, `hit_via_own_label: true` — and its checked
    * click taps. A device that predates it (`predatesOwnLabelVerdict`) reports
    * the hit as occluded, `hit_is_not_target_or_descendant`, and REFUSES a click
@@ -163,7 +163,7 @@ export interface FixturePage {
    * Like `tapPointOnOwnLabel`, but the tap point lands on `hit`, an element
    * INSIDE one of `target`'s own labels — the span a styled checkbox draws, or
    * a "terms" link written into its label. What that means is the device's
-   * own-label rule (A3 V-3360), following HTML's interactive-content set: a
+   * own-label rule (V-3360), following HTML's interactive-content set: a
    * non-interactive `hit` forwards the tap to the control like the label does;
    * an interactive one (a link, a button…) takes the tap itself, so the device
    * reads it as covered and an unchecked tap there ACTIVATES IT. A `hit`

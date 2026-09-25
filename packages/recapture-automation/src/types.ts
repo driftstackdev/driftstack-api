@@ -7,7 +7,7 @@
 // validates that the new captures match the prior baseline (or surfaces
 // a diff for manual review).
 //
-// Phase 3+ workstream. Today the workflow is manual: when Agent 1
+// Phase 3+ workstream. Today the workflow is manual: when the fork
 // notices a new iOS version on Apple's release notes, the founder runs
 // the BS Automate capture batches manually. This package's mock
 // implementation models the SAME workflow programmatically so a future

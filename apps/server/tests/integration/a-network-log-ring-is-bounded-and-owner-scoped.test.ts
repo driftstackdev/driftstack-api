@@ -239,7 +239,7 @@ describe('T-9 relay: networkRequests is appended only for an exact live owning n
     expect(store.get('agt_1').entries.map((e) => e.id)).toEqual(['req_1']);
   });
 
-  // T-16 (A1+A3 2026-09-08) — PER-ENTRY leniency: one bad row must NOT drop the
+  // T-16 (2026-09-08) — PER-ENTRY leniency: one bad row must NOT drop the
   // whole frame (which would blank the pane and read as "the fork emits nothing").
   // ARM 1 is the POSITIVE CONTROL for the vacuity arm below: it proves a drop
   // DOES fire a warn. ⛔ Do NOT split these into separate files or delete this arm

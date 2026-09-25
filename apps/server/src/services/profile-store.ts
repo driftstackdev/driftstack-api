@@ -1,4 +1,4 @@
-// Profile-backed sessions (v1.5; A3 W417) — server-side persistence of the
+// Profile-backed sessions (v1.5; W417) — server-side persistence of the
 // per-profile encrypted store on session end.
 //
 // On a PROFILE-BACKED session ending, the harness emits a `profileSaved`
@@ -298,11 +298,11 @@ export interface AssignProfileBlock {
 }
 
 /**
- * Build the assign `profile` block for a profile-backed session (A3 W420 restore
+ * Build the assign `profile` block for a profile-backed session (W420 restore
  * + save-back contract). Mints presigned R2 URLs rather than streaming the blob
  * through the server: the opaque sealed store (LZFSE + AES-GCM-256) flows R2 ↔
  * harness directly via `URLSession`, so the control plane never holds it. We
- * always use the presigned-GET path (never inline `sealed_blob`) — A3's decoder
+ * always use the presigned-GET path (never inline `sealed_blob`) — the harness's decoder
  * fetches `sealed_blob_url` (W420, tested), and this keeps an arbitrarily large
  * blob off the server with no size-probe needed.
  *

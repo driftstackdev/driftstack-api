@@ -25,9 +25,9 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("LK.6.d module-level framing pinned (touch translation, W198/W1249): input capture translating the user's mouse/trackpad gestures into iPhone-COHERENT TOUCH InputEvents shipped over the LiveKit DataChannel to Agent-1's W3C touch injector — pinned so the LK.6.d anchor + the why-touch-not-mouse coherence contract (a real iPhone never fires mouse events) stays documented", () => {
+  it("LK.6.d module-level framing pinned (touch translation, W198/W1249): input capture translating the user's mouse/trackpad gestures into iPhone-COHERENT TOUCH InputEvents shipped over the LiveKit DataChannel to the harness's W3C touch injector — pinned so the LK.6.d anchor + the why-touch-not-mouse coherence contract (a real iPhone never fires mouse events) stays documented", () => {
     expect(body).toMatch(
-      /\/\/ LK\.6\.d — input capture on the simulator's video element\. Translates the\s*\/\/ user's mouse\/trackpad gestures into iPhone-COHERENT TOUCH InputEvents and\s*\/\/ ships them over the LiveKit DataChannel to Agent-1's Mac-side W3C touch\s*\/\/ injector \(WebDriverManualTouchInjector → genuine pointerType:touch events\)\./,
+      /\/\/ LK\.6\.d — input capture on the simulator's video element\. Translates the\s*\/\/ user's mouse\/trackpad gestures into iPhone-COHERENT TOUCH InputEvents and\s*\/\/ ships them over the LiveKit DataChannel to the harness's Mac-side W3C touch\s*\/\/ injector \(WebDriverManualTouchInjector → genuine pointerType:touch events\)\./,
     );
     // The coherence rationale: mouse events are a detectable iPhone tell.
     expect(body).toMatch(/a real iPhone NEVER fires mouse/);
@@ -102,7 +102,7 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
     expect(body).toMatch(/endCommittedTouch\(p\.x, devY\(p\.y\), g\.touchId\);/);
     // Wheel/trackpad scroll drives a touchStream drag (touchStart→touchMove→touchEnd
     // via wheelDrag), NOT a `swipe` — the fork adds its own momentum to every swipe
-    // (A3 W2736), so per-event swipes stacked into jumpy overshoot. The GUI no longer
+    // (W2736), so per-event swipes stacked into jumpy overshoot. The GUI no longer
     // emits swipe.
     expect(body).toMatch(/wheelDrag/);
     expect(body).not.toMatch(/type: 'swipe'/);

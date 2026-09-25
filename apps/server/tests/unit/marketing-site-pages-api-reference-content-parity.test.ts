@@ -94,11 +94,11 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     expect(body).toMatch(/<li>DELETE \/v1\/sessions\/:id<\/li>/);
   });
 
-  // Arc 4 Wave 2.B sub-slice 8.20.f (v2-#8) — marketing api-reference
+  // Arc 4 phase 2.B, slice 8.20.f (v2-#8) — marketing api-reference
   // surfaces agent-sessions as a distinct route group; pins the collection
   // read plus the customer-facing control subset (extended 2026-05-20 with Slice 3
-  // /:id/mode + Slice 4-6 /:id/input-event landed for Wave 29-NNN
-  // ARC 3) so any rename / drop breaks CI.
+  // /:id/mode + Slice 4-6 /:id/input-event landed for ARC 3) so any
+  // rename / drop breaks CI.
   it('Agent sessions route enumeration includes the live paginated collection read', () => {
     expect(body).toMatch(/<li>POST \/v1\/agent-sessions<\/li>/);
     expect(body).toMatch(/<li>GET \/v1\/agent-sessions<\/li>/);

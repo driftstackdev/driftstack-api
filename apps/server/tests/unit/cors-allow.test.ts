@@ -132,7 +132,7 @@ describe('W586 single-source parity with lib/app.ts', () => {
     // the network was healthy.
     //
     // A guard whose scan is narrower than its own claim is the recurring shape
-    // here — see M-1 in docs/internal/OPEN-ITEMS.md. So the population is now
+    // here — see M-1 in the internal open-items ledger. So the population is now
     // DERIVED by walking the route sources for `reply.raw.writeHead` /
     // `raw.writeHead`, and a fifth hijack route cannot be added uncovered.
     const routesDir = resolve(HERE, '..', '..', 'src', 'routes');

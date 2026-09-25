@@ -1,5 +1,5 @@
 // V-333b — Playwright-backed driver. Foundation for self-hosted local
-// dev + E2E testing on the Mac BEFORE the WebKit fork (Agent 1) lands
+// dev + E2E testing on the Mac BEFORE the WebKit fork lands
 // the production driver. Selecting via DRIVER=playwright +
 // PLAYWRIGHT_BROWSER=webkit|chromium|firefox.
 //
@@ -19,7 +19,7 @@
 // What this DRIVER IS for:
 //   - Founder running the API + GUI on their Mac and verifying the
 //     full session create/navigate/destroy flow against a real
-//     browser without waiting on Agent 1.
+//     browser without waiting on the fork.
 //   - CI E2E tests of the route layer + service layer against a
 //     real browser, without spinning up the WebKit fork.
 //
@@ -181,7 +181,7 @@ export class PlaywrightDriver implements Driver {
       localStorage: {},
       // W615 — minimal lifecycle mapping (smoke-test driver): loaded once
       // a page URL exists; richer errored/loading detail is the real
-      // harness's job (A3 emit).
+      // harness's job.
       pageState: url ? { state: 'loaded' as const } : null,
       capturedAt: new Date(),
     };
@@ -208,7 +208,7 @@ export class PlaywrightDriver implements Driver {
     // Real DOM extraction in the Playwright (local-dev) driver is a follow-up —
     // it needs in-page page.evaluate DOM logic (DOM lib not in the server
     // tsconfig). The production path is the WebKit driver (harness `extract`
-    // intent, A3 W456) + the mock driver covers the default + tests.
+    // intent, W456) + the mock driver covers the default + tests.
     await Promise.resolve();
     throw new DriverNotIntegratedError();
   }

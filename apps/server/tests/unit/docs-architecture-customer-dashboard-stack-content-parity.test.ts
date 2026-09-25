@@ -128,7 +128,7 @@ describe('W559.B /docs/architecture/customer-dashboard-stack.md content parity',
     expect(body).toMatch(/the migration to Next\.js is a matter of moving page components/);
   });
 
-  it("4-out-of-scope + 4-open-question + decision-authority framing pinned: '## Out of scope for this proposal' + 'Real-time event streaming' + 'Offline support — dashboard requires connectivity; no offline mode planned.' + 'Mobile-app-shell experience — `app.driftstack.io` is responsive HTML' + 'Internationalisation — English only at launch; Dutch + German follow' + '## Open questions for founder review' + '**Are the brand-design-system reuse benefits load-bearing for the choice?**' + '**Onboarding flow shape — single page with a state-machine React island, or multi-page MPA with one URL per step?**' + '**Cloudflare Pages vs Vercel for the dashboard runtime.** Cloudflare is already on the sub-processor list (V-052 lock)' + '**Admin panel co-locates or splits?**' + '## Decision authority' + 'This is **architectural / structural** — surfaces for founder review per the Decision authority section in AGENTS.md.' + 'No commit until founder confirms the recommendation (or redirects to one of B / C / D).' — pinned so the 4-out-of-scope (realtime + offline + PWA + i18n) + 4-open-question (brand-reuse + onboarding-shape + CF-vs-Vercel-V-052 + admin-co-locate) + architectural-no-commit-until-founder commitment survives", () => {
+  it("4-out-of-scope + 4-open-question + decision-authority framing pinned: '## Out of scope for this proposal' + 'Real-time event streaming' + 'Offline support — dashboard requires connectivity; no offline mode planned.' + 'Mobile-app-shell experience — `app.driftstack.io` is responsive HTML' + 'Internationalisation — English only at launch; Dutch + German follow' + '## Open questions for founder review' + '**Are the brand-design-system reuse benefits load-bearing for the choice?**' + '**Onboarding flow shape — single page with a state-machine React island, or multi-page MPA with one URL per step?**' + '**Cloudflare Pages vs Vercel for the dashboard runtime.** Cloudflare is already on the sub-processor list (V-052 lock)' + '**Admin panel co-locates or splits?**' + '## Decision authority' + 'This is **architectural / structural** — surfaces for founder review per the project's decision-authority policy.' + 'No commit until founder confirms the recommendation (or redirects to one of B / C / D).' — pinned so the 4-out-of-scope (realtime + offline + PWA + i18n) + 4-open-question (brand-reuse + onboarding-shape + CF-vs-Vercel-V-052 + admin-co-locate) + architectural-no-commit-until-founder commitment survives", () => {
     expect(body).toMatch(/## Out of scope for this proposal/);
     expect(body).toMatch(/- Real-time event streaming/);
     expect(body).toMatch(
@@ -151,7 +151,7 @@ describe('W559.B /docs/architecture/customer-dashboard-stack.md content parity',
     expect(body).toMatch(/4\. \*\*Admin panel co-locates or splits\?\*\*/);
     expect(body).toMatch(/## Decision authority/);
     expect(body).toMatch(
-      /This is \*\*architectural \/ structural\*\* — surfaces for founder review per the Decision authority section in AGENTS\.md\./,
+      /This is \*\*architectural \/ structural\*\* — surfaces for founder review per the project's decision-authority policy\./,
     );
     expect(body).toMatch(
       /No commit until founder confirms the recommendation \(or redirects to one of B \/ C \/ D\)\./,

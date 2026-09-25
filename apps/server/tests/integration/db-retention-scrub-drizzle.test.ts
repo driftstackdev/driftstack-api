@@ -1,7 +1,7 @@
 // V-759 — privacy-policy §9 retention enforcement, against a REAL Postgres.
 //
 // This is the test that matters for this change, because the change is irreversible. Two
-// guards the design (docs/internal/2026-08-12-retention-anonymisation-design.md) demanded
+// guards the retention-anonymisation design (internal design notes, 2026-08-12) demanded
 // beyond the usual sweeper template:
 //
 //   1. NOTHING INSIDE THE 90-DAY WINDOW IS TOUCHED. Over-scrubbing is the whole risk and it

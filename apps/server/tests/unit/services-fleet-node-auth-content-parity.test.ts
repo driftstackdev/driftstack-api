@@ -24,10 +24,10 @@ describe('services/fleet-node-auth content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("V-820 / network-architecture.md framing pinned: 'fleet-node JWT verification. Foundation slice for the cross-agent mTLS endpoint (wss://fleet.driftstack.dev/v1/fleet/events). Agent 1 is waiting on Agent 2 to land the auth primitive; this is the autonomously-safe piece (no SQL migration, no Cloudflare config — just the JWT verification logic + interface).' — pinned so the V-820 anchor + cross-agent-mTLS-endpoint URL + Agent-1-waits-on-Agent-2 cross-agent dependency + autonomously-safe-piece scope all stay documented", () => {
+  it("V-820 / network-architecture.md framing pinned: 'fleet-node JWT verification. Foundation slice for the cross-repo mTLS endpoint (wss://fleet.driftstack.dev/v1/fleet/events). The device side is waiting on the server to land the auth primitive; this is the self-contained, safe piece (no SQL migration, no Cloudflare config — just the JWT verification logic + interface).' — pinned so the V-820 anchor + cross-repo-mTLS-endpoint URL + device-side-waits-on-server cross-repo dependency + self-contained-safe-piece scope all stay documented", () => {
     expect(body).toMatch(/\/\/ V-820 \/ network-architecture\.md — fleet-node JWT verification\./);
     expect(body).toMatch(
-      /\/\/ Foundation slice for the cross-agent mTLS endpoint\s*\/\/ \(`wss:\/\/fleet\.driftstack\.dev\/v1\/fleet\/events`\)\. Agent 1 is waiting\s*\/\/ on Agent 2 to land the auth primitive; this is the autonomously-\s*\/\/ safe piece \(no SQL migration, no Cloudflare config — just the JWT\s*\/\/ verification logic \+ interface\)\./,
+      /\/\/ Foundation slice for the cross-repo mTLS endpoint\s*\/\/ \(`wss:\/\/fleet\.driftstack\.dev\/v1\/fleet\/events`\)\. The device side is waiting\s*\/\/ on the server to land the auth primitive; this is the self-contained,\s*\/\/ safe piece \(no SQL migration, no Cloudflare config — just the JWT\s*\/\/ verification logic \+ interface\)\./,
     );
   });
 

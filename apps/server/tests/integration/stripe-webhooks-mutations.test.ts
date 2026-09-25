@@ -235,7 +235,7 @@ describe('customer.subscription.deleted — cancel + downgrade', () => {
     expect(acct?.tier).toBe('free');
   });
 
-  it('does NOT downgrade when a SUPERSEDED subscription is deleted while another subscription is still active (Fable billing re-audit 2026-07-02)', async () => {
+  it('does NOT downgrade when a SUPERSEDED subscription is deleted while another subscription is still active (billing re-audit 2026-07-02)', async () => {
     fx = await buildTestApp({ tier: 'free' });
     // sub_A active on api_builder → account tier api_builder.
     await postEvent(
@@ -287,7 +287,7 @@ describe('customer.subscription.deleted — cancel + downgrade', () => {
     expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_scale');
   });
 
-  it('does NOT downgrade when a routine UPDATE fires on a SUPERSEDED lower subscription while a higher one is still active (Fable last-hours audit 2026-07-07, C4)', async () => {
+  it('does NOT downgrade when a routine UPDATE fires on a SUPERSEDED lower subscription while a higher one is still active (last-hours audit 2026-07-07, C4)', async () => {
     fx = await buildTestApp({ tier: 'free' });
     // sub_A active on api_builder, then sub_B active on api_scale → api_scale.
     await postEvent(

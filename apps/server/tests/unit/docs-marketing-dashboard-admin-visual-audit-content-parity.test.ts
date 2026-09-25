@@ -134,7 +134,7 @@ describe('W573.A /docs/marketing/dashboard-admin-visual-audit.md content parity'
     expect(body).toMatch(/Not load-bearing; can defer post-launch\./);
     expect(body).toMatch(/### Gap 6 — Anonymity policy compliance check \(V-211\)/);
     expect(body).toMatch(/Grepped customer-dashboard \+ admin-panel pages and src for/);
-    expect(body).toMatch(/`Joël \| Theunissen \| joeltheunissen89` references\. \*\*Zero hits\*\*/);
+    expect(body).toMatch(/personal-name references\. \*\*Zero hits\*\*/);
     expect(body).toMatch(/across both apps\. V-211 audit already cleaned these surfaces; no/);
     expect(body).toMatch(/backslide\./);
     expect(body).toMatch(/\*\*Verdict\*\*: clean\. No PHASE 2 work needed for anonymity\./);
@@ -182,7 +182,9 @@ describe('W573.A /docs/marketing/dashboard-admin-visual-audit.md content parity'
     expect(body).toMatch(/- Layout structural changes \(existing page architecture stays\)\./);
     expect(body).toMatch(/- Marketing-site changes \(already done in V-214b\)\./);
     expect(body).toMatch(/## Verify/);
-    expect(body).toMatch(/- `grep -rn -i "Joël\|Theunissen\|joeltheunissen"` across customer-/);
+    expect(body).toMatch(
+      /- a case-insensitive `grep -rn -i` for every personal-name spelling across customer-/,
+    );
     expect(body).toMatch(/dashboard \+ admin-panel app sources: zero hits\./);
     expect(body).toMatch(/- Empty-state copy across audited pages: technical-direct tone,/);
     expect(body).toMatch(/- Status badge color mapping: consistent across pages within each/);

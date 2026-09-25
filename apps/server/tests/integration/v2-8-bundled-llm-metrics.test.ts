@@ -1,4 +1,4 @@
-// Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — bundled-LLM Prometheus metrics.
+// Arc 4 phase 2.B, slice 8.19 (v2-#8) — bundled-LLM Prometheus metrics.
 //
 // Pins the three counter emission points:
 //   - bundled_llm_request_total{outcome="ok"}        on a consented + under-cap turn
@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
-describe('Arc 4 Wave 2.B sub-slice 8.19 bundled-LLM Prometheus metrics', () => {
+describe('Arc 4 phase 2.B, slice 8.19 bundled-LLM Prometheus metrics', () => {
   let fx: TestAppFixture;
 
   afterEach(async () => {

@@ -1,8 +1,8 @@
-// Scope-disclosure invariant (A2, 2026-07-31).
+// Scope-disclosure invariant (2026-07-31).
 //
 // A customer minting a least-privilege key reads the OpenAPI spec to learn what
 // authority an operation needs. If the spec is SILENT, they cannot know; if it
-// is WRONG, they mint the wrong key and get a 403 they cannot explain. A3
+// is WRONG, they mint the wrong key and get a 403 they cannot explain. A review
 // called exactly that a release blocker for the organization resource
 // ("shipping the current diff would make the public spec contradict the route
 // and tell least-privilege clients to mint the wrong authority") — silence

@@ -253,7 +253,7 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     );
   });
 
-  it("CRITICAL multiple-admins + owner-only-invites + owner-implicitly-admin framing pinned. S36 2026-07-07 (fable-truth-audit): the old 'subsequent admins can be invited by any existing admin' claim was IMPOSSIBLE via the API — POST /v1/team/invites requires the account_owner scope and hardcodes ownerAccountId = the caller's own account (routes/team.ts), and no /v1/team/* route reads X-Driftstack-Account; an admin calling invite would create invites for THEIR OWN team.", () => {
+  it("CRITICAL multiple-admins + owner-only-invites + owner-implicitly-admin framing pinned. S36 2026-07-07 (truth audit): the old 'subsequent admins can be invited by any existing admin' claim was IMPOSSIBLE via the API — POST /v1/team/invites requires the account_owner scope and hardcodes ownerAccountId = the caller's own account (routes/team.ts), and no /v1/team/* route reads X-Driftstack-Account; an admin calling invite would create invites for THEIR OWN team.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(

@@ -1,4 +1,4 @@
-// Wave 1119 / Slice 1119.2 — when billing env is unconfigured (no
+// Slice 1119.2 — when billing env is unconfigured (no
 // STRIPE_SECRET_KEY / DRIFTSTACK_TIER_PRICE_IDS), the four
 // `/v1/billing/*` paths return
 // 503 + `FeatureUnavailable` problem-type (not 404). The customer
@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
-describe('Wave 1119 / Slice 1119.2 — /v1/billing/* with billing disabled', () => {
+describe('Slice 1119.2 — /v1/billing/* with billing disabled', () => {
   let fx: TestAppFixture;
 
   afterEach(async () => {

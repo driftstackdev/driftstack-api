@@ -1,4 +1,4 @@
-// File-UPLOAD correlator (A3 W2851 — the founder's "control files" upload).
+// File-UPLOAD correlator (W2851 — the founder's "control files" upload).
 // The transport-agnostic CORE of POST /v1/agent-sessions/:id/files: it issues an
 // `uploadFile` over the node's LIVE control WSS and awaits the matching
 // `uploadResult`, correlated by `requestId`. A direct mirror of

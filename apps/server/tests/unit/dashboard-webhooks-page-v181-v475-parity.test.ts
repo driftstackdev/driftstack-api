@@ -180,7 +180,7 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
     expect(matches?.length, 'actAs spreads').toBeGreaterThanOrEqual(3);
   });
 
-  // S32 2026-07-07 (fable-frontend-audit) — the old doc-block claimed
+  // S32 2026-07-07 (frontend audit) — the old doc-block claimed
   // /v1/webhooks does NOT expose aggregate delivery_counts and that a
   // mock renders them; both became false (V-185 added the real counts;
   // the page never rendered the mock). The MOCK_WEBHOOKS block was

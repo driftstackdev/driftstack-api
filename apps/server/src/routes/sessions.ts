@@ -120,7 +120,7 @@ function publicSession(s: SessionRecord, logger?: EgressWarningLogger): Record<s
     label: s.label,
     metadata: s.metadata,
     // Migration 0045 — device-reported egress capabilities. null until
-    // SOCKS5 handshake completes or for non-SOCKS5 sessions. Cross-agent
+    // SOCKS5 handshake completes or for non-SOCKS5 sessions. Cross-repo
     // contract shape: { udp_associate, quic_route, warnings[] }.
     //
     // ⛔ `warnings` IS MAPPED, NOT ECHOED. The stored list is the internal
@@ -623,7 +623,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
 
   // ── GET /v1/sessions/:id ───────────────────────────────────────────────
   // Detail endpoint — surfaces the session record + harness-reported
-  // egress_capabilities (migration 0045, cross-agent contract 7d5992d9).
+  // egress_capabilities (migration 0045, cross-repo contract 7d5992d9).
   // V-326e3 — describe is a READ; both 'member' and 'admin' roles allowed
   // on team-scoped requests.
   // #122 — read:sessions floor. GET /v1/sessions (list) already gates
@@ -730,7 +730,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   );
 
   // ── POST /v1/sessions/:id/extract ──────────────────────────────────────
-  // Read structured page data (harness `extract` intent, A3 W456). A driver
+  // Read structured page data (harness `extract` intent, W456). A driver
   // read-op like capture; same admin-only write-scope gate (it drives the
   // session). Returns the extracted `value` map keyed by each extraction name.
   app.post<{ Params: { id: string } }>(

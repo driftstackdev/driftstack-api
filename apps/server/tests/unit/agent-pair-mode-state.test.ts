@@ -80,7 +80,7 @@ describe('Arc 2 v2-#8 sub-slice 8.7 pair-mode state machine', () => {
     ).toThrow(PairModeStateInvalidTransitionError);
   });
 
-  // Arc 4 Wave 2.A sub-slice 8.11 (v2-#8) — takeover-during-runTurn
+  // Arc 4 phase 2.A, slice 8.11 (v2-#8) — takeover-during-runTurn
   // edge case. The state machine has a new intermediate state
   // 'takeover-queued' that holds a request until decompose settles.
   it('v2-#8 sub-slice 8.11 takeover-request-queued from ai-driving → takeover-queued (carries clientId + queuedAt)', () => {
@@ -159,7 +159,7 @@ describe('Arc 2 v2-#8 sub-slice 8.7 pair-mode state machine', () => {
     ).toThrow(PairModeStateInvalidTransitionError);
   });
 
-  // Arc 4 Wave 2.A sub-slice 8.12 (v2-#8) — symmetric handback queue.
+  // Arc 4 phase 2.A, slice 8.12 (v2-#8) — symmetric handback queue.
   it('v2-#8 sub-slice 8.12 handback-request-queued from human-driving → handback-queued', () => {
     const s = applyPairModeTransition(
       { kind: 'human-driving', clientId: 'cli_a', sinceAt: AT },
@@ -235,7 +235,7 @@ describe('Arc 2 v2-#8 sub-slice 8.7 pair-mode state machine', () => {
     ).toThrow(PairModeStateInvalidTransitionError);
   });
 
-  // Arc 4 Wave 2.A sub-slice 8.13 (v2-#8) — heartbeat-timeout
+  // Arc 4 phase 2.A, slice 8.13 (v2-#8) — heartbeat-timeout
   // auto-handback. Pure-state transition; the timer that fires it
   // lives in the route/sweep layer.
   it('v2-#8 sub-slice 8.13 heartbeat-timeout from human-driving / takeover-pending / handback-pending → ai-driving', () => {
@@ -280,7 +280,7 @@ describe('Arc 2 v2-#8 sub-slice 8.7 pair-mode state machine', () => {
     ).toEqual({ kind: 'ai-driving' });
   });
 
-  // Arc 4 Wave 2.A sub-slice 8.15 (v2-#8) — exhaustive invalid-
+  // Arc 4 phase 2.A, slice 8.15 (v2-#8) — exhaustive invalid-
   // transition coverage. 409-not-silent-noop is binding: every
   // semantically-wrong transition MUST throw so the route surface
   // returns a typed PairModeStateInvalidTransition 409 instead of

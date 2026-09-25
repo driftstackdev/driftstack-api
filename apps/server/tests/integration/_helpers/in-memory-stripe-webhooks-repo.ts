@@ -565,7 +565,7 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     accountId: string;
     at: Date;
   }): Promise<{ previousTier: AccountTier | null; appliedTier: AccountTier | null }> {
-    // Fable last-hours audit 2026-07-07 (C4) — mirrors the Drizzle
+    // Last-hours audit 2026-07-07 (C4) — mirrors the Drizzle
     // setAccountTierToBestActive: set to the HIGHEST-RANKED active/trialing
     // subscription (rank-aware, not most-recently-updated), never downgrading
     // to a fallback. Empty active set / missing account leaves the tier as-is.

@@ -1,4 +1,4 @@
-// History-NAVIGATION correlator (sim browser back/forward — A3 W2870). The
+// History-NAVIGATION correlator (sim browser back/forward — W2870). The
 // transport-agnostic CORE of POST /v1/agent-sessions/:id/history: it issues a
 // `navigateHistory` over the node's LIVE control WSS and awaits the matching
 // `navigateHistoryResult`, correlated by `requestId`. A direct mirror of
@@ -18,7 +18,7 @@
 // `fleet-control-registry.ts`. Marked rather than deleted: a "never emitted"
 // claim is a deployment fact written from a source file, and that wording hid two
 // production defects tonight by making a live path read as dead. Original text:
-// "Ships gated-inert until A3's harness `navigateHistory` WD-extension lands: until then
+// "Ships gated-inert until the harness's `navigateHistory` WD-extension lands: until then
 // a live node never emits `navigateHistoryResult`, so a wired request resolves `timeout`
 // — which the GUI renders as the "ships with the next device update" state.
 
@@ -35,7 +35,7 @@ export interface NavigateHistoryTransport {
 }
 
 /** A history step is a one-shot back-forward-list move — generous but bounded so a
- *  silent (pre-A3) or wedged node can't hang the POST indefinitely. Matches the
+ *  silent (pre-handler) or wedged node can't hang the POST indefinitely. Matches the
  *  set-cookies bound (a history step is comparably cheap). */
 export const NAVIGATE_HISTORY_REQUEST_TIMEOUT_MS = 10_000;
 

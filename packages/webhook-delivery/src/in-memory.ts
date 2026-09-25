@@ -697,7 +697,7 @@ class DeliveryWorker {
         // check. A well-behaved webhook receiver returns 2xx directly, so
         // a redirect surfaces as a failed attempt (matches Stripe). The
         // remaining direct-to-internal-IP / DNS-rebind layer is tracked in
-        // docs/internal/2026-05-31-webhook-ssrf-outbound-target.md.
+        // the internal 2026-05-31 webhook SSRF outbound-target notes.
         redirect: 'error',
       });
       if (response.ok) {

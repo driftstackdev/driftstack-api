@@ -299,7 +299,13 @@ describe('migration 0133 adds the fourth leg and the shadow charge rule, and not
     expect(journal.entries[at + 8]?.when).toBeGreaterThan(
       journal.entries[at + 7]?.when ?? Infinity,
     );
-    expect(journal.entries, 'and 0141 is the last one').toHaveLength(142);
+    // 0142 (security sweep #2 — a session's GUI control key records who minted
+    // it) follows 0141; its own guard pins its shape.
+    expect(journal.entries[at + 9]?.tag).toBe('0142_agent_session_control_key_minter');
+    expect(journal.entries[at + 9]?.when).toBeGreaterThan(
+      journal.entries[at + 8]?.when ?? Infinity,
+    );
+    expect(journal.entries, 'and 0142 is the last one').toHaveLength(143);
   });
 
   it('CRITICAL schema.ts names the trigger this migration installs, says where the shadow rule lives, and carries the one sentence about the relaxed clawback guard that 0133 is the record of', () => {

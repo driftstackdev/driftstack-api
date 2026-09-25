@@ -97,7 +97,7 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/initial_url\?: string;/);
   });
 
-  it('CreateAgentSessionRequest exposes optional geolocation override (A3-approved contract 2026-07-01 — explicit device coordinates overriding the proxy-exit auto-derive). Drift to dropping it removes the SDK surface for per-session geo.', () => {
+  it('CreateAgentSessionRequest exposes optional geolocation override (harness-approved contract 2026-07-01 — explicit device coordinates overriding the proxy-exit auto-derive). Drift to dropping it removes the SDK surface for per-session geo.', () => {
     expect(body).toMatch(
       /geolocation\?: \{ latitude: number; longitude: number; accuracy\?: number \};/,
     );

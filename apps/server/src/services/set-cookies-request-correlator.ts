@@ -24,7 +24,7 @@
 // and two production defects survived weeks behind exactly that wording, because
 // anyone checking whether the path was reachable read the comment and stopped.
 // The original text, for the record:
-// "Ships gated-inert until A3's harness `setCookies` WD-extension lands: until then
+// "Ships gated-inert until the harness's `setCookies` WD-extension lands: until then
 // a live node never emits `setCookiesResult`, so a wired request resolves `timeout`
 // — which the GUI renders as the "ships with the next device update" state.
 
@@ -41,7 +41,7 @@ export interface SetCookiesTransport {
 }
 
 /** A cookie write is a one-shot jar mutation — generous but bounded so a silent
- *  (pre-A3) or wedged node can't hang the POST indefinitely. Matches the cookies
+ *  (pre-handler) or wedged node can't hang the POST indefinitely. Matches the cookies
  *  PULL bound (a write is comparably cheap). */
 export const SET_COOKIES_REQUEST_TIMEOUT_MS = 10_000;
 

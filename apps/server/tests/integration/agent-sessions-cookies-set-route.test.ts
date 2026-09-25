@@ -137,7 +137,7 @@ describe('POST /v1/agent-sessions/:id/cookies/set (wired)', () => {
     await fx.agentSessionsRepo!.setNodeId(id, nodeId);
     let relayedCookies: unknown = null;
     // Register a node whose socket synchronously echoes a setCookiesResult ok:true
-    // for the setCookies the route sends — exactly what A3's harness will do live.
+    // for the setCookies the route sends — exactly what the harness will do live.
     const conn = fx.fleetControlRegistry.register(nodeId, (data) => {
       const frame = JSON.parse(data) as {
         type?: string;
@@ -224,7 +224,7 @@ describe('POST /v1/agent-sessions/:id/cookies/set (wired)', () => {
     const id = await createSession(fx);
     const nodeId = 'node-set-cookies-silent';
     await fx.agentSessionsRepo!.setNodeId(id, nodeId);
-    // A node that ACKs nothing (A3's setCookies extension not yet present) — short
+    // A node that ACKs nothing (the harness's setCookies extension not yet present) — short
     // timeout injected so the test doesn't wait the full 10s.
     fx.fleetControlRegistry.register(nodeId, () => {});
     const conn = fx.fleetControlRegistry.get(nodeId)!;

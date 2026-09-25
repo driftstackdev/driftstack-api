@@ -109,7 +109,7 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
     );
   });
 
-  // S38 2026-07-07 (fable-truth-audit follow-on) — the old pin locked TWO fictions: session recordings
+  // S38 2026-07-07 (truth audit follow-on) — the old pin locked TWO fictions: session recordings
   // (feature never shipped — recordingKey() has zero callers) and a
   // customer-configurable retention window (no such setting). The
   // danger zone now points at the privacy-policy purge schedule.

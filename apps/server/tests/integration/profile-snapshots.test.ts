@@ -549,7 +549,7 @@ describe('profile-snapshot write ops require write:profiles scope', () => {
     expect(res.json<{ data: unknown[] }>().data).toEqual([]);
   });
 
-  // Fable last-hours audit 2026-07-07 (C9) — snapshot READS now require
+  // Last-hours audit 2026-07-07 (C9) — snapshot READS now require
   // read:profiles (the reference already documented it; enforcement was
   // missing). A key that can WRITE profiles/snapshots but has no read scope
   // must not read snapshot metadata — write:profiles "Does not include read".

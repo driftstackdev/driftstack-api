@@ -119,6 +119,20 @@ const NEEDS_A_REAL_KEY: Record<string, string> = {
     'not an actor column at all.',
 };
 
+/**
+ * Acting-key columns added AFTER 0138 that brought their own web-session sibling
+ * in the same migration — the rule this file states, kept by a later column rather
+ * than by 0138 — keyed `table.key` to the sibling's column name. The last arm below
+ * checks each sibling really is declared beside its key.
+ *
+ *   · 0142 (security sweep #2): who minted a session's GUI control key. The key
+ *     may be minted from a signed-in browser as well as with an API key, so the
+ *     minting credential is one of the pair, and a CHECK in 0142 allows at most one.
+ */
+const SIBLING_ADDED_WITH_THE_COLUMN: Record<string, string> = {
+  'agent_sessions.gui_control_key_minted_by_api_key_id': 'gui_control_key_minted_by_web_session_id',
+};
+
 /** SQL with `--` comments removed (the prose names statements it does not run). */
 function code(path: string): string {
   return readFileSync(path, 'utf8')
@@ -276,13 +290,30 @@ describe('migration 0138 gives every acting-key column a web-session sibling', (
     ]) {
       expect(history, `the scan no longer finds ${probe}`).toContain(probe);
     }
-    const covered = new Set(SIBLINGS.map((s) => `${s.table}.${s.key}`));
+    const covered = new Set([
+      ...SIBLINGS.map((s) => `${s.table}.${s.key}`),
+      ...Object.keys(SIBLING_ADDED_WITH_THE_COLUMN),
+    ]);
     const uncovered = [...history].filter((c) => !covered.has(c) && !(c in NEEDS_A_REAL_KEY));
     expect(uncovered.sort(), 'acting-key column(s) with no web-session sibling').toEqual([]);
     const stale = Object.keys(NEEDS_A_REAL_KEY).filter((c) => !history.has(c));
     expect(stale, 'an exclusion names a column no migration declares').toEqual([]);
     const phantom = [...covered].filter((c) => !history.has(c));
     expect(phantom, 'a sibling added for a column no migration declares').toEqual([]);
+  });
+
+  it('a later acting-key column that carries its own sibling really does: the web-session column is declared beside it, as a nullable uuid with no foreign key', () => {
+    const schema = codeOnly(readFileSync(resolve(DB, 'schema.ts'), 'utf8'));
+    for (const [column, webSession] of Object.entries(SIBLING_ADDED_WITH_THE_COLUMN)) {
+      const [tableName = '', key = ''] = column.split('.');
+      const table =
+        new RegExp(`pgTable\\(\\s*'${tableName}',[\\s\\S]*?\\n\\);`).exec(schema)?.[0] ?? '';
+      expect(table, `${tableName} was not found in schema.ts`).not.toBe('');
+      expect(table, `${column} is not declared`).toMatch(new RegExp(`: uuid\\('${key}'\\)`));
+      const sibling = new RegExp(`: uuid\\('${webSession}'\\)([^\\n]*)`).exec(table);
+      expect(sibling, `${tableName}.${webSession} is not declared`).not.toBeNull();
+      expect(sibling?.[1] ?? '', `${tableName}.${webSession}`).not.toMatch(/notNull|references/);
+    }
   });
 
   it('the journal applies it after 0137, with a later `when`', () => {

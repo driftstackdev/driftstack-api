@@ -128,7 +128,7 @@ describe('W553.B /docs/operations/production-env-schema.md content parity', () =
     );
   });
 
-  it("Sub-processor crosswalk + Sequence-summary framing pinned: '## Sub-processor → env-var crosswalk' + 'Hetzner Online GmbH                                  | (host-level, not env-var)' + 'Neon, Inc.                                           | `DATABASE_URL`' + 'Upstash, Inc.                                        | `REDIS_URL`' + 'Cloudflare, Inc. (R2 + Pages)                        | `R2_*`' + 'Postmark (ActiveCampaign LLC)                        | `POSTMARK_*`' + 'Sentry (Functional Software, Inc.)                   | `SENTRY_*`' + 'Stripe Payments Europe Ltd / Stripe, Inc.            | `STRIPE_*` + `DRIFTSTACK_TIER_PRICE_IDS`' + '## Sequence summary' + 'Hetzner VMs (V-278 founder runbook).' + 'WebKit-fork driver → `DRIVER=webkit` (post-Agent-1 bridge integration).' — pinned so the 9-sub-processor-crosswalk + DPA-Annex-3-correctness + V-278-Hetzner-first + Agent-1-bridge-driver-last commitment survives", () => {
+  it("Sub-processor crosswalk + Sequence-summary framing pinned: '## Sub-processor → env-var crosswalk' + 'Hetzner Online GmbH                                  | (host-level, not env-var)' + 'Neon, Inc.                                           | `DATABASE_URL`' + 'Upstash, Inc.                                        | `REDIS_URL`' + 'Cloudflare, Inc. (R2 + Pages)                        | `R2_*`' + 'Postmark (ActiveCampaign LLC)                        | `POSTMARK_*`' + 'Sentry (Functional Software, Inc.)                   | `SENTRY_*`' + 'Stripe Payments Europe Ltd / Stripe, Inc.            | `STRIPE_*` + `DRIFTSTACK_TIER_PRICE_IDS`' + '## Sequence summary' + 'Hetzner VMs (V-278 founder runbook).' + 'WebKit-fork driver → `DRIVER=webkit` (post-fork bridge integration).' — pinned so the 9-sub-processor-crosswalk + DPA-Annex-3-correctness + V-278-Hetzner-first + Agent-1-bridge-driver-last commitment survives", () => {
     expect(body).toMatch(/## Sub-processor → env-var crosswalk/);
     expect(body).toMatch(/Hetzner Online GmbH\s+\|\s+\(host-level, not env-var\)/);
     expect(body).toMatch(/Neon, Inc\.\s+\|\s+`DATABASE_URL`/);
@@ -142,7 +142,7 @@ describe('W553.B /docs/operations/production-env-schema.md content parity', () =
     expect(body).toMatch(/## Sequence summary/);
     expect(body).toMatch(/1\. Hetzner VMs \(V-278 founder runbook\)\./);
     expect(body).toMatch(
-      /9\. WebKit-fork driver → `DRIVER=webkit` \(post-Agent-1 bridge integration\)\./,
+      /9\. WebKit-fork driver → `DRIVER=webkit` \(post-fork bridge integration\)\./,
     );
   });
 

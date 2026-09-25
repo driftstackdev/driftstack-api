@@ -502,7 +502,7 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/rotationReminders:\s*!rotationRemindersDisabled/);
   });
 
-  it("V-541.E cost-nightly-job wired in bootstrap: CostAlertDispatcher with logger-only sendAlert sink + DrizzleCostNightlyAccountIdProvider + registerCostNightlyJob + enqueueNextNightlyRun on app start. Pinned 2026-05-20 so a future refactor can't silently drop the wire-up and leave the V-541.E nightly recompute unfired (memory rule: cost-nightly-job had the right shape but was unwired until this slice).", () => {
+  it("V-541.E cost-nightly-job wired in bootstrap: CostAlertDispatcher with logger-only sendAlert sink + DrizzleCostNightlyAccountIdProvider + registerCostNightlyJob + enqueueNextNightlyRun on app start. Pinned 2026-05-20 so a future refactor can't silently drop the wire-up and leave the V-541.E nightly recompute unfired (lesson: cost-nightly-job had the right shape but was unwired until this slice).", () => {
     expect(body).toMatch(
       /import \{ CostAlertDispatcher \} from '\.\.\/services\/cost-alert-dispatcher\.js';/,
     );
@@ -621,7 +621,7 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toContain('livenessStore: sessionLivenessStore,');
     expect(body).toContain('sessionPageStateStore,');
     expect(body).toContain('sessionCapabilityReportStore,');
-    // W650/A3-W1254 — the pageState store is constructed alongside the registry
+    // W650/W1254 — the pageState store is constructed alongside the registry
     // (behind the same flag) + wired as the registry's onPageState consumer.
     expect(body).toMatch(/const sessionPageStateStore = new SessionPageStateStore\(\);/);
     // Session-dispatch config (only assembled behind the flag). Discrete pins

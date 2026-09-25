@@ -1,4 +1,4 @@
-// A3 2026-09-19 ~18:45Z / ~19:10Z — two additive MEASURED keys from the device:
+// 2026-09-19 ~18:45Z / ~19:10Z — two additive MEASURED keys from the device:
 // `harnessBinarySha256` on the heartbeat, and `webkitFrameworkSha256` on BOTH the
 // heartbeat and every capability report.
 //

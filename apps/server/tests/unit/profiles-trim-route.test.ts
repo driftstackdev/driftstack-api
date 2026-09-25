@@ -645,7 +645,7 @@ describe('POST /v1/profiles/:id/trim', () => {
     try {
       const { service, recordTrimCalls } = fakeService({ ownedProfileUuid: PROFILE_UUID });
       const registry = new FleetControlRegistry();
-      // A node that ACKs nothing (A3's trim handler not yet present).
+      // A node that ACKs nothing (the harness's trim handler not yet present).
       registry.register('node-trim-silent', () => {});
       app = await buildHarness({
         service,

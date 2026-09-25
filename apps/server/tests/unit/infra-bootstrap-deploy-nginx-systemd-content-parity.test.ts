@@ -255,7 +255,7 @@ describe('W806 infra bootstrap + deploy + nginx + systemd parity', () => {
     );
   });
 
-  it('CRITICAL deploy-api.sh auto-installs the fleet.driftstack.dev control-WS vhost on PRODUCTION, cert-guarded — a fresh-box bootstrap must not silently lose the -1011 fix (bus W2863/W2866). An UNconditional symlink would 502 the box when the LE cert is absent, so the symlink+reload is gated on the cert existing, else a loud skip with the provisioning command.', () => {
+  it('CRITICAL deploy-api.sh auto-installs the fleet.driftstack.dev control-WS vhost on PRODUCTION, cert-guarded — a fresh-box bootstrap must not silently lose the -1011 fix (W2863/W2866). An UNconditional symlink would 502 the box when the LE cert is absent, so the symlink+reload is gated on the cert existing, else a loud skip with the provisioning command.', () => {
     const p = read(DEPLOY);
     // Prod-only guard + the two scp's (the $connection_upgrade map is always safe; the vhost references the cert).
     expect(p).toMatch(/if \[ "\$ROLE" = production \]; then/);

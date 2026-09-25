@@ -131,7 +131,7 @@ describe('W447.C apps/server/src/db/incidents-repo.ts content parity', () => {
     expect(body).toMatch(
       /async addUpdate\(input: AddUpdateInput\): Promise<IncidentUpdateRow> \{\s*return this\.database\.db\.transaction\(async \(tx\) => \{\s*const \[updateRow\] = await tx\s*\.insert\(incidentUpdates\)\s*\.values\(\{\s*incidentId: input\.incidentId,\s*message: input\.message,\s*status: input\.status,\s*postedByAdminId: input\.postedByAdminId,\s*\.\.\.postedBy\(input\.postedByAdminKeyId\),\s*\}\)\s*\.returning\(\);\s*if \(!updateRow\) throw new Error\('incident_updates insert returned no row'\);/,
     );
-    // The resolved_at lockstep (Fable admin re-audit 2026-07-02): a 'resolved'
+    // The resolved_at lockstep (admin re-audit 2026-07-02): a 'resolved'
     // update stamps resolved_at (preserving an existing one), any non-resolved
     // update clears it — so the /updates path can't drift the invariant.
     expect(body).toMatch(

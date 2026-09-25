@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
- * B-9 — the control-plane half of A3's per-session streaming telemetry.
+ * B-9 — the control-plane half of the harness's per-session streaming telemetry.
  *
  * Seven degradation counters plus four measured video figures reached NOBODY
  * before this: each landed in the node's own stderr, Heartbeat carries host

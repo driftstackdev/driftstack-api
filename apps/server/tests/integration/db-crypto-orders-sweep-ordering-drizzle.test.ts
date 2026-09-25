@@ -114,7 +114,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   },
 );
 
-// Fable audit-2 2026-07-08 (C6) — the idempotency_key unique index is PARTIAL
+// Audit-2 2026-07-08 (C6) — the idempotency_key unique index is PARTIAL
 // (WHERE idempotency_key IS NOT NULL). insertWithIdempotencyKey's ON CONFLICT
 // must carry that same predicate or real Postgres raises 42P10 and EVERY
 // idempotent crypto checkout 500s. This only reproduces against real Postgres

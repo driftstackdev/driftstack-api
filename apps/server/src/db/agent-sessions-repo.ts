@@ -35,8 +35,14 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, count, desc, eq, isNull, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import { ProfileInUseError } from '../lib/errors.js';
+import type { GuiControlKeyMinter } from '../lib/agent-session-control-key.js';
 import type { Database } from './client.js';
 import { agentSessions, sessions } from './schema.js';
+import {
+  CLEARED_GUI_CONTROL_KEY,
+  guiControlKeyMinterIsLive,
+  mintedByColumns,
+} from './agent-session-control-key-minter.js';
 import { profileSessionAdvisoryLockKey } from './profile-session-lock.js';
 import type { TranscriptEntry } from '../services/agent-decomposer.js';
 import { projectProfileActivity, type ProfileActivity } from '../services/profile-activity.js';
@@ -78,6 +84,20 @@ function transcriptIsNotV2(): SQL {
 function readLastErrorEvent(value: unknown): AgentSessionErrorEvent | null {
   const parsed = AgentSessionErrorEventSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+/**
+ * 0142 — the stored key's minter, or null when none is recorded (no key, or a key
+ * minted before 0142). A row naming a credential but no account is not a minter.
+ */
+function mintedByFromRow(row: typeof agentSessions.$inferSelect): GuiControlKeyMinter | null {
+  if (row.guiControlKeyMintedByAccountId === null) return null;
+  return {
+    accountId: row.guiControlKeyMintedByAccountId,
+    apiKeyId: row.guiControlKeyMintedByApiKeyId,
+    webSessionId: row.guiControlKeyMintedByWebSessionId,
+    membershipId: row.guiControlKeyMintedByMembershipId,
+  };
 }
 
 function rowToRecord(
@@ -128,6 +148,7 @@ function rowToRecord(
     lastErrorEvent: readLastErrorEvent(row.lastErrorEvent),
     guiControlKeyExpiresAt: row.guiControlKeyExpiresAt,
     guiControlKeyCiphertext: row.guiControlKeyCiphertext,
+    guiControlKeyMintedBy: mintedByFromRow(row),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -355,7 +376,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     // SessionsRepo.insertSessionIfUnderLimit (the proven pattern for the legacy
     // sessions table). Returns null when already at/over the cap.
     //
-    // A3 finding #7 (W2979/W2980) — global single-active-session-per-profile
+    // Finding #7 (W2979/W2980) — global single-active-session-per-profile
     // guard. When `args.profileId` is set, this takes the canonical cross-surface
     // advisory lock + checks BOTH agent_sessions and legacy sessions. The legacy
     // create path takes the exact same lock and checks the same two tables, so a
@@ -981,7 +1002,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     reason: string,
     opts: { minIdleMs?: number } = {},
   ): Promise<number> {
-    // A2 W2813 bootId consumer — close a restarted node's still-active sessions
+    // W2813 bootId consumer — close a restarted node's still-active sessions
     // EXCEPT the ids the new boot reaffirmed in its heartbeat (keepIds). Same
     // invariant as closeActiveByNode (status='active' AND node_id=nodeId; NULL
     // node_id never matches `eq`). Single atomic UPDATE; idempotent.
@@ -1026,6 +1047,9 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       .set({
         guiControlKeyCiphertext: args.ciphertext,
         guiControlKeyExpiresAt: args.expiresAt,
+        // 0142 — a key written here records no minter, and must not inherit the
+        // previous key's: every control-key gate refuses it.
+        ...mintedByColumns(null),
         updatedAt: now,
       })
       .where(eq(agentSessions.id, args.id))
@@ -1041,6 +1065,7 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     id: string;
     ciphertext: Buffer | null;
     expiresAt: Date | null;
+    mintedBy?: GuiControlKeyMinter | null;
   }): Promise<AgentSessionRecord | null> {
     const now = this.clock();
     const updated = await this.database.db
@@ -1048,12 +1073,39 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       .set({
         guiControlKeyCiphertext: args.ciphertext,
         guiControlKeyExpiresAt: args.expiresAt,
+        ...mintedByColumns(args.mintedBy),
         updatedAt: now,
       })
       .where(and(eq(agentSessions.id, args.id), eq(agentSessions.status, 'active')))
       .returning();
     const row = updated[0];
     return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
+  }
+
+  /**
+   * Security sweep #2 — the live re-check behind every control-key use; the reads
+   * are in db/agent-session-control-key-minter.ts, beside the columns they check.
+   */
+  isGuiControlKeyMinterLive(args: {
+    minter: GuiControlKeyMinter;
+    ownerAccountId: string;
+    now: Date;
+  }): Promise<boolean> {
+    return guiControlKeyMinterIsLive(this.database.db, args);
+  }
+
+  async clearGuiControlKeyIfUnchanged(args: { id: string; ciphertext: Buffer }): Promise<boolean> {
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({ ...CLEARED_GUI_CONTROL_KEY, updatedAt: this.clock() })
+      .where(
+        and(
+          eq(agentSessions.id, args.id),
+          eq(agentSessions.guiControlKeyCiphertext, args.ciphertext),
+        ),
+      )
+      .returning({ id: agentSessions.id });
+    return updated.length === 1;
   }
 
   async setProvisioningDetail(
