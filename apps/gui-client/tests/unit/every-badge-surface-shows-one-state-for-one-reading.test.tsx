@@ -768,9 +768,19 @@ function STATE_CASES(): StateCase[] {
       card: socks({ capabilities: OK_UDP_RESULT }),
       row: {},
       proxies: proxiesChip(<ProxyCapabilityChips result={OK_UDP_RESULT} nowMs={NOW} />, udpChip),
+      // G5 — the session's own measurement: an HTTP/3 connection completed, which
+      // needs UDP both ways. The launch setting alone is not one.
       simulator: () =>
-        render(<UdpReadout report={{ ...REPORT_BASE, proxy_udp_supported: true }} />).container
-          .firstElementChild,
+        render(
+          <UdpReadout
+            report={{
+              ...REPORT_BASE,
+              proxy_udp_supported: true,
+              h3_connection_observed: true,
+              h3_connection_count: 1,
+            }}
+          />,
+        ).container.firstElementChild,
       session: sessionCardUdp(EGRESS_UDP),
     },
     {
@@ -780,9 +790,10 @@ function STATE_CASES(): StateCase[] {
       card: socks({ capabilities: NO_UDP_RESULT }),
       row: {},
       proxies: proxiesChip(<ProxyCapabilityChips result={NO_UDP_RESULT} nowMs={NOW} />, udpChip),
-      simulator: () =>
-        render(<UdpReadout report={{ ...REPORT_BASE, proxy_udp_supported: false }} />).container
-          .firstElementChild,
+      simulator: () => ({
+        notDrawn:
+          'the Simulator has no measured UDP negative: its report carries the launch setting, which is not a measurement (proxy-accuracy audit G5)',
+      }),
       session: sessionCardUdp(EGRESS_TCP_ONLY),
       sessionLog: sessionLogBadge('udp', EGRESS_TCP_ONLY),
     },
@@ -837,9 +848,11 @@ function STATE_CASES(): StateCase[] {
         <ProxyCapabilityChips result={NO_UDP_RESULT} quicMeasured="h2-only" nowMs={NOW} />,
         quicChip,
       ),
+      // G5 — a session set to HTTP/2 only; the launch setting for UDP is no
+      // longer read as "HTTP/3 cannot work here".
       simulator: () =>
-        render(<QuicReadout report={{ ...REPORT_BASE, proxy_udp_supported: false }} />).container
-          .firstElementChild,
+        render(<QuicReadout report={{ ...REPORT_BASE, transport_mode_active: 'h2-only' }} />)
+          .container.firstElementChild,
       // HTTP/3 switched off for the session: the measured NO the Simulator
       // writes as "⤵ QUIC · HTTP/2 only".
       sessionLog: sessionLogBadge('quic', EGRESS_TCP_ONLY),

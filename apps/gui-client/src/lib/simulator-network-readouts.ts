@@ -6,14 +6,16 @@
 // relay UDP (so HTTP/3 cannot work) read "HTTP/3: not observed", exactly as a
 // session nothing had reported on. The profile card and the Proxies grid show
 // both. These derive the Simulator's two lines from the session's report in the
-// same states and the same words those surfaces use for the same reading: the
-// card's chip texts, and the grid's own sentences (`proxyCapabilities`, the one
-// source of those hints), so the three cannot drift apart.
+// same vocabulary those surfaces use for the same reading.
+//
+// ⛔ Proxy-accuracy audit G5 — the report carries no UDP MEASUREMENT for a SOCKS5
+// session, only the launch setting the server wrote (`proxy_udp_supported`), so
+// the UDP line says "not measured in this session" rather than turning that
+// setting into a verdict. The measured states return when the device reports its
+// own QUIC-relay reading (D3).
 
 import type { AgentSessionCapabilityReport } from './agent-session-control';
-import type { ProxyTestResult } from './proxies';
 import { VPN_UDP_NOT_MEASURED_TITLE } from './proxy-check-copy';
-import { proxyCapabilities } from '../components/ProxyCapabilities';
 import { READING_MARK, READING_WORD, badgeText, badgeWithDetail } from './reading-badge-words';
 
 /** The UDP line's states: measured and works / measured and does not /
@@ -26,26 +28,16 @@ export interface UdpReadout {
   title: string;
 }
 
-/** A proxy test that carries traffic, with the UDP answer the session reported —
- *  the input the grid's sentences are written for. */
-function carrying(udp: boolean): ProxyTestResult {
-  return {
-    reachable: true,
-    auth_ok: true,
-    udp_associate: udp,
-    can_route: true,
-    connect_reply: 0,
-    latency_ms: 0,
-    message: '',
-  };
-}
-
-function gridHint(udp: boolean, key: 'webrtc' | 'quic'): string {
-  return proxyCapabilities(carrying(udp)).find((c) => c.key === key)?.hint ?? '';
-}
-
 export const UDP_NOT_MEASURED_TITLE =
   'UDP not measured yet — the phone reports it once the session is running.';
+
+/** The detail after "— UDP" while a session's report carries only its launch
+ *  setting for UDP, which is not a measurement of the proxy. */
+export const SESSION_UDP_NOT_MEASURED_DETAIL = 'not measured in this session';
+export const SESSION_UDP_MEASURED_BY_HTTP3_TITLE =
+  'UDP works in this session — an HTTP/3 connection went through this exit, and HTTP/3 needs UDP both ways. WebRTC calls and media can use it too.';
+export const SESSION_UDP_NOT_MEASURED_TITLE =
+  'UDP was not measured in this session. The session asks for UDP through your proxy; whether your proxy relays it has not been checked here.';
 
 export function udpReadout(report: AgentSessionCapabilityReport | null): UdpReadout {
   // A VPN tunnel carries UDP inside it; the phone asserts it rather than
@@ -61,18 +53,32 @@ export function udpReadout(report: AgentSessionCapabilityReport | null): UdpRead
       title: VPN_UDP_NOT_MEASURED_TITLE,
     };
   }
-  const udp = report?.proxy_udp_supported;
-  if (udp === true)
+  // The one UDP MEASUREMENT a session's report carries today: an HTTP/3
+  // connection completed in THIS session, and QUIC cannot complete without
+  // datagrams both ways through the session's own path (proxy-accuracy audit
+  // §4.1 — a measured QUIC ✓ on the phone's path is a UDP ✓ on that path).
+  if (report?.h3_connection_observed === true)
     return {
       state: 'measured',
       text: badgeText(READING_MARK.works, READING_WORD.udp),
-      title: gridHint(true, 'webrtc'),
+      title: SESSION_UDP_MEASURED_BY_HTTP3_TITLE,
     };
-  if (udp === false)
+  // ⛔ Proxy-accuracy audit G5 (paths-03) — `proxy_udp_supported` is the
+  // DISPATCH CONSTANT: the server writes `udp_associate: true` into every SOCKS5
+  // launch config and the phone echoes `descriptor.supportsUDP` back. Nothing
+  // sent a datagram. This line read "✓ UDP" in the measured state for every
+  // SOCKS5 session, whatever the proxy does with UDP. A config value is never
+  // shown as measured, either way: until the report carries a real measurement
+  // (the device's QUIC-relay reading, D3), the session's UDP is not measured.
+  if (typeof report?.proxy_udp_supported === 'boolean')
     return {
-      state: 'failed',
-      text: badgeText(READING_MARK.fallsBack, READING_WORD.udp),
-      title: gridHint(false, 'webrtc'),
+      state: 'not-measured',
+      text: badgeWithDetail(
+        READING_MARK.notMeasured,
+        READING_WORD.udp,
+        SESSION_UDP_NOT_MEASURED_DETAIL,
+      ),
+      title: SESSION_UDP_NOT_MEASURED_TITLE,
     };
   return {
     state: 'not-measured',
@@ -82,15 +88,13 @@ export function udpReadout(report: AgentSessionCapabilityReport | null): UdpRead
 }
 
 /**
- * The measured "no HTTP/3" for a session, or null. Only when nothing has been
- * observed over HTTP/3 (a real connection outranks both): the egress does not
- * relay UDP, so HTTP/3 cannot work (the grid's own sentence); or the session
- * runs HTTP/2 only.
+ * The "no HTTP/3" for a session, or null. Only when nothing has been observed
+ * over HTTP/3 (a real connection outranks it) and the session runs HTTP/2 only.
  */
 export function noHttp3Reason(report: AgentSessionCapabilityReport | null): string | null {
   if (report === null || report.h3_connection_observed === true) return null;
-  const vpn = report.proxy_kind === 'openvpn' || report.proxy_kind === 'wireguard';
-  if (!vpn && report.proxy_udp_supported === false) return gridHint(false, 'quic');
+  // ⛔ G5 — no branch on `proxy_udp_supported`: it is the launch setting, not a
+  // measurement, so it can state no "HTTP/3 cannot work here".
   if (report.transport_mode_active === 'h2-only') {
     return 'HTTP/3 is off for this session — it uses HTTP/2.';
   }

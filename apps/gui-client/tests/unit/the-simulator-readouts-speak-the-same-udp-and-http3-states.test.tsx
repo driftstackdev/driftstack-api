@@ -7,21 +7,20 @@
 // Every other surface shows both. The Simulator now shows the same states in
 // the same words as the profile card and the Proxies grid, for the same
 // reading — and this file holds it to them, so it cannot drift again:
-//   • UDP  — '✓ UDP' (measured, works) / '⤵ UDP' (measured, does not) /
-//            '⇢ UDP' (a VPN: routed through the tunnel, not measured) /
-//            '— UDP' (nothing reported). WebRTC is in the tooltip. (gui-v0.1.72:
-//            the ONE vocabulary, mark first — it read 'UDP ✓' and 'UDP: not
-//            measured yet'.)
-//   • HTTP/3 — a measured NO: no UDP (HTTP/3 cannot work), or a session set to
-//            HTTP/2 only. A real HTTP/3 connection still outranks both.
+//   • UDP  — '— UDP · not measured in this session' for a SOCKS5 session (the
+//            report carries only the dispatch constant — proxy-accuracy audit
+//            G5), '⇢ UDP' (a VPN: routed through the tunnel, not measured) and
+//            '— UDP' (nothing reported). (gui-v0.1.72: the ONE vocabulary, mark
+//            first — it read 'UDP ✓' and 'UDP: not measured yet'.)
+//   • HTTP/3 — a measured NO: a session set to HTTP/2 only. A real HTTP/3
+//            connection still outranks it.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import type { AgentSessionCapabilityReport } from '../../src/lib/agent-session-control';
-import type { ProxyTestResult } from '../../src/lib/proxies';
-import { proxyCapabilities } from '../../src/components/ProxyCapabilities';
 import { capabilityChips, type CapsInput } from '../../src/components/ProfilePhoneCard';
 import { VPN_UDP_NOT_MEASURED_TITLE } from '../../src/lib/proxy-check-copy';
+import { SESSION_UDP_NOT_MEASURED_TITLE } from '../../src/lib/simulator-network-readouts';
 import { QuicReadout } from '../../src/components/QuicReadout';
 import { UdpReadout } from '../../src/components/UdpReadout';
 import { getAgentSession } from '../../src/lib/agent-session-control';
@@ -35,28 +34,11 @@ const BASE: AgentSessionCapabilityReport = {
   egress_state: 'live',
 };
 
-/** A proxy test that carries traffic, with or without a UDP relay. */
-function usable(udp: boolean): ProxyTestResult {
-  return {
-    reachable: true,
-    auth_ok: true,
-    udp_associate: udp,
-    can_route: true,
-    connect_reply: 0,
-    latency_ms: 40,
-    message: '',
-  };
-}
-
 /** What the profile card draws for a UDP reading Driftstack took. */
 function cardUdpText(p: Partial<CapsInput>): string | undefined {
   const input = { hasProxy: true, capabilities: null, ...p } as CapsInput;
   return capabilityChips(input).eligible.find((c) => c.key === 'udp')?.text;
 }
-/** What the Proxies grid says about the same reading. */
-const gridHint = (udp: boolean, key: 'webrtc' | 'quic'): string =>
-  proxyCapabilities(usable(udp)).find((c) => c.key === key)?.hint ?? '';
-
 function udpLine(report: AgentSessionCapabilityReport | null): HTMLElement {
   const { container } = render(<UdpReadout report={report} />);
   return container.querySelector('[data-component="sim-udp-readout"]') as HTMLElement;
@@ -66,24 +48,53 @@ function h3Line(report: AgentSessionCapabilityReport | null): HTMLElement {
   return container.querySelector('[data-component="sim-quic-readout"]') as HTMLElement;
 }
 
-describe('the Simulator UDP line says what the card and the grid say', () => {
-  it('measured, works: the card’s "✓ UDP", in green, with WebRTC in the tooltip', () => {
-    const el = udpLine({ ...BASE, proxy_udp_supported: true });
-    expect(el.getAttribute('data-state')).toBe('measured');
-    expect(el.textContent).toBe(cardUdpText({ udpProbe: true }));
-    expect(el.textContent).toBe('✓ UDP');
-    expect(el.className).toContain('text-status-ready');
-    expect(el.getAttribute('title')).toBe(gridHint(true, 'webrtc'));
-    expect(el.getAttribute('title')).toMatch(/WebRTC/);
+// ⛔ Proxy-accuracy audit G5 (paths-03, GUI half): `proxy_udp_supported` is
+// `descriptor.supportsUDP` — the DISPATCH CONSTANT the server writes into every
+// SOCKS5 launch config (services/account-proxies.ts), echoed back by the phone.
+// Nothing measured it. The line read "✓ UDP" in the ready green, in the measured
+// state, for every SOCKS5 session, whatever the proxy does with a datagram. A
+// config value is never shown as measured (contract C2): the line says "— UDP ·
+// not measured in this session" until a report field carries a real measurement.
+describe('the Simulator UDP line never shows the dispatch constant as a measurement', () => {
+  it('CRITICAL (T9) a SOCKS5 session whose config says UDP (`proxy_udp_supported: true`) reads "— UDP · not measured in this session" — not measured, never the ready green', () => {
+    for (const report of [
+      { ...BASE, proxy_kind: 'socks5' as const, proxy_udp_supported: true },
+      { ...BASE, proxy_udp_supported: true },
+    ]) {
+      const el = udpLine(report);
+      expect(el.getAttribute('data-state')).toBe('not-measured');
+      expect(el.textContent).toBe('— UDP · not measured in this session');
+      expect(el.className).not.toContain('text-status-ready');
+      expect(el.getAttribute('title')).toBe(SESSION_UDP_NOT_MEASURED_TITLE);
+      expect(el.getAttribute('title')).not.toMatch(/UDP works/);
+      cleanup();
+    }
   });
 
-  it('measured, does not work: the card’s "⤵ UDP", muted — a fall-back, never red', () => {
-    const el = udpLine({ ...BASE, proxy_udp_supported: false });
-    expect(el.getAttribute('data-state')).toBe('failed');
-    expect(el.textContent).toBe(cardUdpText({ udpProbe: false }));
-    expect(el.textContent).toBe('⤵ UDP');
-    expect(el.className).not.toContain('status-error');
-    expect(el.getAttribute('title')).toBe(gridHint(false, 'webrtc'));
+  it('CRITICAL the same constant set to false is not a measured NO either — no ⤵', () => {
+    const el = udpLine({ ...BASE, proxy_kind: 'socks5', proxy_udp_supported: false });
+    expect(el.getAttribute('data-state')).toBe('not-measured');
+    expect(el.textContent).toBe('— UDP · not measured in this session');
+    expect(el.textContent).not.toContain('⤵');
+  });
+
+  it('CRITICAL a session that completed an HTTP/3 connection HAS measured UDP on its own path (QUIC needs datagrams both ways): "✓ UDP", measured — the one measurement the report carries today', () => {
+    const el = udpLine({
+      ...BASE,
+      proxy_kind: 'socks5',
+      proxy_udp_supported: true,
+      h3_connection_observed: true,
+      h3_connection_count: 2,
+    });
+    expect(el.getAttribute('data-state')).toBe('measured');
+    expect(el.textContent).toBe('✓ UDP');
+    expect(el.className).toContain('text-status-ready');
+    expect(el.getAttribute('title')).toMatch(/HTTP\/3/);
+    // …and the launch setting alone, beside no HTTP/3, is still not a reading.
+    cleanup();
+    expect(udpLine({ ...BASE, proxy_udp_supported: true }).getAttribute('data-state')).toBe(
+      'not-measured',
+    );
   });
 
   it('a VPN session: the card’s "⇢ UDP" and its sentence — routed through the tunnel, not measured', () => {
@@ -104,13 +115,10 @@ describe('the Simulator UDP line says what the card and the grid say', () => {
 });
 
 describe('the Simulator HTTP/3 line has the measured NO every other surface has', () => {
-  it('no UDP: HTTP/3 cannot work — the grid’s own sentence, not "not observed"', () => {
+  it('G5 — the dispatch constant `proxy_udp_supported: false` is not a measured NO about HTTP/3 either: "not observed", never "⤵ QUIC"', () => {
     const el = h3Line({ ...BASE, proxy_udp_supported: false });
-    expect(el.getAttribute('data-state')).toBe('no-http3');
-    // The QUIC badge the card and the grid draw for the same NO, and what the
-    // session uses instead as its detail (it read "⤵ HTTP/3 · HTTP/2 only").
-    expect(el.textContent).toBe('⤵ QUIC · HTTP/2 only');
-    expect(el.getAttribute('title')).toBe(gridHint(false, 'quic'));
+    expect(el.getAttribute('data-state')).toBe('not-observed');
+    expect(el.textContent).not.toContain('⤵');
   });
 
   it('a session set to HTTP/2 only: no HTTP/3, said so', () => {
@@ -123,6 +131,7 @@ describe('the Simulator HTTP/3 line has the measured NO every other surface has'
     const el = h3Line({
       ...BASE,
       proxy_udp_supported: false,
+      transport_mode_active: 'h2-only',
       h3_connection_observed: true,
       h3_connection_count: 3,
     });
