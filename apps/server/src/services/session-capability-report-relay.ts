@@ -306,6 +306,11 @@ export function makeSessionCapabilityReportRelay(
     // the ownership gate immediately above is the only place that knows which
     // device this report belongs to, and the operator drift report has to compare
     // a session's frameworks against its DEVICE's current heartbeat.
+    //
+    // The PREVIOUS report is read first: the QUIC back-fill below dates a
+    // latched HTTP/3 observation by when its count ROSE, and only the report
+    // before this one knows what the count was (proxy-accuracy audit S2).
+    const priorReport = store.get(frame.sessionId);
     store.set(frame, reportingNodeId);
 
     // Item 4 — notice a new device-side safeguard layer NAME the moment it is
@@ -370,6 +375,20 @@ export function makeSessionCapabilityReportRelay(
     // observed one, so absence writes nothing and only a real observation ever
     // stamps a green verdict onto the proxy.
     const quicReallyObserved = frame.h3ConnectionObserved === true;
+    // ⛔ S2 (paths-08) — the flag is LATCHED: once a session carries one HTTP/3
+    // connection, every later report (every 240–360 s) says true again. Writing
+    // on every one re-dated a single handshake to "now" for the whole session,
+    // and that fresh date then beat a newer Test's measured failure on every Mac
+    // ("later wins"). A reading is dated when it was TAKEN, so the write happens
+    // only when the device's own `h3ConnectionCount` rises — or, from a harness
+    // that sends no count, on the first latched sighting this relay sees. Never
+    // `frame.observedAt`: that dates the EXIT observation, not the handshake.
+    const priorH3Count = priorReport?.h3_connection_count ?? null;
+    const h3CountRose =
+      frame.h3ConnectionCount !== undefined
+        ? frame.h3ConnectionCount > 0 &&
+          (priorH3Count === null || frame.h3ConnectionCount > priorH3Count)
+        : priorReport?.h3_connection_observed !== true;
     // T-6 — back-fill the REAL, MEASURED QUIC verdict onto the proxy this session
     // browsed through, so the proxy test/chip shows a confirmed result instead of
     // a guess. We write ONLY on a real observation: `quicReallyObserved` is
@@ -383,7 +402,12 @@ export function makeSessionCapabilityReportRelay(
     // operator-default egress has no owned proxy to mark. Owner-scoped (id +
     // accountId), so a foreign or deleted proxy_id updates no row. Best-effort: a
     // failure is logged but never fails consuming the report.
-    if (accountProxies !== undefined && session.proxyId !== null && quicReallyObserved) {
+    if (
+      accountProxies !== undefined &&
+      session.proxyId !== null &&
+      quicReallyObserved &&
+      h3CountRose
+    ) {
       try {
         await accountProxies.update({
           id: session.proxyId,

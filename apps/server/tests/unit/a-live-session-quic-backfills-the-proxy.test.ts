@@ -214,6 +214,108 @@ describe('a live session back-fills the measured QUIC verdict onto its proxy', (
   });
 });
 
+// Proxy-accuracy audit S2 (paths-08): the device LATCHES `h3ConnectionObserved`
+// and re-sends it on every report (every 240–360 s), with `h3ConnectionCount`
+// beside it. Writing 'h3' dated now() on every latched report re-dated ONE
+// handshake for the whole session, and that fresh-looking date then beat a newer
+// Test's measured failure on every Mac. A reading is dated when it was TAKEN: a
+// write only when the count RISES (or, from a harness that sends no count, on the
+// first latched sighting).
+describe('S2 — a latched HTTP/3 observation is dated once, not re-dated on every report', () => {
+  type QuicUpdate = {
+    id: string;
+    accountId: string;
+    updates: { quicMeasured?: string; quicMeasuredAt?: Date };
+  };
+  function sequencedRelay(update: (a: QuicUpdate) => Promise<unknown>): {
+    relay: ReturnType<typeof makeSessionCapabilityReportRelay>;
+    setClock: (d: Date) => void;
+  } {
+    let clock = new Date('2026-09-25T10:00:00.000Z');
+    const relay = makeSessionCapabilityReportRelay(
+      {
+        get: vi.fn(() =>
+          Promise.resolve({
+            nodeId: 'node-1',
+            driftstackSessionId: null,
+            accountId: 'acc_owner',
+            proxyId: 'prx_owned',
+            status: 'active',
+          }),
+        ),
+        setFirstExitIpIfUnset: vi.fn(() => Promise.resolve(null)),
+        closeWithReasonOutcome: vi.fn(() => Promise.resolve({ kind: 'already_closed' as const })),
+        recordErrorEvent: vi.fn(() => Promise.resolve(null)),
+      },
+      { ingestEgressCapabilityReport: vi.fn(() => Promise.resolve()) },
+      new SessionCapabilityReportStore(),
+      logger(),
+      { update },
+      () => clock,
+    );
+    return { relay, setClock: (d) => (clock = d) };
+  }
+  const quicWrites = (update: ReturnType<typeof vi.fn>): Date[] =>
+    update.mock.calls
+      .map((c) => (c[0] as QuicUpdate).updates)
+      .filter((u) => u.quicMeasured !== undefined)
+      .map((u) => u.quicMeasuredAt as Date);
+  const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 15));
+
+  it('CRITICAL (T4) a count that stays at 1 over three reports — the last one from a dead proxy — writes the h3 ONCE, dated at the first report; a count that rises to 2 writes once more, dated then', async () => {
+    const update = vi.fn((_a: QuicUpdate) => Promise.resolve(null));
+    const { relay, setClock } = sequencedRelay(update);
+    relay(report({ h3ConnectionCount: 1 }), 'node-1');
+    await settle();
+    setClock(new Date('2026-09-25T10:05:00.000Z'));
+    relay(report({ h3ConnectionCount: 1, timestamp: '2026-09-25T10:05:00.000Z' }), 'node-1');
+    await settle();
+    setClock(new Date('2026-09-25T10:10:00.000Z'));
+    relay(
+      report({
+        h3ConnectionCount: 1,
+        timestamp: '2026-09-25T10:10:00.000Z',
+        egressState: 'dead_proxy',
+      }),
+      'node-1',
+    );
+    await settle();
+    expect(quicWrites(update).map((d) => d.toISOString())).toEqual(['2026-09-25T10:00:00.000Z']);
+
+    setClock(new Date('2026-09-25T10:15:00.000Z'));
+    relay(report({ h3ConnectionCount: 2, timestamp: '2026-09-25T10:15:00.000Z' }), 'node-1');
+    await settle();
+    expect(quicWrites(update).map((d) => d.toISOString())).toEqual([
+      '2026-09-25T10:00:00.000Z',
+      '2026-09-25T10:15:00.000Z',
+    ]);
+  });
+
+  it('a harness that sends NO count dates the latched flag on its FIRST sighting only', async () => {
+    const update = vi.fn((_a: QuicUpdate) => Promise.resolve(null));
+    const { relay, setClock } = sequencedRelay(update);
+    relay(report({ h3ConnectionCount: undefined }), 'node-1');
+    await settle();
+    setClock(new Date('2026-09-25T10:05:00.000Z'));
+    relay(
+      report({ h3ConnectionCount: undefined, timestamp: '2026-09-25T10:05:00.000Z' }),
+      'node-1',
+    );
+    await settle();
+    expect(quicWrites(update).map((d) => d.toISOString())).toEqual(['2026-09-25T10:00:00.000Z']);
+  });
+
+  it('a count of 0 beside a latched flag (an impossible frame) writes nothing, and neither does an absent flag', async () => {
+    const update = vi.fn((_a: QuicUpdate) => Promise.resolve(null));
+    const { relay } = sequencedRelay(update);
+    relay(report({ h3ConnectionCount: 0 }), 'node-1');
+    await settle();
+    relay(report({ h3ConnectionObserved: undefined, h3ConnectionCount: 3 }), 'node-1');
+    await settle();
+    expect(quicWrites(update)).toEqual([]);
+  });
+});
+
 describe('VPN parity — a live session back-fills the EXIT IDENTITY the box observed onto its proxy', () => {
   // The relay's widened update shape (quic OR exit fields).
   type ExitUpdate = {
