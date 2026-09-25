@@ -544,11 +544,12 @@ mod loopback_fixture_tests {
     use std::time::Duration;
 
     /// What the fake proxy really saw.
-    #[derive(Default, Debug, Clone)]
+    #[derive(Default, Debug, Clone, serde::Serialize)]
     struct Log {
         tcp_accepted: u32,
         /// Connections a one-at-a-time proxy closed at once because another was open.
         tcp_turned_away: u32,
+        #[serde(serialize_with = "logins_as_text")]
         logins: Vec<(Vec<u8>, Vec<u8>)>,
         connects: u32,
         connect_refused: u32,
@@ -586,6 +587,9 @@ mod loopback_fixture_tests {
         /// Only one connection at a time; another is closed while one is open
         /// (and for a short while after it closes, as a real one's accounting lags).
         one_connection: bool,
+        /// How long every connection after the first waits before answering its
+        /// greeting (§5.2 K — a slow second greeting).
+        second_greeting_delay: Duration,
     }
 
     impl Default for Fake {
@@ -599,8 +603,24 @@ mod loopback_fixture_tests {
                     udp: Udp::Answer,
                 },
                 one_connection: false,
+                second_greeting_delay: Duration::ZERO,
             }
         }
+    }
+
+    fn logins_as_text<S: serde::Serializer>(
+        logins: &[(Vec<u8>, Vec<u8>)],
+        ser: S,
+    ) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeSeq;
+        let mut seq = ser.serialize_seq(Some(logins.len()))?;
+        for (u, p) in logins {
+            seq.serialize_element(&(
+                String::from_utf8_lossy(u).to_string(),
+                String::from_utf8_lossy(p).to_string(),
+            ))?;
+        }
+        seq.end()
     }
 
     struct Running {
@@ -649,10 +669,19 @@ mod loopback_fixture_tests {
         total
     }
 
-    fn handle(mut c: TcpStream, f: Fake, udp_port: u16, log: &Mutex<Log>) -> std::io::Result<()> {
+    fn handle(
+        mut c: TcpStream,
+        f: Fake,
+        udp_port: u16,
+        log: &Mutex<Log>,
+        nth: u32,
+    ) -> std::io::Result<()> {
         c.set_read_timeout(Some(Duration::from_secs(15))).ok();
         let head = read_n(&mut c, 2)?;
         read_n(&mut c, head[1] as usize)?;
+        if nth > 0 {
+            thread::sleep(f.second_greeting_delay);
+        }
         match f.auth {
             None => c.write_all(&[0x05, 0x00])?,
             Some((user, pass)) => {
@@ -775,13 +804,17 @@ mod loopback_fixture_tests {
                         }
                         *b = true;
                     }
-                    log.lock().unwrap().tcp_accepted += 1;
+                    let nth = {
+                        let mut l = log.lock().unwrap();
+                        l.tcp_accepted += 1;
+                        l.tcp_accepted - 1
+                    };
                     active.fetch_add(1, Ordering::SeqCst);
                     let log = log.clone();
                     let active = active.clone();
                     let busy = busy.clone();
                     thread::spawn(move || {
-                        let _ = handle(c, f, udp_port, &log);
+                        let _ = handle(c, f, udp_port, &log, nth);
                         if f.one_connection {
                             thread::sleep(Duration::from_millis(300));
                             *busy.lock().unwrap() = false;
@@ -1001,6 +1034,193 @@ mod loopback_fixture_tests {
         assert!(r.reachable && !r.auth_ok && !r.can_route, "{r:?}");
         assert_eq!(r.udp_relay, UdpRelay::NotRun, "{r:?}");
         assert_eq!(log.associates, 0, "{log:?}");
+    }
+
+    #[test]
+    fn g4a_a_second_greeting_slower_than_the_wait_is_our_udp_step_not_finishing() {
+        // §5.2 K — the proxy works; its SECOND connection is merely slow to greet.
+        let fake = start(Fake {
+            second_greeting_delay: PROBE_IO + Duration::from_millis(500),
+            ..Fake::default()
+        });
+        let r = probe(fake.port, None, None);
+        let log = fake.settled_log();
+        assert_eq!(log.tcp_accepted, 2, "{log:?}");
+        assert!(r.reachable && r.auth_ok && r.can_route, "{r:?}");
+        assert_eq!(r.udp_relay, UdpRelay::NotRun, "{r:?}");
+        assert_eq!(log.datagrams_in, 0, "{log:?}");
+    }
+
+    #[test]
+    fn e_a_port_nothing_listens_on_is_unreachable() {
+        // §5.2 E — nothing to log: the connection is refused.
+        let port = {
+            let l = TcpListener::bind("127.0.0.1:0").unwrap();
+            l.local_addr().unwrap().port()
+        };
+        let err = run_socks5_probe_with("127.0.0.1", port, None, None, TEST_WAITS)
+            .expect_err("a dead port has no SOCKS5 answer");
+        assert!(err.starts_with("TCP connect failed"), "{err}");
+    }
+
+    // ── §5.2 as data: the golden matrix the app's own tests read ──────────────
+
+    /// Every §5.2 fixture this probe can meet, with what its fake proxy is told to
+    /// do. The app's vitest suite (the-native-probe-matrix-badges-agree-with-what-
+    /// each-fixture-proxy-logged) renders the badges from the results below and
+    /// holds every mark to the log beside it.
+    fn matrix() -> Vec<(
+        &'static str,
+        &'static str,
+        Fake,
+        Option<&'static str>,
+        Option<&'static str>,
+    )> {
+        let grant = |bnd_zero: bool, udp: Udp| Associate::Grant { bnd_zero, udp };
+        vec![
+            ("A", "relay-all", Fake::default(), None, None),
+            (
+                "B",
+                "grant-drop: ASSOCIATE granted, every datagram dropped",
+                Fake {
+                    associate: grant(false, Udp::Drop),
+                    ..Fake::default()
+                },
+                None,
+                None,
+            ),
+            (
+                "B0",
+                "grant with BND 0.0.0.0, relays",
+                Fake {
+                    associate: grant(true, Udp::Answer),
+                    ..Fake::default()
+                },
+                None,
+                None,
+            ),
+            (
+                "C7",
+                "refuses UDP with 0x07",
+                Fake {
+                    associate: Associate::Refuse(0x07),
+                    ..Fake::default()
+                },
+                None,
+                None,
+            ),
+            (
+                "C2",
+                "refuses UDP with 0x02",
+                Fake {
+                    associate: Associate::Refuse(0x02),
+                    ..Fake::default()
+                },
+                None,
+                None,
+            ),
+            (
+                "D",
+                "wrong password",
+                Fake {
+                    auth: Some(("u", "p")),
+                    ..Fake::default()
+                },
+                Some("u"),
+                Some("wrong"),
+            ),
+            (
+                "H",
+                "login ok, CONNECT refused 0x02, UDP relays",
+                Fake {
+                    connect_rep: 0x02,
+                    ..Fake::default()
+                },
+                None,
+                None,
+            ),
+            (
+                "J",
+                "one connection at a time",
+                Fake {
+                    one_connection: true,
+                    ..Fake::default()
+                },
+                None,
+                None,
+            ),
+            (
+                "K",
+                "second greeting slower than the wait",
+                Fake {
+                    second_greeting_delay: PROBE_IO + Duration::from_millis(500),
+                    ..Fake::default()
+                },
+                None,
+                None,
+            ),
+            (
+                "L",
+                "CONNECT slower than the wait",
+                Fake {
+                    connect_delay: PROBE_IO + Duration::from_millis(700),
+                    ..Fake::default()
+                },
+                None,
+                None,
+            ),
+            (
+                "M",
+                "username with no password",
+                Fake {
+                    auth: Some(("u", "")),
+                    ..Fake::default()
+                },
+                Some("u"),
+                None,
+            ),
+        ]
+    }
+
+    const MATRIX_FILE: &str = "../tests/fixtures/native-socks5-probe-matrix.json";
+
+    #[test]
+    fn the_golden_matrix_is_what_the_probe_does_against_each_fixture_today() {
+        let mut records = Vec::new();
+        for (id, what, fake, user, pass) in matrix() {
+            let running = start(fake);
+            let r = probe(running.port, user, pass);
+            let log = running.settled_log();
+            let mut result = serde_json::to_value(&r).unwrap();
+            // Timing is not part of the contract; everything else is.
+            result.as_object_mut().unwrap().remove("latency_ms");
+            records.push(serde_json::json!({
+                "fixture": id,
+                "what_really_happens": what,
+                "log": log,
+                "result": result,
+            }));
+        }
+        let generated = serde_json::json!({
+            "about": "GENERATED by `cargo test` in apps/gui-client/src-tauri (socks5_probe.rs, the_golden_matrix_is_what_the_probe_does_against_each_fixture_today). Each record is a loopback fake proxy from the proxy-accuracy audit §5.2, what it logged, and what the REAL native probe returned against it. Regenerate with DS_WRITE_PROBE_MATRIX=1 cargo test.",
+            "fixtures": records,
+        });
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(MATRIX_FILE);
+        if std::env::var("DS_WRITE_PROBE_MATRIX").as_deref() == Ok("1") {
+            let text = serde_json::to_string_pretty(&generated).unwrap() + "\n";
+            std::fs::write(&path, text).unwrap();
+            return;
+        }
+        // Compared as DATA, not bytes: the repository's formatter may lay the
+        // file out differently from serde, and neither layout is the contract.
+        let checked_in: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap_or_default())
+                .unwrap_or(serde_json::Value::Null);
+        assert!(
+            checked_in == generated,
+            "the probe no longer does what {MATRIX_FILE} says — regenerate it with DS_WRITE_PROBE_MATRIX=1 cargo test, and read the diff: the app's badge tests read this file\n--- generated ---\n{}",
+            serde_json::to_string_pretty(&generated).unwrap()
+        );
     }
 
     #[test]

@@ -922,6 +922,87 @@ describe('S1 — a SOCKS5 row’s stored UDP reading is a datagram round trip or
   });
 });
 
+// Proxy-accuracy audit §5.2, the fleet column (L4): what the node's frame carries
+// for each fixture on today's device — the QUIC tool pointed at the node's own
+// local gost, so `udp_associate` is gost's grant — and what the route must reply
+// and store. The only UDP reading is the round trip a completed handshake proves;
+// the QUIC timeout is the one real negative a proxy that refuses UDP produces here.
+describe('§5.2 fleet frames per fixture — the reply and the stored row', () => {
+  const FRAMES: Array<{
+    fixture: string;
+    legs: Record<string, unknown>;
+    udp: boolean | 'absent';
+    quic: boolean | 'absent';
+  }> = [
+    {
+      fixture: 'A relay-all',
+      legs: { udp_associate: true, quic_ok: true, quic_detail: null, udp_echo_ok: true },
+      udp: true,
+      quic: true,
+    },
+    {
+      fixture: 'B grant-drop',
+      legs: {
+        udp_associate: true,
+        quic_ok: false,
+        quic_detail: 'quic_handshake_timeout',
+        udp_echo_ok: null,
+      },
+      udp: 'absent',
+      quic: false,
+    },
+    {
+      fixture: 'C7 refuses UDP with 0x07 (upstream), granted by the local gost',
+      legs: {
+        udp_associate: true,
+        quic_ok: false,
+        quic_detail: 'quic_handshake_timeout',
+        udp_echo_ok: null,
+      },
+      udp: 'absent',
+      quic: false,
+    },
+    {
+      fixture: 'our probe tool missing (logic-10)',
+      legs: {
+        udp_associate: false,
+        quic_ok: null,
+        quic_detail: 'probe_unavailable',
+        udp_echo_ok: null,
+      },
+      udp: 'absent',
+      quic: 'absent',
+    },
+  ];
+  for (const [i, f] of FRAMES.entries()) {
+    it(`${f.fixture}: UDP ${String(f.udp)}, QUIC ${String(f.quic)} — replied and stored alike`, async () => {
+      fx = await buildTestApp({
+        enableFleetControlPlane: true,
+        proxyConnectivityProbe: cpProbeStub(),
+      });
+      registerNode(`mac-s52-${i}`, f.legs);
+      const id = await makeSocks5Proxy(`socks-s52-${i}.example.com`);
+      const body = await runTest(id, 'fleet');
+      expect(body.ok, JSON.stringify(body)).toBe(true);
+      const row = await storedRow(id);
+      if (f.udp === 'absent') {
+        expect('udp_associate' in body).toBe(false);
+        expect(row.udpProbe).toBeNull();
+      } else {
+        expect(body.udp_associate).toBe(f.udp);
+        expect(row.udpProbe).toBe(f.udp);
+      }
+      if (f.quic === 'absent') {
+        expect('quic_ok' in body).toBe(false);
+        expect(row.quicProbe).toBeNull();
+      } else {
+        expect(body.quic_ok).toBe(f.quic);
+        expect(row.quicProbe).toBe(f.quic);
+      }
+    });
+  }
+});
+
 describe('a stored QUIC / UDP reading does not outlive the path it was measured through', () => {
   it('P4 CRITICAL a port change, a host change and a credential change each reset all four columns to null — in the SAME update that moves the row — and the list then serves null. A stored `false` is the worst survivor: it tells a client NOT to look again, about a machine the row no longer points at. MUTATION: drop the four keys from `sessionReadings` in `proxyReadingsInvalidatedByEdit`.', async () => {
     fx = await buildTestApp();
