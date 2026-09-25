@@ -5,8 +5,8 @@
 //
 // What it captures: the visual harness (apps/gui-client/visual-harness.html →
 // src/visual-harness/gallery.tsx) with `?scene=<name>`, which renders ONE
-// composition inside the app's real window chrome (TitleBar + Sidebar, dark +
-// oxblood) at a fixed stage (1280×800; the list view 1800×880 so its ~1490px
+// composition inside the app's real window chrome (TitleBar + Sidebar, light +
+// oxblood since 2026-09-25 — `--mode`, below) at a fixed stage (1280×800; the list view 1800×880 so its ~1490px
 // table fits with the Actions column in frame and every row above the fold), from the same React components
 // and the same CSS the Tauri app ships. Scenes:
 //   profiles-grid    Profiles view framing around the real ProfilePhoneCard grid
@@ -48,7 +48,15 @@
 //   manifest.json                  every file with its pixel size
 //
 // Usage (repo root):  node scripts/marketing-screens.mjs [--verify]
-//                     [--scenes=profiles-grid,proxies]
+//                     [--scenes=profiles-grid,proxies] [--mode=light|dark]
+//   --mode       the theme to paint, set as <html data-mode> once the scene is
+//                ready — the way scripts/gui-visual-check.mjs sets each theme
+//                it measures. Defaults to CAPTURE_MODE, the theme the
+//                committed captures are in (light). Rendering the OTHER mode
+//                into the committed directory is refused: the fixture
+//                settings name CAPTURE_MODE (the title-bar toggle draws its
+//                icon from it), so a dark render there would mix the two.
+//                Point OUT_DIR elsewhere to preview the other mode.
 //   HARNESS_URL  default http://127.0.0.1:5199/visual-harness.html — when it
 //                does not answer, this script starts `vite --port 5199` from
 //                apps/gui-client itself and stops it when done.
@@ -289,15 +297,29 @@ const SCENES = [
   },
 ];
 
-/** The theme the committed captures were taken in. visual-harness.html opens
- *  LIGHT since 2026-09-25 (a new install's mode), so the mode is pinned here
- *  rather than inherited — a change to the harness default must not change what
- *  `--verify` compares. Set on <html> after the scene is ready, the way
- *  scripts/gui-visual-check.mjs sets each theme it measures. */
-const CAPTURE_MODE = 'dark';
+/** The theme the committed captures were taken in: LIGHT since 2026-09-25 (the
+ *  desktop app's white theme is the site's face; the captures were dark until
+ *  then). Pinned here rather than inherited from the harness default, so a
+ *  change to that default cannot change what `--verify` compares. Set on <html>
+ *  after the scene is ready, the way scripts/gui-visual-check.mjs sets each
+ *  theme it measures. gallery.tsx FIXTURE_SETTINGS.themeMode names the same
+ *  mode (marketing-scenes.test.tsx holds the two equal). */
+const CAPTURE_MODE = 'light';
 
 const args = process.argv.slice(2);
 const VERIFY = args.includes('--verify');
+const MODE_ARG = args.find((a) => a.startsWith('--mode='))?.slice('--mode='.length);
+if (MODE_ARG !== undefined && MODE_ARG !== 'light' && MODE_ARG !== 'dark') {
+  throw new Error(`--mode must be light or dark, got "${MODE_ARG}"`);
+}
+/** The theme this run paints. */
+const MODE = MODE_ARG ?? CAPTURE_MODE;
+if (MODE !== CAPTURE_MODE && process.env.OUT_DIR === undefined) {
+  throw new Error(
+    `--mode=${MODE} would write ${MODE} renders over the committed ${CAPTURE_MODE} captures ` +
+      `(and gallery.tsx FIXTURE_SETTINGS names ${CAPTURE_MODE}); set OUT_DIR to preview it elsewhere`,
+  );
+}
 const only = args.find((a) => a.startsWith('--scenes='))?.slice('--scenes='.length);
 const selected =
   only === undefined
@@ -546,10 +568,10 @@ async function renderScene(context, scene) {
     await stage.waitFor({ state: 'visible', timeout: 30_000 });
     await page.evaluate((mode) => {
       document.documentElement.dataset.mode = mode;
-    }, CAPTURE_MODE);
+    }, MODE);
     const applied = await page.evaluate(() => document.documentElement.dataset.mode);
-    if (applied !== CAPTURE_MODE) {
-      throw new Error(`${scene.name}: data-mode is ${applied}, wanted ${CAPTURE_MODE}`);
+    if (applied !== MODE) {
+      throw new Error(`${scene.name}: data-mode is ${applied}, wanted ${MODE}`);
     }
     await page.evaluate(() => document.fonts.ready);
     // Let the Sidebar's mount effects (proxy count / recordings index, both
@@ -743,6 +765,7 @@ async function main() {
     generatedBy: 'scripts/marketing-screens.mjs',
     harness: 'apps/gui-client/visual-harness.html?scene=<name>',
     frozenNow: FROZEN_NOW_ISO,
+    mode: MODE,
     stage: { ...STAGE, deviceScaleFactor: DPR, 'profiles-list': { ...LIST_STAGE } },
     files: [],
   };
@@ -751,7 +774,7 @@ async function main() {
       viewport: { width: LIST_STAGE.width + 40, height: STAGE.height + 40 },
       deviceScaleFactor: DPR,
       reducedMotion: 'reduce',
-      colorScheme: 'dark',
+      colorScheme: MODE,
       locale: 'en-US',
       timezoneId: 'UTC',
       userAgent: MAC_UA,

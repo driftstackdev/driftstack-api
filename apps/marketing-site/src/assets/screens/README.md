@@ -4,22 +4,30 @@ Every image here is a **real render of the shipped GUI components** (same React
 code, same CSS as the Tauri app), not an illustration. They come from the
 gui-client visual harness (`apps/gui-client/visual-harness.html` →
 `src/visual-harness/gallery.tsx`) with `?scene=<name>`, which composes one
-screen inside the app's real window chrome (TitleBar + Sidebar, dark theme,
+screen inside the app's real window chrome (TitleBar + Sidebar, light theme,
 oxblood accent) at a fixed stage — 1280×800, except the list view at 1800×880
 so its full-width table (Actions column included) fits in frame — captured at
 2× by Playwright.
 
+**Theme.** The captures are in the app's LIGHT theme since 2026-09-25 (the
+white theme is the site's face; they were dark until then). The AI view's
+stage stays a dark well inside the light window, as it does in the app.
+`scripts/marketing-screens.mjs` pins the mode it paints (`CAPTURE_MODE`) and
+`gallery.tsx` `FIXTURE_SETTINGS.themeMode` names the same one — the title bar's
+theme toggle draws its icon from it — and `marketing-scenes.test.tsx` holds the
+two equal. `manifest.json` records the mode the files were taken in.
+
 | file                        | pixels    | CSS px   | what it shows                                                                             |
 | --------------------------- | --------- | -------- | ----------------------------------------------------------------------------------------- |
 | `profiles-grid.{png,webp}`  | 2560×1600 | 1280×800 | Profiles view — grid of 8 profile tiles (idle / live / VPN / untested / selected …)       |
-| `profiles-grid-hero.*`      | 2064×1010 | 1032×505 | the tile grid alone, cropped from `profiles-grid` (hero image)                            |
+| `profiles-grid-hero.*`      | 2080×1010 | 1040×505 | the tile grid alone, cropped from `profiles-grid` (hero image)                            |
 | `profiles-list.{png,webp}`  | 3600×1760 | 1800×880 | Profiles view — list mode: the grid's same 8 profiles as rows, sorted by name             |
 | `proxies.{png,webp}`        | 2560×1600 | 1280×800 | Proxies view — the SOCKS5 / WireGuard / OpenVPN editors, each holding its saved config    |
 | `simulator.{png,webp}`      | 2560×1600 | 1280×800 | the desktop app + the floating device window over it — example shop page, Egress readouts |
 | `billing.{png,webp}`        | 2560×1600 | 1280×800 | Billing — Usage & cost for one billing cycle                                              |
 | `command-center.{png,webp}` | 2560×1600 | 1280×800 | Command Center — header band + KPI strip                                                  |
 | `ai-running.{png,webp}`     | 2560×1600 | 1280×800 | AI Browser Automation, mid-task — the phone lit in its dark stage, the plan beside it     |
-| `ai-running-hero.*`         | 1768×1448 | 884×724  | the phone + plan column alone, cropped from `ai-running` (hero image)                     |
+| `ai-running-hero.*`         | 1784×1448 | 892×724  | the phone + plan column alone, cropped from `ai-running` (hero image)                     |
 
 `manifest.json` lists the same sizes (regenerated with the images) — read it
 from a page rather than hard-coding widths.
@@ -45,9 +53,10 @@ From the repo root, on macOS (see "Fonts" below):
 # the GUI dev server must serve the harness (the script starts one if :5199 is down)
 cd apps/gui-client && npx vite --port 5199 --strictPort --host 127.0.0.1 &
 cd -
-node scripts/marketing-screens.mjs            # writes every png/webp + manifest.json
+node scripts/marketing-screens.mjs            # writes every png/webp + manifest.json (light)
 node scripts/marketing-screens.mjs --verify   # re-renders and diffs pixel-for-pixel; exit 1 on drift
 node scripts/marketing-screens.mjs --scenes=proxies,simulator   # a subset (manifest untouched)
+OUT_DIR=/tmp/dark node scripts/marketing-screens.mjs --mode=dark   # preview the dark theme elsewhere
 ```
 
 The captures are deterministic: the page clock is frozen at

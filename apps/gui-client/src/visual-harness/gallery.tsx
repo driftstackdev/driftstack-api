@@ -1298,13 +1298,14 @@ export const FIXTURE_ACCOUNT: AccountSelfProfile = {
 /** The fixture's theme mode is the one the committed marketing captures are
  *  taken in (scripts/marketing-screens.mjs `CAPTURE_MODE`): the title-bar
  *  toggle draws its icon from it. Named here rather than inherited from
- *  DEFAULT_SETTINGS, whose mode is a NEW install's (light since 2026-09-25) —
- *  inheriting put the light theme's toggle on every dark capture. Change the two
- *  together when the captures are retaken (marketing-scenes.test.tsx holds them
+ *  DEFAULT_SETTINGS, whose mode is a NEW install's — a later change to that
+ *  default must not change the captures. LIGHT since 2026-09-25, when the
+ *  captures were retaken in the app's white theme (they were dark until
+ *  then). Change the two together (marketing-scenes.test.tsx holds them
  *  equal). The render gates set data-mode themselves and are unaffected. */
 export const FIXTURE_SETTINGS: DriftstackSettings = {
   ...DEFAULT_SETTINGS,
-  themeMode: 'dark',
+  themeMode: 'light',
   apiKey: 'ds_live_example',
   baseUrl: 'https://driftstack.io',
 };

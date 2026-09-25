@@ -2,6 +2,7 @@
   "generatedBy": "scripts/marketing-screens.mjs",
   "harness": "apps/gui-client/visual-harness.html?scene=<name>",
   "frozenNow": "2026-06-15T06:42:00.000Z",
+  "mode": "light",
   "stage": {
     "width": 1280,
     "height": 800,
