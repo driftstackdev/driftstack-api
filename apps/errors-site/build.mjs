@@ -7,13 +7,18 @@
 // whose slug set is drift-guarded against api-types PROBLEM_TYPES (see
 // apps/server/tests/unit/errors-site-slug-parity.test.ts).
 //
-// Dependency-free by design: `node build.mjs` emits dist/. Deployed to the
+// No framework: `node build.mjs` emits dist/. Deployed to the
 // Cloudflare Pages project `driftstack-errors` (custom domain
 // errors.driftstack.dev) via wrangler, same as the other Pages sites.
 
 import { mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// P4 (2026-09-25) — the only import that is not Node itself: the shared design
+// tokens (a workspace package, no install step of its own). Every colour, the
+// radii and the font stacks below come from it, so this site is the desktop
+// app's light theme and cannot drift from it by hand.
+import { accent, font, light, radius } from '@driftstack/design-tokens/hex';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST = join(HERE, 'dist');
@@ -287,23 +292,61 @@ export const RELATED = {
   'legal-acceptance-required': ['forbidden'],
 };
 
+// P4 (2026-09-25) — the desktop app's light theme (owner: "white light theme in
+// GUI is now absolutely amazing, we want this everywhere now"), light only: the
+// site runs no script (CSP script-src 'none'), so there is no toggle to offer,
+// and it follows no system setting, like every other surface. The page is the
+// app's card on the app's ground. Every text/ground pair, measured (WCAG):
+//   heading ink #1a1d23 on the card #f8f9fb 16.0:1 · body ink-secondary
+//   #525863 on the card 6.79 · labels, meta and list slugs ink-muted #5b6270
+//   on the card 5.82 · the brand line and footer ink-muted on the ground
+//   #ebedf2 5.23 · links and the label accent-text #8f3241 on the card 7.38,
+//   on the ground 6.64 · code primary ink on the inset chip #e0e3ea 13.14.
+// The retired values were the near-black #0b0f14 ground and the #e5484d red,
+// one of the five reds the brand used to carry.
+// The package's web mono stack names fonts this page does not ship (Berkeley
+// Mono, JetBrains Mono) and then generics Chrome does not resolve
+// (ui-monospace, SFMono-Regular), so Chrome painted every code chip in
+// Courier. The desktop app's own OS fallbacks (apps/gui-client/tailwind.config.ts:
+// Menlo, Consolas, Liberation Mono) go in front of the final generic.
+const MONO = font.mono.replace(/,\s*monospace$/, ", Menlo, Consolas, 'Liberation Mono', monospace");
+// The app's card lift (--ai-lift): a white top rim and a soft drop in the
+// primary ink, written out because this page has no CSS variables to read.
+const triplet = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(' ');
+const LIFT = `0 1px 0 rgb(255 255 255 / .9) inset,0 8px 22px -14px rgb(${triplet(light.inkPrimary)} / .35)`;
 const css = `
-:root{color-scheme:dark}
+:root{color-scheme:light}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#0b0f14;color:#e8edf2;font:16px/1.65 ui-sans-serif,system-ui,-apple-system,sans-serif;padding:48px 24px}
-main{max-width:680px;margin:0 auto}
-a{color:#e5484d;text-decoration:underline;text-underline-offset:4px}
-.label{font-family:ui-monospace,monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#e5484d}
-h1{font-size:28px;letter-spacing:-.02em;margin:14px 0 4px}
-.status{font-family:ui-monospace,monospace;font-size:13px;color:#9ba6b2;margin-bottom:24px}
-h2{font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:#9ba6b2;margin:26px 0 8px}
-p{color:#c4cdd6}
-code{font-family:ui-monospace,monospace;font-size:.92em;background:#151b23;border:1px solid #232b36;border-radius:4px;padding:1px 5px}
-ul{list-style:none}
-li{border-bottom:1px solid #1a2129;padding:10px 0}
-li code{background:none;border:none;padding:0;color:#9ba6b2}
-footer{margin-top:48px;font-size:13px;color:#5c6770}
+body{background:${light.surfaceBase};color:${light.inkPrimary};font:16px/1.65 ${font.sans};padding:28px 16px 56px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:720px;margin:0 auto}
+.top{display:flex;align-items:baseline;gap:8px;margin:0 4px 16px}
+.brand{font-weight:900;font-style:italic;letter-spacing:-.02em;font-size:17px;color:${light.inkPrimary};text-decoration:none}
+.brand span{color:${light.accentText}}
+.sub{font-size:13px;color:${light.inkMuted}}
+main{background:${light.surfaceRaised};border:1px solid ${light.surfaceDivider};border-radius:${radius.xl};padding:32px clamp(20px,5vw,40px) 36px;box-shadow:${LIFT}}
+a{color:${light.accentText};text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
+a:hover{text-decoration-thickness:2px}
+a:focus-visible{outline:2px solid ${accent.accent};outline-offset:2px;border-radius:2px}
+.label{font-family:${MONO};font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:${light.accentText}}
+h1{font-size:30px;line-height:1.2;letter-spacing:-.02em;margin:10px 0 10px;color:${light.inkPrimary}}
+.status{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-family:${MONO};font-size:13px;color:${light.inkMuted};margin-bottom:8px}
+.status code{font-size:12px}
+.pill{display:inline-block;font-weight:600;color:${light.inkPrimary};background:${light.surfaceInset};border:1px solid ${light.surfaceDivider};border-radius:${radius.full};padding:0 10px}
+h2{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:${light.inkMuted};margin:28px 0 8px}
+p{color:${light.inkSecondary}}
+code{font-family:${MONO};font-size:.875em;color:${light.inkPrimary};background:${light.surfaceInset};border:1px solid ${light.surfaceDivider};border-radius:${radius.DEFAULT};padding:1px 5px;overflow-wrap:anywhere;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+ul{list-style:none;border-top:1px solid ${light.surfaceDivider}}
+li{display:flex;flex-direction:column;gap:2px;border-bottom:1px solid ${light.surfaceDivider};padding:10px 0}
+@media (min-width:640px){li{flex-direction:row;align-items:baseline;justify-content:space-between;gap:16px}}
+li a{font-weight:500}
+li code{background:none;border:none;padding:0;color:${light.inkMuted}}
+footer{margin:20px 4px 0;font-size:13px;color:${light.inkMuted}}
 `.trim();
+
+// The error copy marks field and header names with `backticks`; the page shows
+// them as code instead of printing the backticks. The copy is this file's own
+// constants (no <, > or & in it), so nothing here needs escaping.
+const withCode = (text) => text.replace(/`([^`]+)`/g, '<code>$1</code>');
 
 const escapeAttribute = (value) =>
   String(value)
@@ -314,12 +357,12 @@ const escapeAttribute = (value) =>
 
 const page = (title, body, { description, canonicalPath, noindex = false }) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0b0f14"><meta name="description" content="${escapeAttribute(description)}"><meta name="robots" content="${noindex ? 'noindex,nofollow' : 'index,follow'}">${
+<meta name="theme-color" content="${light.surfaceBase}"><meta name="description" content="${escapeAttribute(description)}"><meta name="robots" content="${noindex ? 'noindex,nofollow' : 'index,follow'}">${
   !noindex && canonicalPath
     ? `<link rel="canonical" href="https://errors.driftstack.dev${canonicalPath}">`
     : ''
 }<title>${title} · Driftstack errors</title><style>${css}</style></head>
-<body><main>${body}<footer>Driftstack API error reference · <a href="https://docs.driftstack.io">docs</a> · <a href="https://driftstack.io">driftstack.io</a></footer></main></body></html>`;
+<body><div class="wrap"><header class="top"><a class="brand" href="/">DRIFT<span>STACK</span></a><span class="sub">API errors</span></header><main>${body}</main><footer>Driftstack API error reference · <a href="https://docs.driftstack.io">docs</a> · <a href="https://driftstack.io">driftstack.io</a></footer></div></body></html>`;
 
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(DIST, { recursive: true });
@@ -333,15 +376,13 @@ for (const slug of slugs) {
     join(DIST, slug, 'index.html'),
     page(
       e.title,
-      `<p class="label">API error type</p><h1>${e.title}</h1><p class="status">HTTP ${e.status} · <code>https://errors.driftstack.dev/${slug}</code></p>
-<h2>What it means</h2><p>${e.meaning}</p>
-<h2>How to fix it</h2><p>${e.fix}</p>
+      `<p class="label">API error type</p><h1>${e.title}</h1><p class="status"><span class="pill">HTTP ${e.status}</span> <code>https://errors.driftstack.dev/${slug}</code></p>
+<h2>What it means</h2><p>${withCode(e.meaning)}</p>
+<h2>How to fix it</h2><p>${withCode(e.fix)}</p>
 <h2>Where it appears</h2><p>In the <code>type</code> field of the <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a> <code>application/problem+json</code> error body, alongside <code>title</code>, <code>status</code>, <code>detail</code>, and an <code>instance</code> correlation id.</p>${
         (RELATED[slug] ?? []).length > 0
           ? `<h2>Related</h2><ul>${RELATED[slug]
-              .map(
-                (r) => `<li><a href="/${r}">${ERROR_PAGES[r].title}</a> <code>· /${r}</code></li>`,
-              )
+              .map((r) => `<li><a href="/${r}">${ERROR_PAGES[r].title}</a> <code>/${r}</code></li>`)
               .join('')}</ul>`
           : ''
       }`,
@@ -364,7 +405,7 @@ const groupsHtml = STATUS_GROUPS.map((g) => {
     .sort((a, b) => ERROR_PAGES[a].status - ERROR_PAGES[b].status)
     .map(
       (s) =>
-        `<li><a href="/${s}">${ERROR_PAGES[s].title}</a> <code>· ${ERROR_PAGES[s].status} · /${s}</code></li>`,
+        `<li><a href="/${s}">${ERROR_PAGES[s].title}</a> <code>${ERROR_PAGES[s].status} · /${s}</code></li>`,
     )
     .join('\n');
   return rows.length > 0 ? `<h2>${g.label}</h2><ul>${rows}</ul>` : '';

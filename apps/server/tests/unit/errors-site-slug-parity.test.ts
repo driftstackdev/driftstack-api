@@ -94,16 +94,56 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
     expect(siteSrc).toMatch(/writeFileSync\(join\(DIST, '_headers'\), SECURITY_HEADERS\);/);
   });
 
+  // P4 (2026-09-25) — the site is the desktop app's light theme (owner decision:
+  // light everywhere), so the theme-color is the light page ground, read from
+  // the token package instead of typed; it was the retired near-black #0b0f14.
+  const lightGround = (
+    JSON.parse(readFileSync(resolve(REPO_ROOT, 'packages/design-tokens/tokens.json'), 'utf8')) as {
+      modes: { light: Record<string, string> };
+    }
+  ).modes.light['surface-base'] as string;
+  const themeColor = new RegExp(`<meta name="theme-color" content="${lightGround}">`, 'g');
+
+  it('P4 the page CSS is built from the shared tokens (hex.mjs): no colour literal is typed into the generator’s stylesheet, the built pages carry the app’s light values, and the retired dark ground and #e5484d red are gone', () => {
+    expect(lightGround).toBe('#ebedf2');
+    expect(siteSrc).toMatch(
+      /import \{ accent, font, light, radius \} from '@driftstack\/design-tokens\/hex';/,
+    );
+    const cssTemplate = siteSrc.slice(
+      siteSrc.indexOf('const css = `'),
+      siteSrc.indexOf('`.trim();'),
+    );
+    expect(cssTemplate.length).toBeGreaterThan(500);
+    expect(cssTemplate.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toEqual([]);
+    const page = readFileSync(resolve(DIST, 'rate-limited', 'index.html'), 'utf8');
+    for (const hex of ['#ebedf2', '#f8f9fb', '#1a1d23', '#525863', '#8f3241', '#cdd3dc']) {
+      expect(page, hex).toContain(hex);
+    }
+    for (const retired of ['#0b0f14', '#e5484d', 'color-scheme:dark']) {
+      expect(page, retired).not.toContain(retired);
+    }
+  });
+
+  it('P4 the error copy’s `backtick` field names render as code, never as literal backticks', () => {
+    const limited = readFileSync(resolve(DIST, 'rate-limited', 'index.html'), 'utf8');
+    expect(limited).toContain('<code>retry_after_seconds</code>');
+    expect(limited).toContain('<code>Idempotency-Key</code>');
+    for (const slug of pageSlugs) {
+      const main = readFileSync(resolve(DIST, slug, 'index.html'), 'utf8').split('<main>')[1] ?? '';
+      expect(main, slug).not.toContain('`');
+    }
+  });
+
   it('every real error page is indexable with a description and exact final-URL canonical', () => {
     const index = readFileSync(resolve(DIST, 'index.html'), 'utf8');
-    expect(index.match(/<meta name="theme-color" content="#0b0f14">/g)).toHaveLength(1);
+    expect(index.match(themeColor)).toHaveLength(1);
     expect(index).toMatch(/<meta name="description" content="[^"]+">/);
     expect(index).toContain('<meta name="robots" content="index,follow">');
     expect(index).toContain('<link rel="canonical" href="https://errors.driftstack.dev/">');
 
     for (const slug of pageSlugs) {
       const rendered = readFileSync(resolve(DIST, slug, 'index.html'), 'utf8');
-      expect(rendered.match(/<meta name="theme-color" content="#0b0f14">/g), slug).toHaveLength(1);
+      expect(rendered.match(themeColor), slug).toHaveLength(1);
       expect(rendered, slug).toMatch(/<meta name="description" content="[^"]+">/);
       expect(rendered, slug).toContain('<meta name="robots" content="index,follow">');
       expect(rendered, slug).toContain(
@@ -162,7 +202,7 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
 
   it('unknown-slug 404 is described but noindex with no conflicting canonical', () => {
     const rendered = readFileSync(resolve(DIST, '404.html'), 'utf8');
-    expect(rendered.match(/<meta name="theme-color" content="#0b0f14">/g)).toHaveLength(1);
+    expect(rendered.match(themeColor)).toHaveLength(1);
     expect(rendered).toMatch(/<meta name="description" content="[^"]+">/);
     expect(rendered).toContain('<meta name="robots" content="noindex,nofollow">');
     expect(rendered).not.toContain('<link rel="canonical"');
