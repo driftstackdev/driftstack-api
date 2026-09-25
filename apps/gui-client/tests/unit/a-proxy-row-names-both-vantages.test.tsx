@@ -99,6 +99,9 @@ vi.mock('../../src/lib/account-proxies', async (importOriginal) => ({
     id: string,
     opts?: { vantage?: 'cp' | 'fleet' },
   ) => testAccountProxy(baseUrl, apiKey, id, opts),
+  // Proxy-accuracy audit G3 — a SOCKS5 Test pushes the stored row before the
+  // fleet leg; the account accepts it.
+  updateProxy: () => Promise.resolve({}),
 }));
 
 // Mutable so one arm can sign the customer out: with no API key the fleet leg

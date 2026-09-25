@@ -163,6 +163,7 @@ import {
   socks5FleetTestNotStoredNotice,
   syncListExitObserved,
   testProxyOnServer,
+  testSocks5RowOnServer,
   unansweredCheckNotice,
   vpnStoreRefusal,
 } from '../lib/proxy-server-test';
@@ -2795,22 +2796,32 @@ export function ProfilesView({
         if (settings.apiKey === null || settings.apiKey.length === 0) {
           setVpnNotices((m) => ({ ...m, [px.id]: SOCKS5_TEST_NO_API_KEY_NOTICE }));
         } else {
-          let serverId: string | undefined = px.serverId;
-          if (serverId === undefined) {
-            try {
-              serverId = await ensureServerProxy(px);
-            } catch (err) {
-              setVpnNotices((m) => ({ ...m, [px.id]: socks5FleetTestNotStoredNotice(err) }));
+          // ⛔ Proxy-accuracy audit G3 — the grid's rule, through the same step:
+          // push this Mac's row before the fleet measures the account's copy,
+          // skip the fleet when an edited row could not be pushed, and drop a
+          // reply taken against a row edited meanwhile.
+          try {
+            const leg = await testSocks5RowOnServer(
+              px,
+              settings.baseUrl,
+              settings.apiKey,
+              async (row) => {
+                const ensured = await ensureAccountProxyRow(row, settings.baseUrl, settings.apiKey);
+                if (ensured !== undefined && (ensured.created || ensured.healed)) {
+                  setProxies(await listProxies());
+                }
+                return ensured;
+              },
+            );
+            if (leg.kind === 'not_stored') {
+              setVpnNotices((m) => ({ ...m, [px.id]: socks5FleetTestNotStoredNotice(leg.error) }));
             }
-          }
-          if (serverId !== undefined) {
-            try {
-              const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, serverId);
-              const next = await persistServerProbe(px.id, outcome);
+            if (leg.kind === 'tested') {
+              const next = await persistServerProbe(px.id, leg.outcome);
               if (next !== null) setProbeCache(next);
-            } catch {
-              /* best-effort — the native verdict above stands */
             }
+          } catch {
+            /* best-effort — the native verdict above stands */
           }
         }
       }

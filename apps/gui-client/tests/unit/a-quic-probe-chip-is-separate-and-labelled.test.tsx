@@ -279,6 +279,9 @@ vi.mock('../../src/lib/account-proxies', async (importOriginal) => ({
     id: string,
     opts?: { vantage?: 'cp' | 'fleet' },
   ) => testAccountProxy(baseUrl, apiKey, id, opts),
+  // Proxy-accuracy audit G3 — a SOCKS5 Test pushes the stored row before the
+  // fleet leg; the account accepts it.
+  updateProxy: () => Promise.resolve({}),
 }));
 
 const settingsStub = { settings: { apiKey: 'ds_test', baseUrl: 'http://localhost:3000' } };

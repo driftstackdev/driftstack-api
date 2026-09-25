@@ -1640,6 +1640,73 @@ export async function ensureAccountProxyRow(
  *  customer was already in. The next step is the one control the GUI has. */
 export const SOCKS5_TEST_NO_API_KEY_NOTICE = `Tested from this computer only. ${MISSING_API_KEY_NEXT_STEP} for the full check — QUIC, OS and server latency.`;
 
+/** What the SOCKS5 Test's fleet leg did (`testSocks5RowOnServer`). */
+export type Socks5FleetLeg =
+  /** The fleet measured this Mac's row as it stands. */
+  | { kind: 'tested'; outcome: ServerProbeOutcome; ensured: EnsuredAccountProxy | undefined }
+  /** The row could not be pushed and the account's copy may be an older one, so
+   *  the fleet was not asked. `error` is the push's own failure. */
+  | { kind: 'not_stored'; error: unknown }
+  /** Nothing to test on the account (no key, or the row was deleted meanwhile). */
+  | { kind: 'no_row' }
+  /** The row was edited on this Mac while the fleet measured; the reply
+   *  describes the endpoint before the edit and is dropped. */
+  | { kind: 'edited_meanwhile' };
+
+/**
+ * ⛔ Proxy-accuracy audit G3 (paths-05) — the SOCKS5 Test's fleet leg, in the ONE
+ * order that makes its reply describe this Mac's row. The grid and the card both
+ * come through here.
+ *
+ * The server tests the row the ACCOUNT holds. The Test used to push local changes
+ * only for a row never stored, so after an edit and Save the fleet measured the
+ * OLD host and credentials, and its latency, QUIC and failure landed beside the new
+ * endpoint's native result as if both described it. Now:
+ *   1. the row is pushed first, every time (for a stored row that is the PUT the
+ *      next launch would have sent; it also lifts `materialUnsynced`);
+ *   2. if that push fails for a row edited here, the fleet is not asked — the
+ *      account's copy is the old endpoint. An UNEDITED stored row still is: the
+ *      account holds exactly this material, and a transient PUT failure changes
+ *      nothing about it;
+ *   3. a reply that returns after the row was edited again on this Mac is dropped.
+ */
+export async function testSocks5RowOnServer(
+  p: ProxyConfig,
+  baseUrl: string,
+  apiKey: string,
+  ensure: (row: ProxyConfig) => Promise<EnsuredAccountProxy | undefined> = (row) =>
+    ensureAccountProxyRow(row, baseUrl, apiKey),
+): Promise<Socks5FleetLeg> {
+  // Taken BEFORE the push: an edit saved at any moment after this is one the
+  // fleet's reply cannot describe.
+  const editsBefore = materialEditCountNow();
+  let ensured: EnsuredAccountProxy | undefined;
+  let serverId: string | undefined;
+  try {
+    ensured = await ensure(p);
+    serverId = ensured?.id;
+  } catch (error) {
+    if (p.serverId === undefined || (await editedOnThisMac(p.id))) {
+      return { kind: 'not_stored', error };
+    }
+    serverId = p.serverId;
+  }
+  if (serverId === undefined) return { kind: 'no_row' };
+  const outcome = await testProxyOnServer(baseUrl, apiKey, serverId);
+  if (materialEditedAfter(p.id, editsBefore)) return { kind: 'edited_meanwhile' };
+  return { kind: 'tested', outcome, ensured };
+}
+
+/** Whether this row holds material the account may not: edited in this app
+ *  session, or marked unsynced by an edit before a restart. A ledger that will
+ *  not read cannot vouch for the row, so it counts as edited. */
+async function editedOnThisMac(proxyId: string): Promise<boolean> {
+  if (materialEditsPending().has(proxyId)) return true;
+  const attempts = await loadCapabilityAttempts().catch(() => null);
+  if (attempts === null) return true;
+  return attempts[proxyId]?.materialUnsynced === true;
+}
+
 /** (q) Item 12-memory (A) — the SOCKS5 Test's notice when the row could not be
  *  stored on the account (the create/refresh threw), so the fleet leg did not
  *  run. Names the cause in the server's words when it gave one; never "check

@@ -7,8 +7,9 @@
 // previous private key and endpoint — and `handleCheckEndpoint` asked the fleet to bring
 // THAT tunnel up. The row (and the profile card) then showed the old tunnel's latency,
 // exit IP, country and timezone as the verdict for the conf just pasted, and every
-// manual Check repeated it. A SOCKS5 row is unaffected: its Test is native and reads the
-// local credentials.
+// manual Check repeated it. A SOCKS5 row's Test had the same hole in its fleet half (its
+// native half reads the local credentials): a-socks5-test-pushes-the-edit-before-the-
+// fleet-measures-it.test.tsx holds that one.
 //
 // N3 MEASURED: the post-save invalidation compared scheme/host/port/username/password
 // only. Host and port are DERIVED from the conf's Endpoint line and username/password

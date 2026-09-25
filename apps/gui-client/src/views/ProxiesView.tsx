@@ -102,6 +102,7 @@ import {
   syncListExitObserved,
   vpnStoreRefusal,
   testProxyOnServer,
+  testSocks5RowOnServer,
   unansweredCheckNotice,
   type ServerProbeOutcome,
 } from '../lib/proxy-server-test';
@@ -1352,8 +1353,10 @@ export function ProxiesView(): JSX.Element {
    * held the previous private key / endpoint / blob — and the fleet leg below
    * brought THAT tunnel up. The row then showed the old tunnel's latency, exit
    * IP, country and timezone as the verdict for the config just pasted, and a
-   * manual Check repeated it. A SOCKS5 row is unaffected: its Test is native and
-   * reads the local credentials directly.
+   * manual Check repeated it. ⛔ A SOCKS5 row was NOT unaffected, as this used to
+   * say: its native half reads the local credentials, but its fleet half tested
+   * the account's copy too — it now goes through `testSocks5RowOnServer`, which
+   * pushes the row first (proxy-accuracy audit G3).
    *
    * Best-effort by design. The PUT is a REFRESH, not a precondition: the common
    * check is an unedited row where the account already holds this exact material,
@@ -1890,44 +1893,43 @@ export function ProxiesView(): JSX.Element {
         if (settings.apiKey === null || settings.apiKey.length === 0) {
           setVpnNotices((m) => ({ ...m, [p.id]: SOCKS5_TEST_NO_API_KEY_NOTICE }));
         } else {
-          let serverId: string | undefined = p.serverId;
-          if (serverId === undefined) {
-            try {
-              const ensured = await ensureAccountProxyRow(p, settings.baseUrl, settings.apiKey);
-              if (stale()) return null;
-              serverId = ensured?.id;
-              if (ensured?.created === true) {
-                // Mirror the persisted `serverId` into this grid's list, so the
-                // next Test / Check of the row takes the stored path at once.
-                const storedId = ensured.id;
-                setState((s) => ({
-                  ...s,
-                  proxies: s.proxies.map((x) => (x.id === p.id ? { ...x, serverId: storedId } : x)),
-                }));
-              }
-            } catch (err) {
-              if (stale()) return null;
-              setVpnNotices((m) => ({ ...m, [p.id]: socks5FleetTestNotStoredNotice(err) }));
-            }
+          // ⛔ Proxy-accuracy audit G3 — the fleet tests the row the ACCOUNT holds,
+          // so this Mac's row is pushed first, every time (not only when it was
+          // never stored): after an edit and Save the fleet measured the OLD host
+          // and credentials. A push that fails for an edited row skips the fleet
+          // leg, and a reply taken against a row edited meanwhile is dropped —
+          // one shared step with the card (`testSocks5RowOnServer`).
+          //
+          // The control plane's own test is the ONLY source of the passive OS
+          // fingerprint AND the honest fleet-side latency/QUIC verdict — only a
+          // proxy stored on the account can be tested there. Best-effort: a miss
+          // keeps the prior verdicts, and nothing here changes the connectivity
+          // result measured above.
+          // T-1 — ask for the FLEET vantage: the Mac that will run the profile
+          // measures it; the server says so (or says it fell back) in the reply.
+          // T-27 — the fetch, the parse of the verdicts and the cache write are
+          // ONE shared step (lib/proxy-server-test) with the profile card's Test,
+          // so the two cannot drift again; only the grid's own state is applied
+          // here. The QUIC stamp inside it is the SERVER's `quic_measured_at`
+          // (drop 5) — not this Mac's clock at reply time.
+          const leg = await testSocks5RowOnServer(p, settings.baseUrl, settings.apiKey);
+          if (stale()) return null;
+          if (leg.kind === 'tested' && leg.ensured?.created === true) {
+            // Mirror the persisted `serverId` into this grid's list, so the
+            // next Test / Check of the row takes the stored path at once.
+            const storedId = leg.ensured.id;
+            setState((s) => ({
+              ...s,
+              proxies: s.proxies.map((x) => (x.id === p.id ? { ...x, serverId: storedId } : x)),
+            }));
           }
-          if (serverId !== undefined) {
-            // The control plane's own test is the ONLY source of the passive OS
-            // fingerprint AND the honest fleet-side latency/QUIC verdict — only a
-            // proxy stored on the account can be tested there. Best-effort: a miss
-            // keeps the prior verdicts, and nothing here changes the connectivity
-            // result measured above.
-            // T-1 — ask for the FLEET vantage: the Mac that will run the profile
-            // measures it; the server says so (or says it fell back) in the reply.
-            // T-27 — the fetch, the parse of the verdicts and the cache write are
-            // ONE shared step (lib/proxy-server-test) with the profile card's Test,
-            // so the two cannot drift again; only the grid's own state is applied
-            // here. The QUIC stamp inside it is the SERVER's `quic_measured_at`
-            // (drop 5) — not this Mac's clock at reply time.
-            const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, serverId);
-            if (stale()) return null;
+          if (leg.kind === 'not_stored') {
+            setVpnNotices((m) => ({ ...m, [p.id]: socks5FleetTestNotStoredNotice(leg.error) }));
+          }
+          if (leg.kind === 'tested') {
             // The ok / failed application is shared with the VPN row's check (b).
-            applyServerProbeOutcome(p.id, outcome);
-            void persistServerProbe(p.id, outcome);
+            applyServerProbeOutcome(p.id, leg.outcome);
+            void persistServerProbe(p.id, leg.outcome);
           }
         }
       } else {
