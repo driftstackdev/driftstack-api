@@ -90,6 +90,10 @@ describe('the Simulator UDP line never shows the dispatch constant as a measurem
     expect(el.textContent).toBe('✓ UDP');
     expect(el.className).toContain('text-status-ready');
     expect(el.getAttribute('title')).toMatch(/HTTP\/3/);
+    // ⛔ An HTTP/3 connection proves UDP on the web port of this session's path,
+    // nothing wider: the hover must not state that calls and media get through
+    // (report D3 — a QUIC-relay reading, not generic UDP or WebRTC).
+    expect(el.getAttribute('title')).not.toMatch(/WebRTC|calls|media/i);
     // …and the launch setting alone, beside no HTTP/3, is still not a reading.
     cleanup();
     expect(udpLine({ ...BASE, proxy_udp_supported: true }).getAttribute('data-state')).toBe(

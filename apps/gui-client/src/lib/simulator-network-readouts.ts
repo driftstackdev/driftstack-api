@@ -34,8 +34,11 @@ export const UDP_NOT_MEASURED_TITLE =
 /** The detail after "— UDP" while a session's report carries only its launch
  *  setting for UDP, which is not a measurement of the proxy. */
 export const SESSION_UDP_NOT_MEASURED_DETAIL = 'not measured in this session';
+/** ⛔ Names only what an HTTP/3 connection proves — UDP both ways on the
+ *  session's own path, to the web port. It does not prove that calls and media
+ *  (WebRTC, other ports) get through, so the hover never says they do. */
 export const SESSION_UDP_MEASURED_BY_HTTP3_TITLE =
-  'UDP works in this session — an HTTP/3 connection went through this exit, and HTTP/3 needs UDP both ways. WebRTC calls and media can use it too.';
+  'UDP works in this session — an HTTP/3 connection went through this exit, and HTTP/3 needs UDP both ways.';
 export const SESSION_UDP_NOT_MEASURED_TITLE =
   'UDP was not measured in this session. The session asks for UDP through your proxy; whether your proxy relays it has not been checked here.';
 
