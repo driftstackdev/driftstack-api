@@ -261,6 +261,8 @@ describe('a fleet-vantage Test stores the QUIC and UDP legs it MEASURED', () => 
       quic_ok: false,
       quic_detail: 'the quic handshake timed out through the proxy',
       udp_associate: true,
+      // S1 — a SOCKS5 UDP boolean is a reading only beside its sentence.
+      udp_detail: 'a dns query round-tripped through the proxy',
     });
     const id = await makeSocks5Proxy('socks-0124-002.example.com');
     // The provider used to relay QUIC and no longer does: the stored `true` must
@@ -289,6 +291,8 @@ describe('a fleet-vantage Test stores the QUIC and UDP legs it MEASURED', () => 
       quic_ok: false,
       quic_detail: 'skipped: udp relay unavailable',
       udp_associate: true,
+      // S1 — a SOCKS5 UDP boolean is a reading only beside its sentence.
+      udp_detail: 'a dns query round-tripped through the proxy',
     });
     const fresh = await makeSocks5Proxy('socks-0124-003.example.com');
     const seeded = await makeSocks5Proxy('socks-0124-004.example.com');
@@ -336,7 +340,7 @@ describe('a fleet-vantage Test stores the QUIC and UDP legs it MEASURED', () => 
     }
   });
 
-  it('P3 the contracted three-state `null` and a VPN row’s ASSERTED literal write nothing either — the same node’s frame on a SOCKS5 row does (vacuity control)', async () => {
+  it('P3 the contracted three-state `null` and a VPN row’s ASSERTED literal write nothing either — nor does the SAME bare boolean on a SOCKS5 row (S1: it is the node’s own local gost grant); a completed handshake’s `udp_echo_ok` on the same frame does (vacuity control)', async () => {
     fx = await buildTestApp({
       enableFleetControlPlane: true,
       proxyConnectivityProbe: cpProbeStub(),
@@ -358,14 +362,37 @@ describe('a fleet-vantage Test stores the QUIC and UDP legs it MEASURED', () => 
     expect(vpnRow.quicProbe).toBeNull();
     expect(vpnRow.quicProbeAt).toBeNull();
 
-    // VACUITY CONTROL — the identical frame on a SOCKS5 row, where the boolean
-    // IS a probe: stored. One node per fixture (the registry dispatches to
-    // whichever is free), so this re-uses the node above on purpose.
+    // The identical frame on a SOCKS5 row: the bare boolean there is the node's
+    // own gost grant, not the upstream's — nothing stored either. One node per
+    // fixture (the registry dispatches to whichever is free), so this re-uses the
+    // node above on purpose.
     const socks = await makeSocks5Proxy('socks-0124-005.example.com');
     expect((await runTest(socks, 'fleet')).ok).toBe(true);
     const socksRow = await storedRow(socks);
-    expect(socksRow.udpProbe).toBe(true);
+    expect(socksRow.udpProbe, 'the local gost grant is not a stored reading').toBeNull();
     expect(socksRow.quicProbe).toBeNull();
+  });
+
+  it('P3 VACUITY CONTROL the same route stores UDP from a frame that carries the round trip (`udp_echo_ok: true`) on both schemes', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerNode('mac-0124-005b', {
+      udp_associate: true,
+      quic_ok: true,
+      quic_detail: null,
+      udp_echo_ok: true,
+    });
+    for (const id of [
+      await makeWireGuardProxy(),
+      await makeSocks5Proxy('socks-0124-005b.example.com'),
+    ]) {
+      expect((await runTest(id, 'fleet')).ok).toBe(true);
+      const row = await storedRow(id);
+      expect(row.udpProbe).toBe(true);
+      expect(row.udpProbeAt).toBeInstanceOf(Date);
+    }
   });
 
   it('P3 a verdict on a proxy that does NOT WORK stores nothing: its `false` legs had nothing to run over, and a stored negative stops anyone looking again', async () => {
@@ -432,7 +459,7 @@ describe('a fleet-vantage Test stores the QUIC and UDP legs it MEASURED', () => 
       enableFleetControlPlane: true,
       proxyConnectivityProbe: cpProbeStub(),
     });
-    registerNode('mac-0124-008', { quic_ok: true, udp_associate: true });
+    registerNode('mac-0124-008', { quic_ok: true, udp_associate: true, udp_echo_ok: true });
     const id = await makeSocks5Proxy('socks-0124-008.example.com');
     // Only the probe-readings write fails; the exit write beside it goes through
     // `update`, which is untouched, so this arm cannot pass because EVERY write
@@ -466,10 +493,18 @@ describe('a fleet-vantage Test stores the QUIC and UDP legs it MEASURED', () => 
     });
     let edit: Record<string, unknown> = { host: 'moved-0124.example.com' };
     let target = '';
-    registerNode('mac-0124-009', { quic_ok: false, udp_associate: false }, async () => {
-      const res = await putProxy(target, edit);
-      expect(res.statusCode, res.body).toBe(200);
-    });
+    registerNode(
+      'mac-0124-009',
+      {
+        quic_ok: false,
+        udp_associate: false,
+        udp_detail: 'the proxy refused the udp relay request',
+      },
+      async () => {
+        const res = await putProxy(target, edit);
+        expect(res.statusCode, res.body).toBe(200);
+      },
+    );
 
     target = await makeSocks5Proxy('socks-0124-009.example.com');
     const movedBody = await runTest(target, 'fleet');
@@ -498,10 +533,14 @@ describe('a fleet-vantage Test stores the QUIC and UDP legs it MEASURED', () => 
       proxyConnectivityProbe: cpProbeStub(),
     });
     let target = '';
-    registerNode('mac-0124-012', { quic_ok: true, udp_associate: true }, async () => {
-      const res = await putProxy(target, { host: 'moved-0124-012.example.com' });
-      expect(res.statusCode, res.body).toBe(200);
-    });
+    registerNode(
+      'mac-0124-012',
+      { quic_ok: true, udp_associate: true, udp_echo_ok: true },
+      async () => {
+        const res = await putProxy(target, { host: 'moved-0124-012.example.com' });
+        expect(res.statusCode, res.body).toBe(200);
+      },
+    );
     target = await makeSocks5Proxy('socks-0124-012.example.com');
     // Opposite polarity to what the node is about to measure, so neither the old
     // reading nor the new one can be mistaken for the other in the reply.
@@ -537,14 +576,18 @@ describe('a fleet-vantage Test stores the QUIC and UDP legs it MEASURED', () => 
       proxyConnectivityProbe: cpProbeStub(),
     });
     let target = '';
-    registerNode('mac-0124-013', { quic_ok: true, udp_associate: true }, async () => {
-      const res = await fx.app.inject({
-        method: 'DELETE',
-        url: `/v1/account/me/proxies/${target}`,
-        headers: auth(fx),
-      });
-      expect(res.statusCode, res.body).toBeLessThan(300);
-    });
+    registerNode(
+      'mac-0124-013',
+      { quic_ok: true, udp_associate: true, udp_echo_ok: true },
+      async () => {
+        const res = await fx.app.inject({
+          method: 'DELETE',
+          url: `/v1/account/me/proxies/${target}`,
+          headers: auth(fx),
+        });
+        expect(res.statusCode, res.body).toBeLessThan(300);
+      },
+    );
     target = await makeSocks5Proxy('socks-0124-013.example.com');
     await seedEarlierReadings(target, false, false);
 
@@ -567,15 +610,19 @@ describe('a fleet-vantage Test stores the QUIC and UDP legs it MEASURED', () => 
     });
     const credentials = { username: 'user-country-us', password: 'hunter2-0124-016' };
     let target = '';
-    registerNode('mac-0124-016', { quic_ok: true, udp_associate: true }, async () => {
-      const res = await putProxy(target, {
-        label: 'p',
-        host: 'socks-0124-016.example.com',
-        port: 1080,
-        ...credentials,
-      });
-      expect(res.statusCode, res.body).toBe(200);
-    });
+    registerNode(
+      'mac-0124-016',
+      { quic_ok: true, udp_associate: true, udp_echo_ok: true },
+      async () => {
+        const res = await putProxy(target, {
+          label: 'p',
+          host: 'socks-0124-016.example.com',
+          port: 1080,
+          ...credentials,
+        });
+        expect(res.statusCode, res.body).toBe(200);
+      },
+    );
     target = await makeSocks5Proxy('socks-0124-016.example.com', credentials);
     await seedEarlierReadings(target, false, false);
     const before = await storedRow(target);
@@ -656,7 +703,7 @@ describe('a fleet-vantage Test stores the QUIC and UDP legs it MEASURED', () => 
       enableFleetControlPlane: true,
       proxyConnectivityProbe: cpProbeStub(),
     });
-    registerNode('mac-0124-014', { quic_ok: true, udp_associate: true });
+    registerNode('mac-0124-014', { quic_ok: true, udp_associate: true, udp_echo_ok: true });
     const id = await makeSocks5Proxy('socks-0124-014.example.com');
     await seedEarlierReadings(id, false, false);
     vi.spyOn(fx.accountProxiesRepo, 'storeProbeReadingsIfSameIdentity').mockRejectedValue(
@@ -680,7 +727,7 @@ describe('a fleet-vantage Test stores the QUIC and UDP legs it MEASURED', () => 
     // Reads fail only from the moment the node has been asked — the handler's
     // own first read of the row, before the test, is a real one.
     let storeIsDown = false;
-    registerNode('mac-0124-018', { quic_ok: true, udp_associate: true }, () => {
+    registerNode('mac-0124-018', { quic_ok: true, udp_associate: true, udp_echo_ok: true }, () => {
       storeIsDown = true;
       return Promise.resolve();
     });
@@ -721,7 +768,11 @@ describe('a fleet-vantage Test stores the QUIC and UDP legs it MEASURED', () => 
         },
       } as unknown as never,
     });
-    registerNode('mac-0124-015', { quic_ok: false, udp_associate: true });
+    registerNode('mac-0124-015', {
+      quic_ok: false,
+      udp_associate: true,
+      udp_detail: 'a dns query round-tripped through the proxy',
+    });
     const id = await makeSocks5Proxy('socks-0124-015.example.com');
 
     const startedAt = Date.now();
@@ -786,6 +837,88 @@ describe('a fleet-vantage Test stores the QUIC and UDP legs it MEASURED', () => 
     expect(body.quic_probe_at).toBeNull();
     expect(body.udp_probe).toBeNull();
     expect(body.udp_probe_at).toBeNull();
+  });
+});
+
+// Proxy-accuracy audit S1 (paths-06 + logic-10). On the SOCKS5 path the fleet
+// Mac points its QUIC tool at its OWN local gost listener (127.0.0.1), and gost
+// grants UDP ASSOCIATE itself before it ever contacts the upstream. So the frame's
+// bare `udp_associate` said "the node's local relay said yes" for every proxy that
+// carries TCP — upstreams that refuse with 0x07 or 0x02 and upstreams that drop
+// every datagram all read ✓ UDP "measured by Driftstack". The reverse was just as
+// false: when the tool was missing or printed nothing, the bare boolean was
+// `false` and a customer read "⤵ UDP" about OUR failure. The only SOCKS5 UDP fact
+// on the wire today is `udp_echo_ok`: true when a QUIC handshake COMPLETED
+// through the proxy (datagrams both ways), absent otherwise — never a measured
+// false. A measured SOCKS5 negative needs the device's own datagram leg (D1),
+// which will arrive with a `udp_detail` sentence, as a VPN's does.
+describe('S1 — a SOCKS5 row’s stored UDP reading is a datagram round trip or nothing', () => {
+  it('CRITICAL the local gost grant (a bare `udp_associate: true`, no detail, no echo) is not a reading: absent from the reply, nothing stored, and an earlier reading is left as it was', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    // An upstream that refuses UDP with 0x07: gost granted locally, the QUIC
+    // handshake timed out, `udp_echo_ok` is null.
+    registerNode('mac-s1-001', {
+      udp_associate: true,
+      quic_ok: false,
+      quic_detail: 'quic_handshake_timeout',
+      udp_echo_ok: null,
+    });
+    const fresh = await makeSocks5Proxy('socks-s1-001.example.com');
+    const body = await runTest(fresh, 'fleet');
+    expect(body.ok, JSON.stringify(body)).toBe(true);
+    expect('udp_associate' in body, 'the node’s own gost grant is not a UDP reading').toBe(false);
+    const row = await storedRow(fresh);
+    expect(row.udpProbe).toBeNull();
+    expect(row.udpProbeAt).toBeNull();
+    expect(body.udp_probe).toBeNull();
+    // The QUIC timeout IS a reading (the only negative this path produces) and
+    // is still stored: the arm is about UDP, not a route that stopped writing.
+    expect(row.quicProbe).toBe(false);
+  });
+
+  it('CRITICAL logic-10: our own probe failing (tool missing — `udp_associate: false`, `probe_unavailable`) stores no UDP false and does not overwrite an earlier reading', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerNode('mac-s1-002', {
+      udp_associate: false,
+      quic_ok: null,
+      quic_detail: 'probe_unavailable',
+      udp_echo_ok: null,
+    });
+    const id = await makeSocks5Proxy('socks-s1-002.example.com');
+    await seedEarlierReadings(id, true, true);
+    const body = await runTest(id, 'fleet');
+    expect(body.ok, JSON.stringify(body)).toBe(true);
+    expect('udp_associate' in body, 'our failure is not a fact about the proxy').toBe(false);
+    const row = await storedRow(id);
+    expect(row.udpProbe).toBe(true);
+    expect(row.udpProbeAt).toEqual(EARLIER);
+  });
+
+  it('CRITICAL VACUITY CONTROL a completed QUIC handshake (`udp_echo_ok: true`) IS the reading: replied true and stored true, dated', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerNode('mac-s1-003', {
+      udp_associate: true,
+      quic_ok: true,
+      quic_detail: null,
+      udp_echo_ok: true,
+    });
+    const id = await makeSocks5Proxy('socks-s1-003.example.com');
+    const body = await runTest(id, 'fleet');
+    expect(body.ok, JSON.stringify(body)).toBe(true);
+    expect(body.udp_associate).toBe(true);
+    const row = await storedRow(id);
+    expect(row.udpProbe).toBe(true);
+    expect(row.udpProbeAt).toBeInstanceOf(Date);
+    expect(body.udp_probe).toBe(true);
   });
 });
 

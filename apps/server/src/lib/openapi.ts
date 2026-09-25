@@ -2750,10 +2750,12 @@ function buildRegistry(): OpenAPIRegistry {
         auth_ok: z.boolean().optional(),
         // ⛔ (V6) ABSENT MEANS "NOT MEASURED", NEVER "no". Absent when the node
         // reports `udp_associate: null` (it did not look), when `udp_detail` starts
-        // with "skipped:" (the leg never ran), and on a VPN row whose node sent the
-        // bare literal with no `udp_detail` — on the VPN path that boolean asserts
-        // the tunnel's nature and no probe stands behind it. A VPN row DOES report
-        // it once the node sends a real verdict beside its `udp_detail` sentence.
+        // with "skipped:" (the leg never ran), and whenever the node sent a bare
+        // boolean with no `udp_detail` — on the VPN path that boolean asserts the
+        // tunnel's nature, and on the SOCKS5 path it is the node's own local relay
+        // granting UDP before the proxy is contacted (proxy-accuracy audit S1).
+        // Present as `true` when a QUIC handshake completed through the proxy
+        // (`udp_echo_ok`), and as the node's verdict beside its `udp_detail`.
         udp_associate: z.boolean().optional(),
         // (V6) The node's sentence about the UDP leg, the sibling of `quic_detail`:
         // a "skipped: …" prefix says the leg never ran. Present whenever the node

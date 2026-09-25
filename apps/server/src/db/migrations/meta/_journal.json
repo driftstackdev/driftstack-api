@@ -1016,6 +1016,13 @@
       "when": 1786665600032,
       "tag": "0144_crypto_order_payment_mint_claim",
       "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1786665600033,
+      "tag": "0145_socks5_udp_probe_from_the_local_gost_grant_is_cleared",
+      "breakpoints": true
     }
   ]
 }

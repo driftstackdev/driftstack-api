@@ -259,13 +259,15 @@ type OsFingerprintFields =
  * are ABSENT from the reply, and absence is the wire's "not measured" — every
  * surface renders it as "not measured yet", never as a negative verdict.
  *
- * ⚠️ THE DISCRIMINATOR FOR UDP ON A VPN ROW IS `udp_detail`, NOT THE BOOLEAN.
- * Today's node sends the bare literal `true` with no detail; the migrated node
- * sends a real verdict WITH its sentence (or `null` + `"skipped: …"`). A bare
- * boolean on a VPN row is therefore the legacy assertion and is dropped, while the
- * same boolean beside a detail is the measurement and is reported. That makes the
- * node change deployable in either order: nothing here needs to ship with it, and
- * the field lights up the moment a node starts saying what it measured.
+ * ⚠️ THE DISCRIMINATOR FOR UDP IS `udp_detail` (or `udp_echo_ok`), NOT THE
+ * BOOLEAN — on EVERY scheme (proxy-accuracy audit S1). Today's node sends a bare
+ * boolean with no detail on both paths: on the VPN path a literal about the
+ * tunnel's nature, on the SOCKS5 path the grant of the node's OWN local gost
+ * listener, which says yes before the upstream is contacted. A bare boolean is
+ * therefore dropped; the same boolean beside a detail is the measurement and is
+ * reported, and a completed QUIC handshake (`udp_echo_ok: true`) reports UDP true.
+ * That makes the node change deployable in either order: nothing here needs to
+ * ship with it, and the field lights up the moment a node says what it measured.
  *
  * ⚠️ QUIC takes no such clause, deliberately: the node has ALWAYS said "skipped:"
  * on the VPN path, so a VPN `quic_ok` arriving without that prefix is already a
@@ -277,21 +279,35 @@ export function capabilityReadingsForReply(
   scheme: string,
   frame: Pick<
     ProbeEgressResult,
-    'udp_associate' | 'udp_detail' | 'h2_ok' | 'quic_ok' | 'quic_detail'
+    'udp_associate' | 'udp_detail' | 'h2_ok' | 'quic_ok' | 'quic_detail' | 'udp_echo_ok'
   >,
 ): { udp_associate?: boolean; udp_detail?: string; h2_ok?: boolean; quic_ok?: boolean } {
   const vpn = scheme === 'openvpn' || scheme === 'wireguard';
   const legSkipped = (detail: string | null | undefined): boolean =>
     typeof detail === 'string' && detail.startsWith('skipped:');
   const udpDetail = typeof frame.udp_detail === 'string' ? frame.udp_detail : undefined;
-  const udpMeasured =
-    typeof frame.udp_associate === 'boolean' &&
-    !legSkipped(udpDetail) &&
-    // The legacy VPN literal: a boolean the node never backed with a sentence.
-    !(vpn && udpDetail === undefined);
+  // ⛔ Proxy-accuracy audit S1 — a bare boolean is not a UDP reading on ANY
+  // scheme. The VPN path writes a literal about the tunnel's nature; the SOCKS5
+  // path points its QUIC tool at the node's OWN local gost listener, which grants
+  // UDP ASSOCIATE before it ever contacts the upstream — so a proxy that refuses
+  // UDP (0x07, 0x02) or drops every datagram read `true`, and the tool failing to
+  // run at all read `false` ("⤵ UDP (measured by Driftstack)" about our own
+  // failure). Only a boolean the node backs with its sentence is a measurement.
+  const udpMeasuredWithDetail =
+    typeof frame.udp_associate === 'boolean' && !legSkipped(udpDetail) && udpDetail !== undefined;
+  // The datagram round trip the node CAN report today: `udp_echo_ok` is true when
+  // a QUIC handshake COMPLETED through the proxy, which cannot happen unless
+  // datagrams travelled both ways. True or absent — never a measured false (a
+  // failed handshake can fail on TLS or ALPN with UDP flowing fine).
+  const udpEchoed = frame.udp_echo_ok === true;
+  const udpReading: boolean | undefined = udpEchoed
+    ? true
+    : udpMeasuredWithDetail
+      ? (frame.udp_associate as boolean)
+      : undefined;
   const quicMeasured = typeof frame.quic_ok === 'boolean' && !legSkipped(frame.quic_detail);
   return {
-    ...(udpMeasured ? { udp_associate: frame.udp_associate as boolean } : {}),
+    ...(udpReading !== undefined ? { udp_associate: udpReading } : {}),
     // The node's own sentence rides even when the boolean does not: "skipped: …"
     // is exactly what tells a surface WHY there is no verdict, and it is the only
     // thing on the wire that can.

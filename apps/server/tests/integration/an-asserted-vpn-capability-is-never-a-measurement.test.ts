@@ -133,7 +133,7 @@ async function testFleet(id: string): Promise<Record<string, unknown>> {
 }
 
 describe('the route reports a capability only when the node MEASURED it', () => {
-  it('G2 CRITICAL a VPN row drops the node’s asserted udp_associate AND h2_ok — a SOCKS5 row keeps both', async () => {
+  it('G2 CRITICAL a VPN row drops the node’s asserted udp_associate AND h2_ok — a SOCKS5 row keeps h2_ok and, since S1, drops the bare udp_associate too (it is the node’s own gost grant)', async () => {
     fx = await buildTestApp({
       enableFleetControlPlane: true,
       proxyConnectivityProbe: cpProbeStub(),
@@ -158,16 +158,43 @@ describe('the route reports a capability only when the node MEASURED it', () => 
     expect(vpnBody.quic_detail).toBe('skipped: quic leg not probed on the vpn path');
 
     // VACUITY CONTROL — the IDENTICAL frame, from the SAME node, on a SOCKS5
-    // row, where udp_associate and h2_ok really are probed: both are still
-    // reported. Without this the arm above would pass on a route that had simply
-    // stopped emitting them. ⛔ One node per fixture: the registry dispatches to
-    // whichever node is free, so a second `registerNode` here would never answer
-    // and these assertions would quietly re-read the first node's frame anyway.
+    // row, where h2_ok really is probed: still reported. Without this the arm
+    // above would pass on a route that had simply stopped emitting it. ⛔ One node
+    // per fixture: the registry dispatches to whichever node is free, so a second
+    // `registerNode` here would never answer and these assertions would quietly
+    // re-read the first node's frame anyway.
+    //
+    // ⛔ S1 (proxy-accuracy audit) — the bare `udp_associate` is NOT a reading on
+    // the SOCKS5 row either: the node's QUIC tool asks its own local gost, which
+    // grants UDP before the upstream is contacted. Its vacuity control (the echo
+    // IS reported) is the next arm.
     const socks = await makeSocks5Proxy('socks-v6-002.example.com');
     const socksBody = await testFleet(socks);
     expect(socksBody.ok, JSON.stringify(socksBody)).toBe(true);
-    expect(socksBody.udp_associate).toBe(true);
+    expect('udp_associate' in socksBody, 'the local gost grant is not a reading').toBe(false);
     expect(socksBody.h2_ok).toBe(true);
+  });
+
+  it('G2 VACUITY CONTROL — S1: a completed handshake’s `udp_echo_ok: true` IS reported as UDP on both schemes', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerNode('mac-v6-001b', {
+      udp_associate: true,
+      h2_ok: true,
+      quic_ok: true,
+      quic_detail: null,
+      udp_echo_ok: true,
+    });
+    for (const id of [
+      await makeWireGuardProxy(),
+      await makeSocks5Proxy('socks-v6-002b.example.com'),
+    ]) {
+      const body = await testFleet(id);
+      expect(body.ok, JSON.stringify(body)).toBe(true);
+      expect(body.udp_associate).toBe(true);
+    }
   });
 
   it('G1 a three-state null / an absent key is NOT MEASURED — the frame parses and the reply omits it', async () => {
@@ -300,10 +327,48 @@ describe('capabilityReadingsForReply', () => {
         udp_detail: 'skipped: not probed',
       }).udp_associate,
     ).toBeUndefined();
-    // A SOCKS5 row needs no sentence — every node has always probed that leg.
+    // ⛔ S1 (proxy-accuracy audit) — a SOCKS5 row's bare boolean is not a reading
+    // either: the node's QUIC tool asks its OWN local gost listener, which grants
+    // UDP ASSOCIATE before the upstream is ever contacted (a proxy that refuses
+    // UDP read ✓), and reads `false` when the tool itself did not run.
     expect(
       capabilityReadingsForReply('socks5', { ...base, udp_associate: true }).udp_associate,
-    ).toBe(true);
+    ).toBeUndefined();
+    expect(
+      capabilityReadingsForReply('socks5', {
+        ...base,
+        quic_ok: null,
+        quic_detail: 'probe_unavailable',
+        udp_associate: false,
+      }).udp_associate,
+    ).toBeUndefined();
+    // …the datagram round trip is: a COMPLETED QUIC handshake through the proxy
+    // (`udp_echo_ok`), on either scheme. True or absent — never a measured false.
+    for (const scheme of ['socks5', 'wireguard', 'openvpn']) {
+      expect(
+        capabilityReadingsForReply(scheme, { ...base, udp_associate: true, udp_echo_ok: true })
+          .udp_associate,
+      ).toBe(true);
+      expect(
+        capabilityReadingsForReply(scheme, { ...base, udp_associate: false, udp_echo_ok: true })
+          .udp_associate,
+      ).toBe(true);
+      for (const echo of [false, null, undefined]) {
+        expect(
+          capabilityReadingsForReply(scheme, { ...base, udp_associate: true, udp_echo_ok: echo })
+            .udp_associate,
+        ).toBeUndefined();
+      }
+    }
+    // A SOCKS5 measurement WITH its sentence (the device's own datagram leg, D1)
+    // is a reading like a VPN's — including the only honest ⤵, a refusal.
+    expect(
+      capabilityReadingsForReply('socks5', {
+        ...base,
+        udp_associate: false,
+        udp_detail: 'upstream refused udp associate (0x07)',
+      }).udp_associate,
+    ).toBe(false);
     // …but a skipped leg or a null is not a reading there either.
     expect(
       capabilityReadingsForReply('socks5', {
