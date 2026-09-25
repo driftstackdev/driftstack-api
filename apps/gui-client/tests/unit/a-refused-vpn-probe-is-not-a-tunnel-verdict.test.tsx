@@ -1687,19 +1687,68 @@ describe('(i) I7 — the list adoption honours the server’s exit_superseded_at
     expect(entry?.exitSupersededAt).toBeUndefined();
   });
 
-  it('G2 (d) — a SOCKS5 row adopts the STAMP (a Driftstack failure reaches every Mac) and never the exit — its own is measured from this Mac', async () => {
+  // ⛔ G2 (d), second pass — on a SOCKS5 row this STAMP is not Driftstack's
+  // verdict: the server's background refresh writes it too, from its own address,
+  // after three missed reachability probes. A SOCKS5 row adopts the failure from
+  // the list's `full_check_ok: false` (the fleet's verdict and nothing else's),
+  // and never an exit — its own is measured from this Mac.
+  it('G2 (d) — a SOCKS5 row adopts NO failure from the exit stamp, and adopts one from the full-check verdict; never the exit', async () => {
     await saveEndpointResult(
       'socks1',
       { resolved: true, ip: '198.51.100.2', message: 'Resolved' },
       NOW - 3,
     );
-    const row = { ...listRow(NOW - 1, STAMP), id: 'aprx_socks' };
     const socks = { ...socks5Row(), id: 'socks1', serverId: 'aprx_socks' };
-    expect(await adoptListExitObserved([row], [socks], NOW + 5)).toEqual(['socks1']);
-    const e = (await loadProbeCache()).socks1;
+    const stamped = { ...listRow(NOW - 1, STAMP), id: 'aprx_socks' };
+    expect(await adoptListExitObserved([stamped], [socks], NOW + 5)).toEqual([]);
+    let e = (await loadProbeCache()).socks1;
+    expect(e).not.toHaveProperty('exitSupersededAt');
+    expect(e).not.toHaveProperty('fleetFailureReason');
+    const verdict = {
+      ...stamped,
+      full_check_ok: false,
+      full_check_at: new Date(STAMP).toISOString(),
+    };
+    expect(await adoptListExitObserved([verdict], [socks], NOW + 5)).toEqual(['socks1']);
+    e = (await loadProbeCache()).socks1;
     expect(e?.exitSupersededAt).toBe(STAMP);
     expect(e?.fleetFailureReason).toBe(LIST_FLEET_FAILED_REASON);
     expect(e?.exitIp).toBeUndefined();
+  });
+
+  it('CRITICAL the wire: listProxies keeps full_check_ok as a boolean or null and full_check_at as a string or null — anything else is "no verdict", never a failure', async () => {
+    const base = {
+      id: 'aprx_socks',
+      label: 's',
+      scheme: 'socks5',
+      host: 'h',
+      port: 1,
+      username: null,
+      has_password: false,
+      created_at: 'c',
+      updated_at: 'u',
+      exit_observed: null,
+    };
+    const at = '2026-09-25T08:00:00.000Z';
+    nextResponse = () =>
+      json({
+        data: [
+          { ...base, id: 'a', full_check_ok: false, full_check_at: at },
+          { ...base, id: 'b', full_check_ok: true, full_check_at: at },
+          { ...base, id: 'c', full_check_ok: null, full_check_at: null },
+          { ...base, id: 'd', full_check_ok: 'false', full_check_at: 12345 },
+          { ...base, id: 'e' },
+        ],
+      });
+    const rows = await real.listProxies('http://x', 'k');
+    expect(rows.map((r) => [r.id, r.full_check_ok, r.full_check_at])).toEqual([
+      ['a', false, at],
+      ['b', true, at],
+      ['c', null, null],
+      ['d', null, null],
+      ['e', undefined, undefined],
+    ]);
+    expect('full_check_ok' in rows[4]! || 'full_check_at' in rows[4]!).toBe(false);
   });
 
   it('CRITICAL the wire: listProxies keeps exit_superseded_at as a string or null and nulls anything else', async () => {

@@ -108,6 +108,20 @@ export interface AccountProxyRow {
   /** When {@link udpProbe} was measured, or null when never measured. */
   udpProbeAt: Date | null;
   /**
+   * (migration 0146) — the verdict of the last FULL check a fleet Mac measured
+   * (`?check=full`, `measured_by: phone`): true = the proxy was usable, false =
+   * the check reached a verdict and it was not; null = none since the row last
+   * changed identity. Written only by {@link AccountProxiesRepo.storeFullCheckVerdictIfSameIdentity}.
+   *
+   * ⛔ Not {@link exitSupersededAt}: the background freshness job stamps that
+   * one too, from the control plane, whose streak of misses cannot tell a dead
+   * proxy from one that admits only listed addresses. A client reads THIS as
+   * "Driftstack could not use this proxy" (proxy-accuracy audit G2 d).
+   */
+  fullCheckOk: boolean | null;
+  /** When {@link fullCheckOk} was measured, or null with it. */
+  fullCheckAt: Date | null;
+  /**
    * ITEM 4 (migration 0123) — when the BACKGROUND freshness refresher last
    * ATTEMPTED this row, success or failure, or null when it never has (= due
    * now). Both the cooldown clock and the claim: {@link
@@ -192,6 +206,11 @@ export interface AccountProxyRowUpdates {
   /** (0124) — the UDP reading a fleet-vantage Test measured; same rules. */
   udpProbe?: boolean | null;
   udpProbeAt?: Date | null;
+  /** (0146) — ONLY ever nulled here, by an edit that repoints the row or changes
+   *  its credential. The verdict itself is written through the identity fence
+   *  (`storeFullCheckVerdictIfSameIdentity`), never through a generic update. */
+  fullCheckOk?: null;
+  fullCheckAt?: null;
   /** ITEM 4 — reset to 0 by the background refresher on a successful probe. The
    *  INCREMENT is not expressible here (it must read-modify-write atomically);
    *  see {@link AccountProxiesRepo.recordFreshnessFailure}. */
@@ -280,6 +299,31 @@ export interface AccountProxiesRepo {
       'scheme' | 'host' | 'port' | 'username' | 'wrappedPassword' | 'wrappedSecret'
     >;
     readings: ProbeReadingsToStore;
+  }): Promise<AccountProxyRow | null>;
+  /**
+   * (0146) — store the verdict of a FULL check a fleet Mac measured, ONLY onto a
+   * row that still carries the identity the node dialled, and only when the row
+   * holds no verdict measured LATER. Returns the row as the statement left it,
+   * or null when nothing matched (gone, another account's, or repointed / given
+   * a new credential while the check ran — including a PUT that resubmitted the
+   * same password, which re-wraps it; the reading then waits for the next check
+   * rather than guessing).
+   *
+   * The same fence as {@link storeProbeReadingsIfSameIdentity}, for the same
+   * reason and a sharper one: a stored `false` here is shown on every desktop as
+   * "Driftstack could not use this proxy" and retires the readings dated before
+   * it, so the old endpoint's failure landing on a corrected row would condemn
+   * the customer's fix. `updated_at` does not move — a verdict is not an edit.
+   */
+  storeFullCheckVerdictIfSameIdentity(args: {
+    id: string;
+    accountId: string;
+    probedIdentity: Pick<
+      AccountProxyRow,
+      'scheme' | 'host' | 'port' | 'username' | 'wrappedPassword' | 'wrappedSecret'
+    >;
+    ok: boolean;
+    at: Date;
   }): Promise<AccountProxyRow | null>;
   /** Returns true if a row was removed; false if no owned row matched. */
   delete(args: { id: string; accountId: string }): Promise<boolean>;
@@ -445,6 +489,8 @@ function toRow(r: typeof accountProxies.$inferSelect): AccountProxyRow {
     quicProbeAt: r.quicProbeAt,
     udpProbe: r.udpProbe,
     udpProbeAt: r.udpProbeAt,
+    fullCheckOk: r.fullCheckOk,
+    fullCheckAt: r.fullCheckAt,
     freshnessAttemptedAt: r.freshnessAttemptedAt,
     freshnessConsecutiveFailures: r.freshnessConsecutiveFailures,
     createdAt: r.createdAt,
@@ -505,6 +551,9 @@ function toRowFromRaw(r: Record<string, unknown>): AccountProxyRow {
     quicProbeAt: parseRawTimestamp(r.quic_probe_at),
     udpProbe: typeof r.udp_probe === 'boolean' ? r.udp_probe : null,
     udpProbeAt: parseRawTimestamp(r.udp_probe_at),
+    // Same null-survives rule as the probe readings above.
+    fullCheckOk: typeof r.full_check_ok === 'boolean' ? r.full_check_ok : null,
+    fullCheckAt: parseRawTimestamp(r.full_check_at),
     freshnessAttemptedAt: parseRawTimestamp(r.freshness_attempted_at),
     freshnessConsecutiveFailures: Number(r.freshness_consecutive_failures ?? 0),
     createdAt: requireRawTimestamp(r.created_at, 'created_at'),
@@ -698,6 +747,41 @@ export class DrizzleAccountProxiesRepo implements AccountProxiesRepo {
          AND p.account_id = ${args.accountId}::uuid
          -- The identity the reading was measured through. NULL-safe on the three
          -- nullable columns: a plain = against NULL is never true.
+         AND p.scheme = ${args.probedIdentity.scheme}::text
+         AND p.host = ${args.probedIdentity.host}::text
+         AND p.port = ${args.probedIdentity.port}::int
+         AND p.username IS NOT DISTINCT FROM ${args.probedIdentity.username}::text
+         AND p.wrapped_password IS NOT DISTINCT FROM ${args.probedIdentity.wrappedPassword}::text
+         AND p.wrapped_secret IS NOT DISTINCT FROM ${args.probedIdentity.wrappedSecret}::text
+       RETURNING p.*;
+    `);
+    const row = rawRows(result)[0];
+    return row === undefined ? null : toRowFromRaw(row);
+  }
+
+  async storeFullCheckVerdictIfSameIdentity(args: {
+    id: string;
+    accountId: string;
+    probedIdentity: Pick<
+      AccountProxyRow,
+      'scheme' | 'host' | 'port' | 'username' | 'wrappedPassword' | 'wrappedSecret'
+    >;
+    ok: boolean;
+    at: Date;
+  }): Promise<AccountProxyRow | null> {
+    // ONE statement: the identity fence and the later-wins rule are both in the
+    // WHERE, so neither a concurrent PUT nor an out-of-order second check can slip
+    // between a read and this write. The date is pre-serialised and the boolean
+    // cast, for the reasons `storeProbeReadingsIfSameIdentity` records.
+    // ⚠️ No backticks inside the template below.
+    const atIso = args.at.toISOString();
+    const result = await this.database.db.execute(sql`
+      UPDATE account_proxies p
+         SET full_check_ok = ${args.ok}::boolean,
+             full_check_at = ${atIso}::timestamptz
+       WHERE p.id = ${args.id}::uuid
+         AND p.account_id = ${args.accountId}::uuid
+         AND (p.full_check_at IS NULL OR p.full_check_at <= ${atIso}::timestamptz)
          AND p.scheme = ${args.probedIdentity.scheme}::text
          AND p.host = ${args.probedIdentity.host}::text
          AND p.port = ${args.probedIdentity.port}::int
@@ -1097,6 +1181,8 @@ export class InMemoryAccountProxiesRepo implements AccountProxiesRepo {
       quicProbeAt: null,
       udpProbe: null,
       udpProbeAt: null,
+      fullCheckOk: null,
+      fullCheckAt: null,
       freshnessAttemptedAt: null,
       freshnessConsecutiveFailures: 0,
       createdAt: now,
@@ -1178,6 +1264,41 @@ export class InMemoryAccountProxiesRepo implements AccountProxiesRepo {
       // Only a write that changed something moves the change stamp — as the
       // statement's own CASE.
       ...(quicLands || udpLands ? { updatedAt: new Date() } : {}),
+    };
+    this.rows.set(next.id, next);
+    return Promise.resolve({ ...next });
+  }
+
+  storeFullCheckVerdictIfSameIdentity(args: {
+    id: string;
+    accountId: string;
+    probedIdentity: Pick<
+      AccountProxyRow,
+      'scheme' | 'host' | 'port' | 'username' | 'wrappedPassword' | 'wrappedSecret'
+    >;
+    ok: boolean;
+    at: Date;
+  }): Promise<AccountProxyRow | null> {
+    // Check and write in one synchronous step, like the statement's WHERE.
+    const r = this.rows.get(args.id);
+    const probed = args.probedIdentity;
+    if (
+      !r ||
+      r.accountId !== args.accountId ||
+      (r.fullCheckAt !== null && r.fullCheckAt.getTime() > args.at.getTime()) ||
+      r.scheme !== probed.scheme ||
+      r.host !== probed.host ||
+      r.port !== probed.port ||
+      r.username !== probed.username ||
+      r.wrappedPassword !== probed.wrappedPassword ||
+      r.wrappedSecret !== probed.wrappedSecret
+    ) {
+      return Promise.resolve(null);
+    }
+    const next: AccountProxyRow = {
+      ...r,
+      fullCheckOk: args.ok,
+      fullCheckAt: new Date(args.at.getTime()),
     };
     this.rows.set(next.id, next);
     return Promise.resolve({ ...next });

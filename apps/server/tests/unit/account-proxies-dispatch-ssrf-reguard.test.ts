@@ -76,6 +76,9 @@ function row(over: Partial<AccountProxyRow> & { scheme: string }): AccountProxyR
     quicProbeAt: over.quicProbeAt ?? null,
     udpProbe: over.udpProbe ?? null,
     udpProbeAt: over.udpProbeAt ?? null,
+    // The last full check's verdict (migration 0146).
+    fullCheckOk: over.fullCheckOk ?? null,
+    fullCheckAt: over.fullCheckAt ?? null,
     // ITEM 4 — the background-refresh bookkeeping columns (migration 0123).
     freshnessAttemptedAt: over.freshnessAttemptedAt ?? null,
     freshnessConsecutiveFailures: over.freshnessConsecutiveFailures ?? 0,

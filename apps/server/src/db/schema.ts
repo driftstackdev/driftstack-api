@@ -980,6 +980,17 @@ export const accountProxies = pgTable(
     quicProbeAt: timestamp('quic_probe_at', { withTimezone: true }),
     udpProbe: boolean('udp_probe'),
     udpProbeAt: timestamp('udp_probe_at', { withTimezone: true }),
+    // (migration 0146) — the verdict of the last FULL check a fleet Mac measured
+    // (`?check=full`, `measured_by: phone`), and when: true = usable, false = the
+    // check reached a verdict and the proxy was not. NULL = none since the row
+    // last changed identity. Its ONLY writer is that check, through the identity
+    // fence (`storeFullCheckVerdictIfSameIdentity`), later wins.
+    // ⛔ NOT `exitSupersededAt`: the background freshness job stamps that one too,
+    // from the control plane, and a streak of misses from a different address
+    // cannot tell a dead proxy from an allow-listed one. A desktop reads THIS
+    // column, never that one, as "Driftstack could not use this proxy".
+    fullCheckOk: boolean('full_check_ok'),
+    fullCheckAt: timestamp('full_check_at', { withTimezone: true }),
     // ITEM 4 (migration 0123) — when the BACKGROUND freshness refresher last
     // ATTEMPTED this row, success or failure. Both the cooldown clock and the
     // claim: the tick stamps it inside the same statement that selects the row

@@ -1023,6 +1023,13 @@
       "when": 1786665600033,
       "tag": "0145_socks5_udp_probe_from_the_local_gost_grant_is_cleared",
       "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1786665600034,
+      "tag": "0146_account_proxy_full_check_verdict",
+      "breakpoints": true
     }
   ]
 }

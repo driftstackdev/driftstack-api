@@ -56,6 +56,9 @@ function rowOf(scheme: AccountProxyRow['scheme']): AccountProxyRow {
     quicProbeAt: null,
     udpProbe: null,
     udpProbeAt: null,
+    // The last full check's verdict (migration 0146) — none here.
+    fullCheckOk: null,
+    fullCheckAt: null,
     // ITEM 4 — the background-refresh bookkeeping columns (migration 0123).
     freshnessAttemptedAt: null,
     freshnessConsecutiveFailures: 0,

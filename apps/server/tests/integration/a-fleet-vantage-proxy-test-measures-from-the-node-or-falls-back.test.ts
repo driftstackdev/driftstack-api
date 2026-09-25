@@ -784,7 +784,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(res2.json<Record<string, unknown>>().quic_ok).toBe(false);
   });
 
-  it('(e) a VPN row never reports udp_associate (a tunnel carries UDP by nature); a socks5 row still does', async () => {
+  it('(e) a VPN row never reports udp_associate (a tunnel carries UDP by nature); a socks5 row reports it only from a datagram round trip (S1)', async () => {
     fx = await buildTestApp({
       enableFleetControlPlane: true,
       proxyConnectivityProbe: cpProbeStub(),
@@ -805,7 +805,11 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
       headers: auth(fx),
     });
     expect(r2.statusCode, r2.body).toBe(200);
-    expect(r2.json<Record<string, unknown>>().udp_associate).toBe(true);
+    // ⛔ Proxy-accuracy audit S1 — this node's bare `udp_associate: true` is the
+    // grant of its OWN local gost listener, not a reading of the customer's proxy,
+    // so a socks5 row no longer reports it: absence is "not measured". (This arm
+    // still asserted the old `true` after S1 landed.)
+    expect('udp_associate' in r2.json<Record<string, unknown>>()).toBe(false);
   });
 
   it('(e) CRITICAL a node_busy refusal reads as a wait, carries NO measurement fields, and is still a fleet answer', async () => {
@@ -2284,5 +2288,168 @@ describe('(i) I3 / I7 — the stored exit: named by its source, contradicted by 
     expect((plain.exit_observed as { observed_at?: string })?.observed_at).toBe(
       '2026-09-01T00:00:00.000Z',
     );
+  });
+});
+
+// Proxy-accuracy audit G2 (d), second pass (migration 0146). A desktop that never
+// ran a check learns Driftstack's verdict about a SOCKS5 proxy from the list. The
+// first pass read `exit_superseded_at` for that — and the background freshness
+// job stamps THAT from the control plane after three missed reachability probes
+// (`recordFreshnessFailure`), so every Mac showed "fails from Driftstack" for a
+// proxy only the control plane could not reach (an allow-listed one, typically).
+// `full_check_ok` / `full_check_at` are written by the fleet verdict and nothing
+// else.
+describe('(0146) the full-check verdict on the list is the fleet’s verdict or nothing', () => {
+  async function listRow(id: string): Promise<Record<string, unknown>> {
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const row = res.json<{ data: Array<Record<string, unknown>> }>().data.find((r) => r.id === id);
+    if (row === undefined) throw new Error(`proxy ${id} missing from the list`);
+    return row;
+  }
+  async function fleetTest(id: string): Promise<Record<string, unknown>> {
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    return res.json<Record<string, unknown>>();
+  }
+  const failingCpProbe = (): never =>
+    ({
+      probe: () => Promise.resolve({ ok: false, reason: 'timeout' }),
+      observeOs: () => Promise.resolve({ observed: false, reason: 'no SYN recorded' }),
+    }) as unknown as never;
+
+  it('CRITICAL a fresh row lists both keys PRESENT and null — never a default verdict', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const id = await makeProxy('fresh.example.com');
+    const row = await listRow(id);
+    expect('full_check_ok' in row && 'full_check_at' in row).toBe(true);
+    expect(row.full_check_ok).toBeNull();
+    expect(row.full_check_at).toBeNull();
+  });
+
+  it('CRITICAL a SOCKS5 row the fleet found DOWN lists full_check_ok:false, dated this test — beside the exit stamp it always carried. MUTATION: pass `true` instead of `usable` to persistFullCheckVerdict and this reds', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-201');
+    const id = await makeProxy('down.example.com');
+    const t0 = Date.now();
+    const down = await fleetTest(id);
+    expect(down.ok).toBe(false);
+    expect(down.measured_from).toBe('fleet');
+    const row = await listRow(id);
+    expect(row.full_check_ok).toBe(false);
+    expect(Date.parse(row.full_check_at as string)).toBeGreaterThanOrEqual(t0);
+    expect(typeof row.exit_superseded_at).toBe('string');
+  });
+
+  it('CRITICAL an UP verdict replaces an earlier DOWN one', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerReplyingNode('mac-eu-204', 40);
+    const id = await makeProxy('recovered.example.com');
+    const probed = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    const downAt = new Date(Date.now() - 60_000);
+    await fx.accountProxiesRepo.storeFullCheckVerdictIfSameIdentity({
+      id,
+      accountId: fx.accountId,
+      probedIdentity: probed!,
+      ok: false,
+      at: downAt,
+    });
+    const up = await fleetTest(id);
+    expect(up.ok).toBe(true);
+    expect(up.measured_from).toBe('fleet');
+    const row = await listRow(id);
+    expect(row.full_check_ok).toBe(true);
+    expect(Date.parse(row.full_check_at as string)).toBeGreaterThan(downAt.getTime());
+  });
+
+  it('CRITICAL the control-plane FALLBACK’s failure writes no verdict: no fleet Mac answered, so Driftstack’s server measured it from a different address. MUTATION: persist a verdict on the cp branch and this reds', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: failingCpProbe(),
+    });
+    // No node registered → the fleet misses → the cp probe answers, and fails.
+    const id = await makeProxy('cp-fails.example.com');
+    const body = await fleetTest(id);
+    expect(body.ok).toBe(false);
+    expect(body.measured_from).toBe('control_plane');
+    expect('not_run' in body).toBe(false);
+    const row = await listRow(id);
+    expect(row.full_check_ok).toBeNull();
+    expect(row.full_check_at).toBeNull();
+  });
+
+  it('CRITICAL (the verdict’s blocker) three BACKGROUND refresh misses stamp exit_superseded_at on a SOCKS5 row with a stored exit — and the list still carries NO full-check verdict, so no desktop can read the streak as "fails from Driftstack"', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const id = await makeProxy('allow-listed.example.com');
+    const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000);
+    await fx.accountProxiesRepo.update({
+      id,
+      accountId: fx.accountId,
+      updates: {
+        exitObserved: {
+          ip: '203.0.113.40',
+          country: 'DE',
+          timezone: 'Europe/Berlin',
+          observed_via: 'session',
+        },
+        exitObservedAt: threeDaysAgo,
+      },
+    });
+    for (let i = 0; i < 3; i += 1) {
+      await fx.accountProxiesRepo.recordFreshnessFailure({
+        id,
+        accountId: fx.accountId,
+        at: new Date(),
+        condemnAfterFailures: 3,
+        probeStartedAt: new Date(),
+      });
+    }
+    const row = await listRow(id);
+    // The stamp the first pass read as a Driftstack failure IS there…
+    expect(typeof row.exit_superseded_at).toBe('string');
+    // …and the verdict field is not.
+    expect(row.full_check_ok).toBeNull();
+    expect(row.full_check_at).toBeNull();
+  });
+
+  it('CRITICAL an edit that repoints the row clears the verdict with the other readings — a `false` the old endpoint earned must not condemn the corrected one. MUTATION: drop the two keys from `sessionReadings` in proxyReadingsInvalidatedByEdit', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-205');
+    const id = await makeProxy('old-host.example.com');
+    await fleetTest(id);
+    expect((await listRow(id)).full_check_ok).toBe(false);
+    const put = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/account/me/proxies/${id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { host: 'new-host.example.com' },
+    });
+    expect(put.statusCode, put.body).toBe(200);
+    const row = await listRow(id);
+    expect(row.full_check_ok).toBeNull();
+    expect(row.full_check_at).toBeNull();
   });
 });

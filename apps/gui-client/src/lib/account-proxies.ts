@@ -92,8 +92,20 @@ export interface AccountProxyMeta {
    *  SEEN, this is when it was CONTRADICTED. The list adoption refuses an
    *  observation dated at or before it — and stamps the local entry — so a
    *  Mac that never ran the failing test agrees with the one that did.
-   *  Cleared (null) by the next exit observation; absent = an older server. */
+   *  Cleared (null) by the next exit observation; absent = an older server.
+   *  ⛔ NOT "Driftstack could not use this proxy": the server's background
+   *  freshness job stamps it too, from the control plane, after three missed
+   *  reachability probes. A SOCKS5 row reads `full_check_ok` for that. */
   exit_superseded_at?: string | null;
+  /** (0146) proxy-accuracy audit G2 (d) — the verdict of the last FULL check a
+   *  fleet Mac measured (true = usable, false = it reached a verdict and the
+   *  proxy was not), and when it was measured (ISO 8601). Written by nothing
+   *  else — not the control-plane fallback, not the background job — so it is
+   *  the one list field a Mac that never ran the check may read as Driftstack's
+   *  verdict. null = none since the row last changed identity; absent = an older
+   *  server. */
+  full_check_ok?: boolean | null;
+  full_check_at?: string | null;
   /** (p) 2026-09-16 — the LAST OS reading the control plane took of this proxy's
    *  own stack, as the SERVER holds it. Until now the reading lived only in this
    *  Mac's probe cache, so a proxy checked on another machine — or before a
@@ -360,6 +372,14 @@ export async function listProxies(baseUrl: string, apiKey: string): Promise<Acco
             exit_superseded_at:
               typeof raw.exit_superseded_at === 'string' ? raw.exit_superseded_at : null,
           }
+        : {}),
+      // (0146) — a verdict is a boolean or nothing, and its date a string or
+      // nothing: a malformed value reads as "no verdict", never as a failure.
+      ...('full_check_ok' in raw
+        ? { full_check_ok: typeof raw.full_check_ok === 'boolean' ? raw.full_check_ok : null }
+        : {}),
+      ...('full_check_at' in raw
+        ? { full_check_at: typeof raw.full_check_at === 'string' ? raw.full_check_at : null }
         : {}),
     };
   });

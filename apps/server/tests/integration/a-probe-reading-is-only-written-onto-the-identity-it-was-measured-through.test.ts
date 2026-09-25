@@ -477,3 +477,160 @@ describe.skipIf(!RUN_DB_TESTS)(
     });
   },
 );
+
+// Proxy-accuracy audit G2 (d), second pass — the FULL-CHECK VERDICT (migration
+// 0146) goes through the same fence. It is the one list field a desktop reads as
+// "Driftstack could not use this proxy", and it retires the readings dated before
+// it on every Mac, so the old endpoint's `false` landing on a row the customer
+// just corrected would condemn the fix everywhere. Later wins, like a reading.
+describe.skipIf(!RUN_DB_TESTS)(
+  'storing a full-check verdict through the identity it was measured on, on real Postgres',
+  () => {
+    const verdictView = (r: AccountProxyRow | null): unknown =>
+      r === null
+        ? null
+        : { fullCheckOk: r.fullCheckOk, fullCheckAt: r.fullCheckAt?.toISOString() ?? null };
+
+    it('VACUITY CONTROL an unmoved row RECEIVES the verdict — a failure as FALSE, with the date it was MEASURED — on a proxy with a credential, one with none, and a WireGuard row; `updated_at` does not move (a verdict is not an edit)', async () => {
+      if (!client) return;
+      const repo = repoFor(client);
+      for (const credentials of [{}, { username: null, wrappedPassword: null }, WIREGUARD]) {
+        const probed = await createProxy(repo, credentials);
+        await client`UPDATE account_proxies SET updated_at = ${EARLIER.toISOString()}::timestamptz WHERE id = ${probed.id}::uuid`;
+        const written = await repo.storeFullCheckVerdictIfSameIdentity({
+          id: probed.id,
+          accountId,
+          probedIdentity: probed,
+          ok: false,
+          at: MEASURED_AT,
+        });
+        expect(written, JSON.stringify(credentials)).not.toBeNull();
+        expect(written?.fullCheckOk, 'a failure is FALSE, not null').toBe(false);
+        expect(written?.fullCheckAt).toEqual(MEASURED_AT);
+        expect(written?.updatedAt).toEqual(EARLIER);
+        const found = await repo.findById({ id: probed.id, accountId });
+        expect(verdictView(found)).toEqual({
+          fullCheckOk: false,
+          fullCheckAt: MEASURED_AT.toISOString(),
+        });
+      }
+    });
+
+    it('CRITICAL a row that MOVED between the check and the write receives nothing — for EACH of the six identity columns. MUTATION: delete any `AND p.<column> …` line from the statement and that column’s arm reds', async () => {
+      if (!client) return;
+      const repo = repoFor(client);
+      for (const edit of IDENTITY_EDITS) {
+        const probed = await createProxy(repo, edit.probed);
+        expect(
+          await repo.update({ id: probed.id, accountId, updates: edit.updates }),
+          edit.name,
+        ).not.toBeNull();
+        const written = await repo.storeFullCheckVerdictIfSameIdentity({
+          id: probed.id,
+          accountId,
+          probedIdentity: probed,
+          ok: false,
+          at: MEASURED_AT,
+        });
+        expect(written, `${edit.name}: the verdict must be declined`).toBeNull();
+        expect(verdictView(await repo.findById({ id: probed.id, accountId })), edit.name).toEqual({
+          fullCheckOk: null,
+          fullCheckAt: null,
+        });
+      }
+    });
+
+    it('CRITICAL later wins: a verdict measured EARLIER than the stored one is declined (two checks finishing out of order end on the newer one); a LATER one replaces it; another account’s id matches nothing. MUTATION: drop the `p.full_check_at <= …` disjunct and the older false replaces the newer true', async () => {
+      if (!client) return;
+      const repo = repoFor(client);
+      const probed = await createProxy(repo);
+      const store = (ok: boolean, at: Date, owner = accountId) =>
+        repo.storeFullCheckVerdictIfSameIdentity({
+          id: probed.id,
+          accountId: owner,
+          probedIdentity: probed,
+          ok,
+          at,
+        });
+      expect(verdictView(await store(true, MEASURED_AT))).toEqual({
+        fullCheckOk: true,
+        fullCheckAt: MEASURED_AT.toISOString(),
+      });
+      expect(await store(false, EARLIER), 'an older failure must not replace a newer pass').toBe(
+        null,
+      );
+      expect(verdictView(await repo.findById({ id: probed.id, accountId }))).toEqual({
+        fullCheckOk: true,
+        fullCheckAt: MEASURED_AT.toISOString(),
+      });
+      expect(await store(false, LATER, randomUUID())).toBeNull();
+      expect(verdictView(await store(false, LATER))).toEqual({
+        fullCheckOk: false,
+        fullCheckAt: LATER.toISOString(),
+      });
+    });
+
+    it('THE DOUBLE AGREES WITH POSTGRES on every rule above', async () => {
+      if (!client) return;
+      const run = async (repo: AccountProxiesRepo): Promise<unknown[]> => {
+        const out: unknown[] = [];
+        for (const edit of [
+          { name: 'unmoved', updates: {} },
+          { name: 'unmoved wireguard', probed: WIREGUARD, updates: {} },
+          ...IDENTITY_EDITS,
+        ]) {
+          const probed = await createProxy(repo, edit.probed);
+          if (Object.keys(edit.updates).length > 0) {
+            await repo.update({ id: probed.id, accountId, updates: edit.updates });
+          }
+          out.push([
+            edit.name,
+            verdictView(
+              await repo.storeFullCheckVerdictIfSameIdentity({
+                id: probed.id,
+                accountId,
+                probedIdentity: probed,
+                ok: false,
+                at: MEASURED_AT,
+              }),
+            ),
+          ]);
+        }
+        const probed = await createProxy(repo);
+        for (const [ok, at] of [
+          [true, MEASURED_AT],
+          [false, EARLIER],
+          [false, LATER],
+        ] as const) {
+          out.push(
+            verdictView(
+              await repo.storeFullCheckVerdictIfSameIdentity({
+                id: probed.id,
+                accountId,
+                probedIdentity: probed,
+                ok,
+                at,
+              }),
+            ),
+          );
+        }
+        return out;
+      };
+      const onPostgres = await run(repoFor(client));
+      const inMemory = await run(new InMemoryAccountProxiesRepo());
+      expect(inMemory).toEqual(onPostgres);
+      expect(onPostgres[0]).toEqual([
+        'unmoved',
+        { fullCheckOk: false, fullCheckAt: MEASURED_AT.toISOString() },
+      ]);
+      expect(onPostgres.slice(2, 2 + IDENTITY_EDITS.length)).toEqual(
+        IDENTITY_EDITS.map((e) => [e.name, null]),
+      );
+      expect(onPostgres.slice(-3)).toEqual([
+        { fullCheckOk: true, fullCheckAt: MEASURED_AT.toISOString() },
+        null,
+        { fullCheckOk: false, fullCheckAt: LATER.toISOString() },
+      ]);
+    });
+  },
+);

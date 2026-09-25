@@ -1525,6 +1525,8 @@ class AccountProxyMetadata(BaseModel):
     udp_probe_at: str | None = None
     exit_observed: ExitObserved | None = None
     exit_superseded_at: str | None = None
+    full_check_ok: bool | None = None
+    full_check_at: str | None = None
     os_fingerprint: OsFingerprint | None = None
     os_fingerprint_at: str | None = None
     created_at: str

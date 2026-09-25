@@ -109,6 +109,9 @@ function expectProbeReadingsCleared(row: AccountProxyRow | null, why: string): v
   expect(row?.quicProbeAt, `${why}: quic_probe_at`).toBeNull();
   expect(row?.udpProbe, `${why}: udp_probe`).toBeNull();
   expect(row?.udpProbeAt, `${why}: udp_probe_at`).toBeNull();
+  // (0146) the last full check's verdict was reached through the same path.
+  expect(row?.fullCheckOk, `${why}: full_check_ok`).toBeNull();
+  expect(row?.fullCheckAt, `${why}: full_check_at`).toBeNull();
 }
 
 /** …and kept exactly as seeded — the vacuity control for the function above: an
@@ -118,6 +121,23 @@ function expectProbeReadingsKept(row: AccountProxyRow | null, why: string): void
   expect(row?.quicProbeAt, `${why}: quic_probe_at`).toEqual(PROBED_AT);
   expect(row?.udpProbe, `${why}: udp_probe`).toBe(true);
   expect(row?.udpProbeAt, `${why}: udp_probe_at`).toEqual(PROBED_AT);
+  expect(row?.fullCheckOk, `${why}: full_check_ok`).toBe(false);
+  expect(row?.fullCheckAt, `${why}: full_check_at`).toEqual(PROBED_AT);
+}
+
+/** (0146) — seed a full-check FAILURE through the only writer there is, the
+ *  identity-fenced one, onto the row as it stands. */
+async function seedFullCheckFailure(id: string): Promise<void> {
+  const row = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+  expect(row).not.toBeNull();
+  const written = await fx.accountProxiesRepo.storeFullCheckVerdictIfSameIdentity({
+    id,
+    accountId: fx.accountId,
+    probedIdentity: row!,
+    ok: false,
+    at: PROBED_AT,
+  });
+  expect(written?.fullCheckOk).toBe(false);
 }
 
 /** Create a proxy and put every stored reading on it, as a test + a live
@@ -145,6 +165,7 @@ async function proxyWithEveryReading(
     accountId: fx.accountId,
     updates: everyReading(osFingerprint),
   });
+  await seedFullCheckFailure(id);
   return id;
 }
 
@@ -168,6 +189,7 @@ async function vpnProxyWithEveryReading(
     accountId: fx.accountId,
     updates: everyReading(osFingerprint),
   });
+  await seedFullCheckFailure(id);
   return id;
 }
 
@@ -206,6 +228,8 @@ describe('PUT /v1/account/me/proxies/:id — a stored reading does not outlive i
       quicProbeAt: null,
       udpProbe: null,
       udpProbeAt: null,
+      fullCheckOk: null,
+      fullCheckAt: null,
     });
 
     const row = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });

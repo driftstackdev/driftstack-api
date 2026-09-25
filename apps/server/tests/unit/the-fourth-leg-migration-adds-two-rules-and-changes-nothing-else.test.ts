@@ -317,7 +317,21 @@ describe('migration 0133 adds the fourth leg and the shadow charge rule, and not
     expect(journal.entries[at + 11]?.when).toBeGreaterThan(
       journal.entries[at + 10]?.when ?? Infinity,
     );
-    expect(journal.entries, 'and 0144 is the last one').toHaveLength(145);
+    // 0145 (proxy accuracy — a SOCKS5 row's stored UDP reading from the local
+    // relay's grant is cleared) follows 0144; its own guard pins its shape.
+    expect(journal.entries[at + 12]?.tag).toBe(
+      '0145_socks5_udp_probe_from_the_local_gost_grant_is_cleared',
+    );
+    expect(journal.entries[at + 12]?.when).toBeGreaterThan(
+      journal.entries[at + 11]?.when ?? Infinity,
+    );
+    // 0146 (proxy accuracy — the last full check's verdict, the one list field a
+    // desktop reads as Driftstack's verdict) follows 0145.
+    expect(journal.entries[at + 13]?.tag).toBe('0146_account_proxy_full_check_verdict');
+    expect(journal.entries[at + 13]?.when).toBeGreaterThan(
+      journal.entries[at + 12]?.when ?? Infinity,
+    );
+    expect(journal.entries, 'and 0146 is the last one').toHaveLength(147);
   });
 
   it('CRITICAL schema.ts names the trigger this migration installs, says where the shadow rule lives, and carries the one sentence about the relaxed clawback guard that 0133 is the record of', () => {

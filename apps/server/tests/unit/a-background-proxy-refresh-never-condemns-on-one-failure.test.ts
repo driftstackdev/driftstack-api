@@ -452,6 +452,14 @@ describe('the background proxy-freshness chain', () => {
     expect(afterThree.exitObserved, 'and even then the exit itself is KEPT').toEqual(
       good.exitObserved,
     );
+    // Proxy-accuracy audit G2 (d), second pass (0146) — the streak is the CONTROL
+    // PLANE's, from an address that is not the one sessions use: it dates a
+    // contradicted exit, and it is NEVER Driftstack's verdict about the proxy. The
+    // desktop reads `full_check_ok` for that, so the job must never write it.
+    expect(
+      { ok: afterThree.fullCheckOk, at: afterThree.fullCheckAt },
+      'the background streak writes no full-check verdict',
+    ).toEqual({ ok: null, at: null });
 
     // A provider outage must heal itself: the next success clears both.
     c.advance(PROXY_FRESHNESS_REFRESH_INTERVAL_MS * 5);

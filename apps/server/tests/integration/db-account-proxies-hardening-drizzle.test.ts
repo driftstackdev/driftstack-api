@@ -121,6 +121,9 @@ beforeAll(async () => {
       quic_probe_at timestamptz,
       udp_probe boolean,
       udp_probe_at timestamptz,
+      -- The last full check's verdict (migration 0146) — same mirroring rule.
+      full_check_ok boolean,
+      full_check_at timestamptz,
       -- ITEM 4 (migration 0123). This table is a hand-written COPY of the real
       -- one, so a column added to the schema and not to this literal makes every
       -- Drizzle statement here fail with "column does not exist" — the copy has

@@ -309,7 +309,22 @@ export const AccountProxyMetadataSchema = z.object({
   // ran the failing test agrees with the one that did. Cleared (null) by the
   // next exit observation, session or probe. null = never contradicted.
   // Optional so a client built against an older server keeps parsing.
+  //
+  // ⛔ It is ALSO stamped by Driftstack's background reachability check, from
+  // its own servers, after repeated misses — a different address from the one
+  // sessions use. It dates a contradicted EXIT; it is not a verdict that the
+  // proxy fails where sessions run. That is `full_check_ok` below.
   exit_superseded_at: z.string().nullable().optional(),
+  // (0146) proxy-accuracy audit G2 (d) — the verdict of the last `?check=full`
+  // test a phone measured (`measured_by: phone`): true = the proxy was usable,
+  // false = the check reached a verdict and it was not, with the date it was
+  // measured (ISO 8601). null = no such check since the proxy's address, scheme
+  // or credentials last changed. A quick check, a full check that fell back to
+  // Driftstack's own servers, a check that could not run, a live session and the
+  // background check never set it. Optional so a client built against an older
+  // server keeps parsing.
+  full_check_ok: z.boolean().nullable().optional(),
+  full_check_at: z.string().nullable().optional(),
   // (p) 2026-09-16 — the LAST OS fingerprint the control plane observed for this
   // proxy's own stack, and WHEN. The reading has been written by the /:id/test
   // route and stored (migration 0119) since N-2, and read back by nothing the

@@ -2482,7 +2482,14 @@ function buildRegistry(): OpenAPIRegistry {
       // SEEN, this is when it was CONTRADICTED. A client adopting `exit_observed`
       // refuses an observation dated at or before it. Cleared (null) by the next
       // exit observation. null = never contradicted. Mirrors api-types.
+      // ⛔ The background reachability check stamps it too (from Driftstack's
+      // own servers), so it is not a verdict about the session path.
       exit_superseded_at: z.string().nullable().optional(),
+      // (0146) — the verdict of the last `?check=full` test a phone measured, and
+      // when (ISO 8601). null = none since the proxy last changed identity.
+      // Written by nothing else. Mirrors api-types.
+      full_check_ok: z.boolean().nullable().optional(),
+      full_check_at: z.string().nullable().optional(),
       // (p) 2026-09-16 — the LAST OS fingerprint the control plane observed for
       // this proxy's own stack, and when (ISO 8601). Written by POST :id/test and
       // stored; this list is its route back out, so a reading taken on one machine

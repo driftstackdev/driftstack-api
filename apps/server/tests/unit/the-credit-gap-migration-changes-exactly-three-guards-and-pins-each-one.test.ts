@@ -415,7 +415,21 @@ describe('migration 0132 changes exactly three guards, and pins each one', () =>
     expect(journal.entries[at + 12]?.when).toBeGreaterThan(
       journal.entries[at + 11]?.when ?? Infinity,
     );
-    expect(journal.entries, 'and 0144 is the last one').toHaveLength(145);
+    // 0145 (proxy accuracy — a SOCKS5 row's stored UDP reading from the local
+    // relay's grant is cleared) follows 0144; its own guard pins its shape.
+    expect(journal.entries[at + 13]?.tag).toBe(
+      '0145_socks5_udp_probe_from_the_local_gost_grant_is_cleared',
+    );
+    expect(journal.entries[at + 13]?.when).toBeGreaterThan(
+      journal.entries[at + 12]?.when ?? Infinity,
+    );
+    // 0146 (proxy accuracy — the last full check's verdict, the one list field a
+    // desktop reads as Driftstack's verdict) follows 0145.
+    expect(journal.entries[at + 14]?.tag).toBe('0146_account_proxy_full_check_verdict');
+    expect(journal.entries[at + 14]?.when).toBeGreaterThan(
+      journal.entries[at + 13]?.when ?? Infinity,
+    );
+    expect(journal.entries, 'and 0146 is the last one').toHaveLength(147);
   });
 
   it('CRITICAL schema.ts mirrors the CHECK and the index this migration adds, by name, and its prose names the trigger it installs and the guard it relaxes', () => {

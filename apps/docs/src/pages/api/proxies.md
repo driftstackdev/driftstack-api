@@ -65,6 +65,8 @@ difference. What you need:
   "udp_probe_at": null,
   "exit_observed": null,
   "exit_superseded_at": null,
+  "full_check_ok": null,
+  "full_check_at": null,
   "os_fingerprint": null,
   "os_fingerprint_at": null,
   "created_at": "2026-06-16T09:15:00Z",
@@ -118,7 +120,21 @@ never happened. The stored exit is kept as the last one seen, at its own
 clears it; a test that finds the tunnel down sets it. A test that could not
 run (`not_run`) measured nothing and never sets it, and while it is set a
 `not_run` reply carries no `exit_observed` at all (see
-[Test a proxy](#test-a-proxy)).
+[Test a proxy](#test-a-proxy)). Driftstack also re-checks saved `socks5` and
+`http` proxies in the background from its own servers, and repeated misses there
+set it too — so it says the stored exit is in doubt, not that the proxy fails
+where your sessions run. `full_check_ok` says that.
+
+`full_check_ok` is the result of the last `?check=full` test that a phone
+measured (`measured_by: phone`, see [Test a proxy](#test-a-proxy)) — `true` when
+the proxy was usable, `false` when the test reached a result and it was not —
+and `full_check_at` is when it was measured (ISO 8601). Both are `null` when no
+such test has reached a result since the proxy's address, scheme, or
+credentials last changed; changing any of them resets both. A later full test
+replaces them. Nothing else sets them: not a quick check, not a full check that
+fell back to Driftstack's own servers, not a test that could not run
+(`not_run`), not a live session, and not the background re-check. A server that
+predates them omits both fields — read an absent field as `null`.
 
 `os_fingerprint` is the last passive OS reading Driftstack took of the proxy's
 own TCP stack — the same object [Test a proxy](#test-a-proxy) returns

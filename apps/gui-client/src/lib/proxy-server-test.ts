@@ -741,7 +741,10 @@ function refusesStoredExit(
 
 /** The slice of a list row the adoption reads: the row, its stored exit, and
  *  (i) I7 — when a fleet verdict contradicted that exit, if ever. */
-export type ListExitRow = Pick<AccountProxyMeta, 'id' | 'exit_observed' | 'exit_superseded_at'>;
+export type ListExitRow = Pick<
+  AccountProxyMeta,
+  'id' | 'exit_observed' | 'exit_superseded_at' | 'full_check_ok' | 'full_check_at'
+>;
 
 /** (i) I7 — the sentence a Mac that never ran the failing test shows for a
  *  tunnel the list says a fleet check found down. Names no cause — the list
@@ -765,18 +768,32 @@ function holdsFleetAnswerAfter(existing: CachedProbe, t: number): boolean {
 
 /**
  * ⛔ Proxy-accuracy audit G2 (d) — a SOCKS5 row's Driftstack failure reaches
- * EVERY Mac. The server stamps `exit_superseded_at` for every scheme when a fleet
- * test finds the proxy unusable, and lists it; this was adopted for VPN rows only,
- * so a second Mac (or a reinstall) kept adopting the readings from BEFORE the
- * failure and never showed it. §4.3: a fleet failure retires every fleet reading
- * dated before it, on every Mac.
+ * EVERY Mac: §4.3, a fleet failure retires every fleet reading dated before it,
+ * on every Mac. A second Mac (or a reinstall) otherwise kept adopting the
+ * readings from BEFORE the failure and never showed it.
  *
- * The stamp is written through `saveFleetFailure` keeping what THIS Mac measured;
- * on a Mac that never tested the row it lands on a seeded entry, which stays
- * seeded, so the OS and capability adoptions that run after this one refuse every
- * reading dated at or before it. A Driftstack answer this Mac holds from after the
- * stamp outranks the list. The server's explicit clear — no stamp, beside an
- * observation dated after the one held here — lifts it, as on a VPN row.
+ * ⛔⛔ FROM `full_check_ok` / `full_check_at` (migration 0146), NEVER FROM
+ * `exit_superseded_at`. The first pass read the exit stamp, and that stamp has a
+ * second writer: the server's background freshness job stamps it from the
+ * CONTROL PLANE after three missed reachability probes (`recordFreshnessFailure`).
+ * A different machine with a different address, whose streak cannot tell a dead
+ * proxy from one that admits only listed addresses (report S6 / §4.1: that
+ * signal must never reach the card). Read as "fails from Driftstack", it put the
+ * pill on every Mac, retired every reading — and came back three misses after
+ * any fleet answer lifted it. The full-check verdict is written by the fleet
+ * Test alone, through the identity fence, so it is the fleet's verdict or
+ * nothing.
+ *
+ * `false` at T — written through `saveFleetFailure` keeping what THIS Mac
+ * measured; on a Mac that never tested the row it lands on a seeded entry, which
+ * stays seeded, so the OS and capability adoptions that run after this one refuse
+ * every reading dated at or before T. A Driftstack answer this Mac holds from
+ * after T outranks it.
+ * `true` at T — the fleet found the proxy usable at T. It lifts a failure this
+ * Mac holds from BEFORE T, and nothing else: a failure dated after it is newer,
+ * and a verdict the list has not caught up with yet (this Mac's own failure a
+ * moment ago, or a write that did not land) is never erased by absence.
+ * `null` / absent — no verdict to adopt, and none to lift by.
  */
 async function adoptListFleetFailureForSocks5(
   p: ListExitProxyLike,
@@ -787,27 +804,28 @@ async function adoptListFleetFailureForSocks5(
 ): Promise<{ cache: ProbeCacheMap; wrote: boolean }> {
   let existing = cache[p.id];
   const stampMs = existing?.exitSupersededAt;
-  const seenUpAt =
-    row.exit_observed?.observed_at !== undefined && row.exit_observed?.observed_at !== null
-      ? Date.parse(row.exit_observed.observed_at)
-      : Number.NaN;
-  if (
-    existing !== undefined &&
-    stampMs !== undefined &&
-    row.exit_superseded_at === null &&
-    Number.isFinite(seenUpAt) &&
-    seenUpAt > stampMs
-  ) {
+  const verdictAt = listSupersededStamp(row.full_check_at);
+  if (verdictAt === undefined || typeof row.full_check_ok !== 'boolean') {
+    return { cache, wrote: false };
+  }
+  if (row.full_check_ok) {
+    if (
+      existing === undefined ||
+      stampMs === undefined ||
+      existing.fleetFailureReason === undefined ||
+      verdictAt <= stampMs
+    ) {
+      return { cache, wrote: false };
+    }
+    if (gate.refuses(p.id)) return { cache, wrote: false };
     try {
       return { cache: await clearFleetFailure(p.id, stampMs), wrote: true };
     } catch {
       return { cache, wrote: false };
     }
   }
-  const serverStamp = listSupersededStamp(row.exit_superseded_at);
-  if (serverStamp === undefined) return { cache, wrote: false };
-  if (stampMs !== undefined && stampMs >= serverStamp) return { cache, wrote: false };
-  if (existing !== undefined && holdsFleetAnswerAfter(existing, serverStamp))
+  if (stampMs !== undefined && stampMs >= verdictAt) return { cache, wrote: false };
+  if (existing !== undefined && holdsFleetAnswerAfter(existing, verdictAt))
     return { cache, wrote: false };
   try {
     if (existing === undefined) {
@@ -818,7 +836,7 @@ async function adoptListFleetFailureForSocks5(
     if (gate.refuses(p.id)) return { cache, wrote: false };
     cache = await saveFleetFailure(
       p.id,
-      serverStamp,
+      verdictAt,
       existing.fleetFailureReason ?? LIST_FLEET_FAILED_REASON,
       { keepNativeExit: true },
     );
@@ -828,9 +846,9 @@ async function adoptListFleetFailureForSocks5(
   }
 }
 
-/** The list's `exit_superseded_at`, as a time — or undefined when the row was
- *  never contradicted, the server predates the field, or the value is not a
- *  date (a malformed stamp refuses nothing). */
+/** A list date (`exit_superseded_at`, `full_check_at`), as a time — or undefined
+ *  when the row carries none, the server predates the field, or the value is not
+ *  a date (a malformed stamp refuses nothing). */
 function listSupersededStamp(raw: string | null | undefined): number | undefined {
   if (typeof raw !== 'string') return undefined;
   const parsed = Date.parse(raw);

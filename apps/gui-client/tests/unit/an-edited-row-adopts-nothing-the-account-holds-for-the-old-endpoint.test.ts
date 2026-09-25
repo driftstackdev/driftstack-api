@@ -159,6 +159,8 @@ type ListRow = Pick<
   | 'id'
   | 'exit_observed'
   | 'exit_superseded_at'
+  | 'full_check_ok'
+  | 'full_check_at'
   | 'os_fingerprint'
   | 'os_fingerprint_at'
   | 'quic_measured'
@@ -183,6 +185,8 @@ const accountRow = (id: string): ListRow => ({
     observed_at: iso(NOW - 10 * MIN),
   },
   exit_superseded_at: null,
+  full_check_ok: null,
+  full_check_at: null,
   os_fingerprint: READING,
   os_fingerprint_at: iso(NOW - 10 * MIN),
   quic_measured: 'h3',
@@ -476,17 +480,25 @@ describe('⛔ FAILS CLOSED — a ledger that cannot be read adopts nothing, for 
   });
 });
 
-// Proxy-accuracy audit G2 (d) / T2 — the list's `exit_superseded_at` is the date a
-// Driftstack check found the proxy unusable, for EVERY scheme. It was adopted for
-// VPN rows only, so a second Mac kept adopting a SOCKS5 row's readings from
-// BEFORE the failure — its ✓ QUIC, ✓ UDP and OS — and never showed the failure.
-// §4.3: a fleet failure retires every fleet reading dated before it, on every Mac.
+// Proxy-accuracy audit G2 (d) / T2 — a SOCKS5 row's Driftstack failure reaches
+// every Mac. It was adopted for VPN rows only, so a second Mac kept adopting a
+// SOCKS5 row's readings from BEFORE the failure — its ✓ QUIC, ✓ UDP and OS — and
+// never showed the failure. §4.3: a fleet failure retires every fleet reading
+// dated before it, on every Mac.
+//
+// ⛔ Second pass (the review's blocker): the failure is read from the list's
+// `full_check_ok` / `full_check_at` (migration 0146), NEVER from
+// `exit_superseded_at`. The server's background freshness job stamps THAT one too,
+// from the control plane, after three missed reachability probes — a different
+// address, which cannot tell a dead proxy from an allow-listed one (report S6:
+// that streak must never reach the card).
 describe('G2 (d) — a SOCKS5 row’s listed Driftstack failure reaches every Mac', () => {
   const failedAt = NOW - 5 * MIN;
   const failedRow = (id: string): ListRow => ({
     ...accountRow(id),
     exit_observed: null,
-    exit_superseded_at: iso(failedAt),
+    full_check_ok: false,
+    full_check_at: iso(failedAt),
   });
 
   it('CRITICAL (T2) a second Mac that never tested the row: the failure lands, and the QUIC, UDP and OS readings the list carries from before it are refused', async () => {
@@ -522,7 +534,62 @@ describe('G2 (d) — a SOCKS5 row’s listed Driftstack failure reaches every Ma
       expect(e, k).not.toHaveProperty(k);
   });
 
-  it('CONTROL a Driftstack answer this Mac took AFTER the listed failure outranks it; no stamp on the list stamps nothing', async () => {
+  // ⛔ THE REVIEW'S BLOCKER, reproduced as it was reported: this Mac holds a native
+  // ok from 10 minutes ago and a fleet ok from 2 days ago; the list row carries a
+  // session exit from 3 days ago and an `exit_superseded_at` from 1 hour ago —
+  // `recordFreshnessFailure` after three control-plane misses — and NO full-check
+  // verdict. MUTATION: read `row.exit_superseded_at` in
+  // adoptListFleetFailureForSocks5 again and both arms red.
+  const streakRow = (id: string): ListRow => ({
+    ...accountRow(id),
+    exit_observed: {
+      ip: '203.0.113.9',
+      country: 'NL',
+      timezone: 'Europe/Amsterdam',
+      observed_via: 'session',
+      observed_at: iso(NOW - 3 * 24 * 60 * MIN),
+    },
+    exit_superseded_at: iso(NOW - 60 * MIN),
+    full_check_ok: null,
+    full_check_at: null,
+  });
+
+  it('CRITICAL (blocker) a background-refresh stamp shows NO "fails from Driftstack" and retires nothing, on a Mac that tested the row', async () => {
+    await saveProbeResult('p1', OK, NOW - 2 * 24 * 60 * MIN);
+    await saveServerProbeResult(
+      'p1',
+      { latencyMs: 30, measuredFrom: 'fleet', nodeId: 'n1', quicProbe: true, udpProbe: true },
+      NOW - 2 * 24 * 60 * MIN,
+    );
+    await saveProbeResult('p1', OK, NOW - 10 * MIN);
+    const before = (await loadProbeCache()).p1;
+    expect(before?.serverLatencyMs, 'the fleet ok is held').toBe(30);
+    const rows = [streakRow('aprx_1')];
+    expect(await adoptListExitObserved(rows, [SOCKS], NOW)).toEqual([]);
+    await adoptListOsFingerprint(rows, [SOCKS], NOW);
+    await adoptListCapabilityReadings(rows, [SOCKS], NOW);
+    const e = (await loadProbeCache()).p1;
+    expect(e).not.toHaveProperty('fleetFailureReason');
+    expect(e).not.toHaveProperty('exitSupersededAt');
+    expect(e?.serverLatencyMs).toBe(30);
+    expect(e?.measuredFrom).toBe('fleet');
+    expect(e?.quicProbe).toBe(true);
+    expect(e?.udpProbe).toBe(true);
+  });
+
+  it('CRITICAL (blocker) …and on a Mac that never tested it: no failure is seeded, and the readings the list carries are adopted as they would be for any row', async () => {
+    const rows = [streakRow('aprx_1')];
+    await adoptListExitObserved(rows, [SOCKS], NOW);
+    await adoptListOsFingerprint(rows, [SOCKS], NOW);
+    await adoptListCapabilityReadings(rows, [SOCKS], NOW);
+    const e = (await loadProbeCache()).p1;
+    expect(e).not.toHaveProperty('fleetFailureReason');
+    expect(e).not.toHaveProperty('exitSupersededAt');
+    expect(e?.osFingerprint?.os).toBe('macos-or-ios');
+    expect(e?.quicProbe).toBe(true);
+  });
+
+  it('CONTROL a Driftstack answer this Mac took AFTER the listed failure outranks it; no verdict on the list stamps nothing', async () => {
     await saveProbeResult('p1', OK, NOW - 2 * MIN);
     await saveServerProbeResult('p1', { latencyMs: 30, measuredFrom: 'fleet' }, NOW - 2 * MIN);
     expect(await adoptListExitObserved([failedRow('aprx_1')], [SOCKS], NOW)).toEqual([]);
@@ -531,16 +598,27 @@ describe('G2 (d) — a SOCKS5 row’s listed Driftstack failure reaches every Ma
     expect((await loadProbeCache()).p1).not.toHaveProperty('exitSupersededAt');
   });
 
-  it('the server’s explicit clear (no stamp, beside a session that saw the proxy after the failure) lifts it', async () => {
+  it('a later full-check PASS lifts it; a pass dated BEFORE the failure, and a list with no verdict yet (this Mac’s own failure not listed yet), lift nothing', async () => {
     await testedSocks();
     await adoptListExitObserved([failedRow('aprx_1')], [SOCKS], NOW);
     expect((await loadProbeCache()).p1?.fleetFailureReason).toBeDefined();
-    const seenUp: ListRow = {
-      ...accountRow('aprx_1'),
-      exit_observed: { ...accountRow('aprx_1').exit_observed!, observed_at: iso(NOW - MIN) },
-      exit_superseded_at: null,
-    };
-    await adoptListExitObserved([seenUp], [SOCKS], NOW);
+    // No verdict listed (the write had not landed when the list was read): stands.
+    await adoptListExitObserved([accountRow('aprx_1')], [SOCKS], NOW);
+    expect((await loadProbeCache()).p1?.fleetFailureReason).toBeDefined();
+    // A pass OLDER than the failure: stands.
+    await adoptListExitObserved(
+      [{ ...accountRow('aprx_1'), full_check_ok: true, full_check_at: iso(failedAt - MIN) }],
+      [SOCKS],
+      NOW,
+    );
+    expect((await loadProbeCache()).p1?.fleetFailureReason).toBeDefined();
+    // A pass AFTER it: lifted.
+    await adoptListExitObserved(
+      [{ ...accountRow('aprx_1'), full_check_ok: true, full_check_at: iso(NOW - MIN) }],
+      [SOCKS],
+      NOW,
+    );
     expect((await loadProbeCache()).p1).not.toHaveProperty('fleetFailureReason');
+    expect((await loadProbeCache()).p1).not.toHaveProperty('exitSupersededAt');
   });
 });

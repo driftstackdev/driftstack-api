@@ -3397,6 +3397,12 @@
           "exit_superseded_at": {
             "type": ["string", "null"]
           },
+          "full_check_ok": {
+            "type": ["boolean", "null"]
+          },
+          "full_check_at": {
+            "type": ["string", "null"]
+          },
           "os_fingerprint": {
             "type": ["object", "null"],
             "properties": {

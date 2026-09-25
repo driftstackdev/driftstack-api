@@ -691,6 +691,12 @@ export function proxyReadingsInvalidatedByEdit(
     quicProbeAt: null,
     udpProbe: null,
     udpProbeAt: null,
+    // (0146) The last full check's verdict was reached THROUGH this address and
+    // credential too. A `false` left behind is the loudest survivor there is: on
+    // every desktop it reads "Driftstack could not use this proxy" and retires the
+    // readings, about the machine the customer just replaced.
+    fullCheckOk: null,
+    fullCheckAt: null,
   } satisfies AccountProxyRowUpdates;
   const osReading = {
     osFingerprint: null,
@@ -1158,6 +1164,13 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // Cleared by the next exit observation (session or probe). null = never
       // contradicted — never a default.
       exit_superseded_at: r.exitSupersededAt?.toISOString() ?? null,
+      // (0146) proxy-accuracy audit G2 (d) — the verdict of the last FULL check a
+      // fleet Mac measured, and when. The ONLY list field a desktop may read as
+      // "Driftstack could not use this proxy": `exit_superseded_at` above is also
+      // stamped by the background freshness job from the control plane, which
+      // cannot tell a dead proxy from an allow-listed one. Both null together.
+      full_check_ok: r.fullCheckAt === null ? null : r.fullCheckOk,
+      full_check_at: r.fullCheckOk === null ? null : (r.fullCheckAt?.toISOString() ?? null),
       // (p) 2026-09-16 — the STORED OS reading, carried exactly as `exit_observed`
       // above is. Until now this column had NO ROUTE OUT: the /:id/test route wrote
       // it (migration 0119) and the only reader was a live session's capability
@@ -1977,6 +1990,42 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       }
     };
 
+    // (0146) proxy-accuracy audit G2 (d) — the verdict a fleet Mac REACHED about
+    // this proxy, stored with the date its frame resolved: the one list field a
+    // desktop that never ran this check may read as "Driftstack could not use this
+    // proxy" (and a later `true` as the answer that lifts it). Through the same
+    // identity fence as the readings above, for a sharper reason: a `false` the
+    // old endpoint earned, landing on a row the customer just corrected, would
+    // condemn the fix on every Mac. Later wins, so two checks finishing out of
+    // order end on the newer verdict. Best-effort and it NEVER throws (a throw on
+    // the fleet branch would relabel the node's measurement `control_plane`).
+    // ⛔ Only a fleet VERDICT reaches here: the control-plane fallback, a frame
+    // that reached no verdict, a refusal and the background freshness job never
+    // write it — the last of those is exactly why `exit_superseded_at` cannot
+    // serve (it stamps that one from a different address after three misses).
+    const persistFullCheckVerdict = async (ok: boolean, measuredAt: Date): Promise<void> => {
+      try {
+        const written = await proxiesRepo.storeFullCheckVerdictIfSameIdentity({
+          id: row.id,
+          accountId: ctx.account.id,
+          probedIdentity: row,
+          ok,
+          at: measuredAt,
+        });
+        if (written === null) {
+          request.log.info(
+            { proxyId: row.id },
+            'proxy test: the proxy was edited or removed while the test ran, or holds a later verdict — the full-check verdict is not stored',
+          );
+        }
+      } catch (err) {
+        request.log.info(
+          { proxyId: row.id, err },
+          'proxy test: failed to persist the full-check verdict',
+        );
+      }
+    };
+
     // (0124) — the Test readings the row holds NOW, for a reply whose own test
     // stored none: a control-plane test (it measures neither leg, so the stored
     // reading, dated, is the only QUIC/UDP answer it has) and a fleet test that
@@ -2395,6 +2444,8 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             // and no retry could change the sentence. See classifyVpnProbeFailure.
             const refusal = classifyVpnProbeFailure(dispatch.message, row.scheme);
             if (refusal.notRun === undefined) {
+              // (0146) — a tunnel the node found DOWN is a full-check verdict.
+              await persistFullCheckVerdict(false, measuredAt);
               // (i) I7 parity — a tunnel the node found DOWN contradicts the
               // stored exit NOW, exactly as the verdict path below does for
               // `!usable && probeReachedVerdict(r)`. The exit is KEPT (it is
@@ -2474,6 +2525,11 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           return undefined;
         })();
         const usable = fleetFailure === undefined;
+        // (0146) — the verdict, stored before anything slower runs (the OS
+        // observation below takes seconds). A frame that reached no verdict
+        // (`fleetFailure` then says "busy" / "could not be completed") writes
+        // nothing: nothing was learned about the proxy.
+        if (probeReachedVerdict(r)) await persistFullCheckVerdict(usable, measuredAt);
         // N-2 — the fingerprint is measured by the CONTROL PLANE even here (see
         // `osFingerprintFields`), so it rides ALONGSIDE the node's latency rather
         // than coming back from the node. Only on an `ok` result: a proxy the node

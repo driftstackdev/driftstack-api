@@ -298,3 +298,33 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
     expect(await supersededAt(proxyId)).toBeNull();
   });
 });
+
+// Proxy-accuracy audit G2 (d), second pass (migration 0146) — a tunnel the fleet
+// Mac could not bring up is a FULL-CHECK verdict too: the list's `full_check_ok`
+// goes false beside the exit stamp. A wait (node_busy) or our own fault writes
+// neither.
+describe('a failed WireGuard bring-up stores the full-check verdict; a wait stores none', () => {
+  async function fullCheck(id: string): Promise<{ ok: boolean | null; at: Date | null }> {
+    const row = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    return { ok: row?.fullCheckOk ?? null, at: row?.fullCheckAt ?? null };
+  }
+
+  it('CRITICAL handshake_failed → full_check_ok false, dated this test. MUTATION: delete the `persistFullCheckVerdict(false, …)` line in the VPN bring-up branch and this reds', async () => {
+    const t0 = Date.now();
+    const { proxyId } = await runFleetTest('mac-wg-101', 'handshake_failed');
+    const verdict = await fullCheck(proxyId);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.at?.getTime()).toBeGreaterThanOrEqual(t0);
+  });
+
+  it('CONTROL node_busy and egress_bin_missing write no verdict (nothing was learned about the tunnel)', async () => {
+    for (const [node, token] of [
+      ['mac-wg-102', 'node_busy'],
+      ['mac-wg-103', 'egress_bin_missing'],
+    ] as const) {
+      const { proxyId } = await runFleetTest(node, token);
+      expect(await fullCheck(proxyId), token).toEqual({ ok: null, at: null });
+      await fx.cleanup();
+    }
+  });
+});
