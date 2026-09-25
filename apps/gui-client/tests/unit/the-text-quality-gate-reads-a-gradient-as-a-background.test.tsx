@@ -66,6 +66,14 @@ function computed(el: Element): Record<string, string> {
     overflow: 'visible',
   };
 }
+// The gate measures RENDERED text extents too (its CLIPPED rule, 2026-09-25), with
+// Range#getClientRects — which jsdom does not implement. No text here is cut, so
+// every range reports no boxes, exactly what a browser reports for text that
+// renders nothing; the-text-quality-gate-sees-text-cut-off-without-an-ellipsis
+// covers the rule itself.
+if (typeof Range.prototype.getClientRects !== 'function') {
+  Range.prototype.getClientRects = (() => []) as unknown as Range['getClientRects'];
+}
 // eslint-disable-next-line @typescript-eslint/no-implied-eval, @typescript-eslint/no-unsafe-call -- runs the gate script's own in-page measurement: that function IS the thing under test
 const measureStage = new Function(
   'getComputedStyle',

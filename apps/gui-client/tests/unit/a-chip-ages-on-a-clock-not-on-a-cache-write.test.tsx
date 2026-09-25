@@ -181,7 +181,10 @@ describe('a reading leaves the present tense on the clock, with no cache write',
     const saved = savedProbeResults.at(-1);
     expect(saved?.id).toBe('a');
     expect(saved?.result.can_route, 'fail closed: never usable by omission').toBe(false);
-    expect(document.querySelector('[data-capability="quic"]')).toBeNull();
+    // A test that got nothing through the proxy measured nothing: its QUIC reads
+    // "— QUIC" (not measured — gui-v0.1.72, where it used to vanish), never the
+    // green of the result it replaced.
+    expect(quicChip().getAttribute('data-ok')).toBe('unmeasured');
 
     // Two full ticks, no other write, no other event.
     await act(async () => {
@@ -189,9 +192,9 @@ describe('a reading leaves the present tense on the clock, with no cache write',
     });
     expect(document.body.textContent).toContain("Couldn't test this proxy");
     expect(
-      document.querySelector('[data-capability="quic"]'),
+      quicChip().getAttribute('data-ok'),
       'the stale green must not come back on a timer',
-    ).toBeNull();
+    ).toBe('unmeasured');
   });
 
   it('CRITICAL ⛔ THE TICK STANDS ASIDE WHILE A CHECK IS RUNNING. The tick re-derives a HELD cache snapshot, and that snapshot is stale for the whole window between an optimistic UI write and the cache emit that confirms it — `applyServerProbeOutcome` and the VPN check both set a row’s chips first and persist after. Re-applying over them would revert the row the customer is watching, which is the opposite of what this clock is for. MUTATION: drop the `testingIdRef.current !== null` guard in the tick effect and this reds', async () => {

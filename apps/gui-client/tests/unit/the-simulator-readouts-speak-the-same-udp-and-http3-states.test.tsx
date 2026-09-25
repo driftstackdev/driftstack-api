@@ -7,9 +7,11 @@
 // Every other surface shows both. The Simulator now shows the same states in
 // the same words as the profile card and the Proxies grid, for the same
 // reading — and this file holds it to them, so it cannot drift again:
-//   • UDP  — 'UDP ✓' (measured, works) / '⤵ UDP' (measured, does not) /
+//   • UDP  — '✓ UDP' (measured, works) / '⤵ UDP' (measured, does not) /
 //            '⇢ UDP' (a VPN: routed through the tunnel, not measured) /
-//            'UDP: not measured yet' (nothing reported). WebRTC is in the tooltip.
+//            '— UDP' (nothing reported). WebRTC is in the tooltip. (gui-v0.1.72:
+//            the ONE vocabulary, mark first — it read 'UDP ✓' and 'UDP: not
+//            measured yet'.)
 //   • HTTP/3 — a measured NO: no UDP (HTTP/3 cannot work), or a session set to
 //            HTTP/2 only. A real HTTP/3 connection still outranks both.
 
@@ -65,11 +67,11 @@ function h3Line(report: AgentSessionCapabilityReport | null): HTMLElement {
 }
 
 describe('the Simulator UDP line says what the card and the grid say', () => {
-  it('measured, works: the card’s "UDP ✓", in green, with WebRTC in the tooltip', () => {
+  it('measured, works: the card’s "✓ UDP", in green, with WebRTC in the tooltip', () => {
     const el = udpLine({ ...BASE, proxy_udp_supported: true });
     expect(el.getAttribute('data-state')).toBe('measured');
     expect(el.textContent).toBe(cardUdpText({ udpProbe: true }));
-    expect(el.textContent).toBe('UDP ✓');
+    expect(el.textContent).toBe('✓ UDP');
     expect(el.className).toContain('text-status-ready');
     expect(el.getAttribute('title')).toBe(gridHint(true, 'webrtc'));
     expect(el.getAttribute('title')).toMatch(/WebRTC/);
@@ -91,11 +93,11 @@ describe('the Simulator UDP line says what the card and the grid say', () => {
     expect(el.getAttribute('title')).toBe(VPN_UDP_NOT_MEASURED_TITLE);
   });
 
-  it('nothing reported yet: "UDP: not measured yet" — never a verdict', () => {
+  it('nothing reported yet: "— UDP" (not measured) — never a verdict', () => {
     for (const report of [null, BASE]) {
       const el = udpLine(report);
       expect(el.getAttribute('data-state')).toBe('not-measured');
-      expect(el.textContent).toBe('UDP: not measured yet');
+      expect(el.textContent).toBe('— UDP');
       cleanup();
     }
   });
@@ -105,14 +107,16 @@ describe('the Simulator HTTP/3 line has the measured NO every other surface has'
   it('no UDP: HTTP/3 cannot work — the grid’s own sentence, not "not observed"', () => {
     const el = h3Line({ ...BASE, proxy_udp_supported: false });
     expect(el.getAttribute('data-state')).toBe('no-http3');
-    expect(el.textContent).toBe('⤵ HTTP/3 · HTTP/2 only');
+    // The QUIC badge the card and the grid draw for the same NO, and what the
+    // session uses instead as its detail (it read "⤵ HTTP/3 · HTTP/2 only").
+    expect(el.textContent).toBe('⤵ QUIC · HTTP/2 only');
     expect(el.getAttribute('title')).toBe(gridHint(false, 'quic'));
   });
 
   it('a session set to HTTP/2 only: no HTTP/3, said so', () => {
     const el = h3Line({ ...BASE, proxy_udp_supported: true, transport_mode_active: 'h2-only' });
     expect(el.getAttribute('data-state')).toBe('no-http3');
-    expect(el.textContent).toBe('⤵ HTTP/3 · HTTP/2 only');
+    expect(el.textContent).toBe('⤵ QUIC · HTTP/2 only');
   });
 
   it('CONTROL — a real HTTP/3 connection outranks both', () => {

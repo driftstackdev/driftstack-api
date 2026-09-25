@@ -209,7 +209,7 @@ describe('a reading measured on another Mac reaches this one', () => {
     const { container } = render(<ProxyOsChip fingerprint={reading} nowMs={NOW} />);
     const chip = container.querySelector('[data-component="proxy-os-fingerprint"]');
     expect(chip?.getAttribute('data-os-tone')).toBe('match');
-    expect(chip?.textContent).toContain('iOS/macOS');
+    expect(chip?.textContent).toContain('Apple');
     // (d) — the chip says WHERE the number came from and HOW OLD it is, in plain
     // words: no vantage names, no mention of a list, a cache or another machine.
     expect(chip?.getAttribute('title')).toContain('Measured by Driftstack, 10 minutes ago.');

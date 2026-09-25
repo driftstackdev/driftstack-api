@@ -49,6 +49,7 @@ Full runbook: `docs/runbooks/deploy-bridge.md`.
 | `check-bench-regression.mjs`    | V-165 — advisory perf check; see docs/benchmarks/regression-check.md. |
 | `check-subprocessor-mirror.mjs` | V-493 — DPA Annex 3 ↔ sub-processors data-source parity check.        |
 | `generate-changelog.sh`         | Cuts a SDK changelog entry from git log between tags.                 |
+| `ci-verdict-on-main.mjs`        | Pre-push, advisory — CI's verdict for the head of origin/main.        |
 
 ## Conventions
 

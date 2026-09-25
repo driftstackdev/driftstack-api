@@ -17,7 +17,7 @@ import { ProfilesTable, type ProfileTableRow } from '../components/ProfilesTable
 import { CostPanel } from '../components/CostPanel';
 import { SkeletonRows } from '../components/Skeleton';
 import { ProxyForm, UDP_AND_QUIC_TALLY_LABEL } from '../views/ProxiesView';
-import { DeviceToolbar } from '../views/SimulatorWindow';
+import { DeviceToolbar, SIM_PANE_RAIL_LABELS, SIM_PANE_TITLES } from '../views/SimulatorWindow';
 import {
   IconChat,
   IconCookie,
@@ -39,6 +39,7 @@ import { ConnectionPill } from '../components/ConnectionPill';
 import { ProfilesActionBar, type ProfileSortBy } from '../components/ProfilesActionBar';
 import { ExitIpChip } from '../components/ExitIpChip';
 import { QuicReadout } from '../components/QuicReadout';
+import { UdpReadout } from '../components/UdpReadout';
 import { OsReadout } from '../components/OsReadout';
 import { IOSKeyboard } from '../components/IOSKeyboard';
 import { SettingsContext } from '../lib/SettingsContext';
@@ -47,6 +48,7 @@ import { DEFAULT_SETTINGS, type DriftstackSettings } from '../lib/settings';
 import type { ProxyDraft } from '../lib/proxies';
 import type { ConnectionStatus } from '../lib/use-connection-status';
 import type { AgentSessionCapabilityReport } from '../lib/agent-session-control';
+import { isFingerprintConfidence, isFingerprintedOs } from '../lib/os-fingerprint-verdict';
 // Audit scenes (2026-09-12) — one composition per view the marketing scenes do
 // not cover, for scripts/gui-text-quality.mjs. ⚠️ CYCLE: audit-scenes.tsx
 // imports AppWindow / the fixtures from THIS module; it therefore touches no
@@ -165,6 +167,11 @@ export const AUDIT_SCENES = [
   'audit-simulator-agent-approval',
   'audit-simulator-agent-done',
   'audit-simulator-pair',
+  // A window, not a state (like `audit-agent-chat-small`): the agent driving,
+  // the Session pane open, at the Simulator's MINIMUM window — where the phone
+  // is narrowest and the agent-driving pill and the rail labels ran out of room
+  // (gui-v0.1.72: "…switch to Manual to take cont", "Downlo…").
+  'audit-simulator-agent-small',
 ] as const;
 export type AuditSceneName = (typeof AUDIT_SCENES)[number];
 export type SceneName = MarketingSceneName | AuditSceneName;
@@ -1302,6 +1309,82 @@ function stateProps(label: string): ProfilePhoneCardProps {
   return found.props;
 }
 
+/** The simulator cockpit's Egress readouts read the session's capability
+ *  report; this is a fully-observed one (exit + HTTP/3 + OS), TEST-NET exit.
+ *  ⛔ It is the SIMULATOR SCENE's session, so it must agree with that scene's
+ *  profile — `tokyo sneakers`, whose grid card is the one card marked `Live`
+ *  and reads `via Residential JP #1` / `Tokyo, Tokyo`. The WebRTC candidate
+ *  tracks the exit deliberately: equal means no leak, and `sim-webrtc-candidates
+ *  [data-leak="false"]` is a capture guard. Consumed by SimulatorScene and, for
+ *  that live card's own readings, by MARKETING_CARDS (`liveSessionReadings`,
+ *  below) — so the grid, its hero crop and the list show the session the
+ *  window shows; no other scene reads it (grep: this file). Declared ABOVE
+ *  MARKETING_CARDS for that reason: a module-level const is not readable
+ *  before its declaration. */
+export const MARKETING_CAPABILITY_REPORT: AgentSessionCapabilityReport = {
+  manual_input_available: true,
+  streaming_state: 'live',
+  egress_state: 'live',
+  h3_connection_observed: true,
+  h3_connection_count: 4,
+  // A session that reached sites over HTTP/3 relays UDP: say so, as the card does.
+  proxy_udp_supported: true,
+  exit_ip: TEST_NET.jp,
+  exit_country: 'JP',
+  exit_timezone: 'Asia/Tokyo',
+  webrtc_candidate_ips: [TEST_NET.jp],
+  observed_at: '2026-06-15T06:41:30.000Z',
+  // ⛔ (V-219) DATED, and dated FIXED. The readout labels a reading past its
+  // freshness window (`? Linux · high confidence · 3 mo ago`), so an undated fixture would
+  // exercise only the legacy shape, and a fixture dated relative to the wall
+  // clock would make this capture change every day. Stamped just before the
+  // report's own `observed_at`, and the scene passes that same instant as `nowMs`
+  // — a fresh reading, rendered exactly as it is today, deterministically.
+  // ⛔ 'linux', the WIRE value — it was 'Linux', which no control plane sends and
+  // `isFingerprintedOs` rightly refuses, so since 2026-09-24 this capture printed
+  // "OS: unknown · high" about a reading the fixture names. In the one vocabulary
+  // (gui-v0.1.72) the line reads "? Linux · high confidence": the reading, named,
+  // and withheld as every surface withholds a reading with no vantage flag.
+  os_fingerprint: { os: 'linux', confidence: 'high', at: '2026-06-15T06:40:00.000Z' },
+  proxy_kind: 'socks5',
+};
+
+/** The instant the simulator scene is captured AT. Fixed, because a relative-age
+ *  label rendered against the wall clock would change the capture every day. */
+export const MARKETING_CAPTURED_AT_MS = Date.parse('2026-06-15T06:41:30.000Z');
+
+/**
+ * gui-v0.1.73 review — the live card's readings ARE its session's. The
+ * simulator scene's window drives `tokyo sneakers` and renders
+ * MARKETING_CAPABILITY_REPORT ("✓ UDP", "✓ QUIC · HTTP/3 live", "? Linux ·
+ * high confidence"), while the same profile's card, in the grid right behind
+ * it, read "✓ UDP  ~ QUIC  — OS": one session, measured and unmeasured in one
+ * public picture. The card now takes them from that report — the HTTP/3 the
+ * session observed is the card's measured QUIC (`quicMeasured`), and the OS
+ * reading the window names is the card's — so the two cannot drift apart
+ * again (marketing-scenes.test.tsx compares the two badges for badge).
+ */
+function liveSessionReadings(
+  report: AgentSessionCapabilityReport,
+): Pick<ProfilePhoneCardProps, 'osFingerprint' | 'quicMeasured'> {
+  const fp = report.os_fingerprint;
+  if (fp === undefined || !isFingerprintedOs(fp.os) || !isFingerprintConfidence(fp.confidence)) {
+    throw new Error('marketing scene: the live session reports no OS reading a card can draw');
+  }
+  return {
+    ...(report.h3_connection_observed === true ? { quicMeasured: 'h3' as const } : {}),
+    osFingerprint: {
+      os: fp.os,
+      confidence: fp.confidence,
+      reason: '',
+      ...(fp.at !== undefined ? { at: Date.parse(fp.at) } : {}),
+      ...(fp.observed_via !== undefined ? { observedVia: fp.observed_via } : {}),
+      ...(fp.single_host_vantage === true ? { singleHostVantage: true } : {}),
+      ...(fp.web_port_vantage === true ? { webPortVantage: true } : {}),
+    },
+  };
+}
+
 /** The 8 curated cards of the profiles grid — each is an existing STATES entry
  *  (so the geometry gate already covers its layout) with example hosts and
  *  TEST-NET exits laid over it. Exported so the scene test can scan them. */
@@ -1323,6 +1406,7 @@ export const MARKETING_CARDS: ReadonlyArray<{ label: string; props: ProfilePhone
       proxyAddress: 'jp-1.proxy.example.com:1080',
       exitIp: TEST_NET.jp,
       locationLabel: 'Tokyo, Tokyo',
+      ...liveSessionReadings(MARKETING_CAPABILITY_REPORT),
     },
   },
   {
@@ -1553,39 +1637,6 @@ function withCardNetwork(row: ProfileTableRow): ProfileTableRow {
 }
 export const MARKETING_TABLE_ROWS: ReadonlyArray<ProfileTableRow> =
   MARKETING_TABLE_ROWS_BASE.map(withCardNetwork);
-
-/** The simulator cockpit's Egress readouts read the session's capability
- *  report; this is a fully-observed one (exit + HTTP/3 + OS), TEST-NET exit.
- *  ⛔ It is the SIMULATOR SCENE's session, so it must agree with that scene's
- *  profile — `tokyo sneakers`, whose grid card is the one card marked `Live`
- *  and reads `via Residential JP #1` / `Tokyo, Tokyo`. The WebRTC candidate
- *  tracks the exit deliberately: equal means no leak, and `sim-webrtc-candidates
- *  [data-leak="false"]` is a capture guard. Consumed ONLY by SimulatorScene
- *  (grep: this file), so the six pinned captures never see it. */
-export const MARKETING_CAPABILITY_REPORT: AgentSessionCapabilityReport = {
-  manual_input_available: true,
-  streaming_state: 'live',
-  egress_state: 'live',
-  h3_connection_observed: true,
-  h3_connection_count: 4,
-  exit_ip: TEST_NET.jp,
-  exit_country: 'JP',
-  exit_timezone: 'Asia/Tokyo',
-  webrtc_candidate_ips: [TEST_NET.jp],
-  observed_at: '2026-06-15T06:41:30.000Z',
-  // ⛔ (V-219) DATED, and dated FIXED. The readout labels a reading past its
-  // freshness window (`OS: Linux · high · 3 mo ago`), so an undated fixture would
-  // exercise only the legacy shape, and a fixture dated relative to the wall
-  // clock would make this capture change every day. Stamped just before the
-  // report's own `observed_at`, and the scene passes that same instant as `nowMs`
-  // — a fresh reading, rendered exactly as it is today, deterministically.
-  os_fingerprint: { os: 'Linux', confidence: 'high', at: '2026-06-15T06:40:00.000Z' },
-  proxy_kind: 'socks5',
-};
-
-/** The instant the simulator scene is captured AT. Fixed, because a relative-age
- *  label rendered against the wall clock would change the capture every day. */
-export const MARKETING_CAPTURED_AT_MS = Date.parse('2026-06-15T06:41:30.000Z');
 
 /** What the fleet knows about a proxy in the scene, in the terms ProxiesView
  *  tallies its header from: `isRowHealthy` counts a SOCKS5 row with a passing
@@ -2060,25 +2111,26 @@ function ShopTileArt({ wash, ink }: { wash: string; ink: string }): JSX.Element 
  *  the live pane store). Icons are that component's own `SIM_PANE_ICONS`
  *  paths.
  *
- *  ⚠️ ONE deliberate divergence: the real rail's label is 7.5px, and this
- *  capture's own text-quality gate refuses readable text under 9px
- *  (scripts/gui-text-quality.mjs MIN_PX) — a marketing PNG must not ship text
- *  it calls illegible. The label is 9px here; everything else (h-10 w-11, the
- *  active accent state, the 18px icon, truncate under the button's aria-label)
- *  is the real button's. */
+ *  ⛔ THE WORDS ARE THE APP'S OWN, READ FROM IT: the label under the icon is
+ *  `SIM_PANE_RAIL_LABELS[pane]` and the button's name `SIM_PANE_TITLES[pane]`.
+ *  This mirror used to carry its own literals, and when the app's rail label
+ *  "Downloads" (which read "Downlo…" in every window) became "Saved", the
+ *  committed simulator.png kept saying "Downloads" (gui-v0.1.72 review);
+ *  marketing-scenes.test.tsx now pins every label against the app's map.
+ *  The label's chrome is the real one's too (9px, max 42px, tracking-tight):
+ *  the 7.5px → 9px divergence this mirror once carried ended when the real rail
+ *  moved to the 9px floor. */
 function SimRailButton({
   pane,
-  label,
-  title,
   active = false,
   icon,
 }: {
-  pane: string;
-  label: string;
-  title: string;
+  pane: keyof typeof SIM_PANE_RAIL_LABELS;
   active?: boolean;
   icon: ReactNode;
 }): JSX.Element {
+  const label = SIM_PANE_RAIL_LABELS[pane];
+  const title = SIM_PANE_TITLES[pane];
   return (
     <button
       type="button"
@@ -2099,16 +2151,9 @@ function SimRailButton({
         {icon}
       </span>
       <span
+        data-component={`sim-rail-label-${pane}`}
         aria-hidden="true"
-        // The size divergence must not also change the WORDS. MEASURED in the
-        // harness at 9px: "Downloads" is 47.25px at the real `tracking-tight`
-        // and 45.2px at `tracking-tighter`, against the real button's 42px cap
-        // — so the cap is 47 and the tracking one step tighter, and all eight
-        // labels render whole inside the 48px rail exactly as the real 7.5px
-        // rail's do. ⚠️ An ellipsis here is invisible to every gate: a
-        // max-width-clamped `truncate` span reports scrollWidth == clientWidth,
-        // so gui-text-quality's CUT check cannot see it. Re-render and LOOK.
-        className="max-w-[47px] truncate text-[9px] font-medium leading-none tracking-tighter"
+        className="max-w-[42px] truncate text-[9px] font-medium leading-none tracking-tight"
       >
         {label}
       </span>
@@ -2304,29 +2349,13 @@ function SimulatorScene(): JSX.Element {
                 aria-label="Drawer sections"
                 className="flex w-12 shrink-0 flex-col items-center gap-1 border-l border-white/[0.12] py-2"
               >
-                <SimRailButton pane="session" label="Session" title="Session" icon={<IconChat />} />
-                <SimRailButton
-                  pane="controls"
-                  label="Controls"
-                  title="Controls"
-                  icon={<IconSliders />}
-                />
+                <SimRailButton pane="session" icon={<IconChat />} />
+                <SimRailButton pane="controls" icon={<IconSliders />} />
                 {/* The ACTIVE one — the pane beside it is Diagnostics. An
                     inactive rail beside an open pane is another impossible
                     state. */}
-                <SimRailButton
-                  pane="diagnostics"
-                  label="Health"
-                  title="Diagnostics"
-                  active
-                  icon={<IconSignal />}
-                />
-                <SimRailButton
-                  pane="cookies"
-                  label="Cookies"
-                  title="Cookies"
-                  icon={<IconCookie />}
-                />
+                <SimRailButton pane="diagnostics" active icon={<IconSignal />} />
+                <SimRailButton pane="cookies" icon={<IconCookie />} />
                 {/* Network is a CONDITIONAL entry in the shipped rail since
                     2026-09-16 (SimulatorWindow visibleSimDrawerPanes): it is
                     withheld until the session has reported a request, so an
@@ -2336,25 +2365,10 @@ function SimulatorScene(): JSX.Element {
                     scene of a session that has reported nothing would simply
                     omit this button and close the gap; the rest of the rail is
                     unchanged either way. */}
-                <SimRailButton
-                  pane="network"
-                  label="Network"
-                  title="Network"
-                  icon={<IconGlobe />}
-                />
-                <SimRailButton pane="files" label="Files" title="Files" icon={<IconUpload />} />
-                <SimRailButton
-                  pane="downloads"
-                  label="Downloads"
-                  title="Downloads"
-                  icon={<IconDownload />}
-                />
-                <SimRailButton
-                  pane="recording"
-                  label="Record"
-                  title="Recording"
-                  icon={<IconRecordDot />}
-                />
+                <SimRailButton pane="network" icon={<IconGlobe />} />
+                <SimRailButton pane="files" icon={<IconUpload />} />
+                <SimRailButton pane="downloads" icon={<IconDownload />} />
+                <SimRailButton pane="recording" icon={<IconRecordDot />} />
                 {/* The always-reachable Stop, pinned to the rail's bottom under
                     its separator — the real rail draws it whenever a session is
                     bound, and this window is a bound, running session. */}
@@ -2462,7 +2476,10 @@ function SimulatorScene(): JSX.Element {
                         <polyline points="3,13 8,13 11,5 14,19 16,13 21,13" />
                       </svg>
                     </span>
-                    <span>Diagnostics</span>
+                    {/* The active section's name, from the app's own map — the
+                        rail button beside it is named with it (gui-v0.1.73:
+                        this said "Diagnostics" under a rail word "Health"). */}
+                    <span data-component="sim-pane-title">{SIM_PANE_TITLES.diagnostics}</span>
                     <button
                       type="button"
                       onClick={noop}
@@ -2528,6 +2545,9 @@ function SimulatorScene(): JSX.Element {
                       <span data-component="sim-proxy-timezone"> · Asia/Tokyo</span>
                     </div>
                     <ExitIpChip report={MARKETING_CAPABILITY_REPORT} />
+                    {/* The real window's three readings, in its order (UDP, QUIC,
+                        OS) — the mirror had no UDP line (gui-v0.1.72). */}
+                    <UdpReadout report={MARKETING_CAPABILITY_REPORT} />
                     <QuicReadout report={MARKETING_CAPABILITY_REPORT} />
                     <OsReadout
                       report={MARKETING_CAPABILITY_REPORT}

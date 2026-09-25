@@ -135,6 +135,7 @@ import {
 import { deriveProbeViewState } from '../../src/lib/proxy-probe-cache';
 import { osFingerprintVerdict } from '../../src/lib/os-fingerprint-verdict';
 import { UDP_AND_QUIC_TALLY_LABEL } from '../../src/views/ProxiesView';
+import { SIM_PANE_RAIL_LABELS, SIM_PANE_TITLES } from '../../src/views/SimulatorWindow';
 
 afterEach(() => {
   cleanup();
@@ -258,7 +259,11 @@ describe('sceneFromSearch — the only door into a scene, marketing or audit', (
     // 30 → 31: `audit-signed-out` — the first-run screen under the notice a
     // customer sees after the server refused the app's key (2026-09-24), so the
     // gates measure the notice in both themes like every other surface.
-    expect(AUDIT_SCENES).toHaveLength(31);
+    // 31 → 32: `audit-simulator-agent-small` — the agent driving at the
+    // Simulator's MINIMUM window with the Session pane open (792×560), where the
+    // agent-driving pill and the rail labels ran out of room and read
+    // "…take cont" / "Downlo…" (gui-v0.1.72); a window, not a state.
+    expect(AUDIT_SCENES).toHaveLength(32);
     for (const name of ALL_SCENES) {
       expect(isAuditScene(name)).toBe(name.startsWith('audit-'));
       const size = sceneSize(name);
@@ -1195,6 +1200,119 @@ describe('scene shapes — what scripts/marketing-screens.mjs guards at capture'
       drawerEgress,
       `the window's Egress names ${drawerEgress || '(nothing)'} but the live card runs through ${String(cardProxy)}`,
     ).toContain(String(cardProxy));
+  });
+
+  /* gui-v0.1.72 review — the app's rail said "Saved" and this mirror still said
+   * "Downloads": the rail label was renamed in SimulatorWindow (it read
+   * "Downlo…" at 9px in every window) and the hand-built marketing mirror kept
+   * its own literal, so the committed simulator.png showed a word the product
+   * no longer shows. The mirror's own rule is that its size divergence must
+   * never change the WORDS; this is that rule, enforced: every rail button the
+   * mirror draws says exactly the app's label under the app's name. */
+  it('simulator: the mirror’s drawer rail says the app’s own rail words — the label under each icon and the button’s name', () => {
+    const { container } = render(<MarketingScene name="simulator" />);
+    const rail = container.querySelector('[data-component="sim-drawer-rail"]');
+    expect(rail).not.toBeNull();
+    const buttons = Array.from(rail?.querySelectorAll('button[data-component^="sim-rail-"]') ?? [])
+      .map((b) => ({
+        pane: (b.getAttribute('data-component') ?? '').replace(/^sim-rail-/, ''),
+        name: b.getAttribute('aria-label'),
+        // The label span (the real rail's `sim-rail-label-<pane>`; before the
+        // mirror carried that hook, its last span).
+        label:
+          (
+            b.querySelector('[data-component^="sim-rail-label-"]') ??
+            b.querySelector(':scope > span:last-of-type')
+          )?.textContent ?? null,
+      }))
+      .filter((b) => b.pane !== 'end');
+    // The mirror draws every section a session that has reported a request shows.
+    expect(buttons.map((b) => b.pane)).toEqual(Object.keys(SIM_PANE_RAIL_LABELS));
+    for (const b of buttons) {
+      const pane = b.pane as keyof typeof SIM_PANE_RAIL_LABELS;
+      expect(b.label, `${pane}: the label under the icon`).toBe(SIM_PANE_RAIL_LABELS[pane]);
+      expect(b.name, `${pane}: the button's name`).toBe(SIM_PANE_TITLES[pane]);
+    }
+    expect(buttons.find((b) => b.pane === 'downloads')?.label).toBe('Saved');
+    // gui-v0.1.73 review — …and the open pane's title is the ACTIVE section's
+    // name, read from the same map: the mirror's pane said "Diagnostics" under
+    // a rail button that said "Health".
+    const active = rail?.querySelector('button[aria-pressed="true"]');
+    const activePane = (active?.getAttribute('data-component') ?? '').replace(/^sim-rail-/, '');
+    expect(activePane).toBe('diagnostics');
+    const paneTitle =
+      container.querySelector(
+        '[data-component="sim-drawer-pane"] [data-component="sim-pane-title"]',
+      ) ??
+      container.querySelector(
+        '[data-component="sim-drawer-pane"] > div:first-child > span:not([aria-hidden])',
+      );
+    expect(paneTitle?.textContent, "the mirror's open pane is titled with its button's name").toBe(
+      active?.getAttribute('aria-label'),
+    );
+  });
+
+  /* gui-v0.1.73 review — one profile, two readings in one public picture. The
+   * window drives `tokyo sneakers` and read "✓ UDP · ✓ QUIC · HTTP/3 live ·
+   * ? Linux · high confidence", while that profile's card, in the grid right
+   * behind it, read "✓ UDP  ~ QUIC  — OS": the same session, measured and
+   * unmeasured at once. The card now carries the readings the window's session
+   * reported (MARKETING_CAPABILITY_REPORT), so the two say one thing. */
+  it('simulator: the live card behind the window reads the SAME UDP, QUIC and OS badges as the window it drives', () => {
+    const { container } = render(<MarketingScene name="simulator" />);
+    const stage = container.querySelector<HTMLElement>('[data-scene="simulator"]') as HTMLElement;
+    const win = stage.querySelector<HTMLElement>(
+      '[data-component="scene-simulator-window"]',
+    ) as HTMLElement;
+    const toolbar = win.querySelector('[data-component="simulator-toolbar"]')?.textContent ?? '';
+    const cards = Array.from(
+      stage.querySelectorAll<HTMLElement>('[data-scene-region="grid"] article'),
+    );
+    const card = cards.find((c) =>
+      toolbar.includes((c.getAttribute('aria-label') ?? '').replace(/^Select /, '')),
+    );
+    expect(card, 'the grid carries the card of the profile the window drives').toBeDefined();
+    const caps = card?.querySelector('[data-region="caps"]');
+    /** A badge as a reader sees it: marks set apart, detail after " · " dropped. */
+    const words = (el: Element | null | undefined): string | null =>
+      el == null
+        ? null
+        : ((el.textContent ?? '')
+            .replace(/([✓✗⤵~⇢—?…])/gu, ' $1 ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .split(' · ')[0] ?? '');
+    for (const [reading, onCard, inWindow] of [
+      [
+        'UDP',
+        caps?.querySelector('[data-udp]'),
+        win.querySelector('[data-component="sim-udp-readout"]'),
+      ],
+      [
+        'QUIC',
+        caps?.querySelector('[data-quic-inferred]'),
+        win.querySelector('[data-component="sim-quic-readout"]'),
+      ],
+      [
+        'OS',
+        caps?.querySelector('[data-component="proxy-os-fingerprint"]'),
+        win.querySelector('[data-component="sim-os-readout"]'),
+      ],
+    ] as const) {
+      const c = words(onCard);
+      const w = words(inWindow);
+      expect(w, `the window draws a ${reading} badge`).not.toBeNull();
+      // The card is the one compact surface: it may shorten the WORD to a
+      // prefix of itself, never change the mark.
+      const [cMark, ...cWord] = (c ?? '').split(' ');
+      const [wMark, ...wWord] = (w ?? '').split(' ');
+      expect(
+        cMark === wMark &&
+          cWord.join(' ').length > 0 &&
+          wWord.join(' ').startsWith(cWord.join(' ')),
+        `${reading}: the card reads ${JSON.stringify(c)}, the window it drives reads ${JSON.stringify(w)}`,
+      ).toBe(true);
+    }
   });
 
   it('billing + command-center: the app chrome frames the real panels', () => {

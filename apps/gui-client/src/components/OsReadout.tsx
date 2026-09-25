@@ -36,6 +36,20 @@ import {
   osFingerprintVerdict,
 } from '../lib/os-fingerprint-verdict';
 import { formatRelativeNarrow } from './RelativeTime';
+import {
+  DETAIL_SEPARATOR,
+  READING_MARK,
+  READING_WORD,
+  badgeText,
+} from '../lib/reading-badge-words';
+
+/** Owner item 9 (gui-v0.1.72) — this line in the ONE vocabulary every surface
+ *  shares (lib/reading-badge-words): the badge the Proxies tab, the card and the
+ *  list draw for the same reading ("✓ Apple", "✗ Windows", "? Linux", "— OS"),
+ *  mark first, and what only this line has room for as its DETAIL — the
+ *  confidence and, past the freshness window, the age. It read "OS: ✓ iOS/macOS
+ *  · high", "OS: Linux · high" (no mark) and "OS: not measured". */
+const OS_NOT_MEASURED = badgeText(READING_MARK.notMeasured, READING_WORD.os);
 
 export function OsReadout({
   report,
@@ -68,7 +82,7 @@ export function OsReadout({
         }
         className="mt-1 text-[10px] leading-snug text-white/50"
       >
-        {vpn ? 'OS: not available for a VPN tunnel' : 'OS: not measured'}
+        {OS_NOT_MEASURED}
       </div>
     );
   }
@@ -116,10 +130,17 @@ export function OsReadout({
       : null;
   const match = verdict?.tone === 'match';
   const mismatch = verdict?.tone === 'mismatch';
-  // The customer's word for the OS ('iOS/macOS', 'Windows', …), never the wire id.
-  const label = verdict !== null && verdict.label !== 'OS' ? verdict.label : 'unknown';
+  // The badge every other surface draws for this reading — the verdict's own
+  // mark and word ('✓ Apple', '✗ Windows', '? Linux', '? OS'), never the wire id.
+  // A value this build does not know is read, and undetermined: '? OS'.
+  const badge =
+    verdict !== null
+      ? badgeText(verdict.glyph, verdict.label)
+      : badgeText(READING_MARK.undetermined, READING_WORD.os);
   const ageText =
-    aged && measuredAt !== undefined ? ` · ${formatRelativeNarrow(measuredAt, nowMs)}` : '';
+    aged && measuredAt !== undefined
+      ? `${DETAIL_SEPARATOR}${formatRelativeNarrow(measuredAt, nowMs)}`
+      : '';
   return (
     <div
       data-component="sim-os-readout"
@@ -132,7 +153,7 @@ export function OsReadout({
             `${match ? 'It matches the iOS device. ' : ''}` +
             'Press Test on the Proxies screen for a current reading.'
           : match
-            ? 'This proxy presents as iOS/macOS — it matches the iOS device. Measured when the proxy was last tested.'
+            ? 'This proxy presents as Apple (iOS or macOS) — it matches the iOS device. Measured when the proxy was last tested.'
             : mismatch && verdict !== null
               ? verdict.hint
               : 'The operating system this proxy presents to websites, measured when it was last tested.'
@@ -141,11 +162,7 @@ export function OsReadout({
         match ? 'text-status-ready' : mismatch ? 'text-status-error' : 'text-white/70'
       }`}
     >
-      {match
-        ? `OS: ✓ ${label} · ${fingerprint.confidence}`
-        : mismatch
-          ? `OS: ✗ ${label} · ${fingerprint.confidence}`
-          : `OS: ${label} · ${fingerprint.confidence}`}
+      {`${badge}${DETAIL_SEPARATOR}${fingerprint.confidence} confidence`}
       {ageText}
     </div>
   );

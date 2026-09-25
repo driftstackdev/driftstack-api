@@ -128,14 +128,16 @@ function cardProps(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardP
 }
 
 describe('3 — a VPN row on a plan without VPN says so on the card, as the Proxies tab does', () => {
-  it('CRITICAL the card’s UDP chip reads "UDP — not on plan" (it read "⇢ UDP"), whole, beside "— OS", with no "+N"', () => {
+  it('CRITICAL the card’s UDP chip reads "— UDP · not on plan" (it read "⇢ UDP"), whole, beside "— OS", with no "+N"', () => {
     const p = cardProps({ planExcludesVpn: true });
     expect(capsMode(p)).toBe('measured');
     const { container } = render(<ProfilePhoneCard {...p} />);
     const caps = container.querySelector('[data-region="caps"]') as HTMLElement;
     const udp = caps.querySelector('[data-udp]') as HTMLElement;
     expect(udp.textContent).toBe(UDP_NOT_ON_PLAN_CHIP);
-    expect(udp.textContent).toBe(`UDP — ${NOT_ON_THIS_PLAN_LABEL}`);
+    // gui-v0.1.72 — the one vocabulary: the missing state, mark first, the plan
+    // as its detail (it read "UDP — not on plan", the word before the mark).
+    expect(udp.textContent).toBe(`— UDP · ${NOT_ON_THIS_PLAN_LABEL}`);
     expect(udp.getAttribute('data-unmeasured')).toBe('plan_excluded');
     expect(udp.getAttribute('title')).toBe(VPN_UDP_NOT_ON_PLAN_HINT);
     expect(caps.querySelector('[data-component="caps-overflow"]')).toBeNull();
@@ -210,7 +212,7 @@ describe('4 — the list’s Network cell draws the card’s chips', () => {
       quicProbe: true,
     });
     const quic = capabilityChips(card).eligible.find((c) => c.key === 'quic');
-    expect(quic?.text).toBe('QUIC ✓');
+    expect(quic?.text).toBe('✓ QUIC');
     render(
       <ProfilesTable
         {...tableProps([
@@ -227,7 +229,7 @@ describe('4 — the list’s Network cell draws the card’s chips', () => {
       />,
     );
     const chip = document.querySelector('[data-component="list-quic-chip"]') as HTMLElement;
-    expect(chip.textContent).toBe('QUIC ✓');
+    expect(chip.textContent).toBe('✓ QUIC');
     expect(chip.getAttribute('title')).toBe(quic!.title);
     for (const cls of quic!.className.split(/\s+/)) expect(chip.className).toContain(cls);
     expect(screen.getByText('Network')).toBeTruthy();
@@ -247,6 +249,8 @@ describe('4 — the list’s Network cell draws the card’s chips', () => {
     );
     chip = document.querySelector('[data-component="list-quic-chip"]') as HTMLElement;
     expect(chip.getAttribute('data-unmeasured')).toBe('plan_excluded');
+    // …and says the plan in the same words as the Proxies tab's QUIC chip.
+    expect(chip.textContent).toBe(`— QUIC · ${NOT_ON_THIS_PLAN_LABEL}`);
     const udp = document.querySelector('[data-udp]') as HTMLElement;
     expect(udp.textContent).toBe(UDP_NOT_ON_PLAN_CHIP);
     expect(udp.getAttribute('title')).toBe(VPN_UDP_NOT_ON_PLAN_HINT);

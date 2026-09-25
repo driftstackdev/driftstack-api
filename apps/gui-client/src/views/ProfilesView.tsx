@@ -90,6 +90,7 @@ import { DevicePicker, type PickerDevice } from '../components/DevicePicker';
 import { RelativeTime } from '../components/RelativeTime';
 import {
   ProfilesTable,
+  listUdpVerdict,
   type ProfileTableRow,
   type ProfilesTableSortKey,
 } from '../components/ProfilesTable';
@@ -5140,17 +5141,15 @@ export function ProfilesView({
                     // plane drops the assertion, so every VPN row is 'unknown' until a
                     // node measures. A measured `false` lands as 'fail' and reads as
                     // the negative verdict it is.
-                    const vpnUdp = px !== null ? probeView.udpProbe[px.id] : undefined;
-                    const udp: 'ok' | 'fail' | 'unknown' =
-                      caps === null
-                        ? typeof vpnUdp === 'boolean'
-                          ? vpnUdp
-                            ? 'ok'
-                            : 'fail'
-                          : 'unknown'
-                        : (caps.find((c) => c.key === 'webrtc')?.ok ?? false)
-                          ? 'ok'
-                          : 'fail';
+                    const udp = listUdpVerdict(
+                      caps,
+                      px !== null ? probeView.udpProbe[px.id] : undefined,
+                    );
+                    // …and when this Mac's own test measured no UDP at all (the
+                    // proxy carried nothing), that test's sentence is the hover.
+                    const udpDownHint = caps?.find(
+                      (c) => c.key === 'webrtc' && c.unmeasured === true,
+                    )?.hint;
                     // T-27 — the QUIC verdict for the list tooltip comes from the SAME
                     // caps the chip reads, so the list never claims "QUIC ✓" while the
                     // card shows a muted "~".
@@ -5185,7 +5184,7 @@ export function ProfilesView({
                           )
                         : undefined;
                     // ⛔ 'fail' is a MEASURED negative and the list prints it as
-                    // "QUIC ✗ (HTTP/2 on last measure)". The no-UDP fallback chip is
+                    // "HTTP/3 falls back to HTTP/2." The no-UDP fallback chip is
                     // also `ok:false, inferred:false`, but it is DEDUCED from this
                     // Mac's own handshake, not measured through the proxy — so it
                     // must land on 'unknown' rather than claim a measurement nobody
@@ -5279,6 +5278,7 @@ export function ProfilesView({
                       // :4842; a row and a card must not disagree about a proxy.
                       osFingerprint: px !== null ? probeView.osFingerprints[px.id] : undefined,
                       udp,
+                      ...(udpDownHint !== undefined ? { udpUnmeasuredHint: udpDownHint } : {}),
                       quic,
                       ...(quicChip !== undefined
                         ? {

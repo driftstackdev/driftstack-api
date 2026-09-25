@@ -14,6 +14,7 @@ import type { AgentSessionCapabilityReport } from './agent-session-control';
 import type { ProxyTestResult } from './proxies';
 import { VPN_UDP_NOT_MEASURED_TITLE } from './proxy-check-copy';
 import { proxyCapabilities } from '../components/ProxyCapabilities';
+import { READING_MARK, READING_WORD, badgeText, badgeWithDetail } from './reading-badge-words';
 
 /** The UDP line's states: measured and works / measured and does not /
  *  not measured (nothing reported, or a VPN, where UDP rides the tunnel). */
@@ -49,13 +50,35 @@ export const UDP_NOT_MEASURED_TITLE =
 export function udpReadout(report: AgentSessionCapabilityReport | null): UdpReadout {
   // A VPN tunnel carries UDP inside it; the phone asserts it rather than
   // measuring it, so this is the card's own "routed through" state and sentence.
+  // Owner item 9 (gui-v0.1.72) — the ONE vocabulary (lib/reading-badge-words):
+  // the mark first, and "— UDP" for a reading nobody took. This line read
+  // "UDP ✓" and "UDP: not measured yet" where the Proxies tab said "✓ UDP" and
+  // the list "— UDP"; the sentence is the hover, as everywhere else.
   if (report?.proxy_kind === 'openvpn' || report?.proxy_kind === 'wireguard') {
-    return { state: 'not-measured', text: '⇢ UDP', title: VPN_UDP_NOT_MEASURED_TITLE };
+    return {
+      state: 'not-measured',
+      text: badgeText(READING_MARK.inTunnel, READING_WORD.udp),
+      title: VPN_UDP_NOT_MEASURED_TITLE,
+    };
   }
   const udp = report?.proxy_udp_supported;
-  if (udp === true) return { state: 'measured', text: 'UDP ✓', title: gridHint(true, 'webrtc') };
-  if (udp === false) return { state: 'failed', text: '⤵ UDP', title: gridHint(false, 'webrtc') };
-  return { state: 'not-measured', text: 'UDP: not measured yet', title: UDP_NOT_MEASURED_TITLE };
+  if (udp === true)
+    return {
+      state: 'measured',
+      text: badgeText(READING_MARK.works, READING_WORD.udp),
+      title: gridHint(true, 'webrtc'),
+    };
+  if (udp === false)
+    return {
+      state: 'failed',
+      text: badgeText(READING_MARK.fallsBack, READING_WORD.udp),
+      title: gridHint(false, 'webrtc'),
+    };
+  return {
+    state: 'not-measured',
+    text: badgeText(READING_MARK.notMeasured, READING_WORD.udp),
+    title: UDP_NOT_MEASURED_TITLE,
+  };
 }
 
 /**
@@ -74,4 +97,11 @@ export function noHttp3Reason(report: AgentSessionCapabilityReport | null): stri
   return null;
 }
 
-export const NO_HTTP3_TEXT = '⤵ HTTP/3 · HTTP/2 only';
+/** The measured NO in the ONE vocabulary: "⤵ QUIC", with what the session uses
+ *  instead as its detail. It read "⤵ HTTP/3 · HTTP/2 only" — the Simulator's own
+ *  word for the reading every other surface calls QUIC (gui-v0.1.72). */
+export const NO_HTTP3_TEXT = badgeWithDetail(
+  READING_MARK.fallsBack,
+  READING_WORD.quic,
+  'HTTP/2 only',
+);

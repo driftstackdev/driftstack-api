@@ -32,6 +32,11 @@ import {
   SHEET_PAGE_FALLBACK_PX,
   type ProfilePhoneCardProps,
 } from '../../src/components/ProfilePhoneCard';
+import {
+  agedOsFingerprintVerdict,
+  osFingerprintVerdict,
+  type OsFingerprint,
+} from '../../src/lib/os-fingerprint-verdict';
 
 const NAME = 'zurich banking';
 const CHECKED_AT = '2026-06-15T06:30:00.000Z';
@@ -194,7 +199,7 @@ describe('THE enumerating test — every pre-Phase-B fact is in the sheet, by it
     // card carried for that fact (scratchpad old-attrs inventory, 2026-09-11);
     // deleting that row from the sheet in ProfilePhoneCard.tsx reds its line.
     const facts: ReadonlyArray<{ fact: string; component: string; text: string }> = [
-      { fact: 'os fingerprint', component: 'proxy-os-fingerprint', text: 'iOS/macOS' },
+      { fact: 'os fingerprint', component: 'proxy-os-fingerprint', text: 'Apple' },
       {
         fact: 'checked-at',
         component: 'proxy-checked-at',
@@ -299,10 +304,10 @@ describe('THE enumerating test — every pre-Phase-B fact is in the sheet, by it
     expect(caps).not.toBeNull();
     expect(caps.querySelector('[data-capability="webrtc"][data-ok="true"]')).not.toBeNull();
     expect(caps.querySelector('[data-capability="quic"][data-ok="true"]')).not.toBeNull();
-    expect(byComponent(sheet, 'proxy-os-fingerprint')?.textContent).toContain('iOS/macOS');
+    expect(byComponent(sheet, 'proxy-os-fingerprint')?.textContent).toContain('Apple');
     const hints = byComponent(sheet, 'capability-hints') as HTMLElement;
     expect(hints.querySelectorAll('li').length).toBeGreaterThanOrEqual(3); // UDP, QUIC, OS
-    expect(hints.textContent).toMatch(/UDP ✓ — /);
+    expect(hints.textContent).toMatch(/✓ UDP — /);
     expect(byComponent(sheet, 'exit-row')?.textContent).toContain('185.22.1.9');
     cleanup();
     const { container: failed } = render(
@@ -891,5 +896,127 @@ describe('C2 — the ⋯ menu is a PORTAL: fixed from the card rect, flipped by 
       HTMLElement.prototype.getBoundingClientRect = original;
       Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalHeight });
     }
+  });
+});
+
+// gui-v0.1.73 review — the sheet prints every capability hint as VISIBLE text
+// ("✓ Apple — Your proxy presents as …"), so a hint is copy a customer reads,
+// not a tooltip. Two findings live here:
+//   1. The OS hint said "Your proxy presents as Apple (iOS or macOS) (high
+//      confidence) — …": the OS name's own bracket, then a second one for the
+//      confidence. The confidence is a clause now ("…, with high confidence"),
+//      so no hint ever carries a second bracketed aside.
+//   2. An untested SOCKS5 proxy drew "— UDP" "— QUIC" "— OS" in the sheet and
+//      explained only the OS one. Every chip the sheet draws for a reading
+//      nobody took is explained, in the OS line's own voice.
+describe('gui-v0.1.73 review — the sheet’s visible hint lines', () => {
+  const NOW = Date.parse('2026-06-15T06:42:00.000Z');
+  const OSES = ['macos-or-ios', 'windows', 'linux', 'bsd'] as const;
+  const CONFIDENCES = ['high', 'medium', 'low'] as const;
+  /** Every vantage a reading can arrive from, including the legacy "no flags". */
+  const VANTAGES: ReadonlyArray<Partial<OsFingerprint>> = [
+    {},
+    { observedVia: 'exit_ip' },
+    { observedVia: 'exit_ip', singleHostVantage: true },
+    { observedVia: 'proxy_host' },
+    { observedVia: 'proxy_host', webPortVantage: true },
+  ];
+  const brackets = (text: string): number => (text.match(/\(/g) ?? []).length;
+
+  it('CRITICAL no OS hint carries a second bracket — fresh, dated or aged, from any vantage, at any confidence — and the confidence is still said where it was', () => {
+    let checked = 0;
+    for (const os of OSES) {
+      for (const confidence of CONFIDENCES) {
+        for (const vantage of VANTAGES) {
+          const fp: OsFingerprint = { os, confidence, reason: 'r', ...vantage };
+          const hints = [
+            osFingerprintVerdict(fp, NOW).hint,
+            osFingerprintVerdict({ ...fp, at: NOW - 5 * 60_000 }, NOW).hint,
+            agedOsFingerprintVerdict(fp, NOW - 9 * 3_600_000, NOW).hint,
+          ];
+          for (const hint of hints) {
+            expect(brackets(hint), hint).toBeLessThanOrEqual(1);
+            expect(hint, hint).not.toMatch(/\)\s*\(/);
+            // Wherever the hint stated how sure the reading is, it still does —
+            // the clause replaced the bracket, it did not drop it. (The entry-
+            // point hint, "that entry point looks like Windows", never did.)
+            if (/presents as|This proxy looks like/.test(hint)) {
+              expect(hint, hint).toContain(`with ${confidence} confidence`);
+            }
+            checked += 1;
+          }
+        }
+      }
+    }
+    expect(checked).toBe(OSES.length * CONFIDENCES.length * VANTAGES.length * 3);
+  });
+
+  it('CRITICAL the sheet prints an Apple reading from every vantage as ONE bracket: "…presents as Apple (iOS or macOS)…, with high confidence"', () => {
+    for (const vantage of VANTAGES) {
+      const { container } = render(
+        <ProfilePhoneCard
+          {...props({ osFingerprint: { ...REAL_OS_NO_VANTAGE, ...vantage } })}
+          detailsInitiallyOpen
+        />,
+      );
+      const hints = byComponent(sheetOf(container) as HTMLElement, 'capability-hints');
+      const lines = Array.from(hints?.querySelectorAll('li') ?? []).map(
+        (li) => li.textContent ?? '',
+      );
+      const os = lines.find((l) => l.startsWith('✓ Apple — '));
+      expect(os, JSON.stringify(lines)).toBeDefined();
+      expect(os).toContain('Apple (iOS or macOS)');
+      expect(os).toContain('with high confidence');
+      for (const line of lines) expect(brackets(line), line).toBeLessThanOrEqual(1);
+      cleanup();
+    }
+  });
+
+  it('CRITICAL an untested SOCKS5 proxy: the sheet draws "— UDP" "— QUIC" "— OS" and explains EACH ONE in the OS line’s voice', () => {
+    const { container } = render(
+      <ProfilePhoneCard
+        {...props({ probed: false, capabilities: null, latencyMs: null, checkedAtIso: null })}
+        detailsInitiallyOpen
+      />,
+    );
+    const sheet = sheetOf(container) as HTMLElement;
+    const facts = sheet.querySelector('[data-fact="capabilities"]') as HTMLElement;
+    expect(facts.querySelector('[data-capability="webrtc"]')?.getAttribute('data-ok')).toBe(
+      'unmeasured',
+    );
+    expect(facts.querySelector('[data-capability="quic"]')?.getAttribute('data-ok')).toBe(
+      'unmeasured',
+    );
+    expect(byComponent(facts, 'proxy-os-fingerprint')?.textContent).toBe('—OS');
+    const lines = Array.from(
+      byComponent(facts, 'capability-hints')?.querySelectorAll('li') ?? [],
+    ).map((li) => li.textContent ?? '');
+    for (const word of ['UDP', 'QUIC', 'OS']) {
+      expect(lines, `the sheet explains its "— ${word}" chip`).toContain(
+        `— ${word} — ${word} not measured yet. Run Test on this proxy.`,
+      );
+    }
+    expect(lines).toHaveLength(3);
+    cleanup();
+  });
+
+  it('VACUITY: while this Mac’s first Test runs the sheet draws no UDP / QUIC chip, so it explains none — a line for a chip that is not there would be the same defect inverted', () => {
+    const { container } = render(
+      <ProfilePhoneCard
+        {...props({
+          probed: false,
+          capabilities: null,
+          latencyMs: null,
+          checkedAtIso: null,
+          testing: true,
+        })}
+        detailsInitiallyOpen
+      />,
+    );
+    const facts = sheetOf(container)?.querySelector('[data-fact="capabilities"]') as HTMLElement;
+    expect(facts.querySelector('[data-capability]')).toBeNull();
+    const text = byComponent(facts, 'capability-hints')?.textContent ?? '';
+    expect(text).not.toMatch(/UDP|QUIC/);
+    cleanup();
   });
 });

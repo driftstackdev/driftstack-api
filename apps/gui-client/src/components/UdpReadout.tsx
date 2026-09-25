@@ -3,10 +3,11 @@
 // HTTP/3 both need it, which is what the tooltip says.
 //
 // Same states and words as the profile card and the Proxies grid for the same
-// reading (lib/simulator-network-readouts.ts): 'UDP ✓' in the ready green,
-// '⤵ UDP' muted (a fall-back, never red), '⇢ UDP' for a VPN tunnel, and
-// 'UDP: not measured yet' until the phone reports. It never fetches — it reads
-// the report the window already holds.
+// reading (lib/simulator-network-readouts.ts), in the ONE vocabulary every
+// surface shares (lib/reading-badge-words): '✓ UDP' in the ready green, '⤵ UDP'
+// muted (a fall-back, never red), '⇢ UDP' for a VPN tunnel, and '— UDP' until
+// the phone reports. It never fetches — it reads the report the window already
+// holds.
 import { type JSX } from 'react';
 
 import type { AgentSessionCapabilityReport } from '../lib/agent-session-control';

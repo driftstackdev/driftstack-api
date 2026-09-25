@@ -209,15 +209,19 @@ describe('a history row names the session instead of showing only its id', () =>
     // DNS resolved outside the proxy is the classic proxy leak; it was collected,
     // stored, and rendered nowhere, so a leaking session looked exactly like a
     // clean one. The line reads in the customer's words (no 'UDP associate').
-    const line = await screen.findByText(/DNS resolved outside the proxy/);
-    expect(line.textContent).toContain('Connection limits: UDP not supported');
+    const dns = await screen.findByText(/DNS resolved outside the proxy/);
+    const line = dns.closest('[data-component="history-connection-limits"]') as HTMLElement;
+    // gui-v0.1.73 review — the UDP reading in the one vocabulary every surface
+    // badges it with ("⤵ UDP"), never a fourth name ("UDP not supported"); and
+    // "Connection limits", which is true of a session with no proxy of its own.
+    expect(line.textContent).toContain('Connection limits: ⤵ UDP');
     expect(line.textContent).not.toMatch(/associate|egress/i);
     // ⛔ THE BRANCH THAT WAS DEAD. `quic_route` is a string enum and the check
     // compared it against `false`, so this warning could not appear for any
     // payload — including this one, whose route really is disabled. It only
     // looked covered because the old fixture put a boolean in that field.
     expect(line.textContent, 'a disabled QUIC route is reported, not silently dropped').toContain(
-      'HTTP/3 not available',
+      '⤵ QUIC',
     );
   });
 
@@ -352,8 +356,8 @@ describe('a history row says what each warning means, in words, under the right 
       udp_associate: false,
       quic_route: 'disabled',
     });
-    expect(text).toContain('Connection limits: UDP not supported · HTTP/3 not available');
-    expect(text.split('UDP not supported').length - 1).toBe(1);
-    expect(text.split('HTTP/3 not available').length - 1).toBe(1);
+    expect(text).toContain('Connection limits: ⤵ UDP · ⤵ QUIC');
+    expect(text.split('⤵ UDP').length - 1).toBe(1);
+    expect(text.split('⤵ QUIC').length - 1).toBe(1);
   });
 });

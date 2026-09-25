@@ -292,11 +292,11 @@ describe('the profile card ages the measured QUIC verdict', () => {
     expect(chip.getAttribute('title')).toMatch(/^Last checked /);
     expect(chip.getAttribute('title')).not.toContain('not yet tested');
     // …and its TEXT is not the green chip's either: the pin this replaced read the
-    // '~' off the text, and an aged chip whose text was the bare 'QUIC ✓' would
+    // '~' off the text, and an aged chip whose text was the bare '✓ QUIC' would
     // announce a current verdict to anything that reads text and not chrome.
     // (Printed, not hidden: this row's only aged chip is this one, and beside
-    // 'UDP ✓' and '— OS' the dated form fits the card's default 206px.)
-    expect(chip.textContent).toBe('QUIC ✓ · 31 min');
+    // '✓ UDP' and '— OS' the dated form fits the card's default 206px.)
+    expect(chip.textContent).toBe('✓ QUIC · 31 min');
     expect(chip.querySelector('.sr-only')).toBeNull();
     expect(chip.className).toContain('bg-surface-inset');
   });

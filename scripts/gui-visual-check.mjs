@@ -1191,6 +1191,116 @@ function measureSimulatorWindow(root, opts) {
   return { violations, simState, leaves, overflow: overflowing };
 }
 
+/** Runs INSIDE the page (2026-09-25): text, and the status bar's glyphs, that
+ *  the simulator window paints UNDER something opaque of its own.
+ *
+ *  Why it exists: at the Simulator's minimum window (792x560 with the Session
+ *  pane open) the phone's status-bar clock read "7:4" — the 120px Dynamic
+ *  Island lay over the last digit, the Wi-Fi glyph and half the battery, on a
+ *  screen 211px wide. Every rule this gate and gui-text-quality apply looks at
+ *  OVERFLOW (a scroller, a clipping box, an ellipsis); a sibling painted on top
+ *  cuts nothing, so both reported 0 at the very scene that showed it.
+ *
+ *  How: each text run (its own text nodes' line boxes) and each <svg> glyph
+ *  (≥ 6px) is sampled along its midline, and `elementsFromPoint` says what is
+ *  painted above it there. Hit testing follows paint order, border-radius and
+ *  overflow clips, so it answers "what does the eye see here" — with ONE
+ *  adjustment: the status bar and the island are `pointer-events: none`, which
+ *  hit testing skips, so every element is made hit-testable for the length of
+ *  the measurement (an injected stylesheet, removed in `finally`).
+ *  Something above counts only when it HIDES what is under it: at least half
+ *  opaque through every ancestor, visible, and either a replaced element or a
+ *  background colour at least half opaque. A hover flyout at opacity 0, a
+ *  gradient glow and a transparent click target cover nothing.
+ *  A point where the element is not painted at all (clipped, off screen) is
+ *  not sampled — that is the text gate's CLIPPED rule, not this one.
+ *  Content inside the screen host is skipped: it stands for the live video,
+ *  which the window's own overlays (the agent pill, the notices) float over by
+ *  design. */
+function coveredInWindow(root) {
+  const probe = document.createElement('style');
+  probe.textContent = '*, *::before, *::after { pointer-events: auto !important; }';
+  document.head.appendChild(probe);
+  try {
+    const host = root.querySelector('[data-component="simulator-screen-host"]');
+    const alphaOf = (color) => {
+      const m = /rgba?\(([^)]*)\)/.exec(color);
+      if (m === null) return color === 'transparent' ? 0 : 1;
+      const parts = m[1].split(/[\s,/]+/).filter((s) => s !== '');
+      const a = parts[3];
+      if (a === undefined) return 1;
+      return a.endsWith('%') ? Number(a.slice(0, -1)) / 100 : Number(a);
+    };
+    const opacityThroughAncestors = (el) => {
+      let o = 1;
+      for (let n = el; n !== null; n = n.parentElement) o *= Number(getComputedStyle(n).opacity);
+      return o;
+    };
+    const hides = (el) => {
+      if (opacityThroughAncestors(el) < 0.5) return false;
+      const s = getComputedStyle(el);
+      if (s.visibility !== 'visible') return false;
+      if (['IMG', 'VIDEO', 'CANVAS', 'IFRAME'].includes(el.tagName)) return true;
+      return alphaOf(s.backgroundColor) >= 0.5;
+    };
+    const nameOf = (el) =>
+      el.getAttribute('data-component') ??
+      `${el.closest('[data-component]')?.getAttribute('data-component') ?? '?'} <${el.tagName.toLowerCase()}>`;
+    const found = [];
+    for (const el of root.querySelectorAll('*')) {
+      if (host !== null && host.contains(el)) continue;
+      const tag = el.tagName.toLowerCase();
+      // Only an <svg> ROOT is a glyph; its paths are the glyph's own parts.
+      if (tag !== 'svg' && el.namespaceURI === 'http://www.w3.org/2000/svg') continue;
+      let rects = [];
+      let text = '';
+      if (tag === 'svg') {
+        const b = el.getBoundingClientRect();
+        if (b.width < 6 || b.height < 6) continue;
+        rects = [b];
+        text = '(glyph)';
+      } else {
+        const nodes = Array.from(el.childNodes).filter(
+          (n) => n.nodeType === 3 && (n.textContent ?? '').trim() !== '',
+        );
+        if (nodes.length === 0) continue;
+        text = nodes.map((n) => (n.textContent ?? '').trim()).join(' ');
+        for (const n of nodes) {
+          const range = document.createRange();
+          range.selectNodeContents(n);
+          rects.push(...Array.from(range.getClientRects()));
+        }
+      }
+      let sampled = 0;
+      let covered = 0;
+      let by = null;
+      for (const r of rects) {
+        if (r.width < 3 || r.height < 3) continue;
+        const y = r.top + r.height / 2;
+        const n = Math.min(40, Math.max(2, Math.floor(r.width / 3)));
+        for (let i = 0; i < n; i += 1) {
+          const x = r.left + 1 + ((r.width - 2) * (i + 0.5)) / n;
+          const stack = document.elementsFromPoint(x, y);
+          const at = stack.findIndex((s) => s === el || el.contains(s));
+          if (at < 0) continue;
+          sampled += 1;
+          const over = stack.slice(0, at).find((s) => !s.contains(el) && hides(s));
+          if (over !== undefined) {
+            covered += 1;
+            if (by === null) by = nameOf(over);
+          }
+        }
+      }
+      if (covered > 0) {
+        found.push({ el: nameOf(el), text: text.slice(0, 60), by, covered, sampled });
+      }
+    }
+    return found;
+  } finally {
+    probe.remove();
+  }
+}
+
 /** One Phase E cell: scene x theme, at the scene's own declared (native)
  *  size — never `?stage=`, which only accepts W>=640 and this scene's real
  *  width (582/842) is below that on purpose (the drawer-open width, not a
@@ -1246,6 +1356,11 @@ async function measureSimulatorCell(context, scene, kind, expectedSimState, them
       expectedState: expectedSimState,
       minLeaves: MIN_SIMULATOR_TEXT_LEAVES,
     });
+    // Text or a status glyph painted under something opaque (coveredInWindow).
+    const covered = await stage.evaluate(coveredInWindow);
+    if (covered.length > 0) {
+      res.violations.push({ kind: 'covered', elements: covered.slice(0, 8) });
+    }
     const marker = await page.evaluate(
       (name) =>
         import(/* @vite-ignore */ '/src/visual-harness/simulator-scenes.tsx').then((m) =>

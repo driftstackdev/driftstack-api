@@ -35,6 +35,7 @@
  * anything could have re-taken it.
  */
 export { MEASURED_READING_TTL_MS as OS_FINGERPRINT_TTL_MS } from './proxy-reading-windows';
+import { OS_WORD } from './reading-badge-words';
 
 export const FINGERPRINTED_OS = ['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown'] as const;
 export type FingerprintedOs = (typeof FINGERPRINTED_OS)[number];
@@ -165,12 +166,31 @@ export interface OsVerdict {
   hint: string;
 }
 
-const OS_LABEL: Record<Exclude<FingerprintedOs, 'unknown'>, string> = {
-  'macos-or-ios': 'iOS/macOS',
-  windows: 'Windows',
-  linux: 'Linux',
-  bsd: 'BSD',
+/** The badge's word for each OS family — the ONE vocabulary's (lib/reading-
+ *  badge-words): "Apple" for macOS-or-iOS on every surface. It was "iOS/macOS"
+ *  here and "Apple" on the compact card, one reading in two words (gui-v0.1.72,
+ *  owner item 9). */
+const OS_LABEL: Record<Exclude<FingerprintedOs, 'unknown'>, string> = OS_WORD;
+/** The same family in a SENTENCE (a hover): the badge's word, and for Apple the
+ *  two systems it stands for — the reading cannot tell macOS from iOS. */
+const OS_NAME: Record<Exclude<FingerprintedOs, 'unknown'>, string> = {
+  ...OS_WORD,
+  'macos-or-ios': `${OS_WORD['macos-or-ios']} (iOS or macOS)`,
 };
+
+/**
+ * How sure the reading is, as a CLAUSE after the OS name: ", with high
+ * confidence".
+ *
+ * ⛔ Never a second bracket (gui-v0.1.73 review). It was "(high confidence)"
+ * straight after the name, and the Apple name carries its own "(iOS or macOS)",
+ * so the card's details sheet — which prints these hints as visible text —
+ * read "Your proxy presents as Apple (iOS or macOS) (high confidence) — …".
+ * A reading that carries no confidence at all says so in words.
+ */
+function withConfidence(confidence: FingerprintConfidence): string {
+  return `, with ${confidence === 'none' ? 'no' : confidence} confidence`;
+}
 
 /**
  * (o) O3 — the TRUE sentence for each reported cause. Each one names the cause and
@@ -403,6 +423,7 @@ function osFingerprintVerdictUndated(fp: OsFingerprint | undefined): OsVerdict {
   // the argument against it is the V-219 note further down and is kept there.
   if (fp.os === 'macos-or-ios') {
     const label = OS_LABEL['macos-or-ios'];
+    const name = OS_NAME['macos-or-ios'];
     const websitePath = fp.singleHostVantage === true || fp.webPortVantage === true;
     const entryPointOnly = fp.observedVia === 'proxy_host' && fp.webPortVantage !== true;
     return {
@@ -410,10 +431,10 @@ function osFingerprintVerdictUndated(fp: OsFingerprint | undefined): OsVerdict {
       glyph: '✓',
       label,
       hint: websitePath
-        ? `Your proxy presents as ${label} to websites (${fp.confidence} confidence) — it matches the iOS device behind it.${vantageSentence(fp)}`
+        ? `Your proxy presents as ${name} to websites${withConfidence(fp.confidence)} — it matches the iOS device behind it.${vantageSentence(fp)}`
         : entryPointOnly
-          ? `Your proxy presents as ${label} (${fp.confidence} confidence) — it matches the iOS device behind it. Only the proxy's entry point could be read, so some websites may reach a different machine.`
-          : `Your proxy presents as ${label} (${fp.confidence} confidence) — it matches the iOS device behind it. It forwards through more than one machine, so some websites may reach a different one.`,
+          ? `Your proxy presents as ${name}${withConfidence(fp.confidence)} — it matches the iOS device behind it. Only the proxy's entry point could be read, so some websites may reach a different machine.`
+          : `Your proxy presents as ${name}${withConfidence(fp.confidence)} — it matches the iOS device behind it. It forwards through more than one machine, so some websites may reach a different one.`,
     };
   }
   // ⛔ MEASURED ON PROD 2026-09-14, and it is the owner's whole complaint: every
@@ -442,7 +463,7 @@ function osFingerprintVerdictUndated(fp: OsFingerprint | undefined): OsVerdict {
   // Only the OBSERVER-port front door — the provider's gateway — stays neutral.
   if (fp.observedVia === 'proxy_host' && fp.webPortVantage !== true) {
     const looksLike =
-      fp.os === 'unknown' ? 'could not be identified' : `looks like ${OS_LABEL[fp.os]}`;
+      fp.os === 'unknown' ? 'could not be identified' : `looks like ${OS_NAME[fp.os]}`;
     return {
       tone: 'unknown',
       glyph: '?',
@@ -459,6 +480,7 @@ function osFingerprintVerdictUndated(fp: OsFingerprint | undefined): OsVerdict {
     };
   }
   const label = OS_LABEL[fp.os];
+  const name = OS_NAME[fp.os];
   // ⛔⛔ (V-219) NEITHER ARM MAY ASSERT UNLESS THE VANTAGE SUPPORTS IT, and the
   // symmetry is the whole point.
   //
@@ -523,7 +545,7 @@ function osFingerprintVerdictUndated(fp: OsFingerprint | undefined): OsVerdict {
       tone: 'unknown',
       glyph: '?',
       label,
-      hint: `This proxy looks like ${label} (${fp.confidence} confidence), but it forwards through more than one machine, so a website may reach a different one. Not a conclusion either way.`,
+      hint: `This proxy looks like ${name}${withConfidence(fp.confidence)}, but it forwards through more than one machine, so a website may reach a different one. Not a conclusion either way.`,
     };
   }
   // (An Apple reading returned green at the top of this function — owner item 9.)
@@ -531,7 +553,7 @@ function osFingerprintVerdictUndated(fp: OsFingerprint | undefined): OsVerdict {
     tone: 'mismatch',
     glyph: '✗',
     label,
-    hint: `Your proxy presents as ${label} to websites (${fp.confidence} confidence) — an iOS device behind a ${label} proxy can be detected.${vantageSentence(fp)}`,
+    hint: `Your proxy presents as ${name} to websites${withConfidence(fp.confidence)} — an iOS device behind a ${name} proxy can be detected.${vantageSentence(fp)}`,
   };
 }
 

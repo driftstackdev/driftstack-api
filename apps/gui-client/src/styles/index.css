@@ -4737,11 +4737,10 @@
 
 /* the Dynamic Island's camera lens — ports `.ai-island::after`'s recipe (§1,
    ~line 3402) onto the simulator's island, which is a flat black pill with
-   no lens detail today. `IosStatusBar`'s island div is untouched in every
-   other way — still exactly `w-[120px] h-[32px]`, pinned by
-   `simulator-window-ios-chrome.test.tsx` — this only adds a class carrying
-   the pseudo-element below. Drawn strictly inside the dedicated black
-   status-bar strip: a sibling of the video, never a layer over it. */
+   no lens detail today. Its size is the status bar's (`.sim-statusbar
+   .sim-island`, below); this only adds the pseudo-element. Drawn strictly
+   inside the dedicated black status-bar strip: a sibling of the video, never
+   a layer over it. */
 .sim-island::after {
   content: '';
   position: absolute;
@@ -4756,6 +4755,49 @@
     rgb(var(--surface-raised-rgb)),
     rgb(var(--surface-inset-rgb)) 60%
   );
+}
+
+/* The phone's status bar SCALES WITH THE SCREEN (gui-v0.1.72 follow-up).
+   The island was a fixed 120×32 and the insets a fixed 24px, on a screen
+   that is 211px wide at the Simulator's minimum window (792x560 with the
+   Session pane open): the island lay over the clock's last digit ("7:4"),
+   the Wi-Fi glyph and half the battery — and over the cellular bars on every
+   screen under ~322px, which includes the 842x718 window. Measured, not
+   assumed: gui-visual-check's simulator sweep (`coveredInWindow`) reported
+   the cellular glyph under the island in all 18 cells and the clock in the
+   792x560 ones.
+
+   The strip is a size container, and everything is a share of its width:
+   · the island is the real iPhone's share — 125 of 393pt ≈ 31% — capped at
+     the 120×32 it always was (a screen ≥ 387px draws it exactly as before),
+     with its 15:4 proportions kept;
+   · the side insets are 6.2% (24px at 387, never under 14);
+   · below 290px there is no room for three glyphs beside a centred island
+     (0.345·w − inset − 6 < 71px), so the cellular bars step aside — the
+     item a real iPhone drops first. The clock always stays.
+   At 211px: clock 14–52, island 73–138, Wi-Fi + battery 150–197.
+
+   `inline-size`, never `size` — the strip's height is its own 40px. The
+   container makes the strip the containing block for `position: fixed`
+   descendants; it has none. */
+.sim-statusbar {
+  container-type: inline-size;
+  container-name: simstatus;
+}
+.sim-statusbar .sim-island {
+  width: min(120px, 31cqw);
+  aspect-ratio: 15 / 4;
+}
+.sim-statusbar .sim-status-clock {
+  margin-left: clamp(14px, 6.2cqw, 24px);
+}
+.sim-statusbar .sim-status-glyphs {
+  margin-right: clamp(14px, 6.2cqw, 24px);
+}
+@container simstatus (max-width: 289px) {
+  .sim-status-cellular {
+    display: none;
+  }
 }
 
 /* The floor reflection itself is the 7th `.sim-device` box-shadow layer

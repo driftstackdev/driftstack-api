@@ -118,10 +118,11 @@ describe('the Simulator OS line reads the vantage exactly as the Proxies grid do
       expect(sim.getAttribute('data-os-tone'), 'simulator').toBe(c.tone);
       if (c.tone === 'match') {
         expect(sim.className).toContain('text-status-ready');
-        expect(sim.textContent).toMatch(/^OS: ✓ iOS\/macOS/);
+        // The grid's own badge (gui-v0.1.72 — one vocabulary, mark first).
+        expect(sim.textContent).toMatch(/^✓ Apple · /);
       } else if (c.tone === 'mismatch') {
         expect(sim.className).toContain('text-status-error');
-        expect(sim.textContent).toMatch(/^OS: ✗ Windows/);
+        expect(sim.textContent).toMatch(/^✗ Windows · /);
       } else {
         expect(sim.className).not.toContain('text-status-error');
         expect(sim.className).not.toContain('text-status-ready');

@@ -23,6 +23,7 @@ import {
 } from '../lib/active-agent-sessions';
 import { useExclusiveAsyncAction } from '../lib/use-exclusive-async-action';
 import { formatDeviceName } from './ProfilesView';
+import { READING_MARK, READING_WORD, badgeText } from '../lib/reading-badge-words';
 
 // Consistency #5 — the minimal agent-session shape SessionsView renders. A
 // profile launch creates an `agt_` AGENT session (no driver row), which the
@@ -783,7 +784,9 @@ function SessionsEmptyState({
 // Console session card — status pill, mono id, archetype/proxy details,
 // duration, quiet row actions. Live (ready/busy) cards carry a subtle
 // status-ready ring; hover lifts the card a hair (matches the hub).
-function SessionCard({
+// Exported for every-badge-surface-shows-one-state-for-one-reading.test.tsx,
+// which reads its UDP badge beside every other surface's.
+export function SessionCard({
   session,
   busy,
   onDestroy,
@@ -854,29 +857,37 @@ function SessionCard({
       </div>
 
       {/* Egress / proxy detail row — honest: shows the harness-reported
-          egress capability when present, else a quiet placeholder. */}
+          egress capability when present, else a quiet placeholder.
+          gui-v0.1.73 review — the UDP reading is the badge every other
+          surface draws for it ("✓ UDP" / "⤵ UDP", lib/reading-badge-words):
+          it read "SOCKS5 · UDP supported" beside "Full", and "SOCKS5 · TCP
+          only" beside "Limited" — two more names for one reading. What the
+          reading means stays a sentence, in the hover. */}
       <div className="flex items-center gap-2 rounded-lg bg-surface-inset px-2.5 py-1.5">
         <span aria-hidden="true" className="text-ink-secondary">
           {egress !== null ? <IconGlobe /> : <IconPlug />}
         </span>
         {egress !== null ? (
           <>
-            <span className="mono min-w-0 truncate text-[10.5px] text-ink-secondary">
-              {egress.udp_associate ? 'SOCKS5 · UDP supported' : 'SOCKS5 · TCP only'}
-            </span>
+            <span className="mono min-w-0 truncate text-[10.5px] text-ink-secondary">SOCKS5</span>
             <span
-              className={`ml-auto shrink-0 rounded-[5px] px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${
+              data-component="session-egress-udp"
+              data-udp={egress.udp_associate ? 'true' : 'false'}
+              className={`ml-auto shrink-0 whitespace-nowrap rounded-[5px] px-1.5 py-px text-[9px] font-bold tracking-wide ${
                 egress.udp_associate
                   ? 'bg-status-ready/12 text-status-ready'
                   : 'bg-surface-inset text-ink-muted'
               }`}
               title={
                 egress.udp_associate
-                  ? 'This proxy supports UDP, so HTTP/3 and WebRTC work through it.'
-                  : 'This proxy is TCP only, so HTTP/3 is switched off and WebRTC uses a fallback.'
+                  ? 'UDP works through this proxy — HTTP/3 and WebRTC work through it.'
+                  : 'No UDP through this proxy — HTTP/3 is switched off for this session and WebRTC uses a slower fallback.'
               }
             >
-              {egress.udp_associate ? 'Full' : 'Limited'}
+              {badgeText(
+                egress.udp_associate ? READING_MARK.works : READING_MARK.fallsBack,
+                READING_WORD.udp,
+              )}
             </span>
           </>
         ) : (

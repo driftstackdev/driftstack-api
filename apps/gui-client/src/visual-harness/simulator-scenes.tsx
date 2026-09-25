@@ -101,6 +101,11 @@ export const SIMULATOR_SCENE_KINDS = [
   'agent-approval',
   'agent-done',
   'pair',
+  // gui-v0.1.72 follow-up — `agent-running` at the Simulator's MINIMUM window
+  // with the Session pane open (SIMULATOR_SCENE_SIZE_SMALL): the size where the
+  // phone is narrowest and the agent-driving pill and the rail labels have the
+  // least room. A window, not a state — like the AI view's own `-small`.
+  'agent-small',
 ] as const;
 export type SimulatorSceneKind = (typeof SIMULATOR_SCENE_KINDS)[number];
 
@@ -113,12 +118,13 @@ export type SimulatorSceneKind = (typeof SIMULATOR_SCENE_KINDS)[number];
  *  `agent-running` names a mission, not a connectivity state. */
 export function isAgentMissionKind(
   kind: SimulatorSceneKind,
-): kind is 'agent-running' | 'agent-approval' | 'agent-done' | 'pair' {
+): kind is 'agent-running' | 'agent-approval' | 'agent-done' | 'pair' | 'agent-small' {
   return (
     kind === 'agent-running' ||
     kind === 'agent-approval' ||
     kind === 'agent-done' ||
-    kind === 'pair'
+    kind === 'pair' ||
+    kind === 'agent-small'
   );
 }
 
@@ -138,6 +144,7 @@ export function simulatorSceneSimState(
  *  a mission scene's Session pane is open at the WIDE conversation width,
  *  so its window is wider than the four connectivity scenes'. */
 export function simulatorSceneSize(kind: SimulatorSceneKind): { width: number; height: number } {
+  if (kind === 'agent-small') return SIMULATOR_SCENE_SIZE_SMALL;
   return isAgentMissionKind(kind) ? SIMULATOR_SCENE_SIZE_WIDE : SIMULATOR_SCENE_SIZE;
 }
 
@@ -171,6 +178,13 @@ export const SIMULATOR_SCENE_SIZE = { width: 582, height: 718 } as const;
  *  window's height sacred to the drawer's content; only to the phone. */
 export const SIMULATOR_SCENE_SIZE_WIDE = { width: 842, height: 718 } as const;
 
+/** The Simulator's MINIMUM window with the Session pane open at the wide
+ *  conversation width: `src-tauri/src/lib.rs`'s `.min_inner_size(280.0, 560.0)`
+ *  (RAIL_W inside it, as in the 330 above) plus CONVO_PANE_W's 512. The phone is
+ *  at its narrowest here — 232px — so this is where anything laid over it, or
+ *  labelled beside it, runs out of room first. */
+export const SIMULATOR_SCENE_SIZE_SMALL = { width: 792, height: 560 } as const;
+
 /** The one line of copy each scene must show once loaded — what
  *  `scripts/gui-text-quality.mjs`'s readiness wait looks for (mirrors
  *  `auditLoadedMarkers`'s per-scene marker). For the four original kinds:
@@ -191,6 +205,7 @@ export function simulatorSceneLoadedMarker(kind: SimulatorSceneKind): string {
     case 'ended':
       return 'Session ended';
     case 'agent-running':
+    case 'agent-small':
       return 'Running';
     case 'agent-approval':
       return 'Paused';
@@ -443,7 +458,7 @@ const DONE_ELAPSED_MS = 86_000; // matches the mockup's "Finished · 4 of 4 step
  * `freezeHarnessClock`).
  */
 function simulatorAgentSceneFixture(
-  kind: 'agent-running' | 'agent-approval' | 'agent-done' | 'pair',
+  kind: 'agent-running' | 'agent-approval' | 'agent-done' | 'pair' | 'agent-small',
   now: number,
 ): {
   chat: UseAgentChatResult;
@@ -452,6 +467,7 @@ function simulatorAgentSceneFixture(
 } {
   switch (kind) {
     case 'agent-running':
+    case 'agent-small':
       return {
         chat: agentChatSceneFixture('running', now).chat as UseAgentChatResult,
         phoneStandIn: standInScreen(shopListingSvg()),

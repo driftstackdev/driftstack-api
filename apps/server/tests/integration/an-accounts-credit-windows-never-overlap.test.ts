@@ -31,6 +31,10 @@ import {
 import { refusal } from './_helpers/database-refusal.js';
 
 const ISOLATED_DB_NAME = 'driftstack_iso_credit_windows_overlap';
+/** One fixed instant, in the past (a window may not be created ahead of its
+ *  start) and at .999999 — the last microsecond of a second, the very place two
+ *  separately-read clocks can fall either side of. */
+const ONE_INSTANT = "timestamptz '2026-03-14 11:59:59.999999+00'";
 const RUN_DB_TESTS = Boolean(process.env.CI || process.env.DATABASE_URL);
 
 let client: postgres.Sql | null = null;
@@ -120,14 +124,16 @@ describe.skipIf(!RUN_DB_TESTS)('an account’s credit windows never overlap', ()
 
   it('two windows may TOUCH — one ends at the instant the next starts — because the range is half-open', async () => {
     const accountId = await newAccountOn(db());
-    // Both in the past: a window may not be created ahead of its start.
+    // Both in the past: a window may not be created ahead of its start. One
+    // instant for both, for the reason the next arm gives: two now()s either side
+    // of a second would leave a gap, and "touching" would pass by not touching.
     await insertWindow(db(), accountId, {
-      start: "date_trunc('second', now()) - interval '62 days'",
-      end: "date_trunc('second', now()) - interval '31 days'",
+      start: `${ONE_INSTANT} - interval '62 days'`,
+      end: `${ONE_INSTANT} - interval '31 days'`,
     });
     await insertWindow(db(), accountId, {
-      start: "date_trunc('second', now()) - interval '31 days'",
-      end: "date_trunc('second', now()) - interval '1 day'",
+      start: `${ONE_INSTANT} - interval '31 days'`,
+      end: `${ONE_INSTANT} - interval '1 day'`,
     });
     const rows = await windowsOf(db(), accountId);
     expect(rows).toHaveLength(2);
@@ -135,18 +141,50 @@ describe.skipIf(!RUN_DB_TESTS)('an account’s credit windows never overlap', ()
   });
 
   it('one microsecond of overlap is an overlap: the constraint compares to the microsecond, which is why no boundary may pass through a millisecond clock', async () => {
+    // ⛔ ONE instant for both inserts. This arm used to read `date_trunc('second',
+    // now())` in each insert, and each insert is its own transaction with its own
+    // now(): when the two fell either side of a whole second, the second window
+    // started almost a second AFTER the first ended, the "1 µs overlap" was a gap,
+    // and the database — correctly — accepted it. A fixed base, at the last
+    // microsecond of a second, makes the overlap exactly 1 µs on every run.
     const accountId = await newAccountOn(db());
     await insertWindow(db(), accountId, {
-      start: "date_trunc('second', now()) - interval '62 days'",
-      end: "date_trunc('second', now()) - interval '31 days'",
+      start: `${ONE_INSTANT} - interval '62 days'`,
+      end: `${ONE_INSTANT} - interval '31 days'`,
     });
     const r = await refusal(() =>
       insertWindow(db(), accountId, {
-        start: "date_trunc('second', now()) - interval '31 days' - interval '1 microsecond'",
-        end: "date_trunc('second', now()) - interval '1 day'",
+        start: `${ONE_INSTANT} - interval '31 days' - interval '1 microsecond'`,
+        end: `${ONE_INSTANT} - interval '1 day'`,
       }),
     );
     expect(r.code).toBe('23P01');
+    expect(r.constraint).toBe('credit_windows_no_overlap');
+  });
+
+  it('the flake that arm had, forced: two clocks read either side of a whole second turn the 1 µs overlap into a gap of 999 999 µs, and the database accepts it — so no arm here may take a boundary from two separate now()s', async () => {
+    const accountId = await newAccountOn(db());
+    // What the two transactions' now()s were when the arm above went green by
+    // accident: the first at the last microsecond of a second, the second two
+    // microseconds later, in the next one.
+    const firstNow = ONE_INSTANT;
+    const secondNow = "timestamptz '2026-03-14 12:00:00.000001+00'";
+    await insertWindow(db(), accountId, {
+      start: `date_trunc('second', ${firstNow}) - interval '62 days'`,
+      end: `date_trunc('second', ${firstNow}) - interval '31 days'`,
+    });
+    await insertWindow(db(), accountId, {
+      start: `date_trunc('second', ${secondNow}) - interval '31 days' - interval '1 microsecond'`,
+      end: `date_trunc('second', ${secondNow}) - interval '1 day'`,
+    });
+    const [gap] = await db()<Array<{ us: string }>>`
+      SELECT (extract(epoch FROM (b.window_start - a.window_end)) * 1000000)::bigint::text AS us
+        FROM credit_windows a, credit_windows b
+       WHERE a.account_id = ${accountId}::uuid AND b.account_id = ${accountId}::uuid
+         AND a.window_start < b.window_start
+       ORDER BY a.window_start`;
+    expect(gap?.us, 'the second window starts this many µs after the first ends').toBe('999999');
+    expect(await windowsOf(db(), accountId)).toHaveLength(2);
   });
 
   it('the constraint is per account: another account may hold a window over the same time', async () => {
@@ -159,23 +197,26 @@ describe.skipIf(!RUN_DB_TESTS)('an account’s credit windows never overlap', ()
 
   it('the same payment cannot have two windows for the same month: a unique index, separate from the overlap rule', async () => {
     const accountId = await newAccountOn(db());
+    // One instant for every boundary: the unique index keys on `natural_start`, and
+    // two now()s either side of a second would give the two inserts DIFFERENT
+    // natural starts — a second month, which the index rightly admits.
     const natural = {
-      naturalStart: "date_trunc('second', now()) - interval '70 days'",
-      naturalEnd: "date_trunc('second', now()) - interval '1 day'",
+      naturalStart: `${ONE_INSTANT} - interval '70 days'`,
+      naturalEnd: `${ONE_INSTANT} - interval '1 day'`,
     };
     await insertWindow(db(), accountId, {
       sourceRef: 'in_same',
       ...natural,
-      start: "date_trunc('second', now()) - interval '70 days'",
-      end: "date_trunc('second', now()) - interval '40 days'",
+      start: `${ONE_INSTANT} - interval '70 days'`,
+      end: `${ONE_INSTANT} - interval '40 days'`,
     });
     // Not overlapping, so only the unique index can refuse it.
     const r = await refusal(() =>
       insertWindow(db(), accountId, {
         sourceRef: 'in_same',
         ...natural,
-        start: "date_trunc('second', now()) - interval '30 days'",
-        end: "date_trunc('second', now()) - interval '1 day'",
+        start: `${ONE_INSTANT} - interval '30 days'`,
+        end: `${ONE_INSTANT} - interval '1 day'`,
       }),
     );
     expect(r.code).toBe('23505');

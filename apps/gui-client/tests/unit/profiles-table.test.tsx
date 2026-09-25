@@ -120,11 +120,11 @@ describe('ProfilesTable', () => {
   });
 
   // 2026-09-24 (owner item 9) — the chips carry the word, the card's text for the
-  // same reading ('UDP ✓' / '⤵ UDP'), and a proxy nothing has measured says so
+  // same reading ('✓ UDP' / '⤵ UDP'), and a proxy nothing has measured says so
   // ('— UDP'); the bare dash is left for a row with no proxy at all.
-  it('UDP shows UDP ✓ (ok) / ⤵ UDP (fail) / — UDP (not measured) / – (no proxy)', () => {
+  it('UDP shows ✓ UDP (ok) / ⤵ UDP (fail) / — UDP (not measured) / – (no proxy)', () => {
     const { rerender } = render(<ProfilesTable {...props({ rows: [row({ udp: 'ok' })] })} />);
-    expect(screen.getByText('UDP ✓')).toBeTruthy();
+    expect(screen.getByText('✓ UDP')).toBeTruthy();
     rerender(<ProfilesTable {...props({ rows: [row({ udp: 'fail' })] })} />);
     expect(screen.getByText('⤵ UDP')).toBeTruthy();
     rerender(<ProfilesTable {...props({ rows: [row({ udp: 'unknown' })] })} />);
@@ -179,7 +179,7 @@ describe('ProfilesTable', () => {
     const match = document.querySelector('[data-component="proxy-os-fingerprint"]');
     expect(match).not.toBeNull();
     expect(match?.getAttribute('data-os-tone')).toBe('match');
-    expect(match?.textContent).toBe('✓iOS/macOS'); // glyph + label, gap-0.5 between
+    expect(match?.textContent).toBe('✓Apple'); // glyph + label, gap-0.5 between
     // The one measured defect keeps its own tone here as well — carrying the
     // same single-host vantage, because (V-219) the gate withholds the RED
     // exactly as hard as the green, and this arm is not the place that pins

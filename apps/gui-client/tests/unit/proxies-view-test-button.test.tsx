@@ -189,7 +189,7 @@ describe('ProxiesView "Test" button result card', () => {
     expect(screen.queryByText('unreachable')).toBeNull();
   });
 
-  it('unreachable → "unreachable" pill, no protocol chips, "not verified" note', async () => {
+  it('unreachable → "unreachable" pill, and its UDP / QUIC read "— UDP" "— QUIC" (not measured) — no ✓ or ⤵ verdict, no "not verified"', async () => {
     testProxy.mockResolvedValue({
       reachable: false,
       auth_ok: false,
@@ -203,10 +203,19 @@ describe('ProxiesView "Test" button result card', () => {
     await clickTestAndSettle();
 
     expect(await screen.findByText('unreachable')).toBeTruthy();
-    // No protocol-capability chips when the exit isn't even reachable — the
-    // slot reads "not verified" instead, and there is no WebRTC chip.
-    expect(screen.queryByText('UDP')).toBeNull();
-    expect(screen.getByText('not verified')).toBeTruthy();
+    // No protocol VERDICT when the exit isn't even reachable: nothing was
+    // measured through it. gui-v0.1.72 review — the slot said "not verified"
+    // (one pill for two readings, a third wording of the missing state); it
+    // states each reading as not measured, in the one vocabulary, with the
+    // reason in the hover.
+    const udp = document.querySelector('[data-capability="webrtc"]');
+    const quic = document.querySelector('[data-capability="quic"]');
+    expect(udp?.getAttribute('data-ok')).toBe('unmeasured');
+    expect(quic?.getAttribute('data-ok')).toBe('unmeasured');
+    expect(udp?.textContent).toBe('—UDP');
+    expect(quic?.textContent).toBe('—QUIC');
+    expect(udp?.getAttribute('title')).toMatch(/last test/);
+    expect(screen.queryByText('not verified')).toBeNull();
   });
 });
 

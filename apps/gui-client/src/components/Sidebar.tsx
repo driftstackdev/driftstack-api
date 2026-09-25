@@ -15,6 +15,7 @@
 // is functional, not a stylistic borrow.
 
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -83,6 +84,85 @@ function useRailTier(ref: RefObject<HTMLElement>): boolean {
     return () => observer.disconnect();
   }, [ref]);
   return rail;
+}
+
+/**
+ * How much vertical room the nav's rhythm spends, from the most to the least.
+ *   roomy  — the full layout: group labels, 30px rows (32 in the rail);
+ *   tight  — the same layout at 26px rows (28 in the rail) and closer groups;
+ *   folded — `tight`, with the group labels ("Browse", "Automate" …) folded
+ *            into hairline dividers; each group keeps its name for a screen
+ *            reader.
+ */
+export type SidebarDensity = 'roomy' | 'tight' | 'folded';
+const DENSITIES: readonly SidebarDensity[] = ['roomy', 'tight', 'folded'];
+
+/**
+ * The SHORT-WINDOW tiers (gui-v0.1.72 follow-up, 2026-09-25): at full width in a
+ * 1061×700 window the nav scrolled and Settings sat below the fold — a
+ * destination you cannot see is one you do not know exists. When a layout does
+ * not fit the height the nav is given, the next denser one is used, which puts
+ * every destination on screen down to a 1060×640 window and below (measured in
+ * the harness, both width tiers, with the account footer — plan, figures,
+ * Sign out — kept whole): `tight` at 1061×700, `folded` at 1061×640.
+ *
+ * MEASURED, not queried: the nav is `flex-1 min-h-0`, so its clientHeight is the
+ * room it is given whatever it holds, and its scrollHeight is what the layout on
+ * screen needs. The sidebar height each layout needed is remembered when it is
+ * given up, and it comes back only once the sidebar is that tall again — so two
+ * layouts can never take turns. Re-measured on every render too, because the destinations can change
+ * (Team, Your servers) without the box changing size. A nav that is not laid out
+ * (0 — jsdom) keeps the roomy layout.
+ */
+function useSidebarDensity(navRef: RefObject<HTMLElement>, rail: boolean): SidebarDensity {
+  const [level, setLevel] = useState(0);
+  const levelRef = useRef(0);
+  /** The sidebar height each layout needed, the last time it overflowed. */
+  const need = useRef<number[]>([0, 0, 0]);
+  const measure = useCallback(() => {
+    const nav = navRef.current;
+    if (nav === null) return;
+    // Only a layout that is ON SCREEN can be measured: until the render of the
+    // density just chosen has landed, the box still holds the previous one, and
+    // measuring it again would step twice on one reading.
+    if (nav.parentElement?.getAttribute('data-sidebar-density') !== DENSITIES[levelRef.current]) {
+      return;
+    }
+    const room = nav.clientHeight;
+    if (room <= 0) return;
+    // Kept as the SIDEBAR's height, not the nav's: that is the one number no
+    // density changes, so "the room for that layout is back" compares like with
+    // like however the footer or the search row may one day be sized.
+    const total = nav.parentElement?.clientHeight ?? 0;
+    let next = levelRef.current;
+    if (nav.scrollHeight > room + 1 && next < DENSITIES.length - 1) {
+      need.current[next] = total + (nav.scrollHeight - room);
+      next += 1;
+    } else if (next > 0 && total >= (need.current[next - 1] ?? 0)) {
+      next -= 1;
+    }
+    if (next !== levelRef.current) {
+      levelRef.current = next;
+      setLevel(next);
+    }
+  }, [navRef]);
+  // A change of width tier is a different set of layouts: measure them afresh.
+  useLayoutEffect(() => {
+    levelRef.current = 0;
+    need.current = [0, 0, 0];
+    setLevel(0);
+  }, [rail]);
+  useLayoutEffect(() => {
+    measure();
+  });
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (nav === null || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, [navRef, measure]);
+  return DENSITIES[level] ?? 'roomy';
 }
 
 export function Sidebar({
@@ -161,6 +241,10 @@ export function Sidebar({
   const recordingsCount = recordings.size;
   const asideRef = useRef<HTMLElement>(null);
   const rail = useRailTier(asideRef);
+  const navRef = useRef<HTMLElement>(null);
+  const density = useSidebarDensity(navRef, rail);
+  /** Any rhythm tighter than the roomy one. */
+  const short = density !== 'roomy';
   const workspaceName =
     activeWorkspace === null
       ? 'Personal'
@@ -173,6 +257,7 @@ export function Sidebar({
     <aside
       ref={asideRef}
       data-sidebar-tier={rail ? 'rail' : 'full'}
+      data-sidebar-density={density}
       className={
         'flex shrink-0 flex-col overflow-hidden border-r border-surface-divider bg-surface-raised/55 py-3 ' +
         (rail ? 'w-[60px] items-center px-2' : 'w-[216px] px-2.5')
@@ -185,7 +270,8 @@ export function Sidebar({
           onClick={onOpenPalette}
           title={rail ? 'Search (⌘K)' : undefined}
           className={
-            'mb-3.5 flex h-[30px] shrink-0 items-center gap-2 rounded-[7px] bg-surface-inset text-xs text-ink-muted shadow-[inset_0_0_0_1px_rgb(var(--surface-divider-rgb)/0.7)] transition-colors hover:text-ink-primary ' +
+            'flex h-[30px] shrink-0 items-center gap-2 rounded-[7px] bg-surface-inset text-xs text-ink-muted shadow-[inset_0_0_0_1px_rgb(var(--surface-divider-rgb)/0.7)] transition-colors hover:text-ink-primary ' +
+            'mb-3.5 ' +
             (rail ? 'w-[34px] justify-center' : 'w-full px-[9px]')
           }
         >
@@ -201,14 +287,16 @@ export function Sidebar({
           flex child keeps min-height:auto and refuses to shrink, pushing the
           footer off-screen instead of letting the nav scroll. */}
       <nav
+        ref={navRef}
         aria-label="Primary"
         className={
           'flex min-h-0 flex-1 flex-col overflow-y-auto ' + (rail ? 'w-full items-center' : '')
         }
       >
-        <SidebarSection label="Home" rail={rail}>
+        <SidebarSection label="Home" rail={rail} density={density}>
           <SidebarItem
             rail={rail}
+            short={short}
             icon={<IconHome />}
             active={current === 'home'}
             onClick={() => onNavigate('home')}
@@ -220,9 +308,10 @@ export function Sidebar({
         {/* 2026-06-15 — founder reversed the earlier "Automate above Browse"
           call: Profiles is the core surface, so Browse sits directly under
           Home and Automate moves below it. */}
-        <SidebarSection label="Browse" rail={rail}>
+        <SidebarSection label="Browse" rail={rail} density={density}>
           <SidebarItem
             rail={rail}
+            short={short}
             icon={<IconLayers />}
             active={current === 'profiles'}
             onClick={() => onNavigate('profiles')}
@@ -232,6 +321,7 @@ export function Sidebar({
           </SidebarItem>
           <SidebarItem
             rail={rail}
+            short={short}
             icon={<IconGlobe />}
             active={current === 'proxies'}
             onClick={() => onNavigate('proxies')}
@@ -241,9 +331,10 @@ export function Sidebar({
           </SidebarItem>
         </SidebarSection>
 
-        <SidebarSection label="Automate" rail={rail}>
+        <SidebarSection label="Automate" rail={rail} density={density}>
           <SidebarItem
             rail={rail}
+            short={short}
             icon={<IconSparkle />}
             active={current === 'ai'}
             onClick={() => onNavigate('ai')}
@@ -252,6 +343,7 @@ export function Sidebar({
           </SidebarItem>
           <SidebarItem
             rail={rail}
+            short={short}
             icon={<IconBook />}
             active={current === 'recipes'}
             onClick={() => onNavigate('recipes')}
@@ -260,9 +352,10 @@ export function Sidebar({
           </SidebarItem>
         </SidebarSection>
 
-        <SidebarSection label="History" rail={rail}>
+        <SidebarSection label="History" rail={rail} density={density}>
           <SidebarItem
             rail={rail}
+            short={short}
             icon={<IconList />}
             active={current === 'sessions-history'}
             onClick={() => onNavigate('sessions-history')}
@@ -271,6 +364,7 @@ export function Sidebar({
           </SidebarItem>
           <SidebarItem
             rail={rail}
+            short={short}
             icon={<IconFilm />}
             active={current === 'recordings'}
             onClick={() => onNavigate('recordings')}
@@ -285,9 +379,10 @@ export function Sidebar({
           only showed captured console output + errors. The floating DevLogPanel
           still exposes it for dev triage. 2026-06-19. */}
         {!isCloudBaseUrl(settings.baseUrl) && (
-          <SidebarSection label="Self-hosted" rail={rail}>
+          <SidebarSection label="Self-hosted" rail={rail} density={density}>
             <SidebarItem
               rail={rail}
+              short={short}
               icon={<IconServer />}
               active={current === 'fleet'}
               onClick={() => onNavigate('fleet')}
@@ -297,10 +392,11 @@ export function Sidebar({
           </SidebarSection>
         )}
 
-        <SidebarSection label="Account" rail={rail}>
+        <SidebarSection label="Account" rail={rail} density={density}>
           {showTeam && (
             <SidebarItem
               rail={rail}
+              short={short}
               icon={<IconUsers />}
               badge={teamCount > 0 ? String(teamCount) : null}
               active={current === 'team'}
@@ -313,6 +409,7 @@ export function Sidebar({
               cloud/tier gate (a self-hosted customer pays + tops up too). */}
           <SidebarItem
             rail={rail}
+            short={short}
             icon={<IconBilling />}
             active={current === 'billing'}
             onClick={() => onNavigate('billing')}
@@ -321,6 +418,7 @@ export function Sidebar({
           </SidebarItem>
           <SidebarItem
             rail={rail}
+            short={short}
             icon={<IconCog />}
             active={current === 'settings'}
             onClick={() => onNavigate('settings')}
@@ -444,19 +542,61 @@ export function Sidebar({
   );
 }
 
+/**
+ * ⛔ `transition-none` on every box whose GEOMETRY a density changes (the group,
+ * its label; the rows carry `transition-colors`, which already leaves padding
+ * alone). Nothing here sets a transition, so the property is the default `all` —
+ * and under reduced motion index.css gives every element a 0.01ms duration, so a
+ * margin that changed with the density was still its OLD value when the density
+ * hook measured the new layout in the same frame: `tight` read 36px taller than
+ * it is and was skipped for `folded` at 1061×680 (measured in the harness).
+ */
 function SidebarSection({
   label,
   rail,
+  density = 'roomy',
   children,
 }: {
   label: string;
   rail: boolean;
+  /** See `SidebarDensity`: `tight` closes the gaps, `folded` also folds the
+   *  label into a hairline divider (the group keeps its name for a screen
+   *  reader). */
+  density?: SidebarDensity;
   children: ReactNode;
 }): JSX.Element {
+  if (density === 'folded') {
+    return (
+      <div
+        role="group"
+        aria-label={label}
+        data-sidebar-section={label}
+        className={
+          'mb-1 flex flex-col gap-px border-t border-surface-divider/70 pt-1 transition-none first:border-t-0 first:pt-0 ' +
+          (rail ? 'w-full items-center' : '')
+        }
+      >
+        {children}
+      </div>
+    );
+  }
+  const tight = density === 'tight';
   return (
-    <div className={'mb-3 flex flex-col gap-px ' + (rail ? 'w-full items-center' : '')}>
+    <div
+      data-sidebar-section={label}
+      className={
+        (tight ? 'mb-2 ' : 'mb-3 ') +
+        'flex flex-col gap-px transition-none ' +
+        (rail ? 'w-full items-center' : '')
+      }
+    >
       {!rail && (
-        <span className="block px-2 pb-1.5 text-[10px] font-semibold uppercase leading-3 tracking-[0.09em] text-ink-muted">
+        <span
+          className={
+            'block px-2 text-[10px] font-semibold uppercase leading-3 tracking-[0.09em] text-ink-muted transition-none ' +
+            (tight ? 'pb-1' : 'pb-1.5')
+          }
+        >
           {label}
         </span>
       )}
@@ -474,6 +614,8 @@ interface SidebarItemProps {
   /** The narrow tier: icon only, the label kept for screen readers and as a
    *  tooltip, the count pinned to the icon's corner. */
   rail?: boolean;
+  /** Any density tighter than roomy: 4px less height a row (26 / 28 in the rail). */
+  short?: boolean;
 }
 
 function SidebarItem({
@@ -483,6 +625,7 @@ function SidebarItem({
   active,
   onClick,
   rail = false,
+  short = false,
 }: SidebarItemProps): JSX.Element {
   const isInteractive = onClick !== undefined;
   const hasBadge = badge !== null && badge !== undefined && badge.length > 0;
@@ -499,7 +642,9 @@ function SidebarItem({
       aria-label={rail && hasBadge ? `${children} ${badge}` : undefined}
       className={
         'group relative flex items-center rounded-[7px] text-left text-[12.5px] leading-4 transition-colors ' +
-        (rail ? 'h-8 w-11 justify-center ' : 'w-full gap-2.5 whitespace-nowrap px-2 py-[7px] ') +
+        (rail
+          ? `${short ? 'h-7' : 'h-8'} w-11 justify-center `
+          : `w-full gap-2.5 whitespace-nowrap px-2 ${short ? 'py-[5px]' : 'py-[7px]'} `) +
         (active === true
           ? 'bg-accent-subtle font-semibold text-ink-primary'
           : 'text-ink-secondary hover:bg-surface-elevated hover:text-ink-primary ' +

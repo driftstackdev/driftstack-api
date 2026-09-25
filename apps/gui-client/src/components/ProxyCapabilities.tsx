@@ -40,6 +40,7 @@ import {
   type OsFingerprint,
 } from '../lib/os-fingerprint-verdict';
 import type { AgedReading, AgedRowReadings } from '../lib/proxy-probe-cache';
+import { READING_MARK } from '../lib/reading-badge-words';
 import { formatRelativeNarrow } from './RelativeTime';
 
 /** Owner item 9 (2026-09-24) — ONE word for the UDP reading on every surface: the
@@ -48,6 +49,11 @@ import { formatRelativeNarrow } from './RelativeTime';
  *  relays UDP) — and WebRTC, what that makes possible, is in its hover. The
  *  capability KEY stays `webrtc` (a data attribute, not copy). */
 export const UDP_LABEL = 'UDP';
+
+/** What a reading nobody has taken says after its word — the OS chip's sentence
+ *  ("OS not measured yet. Run Test on this proxy.", os-fingerprint-verdict.ts),
+ *  so the three missing readings read as one voice wherever they are listed. */
+const NOT_MEASURED_YET_HINT = 'not measured yet. Run Test on this proxy.';
 
 export interface ProxyCapability {
   /** 'quic-relay' — T-1's SEPARATE probe chip: the fleet Mac's standalone QUIC
@@ -63,10 +69,12 @@ export interface ProxyCapability {
   /** Long-form tooltip explaining what the state means for a session. */
   hint: string;
   /**
-   * Owner item 9 (2026-09-24) — nothing has measured this capability yet. Only a
-   * row this Mac has not tested itself can have one (see
-   * `serverReadingCapabilities`): there, a chip the server's readings do not
-   * cover says so ('— UDP'), rather than vanishing beside the ones they do.
+   * Owner item 9 (2026-09-24) — nothing has measured this capability. Two rows
+   * have one: a row this Mac has not tested itself (`serverReadingCapabilities`),
+   * where a chip the server's readings do not cover says so ('— UDP') rather
+   * than vanishing beside the ones they do; and a proxy that carried nothing on
+   * its last test (`proxyCapabilities`), whose UDP, QUIC and HTTP/2 nobody
+   * could ask.
    */
   unmeasured?: true;
   /**
@@ -115,7 +123,8 @@ export function agedChipAge(atMs: number, nowMs: number): string {
 // line whole (the row's flex-wrap does that); it never splits.
 // `ds-proxy-aged-chip` is the one exception, and it lives in styles/index.css:
 // at the MINIMUM window the Network column holds 90px and the longest aged chip
-// ("? iOS/macOS · 5 h ago", 108px) is wider than the whole column, so "moves to
+// (measured as "? iOS/macOS · 5 h ago", 108px, before the OS word became
+// "Apple") is wider than the whole column, so "moves to
 // the next line" cannot help — unbroken, it lay 10px over the Health column's
 // text. There, and only there, it may break (balanced, inside ONE border). The
 // rule is scoped to the proxies grid by its `data-component`, not by this class
@@ -160,6 +169,15 @@ export function proxyCapabilities(
   // that: a proxy can authenticate and refuse every CONNECT.
   const live = isProxyUsable(result);
   const udp = live && result.udp_associate;
+  // ⛔ A proxy that carried NOTHING on its last test (unreachable, login refused,
+  // every CONNECT refused) gave no UDP answer and no QUIC one: its UDP-associate
+  // flag is false because nothing was asked, not because the proxy said no. So
+  // both are NOT MEASURED ("— UDP", "— QUIC"), never the "⤵" of a measured
+  // fall-back — which is what the list and the card's sheet drew for a down
+  // proxy, while the Proxies tab said "not verified" (gui-v0.1.72 review). A QUIC
+  // reading Driftstack DID take (`quicMeasured` / `quicProbe`) still wins below.
+  const DOWN_HINT = (reading: 'UDP' | 'QUIC' | 'HTTP/2'): string =>
+    `${reading} not measured — no traffic got through this proxy on its last test, so nothing could be checked through it.`;
   // ONE QUIC verdict, strongest evidence first (2026-09-09). A live session's HTTP/3
   // is green; a live session's h2-only is a measured negative; the fleet relay probe
   // true is green / false is a measured negative; and only when NOTHING was measured
@@ -200,17 +218,26 @@ export function proxyCapabilities(
                 inferred: false,
                 hint: 'This proxy does not carry QUIC — HTTP/3 falls back to HTTP/2.',
               }
-            : {
-                key: 'quic',
-                label: 'QUIC',
-                // Nothing measured → the UDP inference: LIKELY when UDP relays,
-                // impossible when it does not. Never green (it's a guess).
-                ok: udp,
-                inferred: udp,
-                hint: udp
-                  ? 'UDP works, so HTTP/3 is likely — not yet tested. Run Test or a session to confirm.'
-                  : 'No UDP — HTTP/3 cannot work here; it falls back to HTTP/2.',
-              };
+            : !live
+              ? {
+                  key: 'quic',
+                  label: 'QUIC',
+                  ok: false,
+                  inferred: false,
+                  unmeasured: true,
+                  hint: DOWN_HINT('QUIC'),
+                }
+              : {
+                  key: 'quic',
+                  label: 'QUIC',
+                  // Nothing measured → the UDP inference: LIKELY when UDP relays,
+                  // impossible when it does not. Never green (it's a guess).
+                  ok: udp,
+                  inferred: udp,
+                  hint: udp
+                    ? 'UDP works, so HTTP/3 is likely — not yet tested. Run Test or a session to confirm.'
+                    : 'No UDP — HTTP/3 cannot work here; it falls back to HTTP/2.',
+                };
   // The third state: nothing CURRENT was measured, but something was, a while
   // ago. Showing the inference here ("not yet tested — run Test") is what told a
   // customer to test a proxy they had tested that morning.
@@ -250,23 +277,31 @@ export function proxyCapabilities(
       : `${when} HTTP/3 worked through this exit then, but UDP is not getting through from this device now — the two checks disagree, so HTTP/3 may fall back to HTTP/2.`;
   }
   return [
-    {
-      key: 'webrtc',
-      label: UDP_LABEL,
-      ok: udp,
-      hint: udp
-        ? 'UDP works — WebRTC calls and media stream through this exit.'
-        : 'No UDP — WebRTC falls back to a slower, more detectable path.',
-    },
+    live
+      ? {
+          key: 'webrtc',
+          label: UDP_LABEL,
+          ok: udp,
+          hint: udp
+            ? 'UDP works — WebRTC calls and media stream through this exit.'
+            : 'No UDP — WebRTC falls back to a slower, more detectable path.',
+        }
+      : { key: 'webrtc', label: UDP_LABEL, ok: false, unmeasured: true, hint: DOWN_HINT('UDP') },
     quicChip,
-    {
-      key: 'http2',
-      label: 'HTTP/2',
-      ok: live,
-      hint: live
-        ? 'Connected and logged in — HTTP/2 works through this exit.'
-        : 'The proxy could not be reached or the login failed — no traffic can go through it.',
-    },
+    // gui-v0.1.73 review — HTTP/2 is a reading too, and a proxy that carried
+    // nothing had it read "⤵ HTTP/2" beside "— UDP" "— QUIC": the mark of a
+    // measured fall-back, for a protocol nothing got through to fall back from.
+    // Its hover said "could not be reached or the login failed", which is false
+    // for a proxy that logged in and refused every CONNECT. It is the same
+    // missing state as its neighbours now, with their sentence.
+    live
+      ? {
+          key: 'http2',
+          label: 'HTTP/2',
+          ok: true,
+          hint: 'Connected and logged in — HTTP/2 works through this exit.',
+        }
+      : { key: 'http2', label: 'HTTP/2', ok: false, unmeasured: true, hint: DOWN_HINT('HTTP/2') },
   ];
 }
 
@@ -321,7 +356,10 @@ export function serverReadingCapabilities(
             label: UDP_LABEL,
             ok: false,
             unmeasured: true,
-            hint: 'UDP not measured yet — run Test to check WebRTC through this exit.',
+            // gui-v0.1.73 review — the OS chip's own voice ("OS not measured yet.
+            // Run Test on this proxy."): the card's details sheet prints all
+            // three missing readings one under another.
+            hint: `${UDP_LABEL} ${NOT_MEASURED_YET_HINT}`,
           };
   // The QUIC chip: the tested row's own rule over a result that grants exactly
   // what Driftstack measured about UDP — so a relay/live verdict wins, and the
@@ -349,11 +387,16 @@ export function serverReadingCapabilities(
           label: 'QUIC',
           ok: false,
           unmeasured: true,
-          hint: 'QUIC not measured yet — run Test to check HTTP/3 through this exit.',
+          hint: `QUIC ${NOT_MEASURED_YET_HINT}`,
         }
       : quic;
   return [webrtc, quicChip];
 }
+
+/** The NEUTRAL chip: a reading nobody took ("— UDP", "— QUIC", "— OS") and the
+ *  OS tones that are not a verdict ("? Linux", "… OS"). Every "not measured"
+ *  chip in a Proxies network cell wears this one look. */
+export const NEUTRAL_CHIP_CLASS = 'bg-surface-inset text-ink-muted';
 
 /**
  * Capability chips. `size` tunes density: 'xs' for the dense card proxy-row,
@@ -405,16 +448,21 @@ export function ProxyCapabilityChips({
       {caps.map((c) =>
         c.unmeasured === true ? (
           // Owner item 9 — "not measured yet", stated: the '—' every surface uses
-          // for it ('— OS' beside it), never a ⤵ that reads as a measured NO.
+          // for it, never a ⤵ that reads as a measured NO.
+          // ⛔ gui-v0.1.72 review — and in the SAME chip as the "— OS" beside it
+          // (ProxyOsChip's neutral tone). For a day these wore the tab's old
+          // "untested" wash (divider/30) while "— OS" kept surface-inset: one
+          // state, two looks in one cell, plainly visible in dark. The words
+          // are one vocabulary; the chip is one look.
           <span
             key={c.key}
             title={c.hint}
             data-capability={c.key}
             data-ok="unmeasured"
             data-inferred="false"
-            className={`inline-flex items-center gap-0.5 rounded-sm px-1 py-px ${text} bg-surface-inset text-ink-muted`}
+            className={`inline-flex items-center gap-0.5 rounded-sm px-1 py-px ${text} ${NEUTRAL_CHIP_CLASS}`}
           >
-            <span aria-hidden="true">—</span>
+            <span aria-hidden="true">{READING_MARK.notMeasured}</span>
             {c.label}
           </span>
         ) : c.aged !== undefined ? (
@@ -429,7 +477,9 @@ export function ProxyCapabilityChips({
             data-inferred="false"
             className={`inline-flex items-center gap-0.5 rounded-sm px-1 py-px ${text} ${AGED_CHIP_CLASS}`}
           >
-            <span aria-hidden="true">{c.aged.value ? '✓' : '⤵'}</span>
+            <span aria-hidden="true">
+              {c.aged.value ? READING_MARK.works : READING_MARK.fallsBack}
+            </span>
             {c.label} · {agedChipAge(c.aged.atMs, nowMs)}
           </span>
         ) : (
@@ -449,7 +499,13 @@ export function ProxyCapabilityChips({
                 : 'bg-surface-inset text-ink-muted'
             }`}
           >
-            <span aria-hidden="true">{c.ok ? (c.inferred === true ? '~' : '✓') : '⤵'}</span>
+            <span aria-hidden="true">
+              {c.ok
+                ? c.inferred === true
+                  ? READING_MARK.likely
+                  : READING_MARK.works
+                : READING_MARK.fallsBack}
+            </span>
             {c.label}
           </span>
         ),
@@ -503,15 +559,15 @@ export function ProxyOsChip({
         ? 'bg-status-ready/15 text-status-ready'
         : v.tone === 'mismatch'
           ? 'bg-status-error/15 text-status-error'
-          : 'bg-surface-inset text-ink-muted';
+          : NEUTRAL_CHIP_CLASS;
   return (
     <span
       title={v.hint}
       data-component="proxy-os-fingerprint"
       data-os-tone={v.tone}
       {...(v.aged === true ? { 'data-ok': 'aged' } : {})}
-      // `whitespace-nowrap` on the AGED chip only. A current "✓ iOS/macOS" is short
-      // and never wrapped; the aged one ("? iOS/macOS · 5 h ago") did, inside its
+      // `whitespace-nowrap` on the AGED chip only. A current "✓ Apple" is short
+      // and never wrapped; the aged one ("? Apple · 5 h ago") did, inside its
       // own dashed box. Scoping it keeps the present-tense chip byte-for-byte what
       // it was before the aged state existed — which a test pins, because "fresh
       // behaviour unchanged" is only a claim until the markup is compared.

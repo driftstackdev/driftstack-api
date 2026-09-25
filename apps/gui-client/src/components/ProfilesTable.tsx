@@ -21,7 +21,7 @@
 
 import { useRef, useState, type JSX } from 'react';
 import { RelativeTime } from './RelativeTime';
-import { ProxyOsChip, agedChipAge } from './ProxyCapabilities';
+import { ProxyOsChip, agedChipAge, type ProxyCapability } from './ProxyCapabilities';
 import {
   OS_FINGERPRINT_MEASURING,
   VPN_TUNNEL_OS_FINGERPRINT,
@@ -46,10 +46,14 @@ import {
   VPN_UDP_MEASURED_NONE_TITLE,
   VPN_UDP_MEASURED_OK_TITLE,
   VPN_UDP_NOT_MEASURED_TITLE,
+  QUIC_NOT_ON_PLAN_CHIP,
   UDP_NOT_ON_PLAN_CHIP,
   VPN_UDP_NOT_ON_PLAN_HINT,
   VPN_QUIC_NOT_ON_PLAN_HINT,
+  QUIC_SENTENCE,
+  UDP_WORKS_SENTENCE,
 } from '../lib/proxy-check-copy';
+import { READING_MARK, READING_WORD, badgeText } from '../lib/reading-badge-words';
 
 export type ProfilesTableSortKey = 'name' | 'status' | 'country' | 'created' | 'lastUsed';
 
@@ -70,8 +74,12 @@ export interface ProfileTableRow {
   locationLabel: string | null; // resolved city · region · country (or country)
   probed: boolean;
   udp: 'ok' | 'fail' | 'unknown';
+  /** The hover of an unmeasured UDP chip ("— UDP") when the row's own test says
+   *  why nothing was measured — a proxy that carried nothing on it. Absent = the
+   *  plain "not measured yet". */
+  udpUnmeasuredHint?: string;
   /** Canonical QUIC verdict (same source as the card's chip) for the UDP-column
-   *  tooltip, so the list never claims "QUIC ✓" while the card shows "~".
+   *  tooltip, so the list never claims "✓ QUIC" while the card shows "~ QUIC".
    *  'aged' — nothing CURRENT was measured, but a Test did measure it more than
    *  thirty minutes ago: the tooltip then prints `quicAgedHint` (the card's QUIC
    *  chip's own sentence, age first) instead of "not yet measured", which is
@@ -239,15 +247,42 @@ const COLS: ReadonlyArray<Col> = [
 const HIDE_SMALL = 'ds-col-l';
 const HIDE_MED = 'ds-col-m';
 
-// The QUIC clause of the UDP-column tooltip — the canonical verdict wording,
-// so the list agrees with the card's QUIC chip instead of asserting "QUIC ✓"
-// from UDP relay alone (which only means WebRTC, never that HTTP/3 carries).
+// The QUIC sentence of the UDP-column tooltip — the canonical verdict, so the
+// list agrees with the card's QUIC chip instead of asserting HTTP/3 from UDP
+// relay alone (which only means WebRTC, never that HTTP/3 carries).
+// ⛔ gui-v0.1.73 review — in WORDS, the card's own sentences (QUIC_SENTENCE). It
+// read "QUIC ✓" / "QUIC ✗ (HTTP/2 on last measure)": the mark after the word,
+// and ✗ — the red OS-mismatch mark — for the fall-back the chip beside it draws
+// as "⤵ QUIC".
 const QUIC_CLAUSE: Record<Exclude<NonNullable<ProfileTableRow['quic']>, 'aged'>, string> = {
-  ok: 'QUIC ✓',
-  inferred: 'QUIC likely (not yet measured)',
-  fail: 'QUIC ✗ (HTTP/2 on last measure)',
-  unknown: 'QUIC not tested',
+  ok: QUIC_SENTENCE.works,
+  inferred: QUIC_SENTENCE.likely,
+  fail: QUIC_SENTENCE.fallsBack,
+  unknown: QUIC_SENTENCE.notMeasured,
 };
+
+/**
+ * The row's UDP verdict, as ProfilesView derives it: from this Mac's own test
+ * (`caps`, `proxyCapabilities` over its result) when there is one, else from
+ * Driftstack's measured reading (`udpProbe` — a tunnel's, or a SOCKS5 proxy this
+ * Mac never tested). ⛔ `'unknown'` is NOT MEASURED and renders "— UDP"; it is
+ * never a negative verdict.
+ * ⛔ (gui-v0.1.72 review) A proxy that carried nothing on its last test has a
+ * result and no UDP reading (`unmeasured`): 'unknown', not the 'fail' this
+ * used to read off its `ok: false` — which drew "⤵ UDP", a measured fall-back
+ * nobody measured, beside the Proxies tab's "— UDP" for the same proxy.
+ */
+export function listUdpVerdict(
+  caps: ReadonlyArray<ProxyCapability> | null,
+  udpProbe: boolean | undefined,
+): ProfileTableRow['udp'] {
+  if (caps === null) {
+    return typeof udpProbe === 'boolean' ? (udpProbe ? 'ok' : 'fail') : 'unknown';
+  }
+  const udp = caps.find((c) => c.key === 'webrtc');
+  if (udp?.unmeasured === true) return 'unknown';
+  return (udp?.ok ?? false) ? 'ok' : 'fail';
+}
 
 /**
  * The whole sentence in the UDP cell's hover: what UDP does, then what QUIC does.
@@ -280,7 +315,7 @@ function udpCellTitle(r: ProfileTableRow): string {
     // the sentence ends on the measurement rather than on the guess.
     return quic === null ? udp : `${udp} ${quic}`;
   }
-  if (r.udp === 'ok') return `UDP works — WebRTC ✓${quicJoin(quic)}`;
+  if (r.udp === 'ok') return `${UDP_WORKS_SENTENCE}${quicJoin(quic)}`;
   // A failed UDP handshake says nothing about QUIC that a measurement cannot
   // overrule — and when there IS no reading, it still says what it always said.
   return quic === null
@@ -297,12 +332,12 @@ function agedUdpQuicSuffix(r: ProfileTableRow): string {
   return quic === null ? '' : ` ${quic}`;
 }
 
-/** An aged clause is its own sentence (it starts "QUIC — Last checked …"); a
- *  one-word verdict rides the same sentence after a semicolon, exactly as it did
- *  before this cell learned to print it everywhere. */
+/** The QUIC sentence after the UDP one, pre-spaced. Every clause is a sentence
+ *  of its own now — an aged one ("QUIC — Last checked …") and a current one
+ *  (QUIC_SENTENCE) alike — so it no longer rides the UDP sentence after a
+ *  semicolon. */
 function quicJoin(quic: string | null): string {
-  if (quic === null) return `; ${QUIC_CLAUSE.unknown}`;
-  return quic.startsWith('QUIC — ') ? `. ${quic}` : `; ${quic}`;
+  return ` ${quic ?? QUIC_CLAUSE.unknown}`;
 }
 
 /** How an aged reading looks in this table: the recessed ground of a non-verdict
@@ -321,7 +356,8 @@ function quicJoin(quic: string | null): string {
  * proxy, from one cache. A VPN row printed nothing about QUIC at all.
  *
  * `null` when there is genuinely nothing to say, so a caller can keep its own
- * shorter sentence rather than append "QUIC not tested" to every row.
+ * shorter sentence rather than append "HTTP/3 has not been measured yet" to
+ * every row.
  */
 function quicClause(r: ProfileTableRow): string | null {
   if (r.quic === 'aged') return r.quicAgedHint !== undefined ? `QUIC — ${r.quicAgedHint}` : null;
@@ -374,8 +410,9 @@ export function agedOsVerdictFor(
  *
  * ⛔ NOT the shared ProxyOsChip, which prints the age beside the label, and the
  * reason is MEASURED, not assumed (2026-09-17, live harness, this table mounted
- * at the `profiles-list` composition's 1526px): a current '✓ iOS/macOS' is
- * 73.34px; '✓ iOS/macOS · 59 min ago' is 136.17px and widens the table by 62px
+ * at the `profiles-list` composition's 1526px, when the OS word was still
+ * 'iOS/macOS' — it is 'Apple' now, and narrower): a current '✓ iOS/macOS' was
+ * 73.34px; '✓ iOS/macOS · 59 min ago' was 136.17px and widened the table by 62px
  * more than the current chip does — horizontal scroll, for every customer,
  * thirty minutes after any Test. No dated form fits the current chip's width
  * either (that reading's shortest, '✓ Apple · 23 h', is 76.98px, and it gives up
@@ -443,7 +480,7 @@ function QuicCellChip({ r }: { r: ProfileTableRow }): JSX.Element {
               : 'QUIC not measured yet — run Test to measure it through this proxy.'
         }
       >
-        — QUIC
+        {plan ? QUIC_NOT_ON_PLAN_CHIP : badgeText(READING_MARK.notMeasured, READING_WORD.quic)}
       </span>
     );
   }
@@ -888,7 +925,10 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
                 <span
                   data-udp="unmeasured"
                   className="inline-block cursor-help whitespace-nowrap rounded bg-surface-inset px-1.5 py-0.5 text-[10px] font-bold text-ink-muted"
-                  title="UDP not measured yet — run Test to check UDP (WebRTC) through this proxy."
+                  title={
+                    r.udpUnmeasuredHint ??
+                    'UDP not measured yet — run Test to check UDP (WebRTC) through this proxy.'
+                  }
                 >
                   — UDP
                 </span>
@@ -913,10 +953,13 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
                 // which exists on a tunnel. Both halves are shared with the grid and
                 // the card so one measurement cannot be described three ways.
                 title={udpCellTitle(r)}
+                data-udp={r.udp === 'ok' ? 'true' : 'false'}
               >
                 {/* Owner item 9 — "UDP" on the chip itself, the card's text; the
-                  column holds QUIC and OS beside it now. */}
-                {r.udp === 'ok' ? 'UDP ✓' : '⤵ UDP'}
+                  column holds QUIC and OS beside it now. In the ONE vocabulary
+                  (gui-v0.1.72): the mark first, as on the Proxies tab — it read
+                  "UDP ✓" here and "✓ UDP" there. */}
+                {badgeText(r.udp === 'ok' ? READING_MARK.works : READING_MARK.fallsBack, 'UDP')}
               </span>
             )}
             {r.hasProxy ? <QuicCellChip r={r} /> : null}
@@ -949,7 +992,8 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             `profiles-list` scene builds its rows directly and carries no
             fingerprint, so the chip never renders there and the shell's measured
             0px of slack at 1526px was never tested against it. The widest chip
-            here ('✓ iOS/macOS' at ProxyOsChip `sm`) is 73.34px plus a 4px gap.
+            here was '✓ iOS/macOS' at ProxyOsChip `sm`, 73.34px plus a 4px gap;
+            the OS word is 'Apple' now and every OS chip is narrower than that.
             Before widening this cell, or adding a fingerprint to
             MARKETING_TABLE_ROWS, measure the shell in the live harness — the
             capture will pass either way until something actually paints one. */}
@@ -989,7 +1033,8 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           label it scrolls the whole table sideways (see AgedOsCellChip). Under
           the chips it is free — 'as of 59 min ago', the widest it prints,
           measured 80.48px, narrower than the '✓' + '✓ iOS/macOS' pair a current
-          row already lays out above it (99px) and than the 'UDP via tunnel' pill
+          row laid out above it when this was measured (99px; the OS word is
+          'Apple' now) and than the 'UDP via tunnel' pill
           an aged VPN chip replaces (87.13px) — and it adds no height either: the
           Exit IP cell beside it is two lines tall already (a row with the
           line and a current row without it both measured 55px). */}

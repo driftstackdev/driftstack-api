@@ -542,7 +542,7 @@ describe('the chips — an aged reading can never be mistaken for a current one'
     const chip = container.querySelector('[data-component="proxy-os-fingerprint"]');
     expect(chip?.getAttribute('data-os-tone')).toBe('match');
     expect(chip?.getAttribute('data-ok')).toBe('aged');
-    expect(chip?.textContent).toBe('✓iOS/macOS · 9 h ago');
+    expect(chip?.textContent).toBe('✓Apple · 9 h ago');
     expect(chip?.className).toContain('status-ready');
     expect(chip?.className).toContain('border-dashed');
     expect(chip?.getAttribute('title')).toMatch(
@@ -673,7 +673,7 @@ describe('the chips — an aged reading can never be mistaken for a current one'
       render(<ProxyOsChip fingerprint={{ ...FP, at: NOW - 10 * MIN }} nowMs={NOW} />).container
         .innerHTML,
     ).toBe(
-      `<span title="Your proxy presents as iOS/macOS to websites (high confidence) — it matches the iOS device behind it. Measured by Driftstack, 10 minutes ago." data-component="proxy-os-fingerprint" data-os-tone="match" class="inline-flex items-center gap-0.5 rounded-sm px-1 py-px text-[10px] ${GREEN}"><span aria-hidden="true">✓</span>iOS/macOS</span>`,
+      `<span title="Your proxy presents as Apple (iOS or macOS) to websites, with high confidence — it matches the iOS device behind it. Measured by Driftstack, 10 minutes ago." data-component="proxy-os-fingerprint" data-os-tone="match" class="inline-flex items-center gap-0.5 rounded-sm px-1 py-px text-[10px] ${GREEN}"><span aria-hidden="true">✓</span>Apple</span>`,
     );
     expect(render(<ProxyOsChip fingerprint={undefined} nowMs={NOW} />).container.innerHTML).toBe(
       `<span title="OS not measured yet. Run Test on this proxy." data-component="proxy-os-fingerprint" data-os-tone="unknown" class="inline-flex items-center gap-0.5 rounded-sm px-1 py-px text-[10px] ${MUTED}"><span aria-hidden="true">—</span>OS</span>`,

@@ -382,8 +382,10 @@ describe('ProfilePhoneCard', () => {
     expect(screen.getByText('NL').getAttribute('title')).toBe('NL · 82.14.220.9');
     expect(screen.queryByText('82.14.220.9')).toBeNull();
     const udp = container.querySelector('[data-udp="true"]') as HTMLElement;
-    expect(udp.textContent).toBe('UDP ✓');
-    expect(udp.getAttribute('title')).toMatch(/WebRTC ✓/); // the hover detail moved into the title
+    expect(udp.textContent).toBe('✓ UDP');
+    // the hover detail moved into the title — in words (gui-v0.1.73 review: it
+    // read "WebRTC ✓", a mark after the word)
+    expect(udp.getAttribute('title')).toMatch(/^UDP works — WebRTC calls and media stream/);
     expect(screen.getByText('Idle')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Launch' }));
     expect(onPrimary).toHaveBeenCalledTimes(1);
@@ -1081,7 +1083,7 @@ describe('B1 — the health pill: ONE element, seven arms, strict precedence (he
     expect(screen.queryByRole('button', { name: CHECK_VPN_ACTION })).toBeNull();
     const caps = byRegion(container, 'caps') as HTMLElement;
     expect(caps.getAttribute('data-caps-mode')).toBe('measured');
-    expect(caps.querySelector('[data-quic-inferred="false"]')?.textContent).toBe('QUIC ✓');
+    expect(caps.querySelector('[data-quic-inferred="false"]')?.textContent).toBe('✓ QUIC');
     cleanup();
     expect(healthPill(props({ ...up, vpnNotice: VPN_NOTICE })).title).toBe(
       `${VPN_TUNNEL_UP_NO_LATENCY_TITLE} — ${VPN_NOTICE}`,
@@ -1314,12 +1316,14 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     }
   };
 
-  it('visibleChips C1 — every MEASURED chip is visible at every card width: the compact OS label at 144 / 152, the FULL label from content 167 (QUIC ~) / 169 (QUIC ✓) up', () => {
+  it('visibleChips C1 — every MEASURED chip is visible at every card width, and the OS chip says "✓ Apple" at every one of them (gui-v0.1.72: one word on every surface)', () => {
     // ProfilePhoneCard.tsx `visibleChips` — three levels in order: full labels,
     // compact labels (OS_LABEL_COMPACT), then whole chips by C3 priority.
     // ⛔ Every literal below is MEASURED, 2026-09-12, in the live harness with
     // CHIP_BASE at px-1 (Chromium/Playwright @2x, after document.fonts.ready):
-    // UDP ✓ 40.22, QUIC ~ 42.03, QUIC ✓ 44.30, ✓ iOS/macOS 73.38, ✓ Apple 47.16
+    // ✓ UDP 40.22, ~ QUIC 42.03, ✓ QUIC 44.30, ✓ Apple 47.16 (and the retired
+    // full label '✓ iOS/macOS' 73.38 — re-measured 2026-09-25 with the reversed
+    // texts, glyph for glyph the same)
     // — and C4 (2026-09-12) put those MEASUREMENTS in CHIP_WIDTH instead of their
     // ceilings. The ceil was a second, unnamed slack floor stacked on
     // CAPS_MIN_SLACK, and the pair of them refused the widest green trio at the
@@ -1333,13 +1337,13 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // Lowering any literal below its rendered width re-opens the mid-glyph cut;
     // inflating one by 20px reds the 144 arm (the C4 mutation, run 2026-09-12).
     const at144 = visibleChips(MAX, 144);
-    expect(at144.chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ~', '✓ Apple']);
+    expect(at144.chips.map((c) => c.text)).toEqual(['✓ UDP', '~ QUIC', '✓ Apple']);
     expect(at144.chips.map((c) => c.width)).toEqual([40.22, 42.03, 47.16]);
     expect(at144.hiddenHints).toEqual([]);
     // 152 — the 186px column of the 1440 viewport, the width that used to cut
     // the OS chip mid-glyph.
     const at152 = visibleChips(MAX, 152);
-    expect(at152.chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ~', '✓ Apple']);
+    expect(at152.chips.map((c) => c.text)).toEqual(['✓ UDP', '~ QUIC', '✓ Apple']);
     expect(at152.hiddenHints).toEqual([]);
     // The compact trio itself: 40.22 + 42.03 + 47.16 + 8 = 137.41 for MAX's
     // inferred QUIC, plus the CAPS_MIN_SLACK floor of 3 that every reservation
@@ -1350,7 +1354,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(visibleChips(MAX, 143).chips).toHaveLength(3);
     expect(visibleChips(MAX, 141).chips).toHaveLength(3);
     // ⛔ (V-219, 2026-09-14) BELOW THE COMPACT TRIO THE EVICTION ORDER FLIPPED,
-    // DELIBERATELY. This read ['UDP ✓', 'QUIC ~'] until today — the GREEN OS chip
+    // DELIBERATELY. This read ['✓ UDP', '~ QUIC'] until today — the GREEN OS chip
     // was the one that went. `keep` was `os.tone === 'mismatch'` and is now
     // `fingerprint !== undefined && !unavailable && measuring !== true`, so EVERY
     // measured reading is pinned to the row whatever its tone and the QUIC chip
@@ -1359,58 +1363,57 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // at all, and a measured fact behind an opaque '+N' is the thing they
     // objected to. A future reader can tell this from a regression by the
     // mutation: reverting `keep` to the tone test restores the old pair here.
-    expect(visibleChips(MAX, 140).chips.map((c) => c.text)).toEqual(['UDP ✓', '✓ Apple']);
-    expect(visibleChips(MAX, 140).hiddenHints[0]).toMatch(/^QUIC ~ — /);
-    // 166.63 = 40.22 + 42.03 + 73.38 + 8 + 3, MAX's full-label threshold: the
-    // sweep flips from '✓ Apple' to '✓ iOS/macOS' at content 167 / a 201px card.
-    expect(visibleChips(MAX, 166).chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ~', '✓ Apple']);
-    expect(visibleChips(MAX, 167).chips.map((c) => c.text)).toEqual([
-      'UDP ✓',
-      'QUIC ~',
-      '✓ iOS/macOS',
-    ]);
+    expect(visibleChips(MAX, 140).chips.map((c) => c.text)).toEqual(['✓ UDP', '✓ Apple']);
+    expect(visibleChips(MAX, 140).hiddenHints[0]).toMatch(/^~ QUIC — /);
+    // ⛔ gui-v0.1.72 (owner item 9) — there is no wider OS label to flip to any
+    // more. The sweep used to flip from '✓ Apple' to '✓ iOS/macOS' at content 167
+    // (a 201px card), so ONE reading was 'Apple' on a narrow card and
+    // 'iOS/macOS' on a wide one and on every other surface. 'Apple' is the one
+    // word now, at every width.
+    expect(visibleChips(MAX, 166).chips.map((c) => c.text)).toEqual(['✓ UDP', '~ QUIC', '✓ Apple']);
+    expect(visibleChips(MAX, 167).chips.map((c) => c.text)).toEqual(['✓ UDP', '~ QUIC', '✓ Apple']);
     // ⛔ C4 — THE OWNER'S OWN ROW, AT THE OWNER'S OWN WIDTH.
-    // MAX carries the INFERRED 'QUIC ~' (42.03). The row's worst case is the
-    // MEASURED 'QUIC ✓' (44.3) — an ordinary healthy proxy whose live session
+    // MAX carries the INFERRED '~ QUIC' (42.03). The row's worst case is the
+    // MEASURED '✓ QUIC' (44.3) — an ordinary healthy proxy whose live session
     // reported h3 — so every threshold is 2.27px higher there: the compact trio
     // reserves 40.22 + 44.3 + 47.16 + 8 + 3 = 142.68 and the full one 168.9.
     // 144 IS THE 178px COLUMN, the narrowest the grid can produce
     // (`minmax(178px,1fr)`, content = card − 34). This arm asserted the OPPOSITE
-    // until C4 — `toEqual(['UDP ✓', 'QUIC ✓'])`, i.e. the measured OS match behind
+    // until C4 — `toEqual(['✓ UDP', '✓ QUIC'])`, i.e. the measured OS match behind
     // a '+1' — inside a test whose own title promises "every MEASURED chip is
     // visible at every card width". It was green the whole time, because the pin
     // was written from the arithmetic instead of from the owner's sentence.
-    // Rendered before the fix, both themes, real card, 178px: 'UDP ✓  QUIC ✓  +1'.
+    // Rendered before the fix, both themes, real card, 178px: '✓ UDP  ✓ QUIC  +1'.
     const GREEN_WORST = props({ osFingerprint: REAL_OS, quicMeasured: 'h3' });
     expect(visibleChips(GREEN_WORST, 144).chips.map((c) => c.text)).toEqual([
-      'UDP ✓',
-      'QUIC ✓',
+      '✓ UDP',
+      '✓ QUIC',
       '✓ Apple',
     ]);
     expect(visibleChips(GREEN_WORST, 144).hiddenHints).toEqual([]);
     // …and the floor is still a floor: 142.68 needs 143, so 142 still drops one.
     // ⛔ (V-219) WHICH one it drops changed, and only that: the measured
-    // '✓ Apple' now outranks the measured 'QUIC ✓' for the same reason as the
+    // '✓ Apple' now outranks the measured '✓ QUIC' for the same reason as the
     // 140 arm above. What this pair measures is the FLOOR — that 142.68 needs
     // 143 — and the floor has not moved a pixel.
     expect(visibleChips(GREEN_WORST, 143).chips).toHaveLength(3);
-    expect(visibleChips(GREEN_WORST, 142).chips.map((c) => c.text)).toEqual(['UDP ✓', '✓ Apple']);
+    expect(visibleChips(GREEN_WORST, 142).chips.map((c) => c.text)).toEqual(['✓ UDP', '✓ Apple']);
     expect(visibleChips(GREEN_WORST, 168).chips.map((c) => c.text)).toEqual([
-      'UDP ✓',
-      'QUIC ✓',
+      '✓ UDP',
+      '✓ QUIC',
       '✓ Apple',
     ]);
     expect(visibleChips(GREEN_WORST, 169).chips.map((c) => c.text)).toEqual([
-      'UDP ✓',
-      'QUIC ✓',
-      '✓ iOS/macOS',
+      '✓ UDP',
+      '✓ QUIC',
+      '✓ Apple',
     ]);
     const at206 = visibleChips(MAX, 206);
-    expect(at206.chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ~', '✓ iOS/macOS']);
-    expect(at206.chips.map((c) => c.width)).toEqual([40.22, 42.03, 73.38]);
+    expect(at206.chips.map((c) => c.text)).toEqual(['✓ UDP', '~ QUIC', '✓ Apple']);
+    expect(at206.chips.map((c) => c.width)).toEqual([40.22, 42.03, 47.16]);
     expect(at206.hiddenHints).toEqual([]);
     expect(visibleChips(MAX, 226).chips).toHaveLength(3);
-    // Below the compact trio (140.41 here, 142.68 at 'QUIC ✓', slack floor
+    // Below the compact trio (140.41 here, 142.68 at '✓ QUIC', slack floor
     // included) a whole chip goes — and the '+N' hint then carries the FULL
     // label, never the compact one.
     // ⛔ (V-219) …and the chip that goes is the QUIC one now, not the OS one —
@@ -1418,13 +1421,13 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // still pinned below, at the only widths where a MEASURED OS chip can be
     // hidden at all.
     const at128 = visibleChips(MAX, 128);
-    expect(at128.chips.map((c) => c.text)).toEqual(['UDP ✓', '✓ Apple']);
+    expect(at128.chips.map((c) => c.text)).toEqual(['✓ UDP', '✓ Apple']);
     expect(at128.hiddenHints).toHaveLength(1);
-    expect(at128.hiddenHints[0]).toMatch(/^QUIC ~ — /);
+    expect(at128.hiddenHints[0]).toMatch(/^~ QUIC — /);
     // The '+1' tail reserves 27px (dashed border + 9.5px). The surviving pair is
-    // 'UDP ✓' + the pinned '✓ Apple' now: 40.22 + 47.16 + 4 + 4 + 27 = 122.38,
+    // '✓ UDP' + the pinned '✓ Apple' now: 40.22 + 47.16 + 4 + 4 + 27 = 122.38,
     // +3 slack floor = 125.38 — so 126 keeps two and 125 keeps one. (It was
-    // 40.22 + 42.03 + … = 120.25 while the pair was 'UDP ✓' + 'QUIC ~'; the
+    // 40.22 + 42.03 + … = 120.25 while the pair was '✓ UDP' + '~ QUIC'; the
     // arithmetic is the same, the operands moved.)
     expect(visibleChips(MAX, 126).chips).toHaveLength(2);
     expect(visibleChips(MAX, 125).chips).toHaveLength(1);
@@ -1434,16 +1437,16 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(visibleChips(MAX, 82).chips.map((c) => c.text)).toEqual(['✓ Apple']);
     const tiny = visibleChips(MAX, 81);
     expect(tiny.chips).toEqual([]);
-    // Below that even the pinned chip goes, and THERE the hint still carries the
-    // FULL label, never the compact one: the '+N' pill is where the long form
-    // belongs (C2). Asserted both ways so a compact label cannot leak in.
+    // Below that even the pinned chip goes, and THERE the hint carries the chip's
+    // FULL label (C2) — which for Apple is the same one word (gui-v0.1.72), and
+    // its hover sentence names the two systems it stands for.
     expect(tiny.hiddenHints).toHaveLength(3);
-    expect(tiny.hiddenHints[2]).toMatch(/^✓ iOS\/macOS — Your proxy presents as iOS\/macOS/);
-    expect(tiny.hiddenHints.some((h) => h.startsWith('✓ Apple'))).toBe(false);
+    expect(tiny.hiddenHints[2]).toMatch(/^✓ Apple — Your proxy presents as Apple \(iOS or macOS\)/);
+    expect(tiny.hiddenHints.some((h) => h.includes('iOS/macOS'))).toBe(false);
     // Every other measured chip, pinned to its px-1 render as well.
     const widths = (over: Partial<ProfilePhoneCardProps>) =>
       Object.fromEntries(visibleChips(props(over), 400).chips.map((c) => [c.text, c.width]));
-    expect(widths({ quicMeasured: 'h3' })).toMatchObject({ 'QUIC ✓': 44.3 });
+    expect(widths({ quicMeasured: 'h3' })).toMatchObject({ '✓ QUIC': 44.3 });
     expect(widths({ quicMeasured: 'h2-only' })).toMatchObject({ '⤵ QUIC': 43.55 });
     expect(
       widths({ capabilities: { ...props().capabilities!, udp_associate: false } }),
@@ -1492,7 +1495,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // estimate, and that estimate over-reserves. '? Apple' estimated 56 against
     // a real 43.80 and put a measured OS chip behind a '+1' at the 178px column.
     // Update it only alongside a real measurement.
-    // 21 -> 22 on 2026-09-24 (owner item 9): 'UDP — not on plan' (96.5), a VPN
+    // 21 -> 22 on 2026-09-24 (owner item 9): '— UDP · not on plan' (96.5), a VPN
     // row on a plan without VPN, measured the same way with '? OS' 29.97 and
     // '✓ Apple' 47.16 reproduced as controls in the same run.
     expect(entries).toHaveLength(22);
@@ -1509,7 +1512,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // INSTANCE of a general rule ("a measured reading keeps its place") rather
     // than the exception it used to be. The red geometry is unchanged, which is
     // why this arm still reads as it did. Dropping `keep` makes
-    // the 128 arm below render ['UDP ✓', 'QUIC ✓'] with the red chip hidden →
+    // the 128 arm below render ['✓ UDP', '✓ QUIC'] with the red chip hidden →
     // red (mutation run 2026-09-12). MEASURED at px-1: ✗ Windows 62.14, ✗ Win
     // 36.97, so the full red trio is 40.22 + 44.3 + 62.14 + 8 = 154.66 and the
     // compact one 129.49, each +3 for the CAPS_MIN_SLACK floor (rowWidth) →
@@ -1523,38 +1526,38 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // gate is SYMMETRIC'), where the lost `keep` is asserted too.
     const RED = props({ osFingerprint: WINDOWS_OS, quicMeasured: 'h3' });
     const at144 = visibleChips(RED, 144);
-    expect(at144.chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ✓', '✗ Win']);
+    expect(at144.chips.map((c) => c.text)).toEqual(['✓ UDP', '✓ QUIC', '✗ Win']);
     expect(at144.chips.map((c) => c.width)).toEqual([40.22, 44.3, 36.97]);
     expect(at144.hiddenHints).toEqual([]);
     const os = at144.chips.find((c) => c.key === 'os');
     expect(os?.attrs['data-os-tone']).toBe('mismatch');
     expect(os?.title).toMatch(/^(Your proxy presents as|This proxy looks like) Windows/);
     // 157.66 is where the full label takes over: content 158, a 192px card.
-    expect(visibleChips(RED, 157).chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ✓', '✗ Win']);
+    expect(visibleChips(RED, 157).chips.map((c) => c.text)).toEqual(['✓ UDP', '✓ QUIC', '✗ Win']);
     expect(visibleChips(RED, 158).chips.map((c) => c.text)).toEqual([
-      'UDP ✓',
-      'QUIC ✓',
+      '✓ UDP',
+      '✓ QUIC',
       '✗ Windows',
     ]);
     // C3 — narrower than the compact trio (132.49): the GREEN QUIC chip is what
     // moves into the '+1'; the one measured defect stays visible. No real column
     // is this narrow (minmax(178px,1fr) ⇒ 144), so this never fires in the app.
     const at128 = visibleChips(RED, 128);
-    expect(at128.chips.map((c) => c.text)).toEqual(['UDP ✓', '✗ Win']);
+    expect(at128.chips.map((c) => c.text)).toEqual(['✓ UDP', '✗ Win']);
     expect(at128.hiddenHints).toHaveLength(1);
-    expect(at128.hiddenHints[0]).toMatch(/^QUIC ✓ — /);
+    expect(at128.hiddenHints[0]).toMatch(/^✓ QUIC — /);
     // …and at the narrowest the mismatch is the last chip standing
     // (36.97 + 4 + 27 + 3 slack = 70.97).
     expect(visibleChips(RED, 71).chips.map((c) => c.text)).toEqual(['✗ Win']);
     expect(visibleChips(RED, 70).chips).toHaveLength(0);
     // ⛔ (V-219, 2026-09-14) A GREEN OS CHIP HAS THE SAME PRIVILEGE NOW.
     // This line read "A green OS chip has no such privilege: it goes first, as
-    // it always did" and asserted ['UDP ✓', 'QUIC ~']. Retention is keyed on
+    // it always did" and asserted ['✓ UDP', '~ QUIC']. Retention is keyed on
     // HAVING MEASURED, not on the tone, so the green reading is pinned here
     // exactly as the red one is and the QUIC chip is what moves into the '+1'.
     // Nothing in the drop order is mismatch-specific any more.
-    expect(visibleChips(MAX, 128).chips.map((c) => c.text)).toEqual(['UDP ✓', '✓ Apple']);
-    expect(visibleChips(MAX, 128).hiddenHints[0]).toMatch(/^QUIC ~ — /);
+    expect(visibleChips(MAX, 128).chips.map((c) => c.text)).toEqual(['✓ UDP', '✓ Apple']);
+    expect(visibleChips(MAX, 128).hiddenHints[0]).toMatch(/^~ QUIC — /);
     // 'Linux' (45) and 'BSD' (39) are already short enough to fit 144 in FULL,
     // so they compact to themselves and the label never changes.
     // ⛔ The WIDTH is asserted, not just the presence. Asserting only "the chip is
@@ -1572,7 +1575,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       [BSD_OS, '✗ BSD', 38.89],
     ] as const) {
       const v = visibleChips(props({ osFingerprint: fp, quicMeasured: 'h3' }), 144);
-      expect(v.chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ✓', text]);
+      expect(v.chips.map((c) => c.text)).toEqual(['✓ UDP', '✓ QUIC', text]);
       expect(v.chips.map((c) => c.width)).toEqual([40.22, 44.3, width]);
       expect(v.chips.find((c) => c.key === 'os')?.compact).toBeUndefined();
       expect(v.hiddenHints).toEqual([]);
@@ -1650,7 +1653,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       // re-measured at the foot of this arm.
       expect(chip?.keep, label).toBe(true);
       expect(chip?.title, label).toMatch(
-        /^This proxy looks like .+ \((high|medium|low) confidence\), but it forwards through more than one machine/,
+        /^This proxy looks like .+, with (high|medium|low) confidence, but it forwards through more than one machine/,
       );
       expect(chip?.title, label).toMatch(
         /a website may reach a different one\. Not a conclusion either way\./,
@@ -1667,7 +1670,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       const chip = visibleChips(props({ osFingerprint: fp, quicMeasured: 'h3' }), 400).chips.find(
         (c) => c.key === 'os',
       );
-      expect(chip?.text, label).toBe('✓ iOS/macOS');
+      expect(chip?.text, label).toBe('✓ Apple');
       expect(chip?.attrs['data-os-tone'], label).toBe('match');
       expect(chip?.keep, label).toBe(true);
       expect(chip?.title, label).toMatch(/matches the iOS device behind it/);
@@ -1684,7 +1687,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // keep column as a pin on the new rule's uniformity, not as evidence that
     // the fixtures still assert.
     for (const [label, fp, text, tone, keep] of [
-      ['green', REAL_OS, '✓ iOS/macOS', 'match', true],
+      ['green', REAL_OS, '✓ Apple', 'match', true],
       ['red', WINDOWS_OS, '✗ Windows', 'mismatch', true],
     ] as const) {
       const chip = visibleChips(props({ osFingerprint: fp, quicMeasured: 'h3' }), 400).chips.find(
@@ -1699,7 +1702,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // not have to re-derive it.
     //
     // The withheld tone mints labels that are NEW reachable strings: '?' is no
-    // longer paired only with 'OS'. '? iOS/macOS', '? Apple', '? Windows',
+    // longer paired only with 'OS'. '? Apple', '? Apple', '? Windows',
     // '? Win', '? Linux' and '? BSD' are all reachable now, and CHIP_WIDTH holds
     // none of them — its own comment still says the '?' glyph appears "only with
     // the 'OS' label", a sentence V-219 made false. They fall back to
@@ -1714,11 +1717,11 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // `visibleChips` at the four real column widths, withheld green (default
     // inferred QUIC) and withheld red (measured QUIC):
     //   content 144 (the 178px column, the grid's floor)
-    //     green → ['UDP ✓','? Apple'] and a '+1' holding the QUIC chip
-    //     red   → ['UDP ✓','QUIC ✓','? Win'] — the whole row fits
-    //   content 152 → ['UDP ✓','QUIC ~','? Apple']   (nothing hidden)
-    //   content 172 → ['UDP ✓','QUIC ~','? Apple']
-    //   content 206 → ['UDP ✓','QUIC ~','? iOS/macOS']
+    //     green → ['✓ UDP','? Apple'] and a '+1' holding the QUIC chip
+    //     red   → ['✓ UDP','✓ QUIC','? Win'] — the whole row fits
+    //   content 152 → ['✓ UDP','~ QUIC','? Apple']   (nothing hidden)
+    //   content 172 → ['✓ UDP','~ QUIC','? Apple']
+    //   content 206 → ['✓ UDP','~ QUIC','? Apple']
     // So the withheld READING is on the row at every real column now — that was
     // the cause worth fixing, and `keep` fixed it. What remains is a '+1' at the
     // narrowest column ONLY, holding the QUIC chip, and it has a single cause
@@ -1742,7 +1745,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // projection gap, so no reading at all) left exactly the opaque pill they
     // asked about. '— OS' states the absence; its title says which absence.
     const unmeasured = visibleChips(props(), 144);
-    expect(unmeasured.chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ~', '— OS']);
+    expect(unmeasured.chips.map((c) => c.text)).toEqual(['✓ UDP', '~ QUIC', '— OS']);
     expect(unmeasured.chips[2]?.title).toMatch(/^OS not measured yet\. Run Test/);
     expect(unmeasured.hiddenHints).toEqual([]);
     // The VPN row is the vacuity control for the '+N' itself: something CAN
@@ -1754,7 +1757,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // ⛔ The VPN row's THIRD chip. "UDP travels inside the tunnel" was the last
     // hint riding a '+N' here — the owner's "+1 on an OpenVPN" (2026-09-14) —
     // and it is a chip now with its own glyph. Nothing is hidden on this row.
-    expect(vpn.chips.map((c) => c.text)).toEqual(['⇢ UDP', 'QUIC ✓', '— OS']);
+    expect(vpn.chips.map((c) => c.text)).toEqual(['⇢ UDP', '✓ QUIC', '— OS']);
     expect(vpn.chips[0]?.title).toMatch(/UDP travels inside the VPN\./);
     expect(vpn.chips[2]?.title).toMatch(
       /^OS not measured: the OS check is not available for VPN connections/,
@@ -1802,7 +1805,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
   it('the row reads its OWN width: at a measured 144px MAX renders ALL THREE chips with the compact OS label and NO "+1" — C1, the owner’s "i dont see OS currently at profile grid"', () => {
     // ProfilePhoneCard.tsx `useContentWidth` + `visibleChips` level 2:
     //   • replacing the measured `el.clientWidth` with DEFAULT_CONTENT_WIDTH
-    //     renders the FULL '✓ iOS/macOS' here instead (206 ≥ 166) → red;
+    //     renders the FULL '✓ Apple' here instead (206 ≥ 166) → red;
     //   • inflating any CHIP_WIDTH entry by 20px brings the '+1' back → red;
     //   • dropping level 2 (the compact label) restores the old 2-chip row → red.
     atContentWidth(144, () => {
@@ -1817,11 +1820,11 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       // the family BOTH members of 'macos-or-ios' share, so the compact form
       // shortens the claim without deciding it.
       expect(os.getAttribute('title')).toMatch(
-        /^(Your proxy presents as|This proxy looks like) iOS\/macOS/,
+        /^(Your proxy presents as|This proxy looks like) Apple \(iOS or macOS\)/,
       );
       expect(Array.from(caps.children).map((c) => c.textContent)).toEqual([
-        'UDP ✓',
-        'QUIC ~',
+        '✓ UDP',
+        '~ QUIC',
         '✓ Apple',
       ]);
       cleanup();
@@ -1851,8 +1854,8 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
         /^(Your proxy presents as|This proxy looks like) Windows/,
       );
       expect(Array.from(caps.children).map((c) => c.textContent)).toEqual([
-        'UDP ✓',
-        'QUIC ✓',
+        '✓ UDP',
+        '✓ QUIC',
         '✗ Win',
       ]);
       cleanup();
@@ -1888,7 +1891,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(classes(os)).not.toContain('text-status-ready');
     expect(classes(os)).toEqual(expect.arrayContaining(['bg-ink-muted/15', 'text-ink-secondary']));
     expect(os.getAttribute('title')).toMatch(
-      /^This proxy looks like Windows \(high confidence\), but/,
+      /^This proxy looks like Windows, with high confidence, but/,
     );
     expect(os.getAttribute('title')).toMatch(/a website may reach a different one/);
     expect(os.getAttribute('title')).not.toMatch(/detectable mismatch/);
@@ -1896,7 +1899,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     cleanup();
     // The green half, from the shape MOST stored rows are actually in: a cached
     // record written before the field existed. ⛔ OWNER 2026-09-24 (item 9) — it
-    // renders the green '✓ iOS/macOS' again (V-219 had made it '? iOS/macOS'),
+    // renders the green '✓ Apple' again (V-219 had made it '? Apple'),
     // with the vantage's caveat in its title.
     const { container: green } = render(
       <ProfilePhoneCard {...props({ osFingerprint: REAL_OS_LEGACY })} />,
@@ -1905,7 +1908,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       byRegion(green, 'caps') as HTMLElement,
       'proxy-os-fingerprint',
     ) as HTMLElement;
-    expect(g.textContent).toBe('✓ iOS/macOS');
+    expect(g.textContent).toBe('✓ Apple');
     expect(g.getAttribute('data-os-tone')).toBe('match');
     expect(classes(g)).toContain('text-status-ready');
     expect(g.getAttribute('title')).toMatch(/matches the iOS device behind it/);
@@ -1931,17 +1934,20 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(os?.text).toBe('✓ Apple');
     expect(os?.width).toBe(47.16);
     // The full disjunction is never lost: it is the chip's title and the hint line.
-    expect(os?.title).toMatch(/^Your proxy presents as iOS\/macOS to websites \(high confidence\)/);
+    expect(os?.title).toMatch(
+      /^Your proxy presents as Apple \(iOS or macOS\) to websites, with high confidence/,
+    );
     // ⛔ (V-219, 2026-09-14) THE HINT IS READ AT CONTENT 81, NOT 128. A measured
     // reading carries `keep` now, so at 128 the OS chip is ON the row and the
     // QUIC chip is the one in the '+1'; the OS hint is only reachable below
     // 81.16 — the width at which even the pinned chip plus its '+2' stops
-    // fitting. The property this line pins is untouched: wherever the OS row
-    // does end up in the pill, the HINT says 'iOS/macOS' and never the compact
-    // 'Apple'. Pinned both ways so a compact label cannot leak into a hint.
+    // fitting. Wherever the OS row does end up in the pill, the hint carries the
+    // chip's FULL label — which since gui-v0.1.72 is the one word 'Apple' on every
+    // surface (it was 'iOS/macOS' there and 'Apple' on the chip) — and its hover
+    // sentence names the two systems.
     const hintsAt81 = visibleChips(MAX, 81).hiddenHints;
-    expect(hintsAt81[2]).toMatch(/^✓ iOS\/macOS — /);
-    expect(hintsAt81.some((h) => h.startsWith('✓ Apple'))).toBe(false);
+    expect(hintsAt81[2]).toMatch(/^✓ Apple — Your proxy presents as Apple \(iOS or macOS\)/);
+    expect(hintsAt81.some((h) => h.includes('iOS/macOS'))).toBe(false);
     // …and the SOURCE, so a compact form can never be re-pointed at one member
     // without this arm being read first.
     expect(source('components/ProfilePhoneCard.tsx')).toContain("'macos-or-ios': 'Apple',");
@@ -1972,7 +1978,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // measurement and C1 applies to it; '? OS' measures 29.97, trio 125.49/144.
     // Mutation: drop `os.glyph === '?'` from the eligibility test → red.
     const undet = visibleChips(props({ osFingerprint: UNDETERMINED_OS, quicMeasured: 'h3' }), 144);
-    expect(undet.chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ✓', '? OS']);
+    expect(undet.chips.map((c) => c.text)).toEqual(['✓ UDP', '✓ QUIC', '? OS']);
     expect(undet.chips.map((c) => c.width)).toEqual([40.22, 44.3, 29.97]);
     expect(undet.hiddenHints).toEqual([]);
     const chip = undet.chips.find((c) => c.key === 'os');
@@ -2005,7 +2011,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       expect(
         v.chips.map((c) => c.text),
         label,
-      ).toEqual(['UDP ✓', 'QUIC ✓', '— OS']);
+      ).toEqual(['✓ UDP', '✓ QUIC', '— OS']);
       expect(v.chips[2]?.width, label).toBe(33.33);
       expect(v.chips[2]?.title, label).toMatch(hint);
       expect(v.chips[2]?.attrs['data-os-tone'], label).toBe('unknown');
@@ -2034,7 +2040,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // "a measured reading keeps its place" is a statement about EVIDENCE; only
     // this arm stops the second from swallowing the first.
     // Mutation: `keep: true` unconditionally → the three non-reading rows below
-    // render ['UDP ✓', <the OS chip>] and red here. ⚠️ DERIVED, NOT RUN — src/ was
+    // render ['✓ UDP', <the OS chip>] and red here. ⚠️ DERIVED, NOT RUN — src/ was
     // out of scope for the session that added this arm, so the claim rests on the
     // 123px arithmetic below (a kept '— OS' reserves 40.22 + 33.33 + 4 + 4 + 27 +
     // 3 = 111.55, inside 123) plus its MEASURED neighbour: '? OS', a keep-flagged
@@ -2054,10 +2060,10 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // Same width, same shortfall, opposite outcome, decided by nothing but
     // whether a measurement exists.
     const measured = visibleChips(props({ osFingerprint: UNDETERMINED_OS }), 123);
-    expect(measured.chips.map((c) => c.text)).toEqual(['UDP ✓', '? OS']);
+    expect(measured.chips.map((c) => c.text)).toEqual(['✓ UDP', '? OS']);
     expect(measured.chips.find((c) => c.key === 'os')?.keep).toBe(true);
     expect(measured.hiddenHints).toHaveLength(1);
-    expect(measured.hiddenHints[0]).toMatch(/^QUIC ~ — /);
+    expect(measured.hiddenHints[0]).toMatch(/^~ QUIC — /);
     for (const [label, over, text] of [
       ['never measured — no fingerprint at all', {}, '— OS'],
       [
@@ -2077,7 +2083,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       expect(
         narrow.chips.map((c) => c.text),
         label,
-      ).toEqual(['UDP ✓', 'QUIC ~']);
+      ).toEqual(['✓ UDP', '~ QUIC']);
       expect(narrow.hiddenHints, label).toHaveLength(1);
       expect(narrow.hiddenHints[0], label).toMatch(new RegExp(`^${text} — `));
     }
@@ -2136,7 +2142,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // also carries one non-measurement hint ("UDP via tunnel"), and reserving
     // 27 + 4 = 31px of that 90 for its pill cost the OS chip its place at EVERY
     // column the grid can produce. Rendered on the real card off the running
-    // harness before the fix, dark AND light, at 178 and 186: 'Check  QUIC ✓ +2',
+    // harness before the fix, dark AND light, at 178 and 186: 'Check  ✓ QUIC +2',
     // the '+2' holding '— OS'. The exact input ships today — a stored VPN whose
     // endpoint resolved, launched once, so the hub's session poll wrote an h3
     // observation (recordLiveH3Observations → saveObservedQuic, no scheme gate;
@@ -2152,7 +2158,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       quicMeasured: 'h3',
     });
     expect(capsMode(FIRST_VPN_QUIC)).toBe('first');
-    // The arithmetic, all four numbers measured: 'QUIC ✓' 44.3 + gap 4 + '— OS'
+    // The arithmetic, all four numbers measured: '✓ QUIC' 44.3 + gap 4 + '— OS'
     // 33.33 + the 3px floor = 84.63 of the 90 the compact 'Check' (50) leaves at
     // content 144. With the pill reserved it is 115.63, which is why the row
     // needs content 193 before the tunnel chip itself fits beside both. It never
@@ -2160,20 +2166,20 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     for (const [contentWidth, label, texts, hints] of [
       // 144 = the 178px column, 152 = the 186px one: the grid's floor, both
       // themes, and the two widths this row was broken at.
-      [144, 'Check', ['QUIC ✓', '— OS'], 0],
-      [152, 'Check', ['QUIC ✓', '— OS'], 0],
-      [169, 'Check', ['QUIC ✓', '— OS'], 0],
+      [144, 'Check', ['✓ QUIC', '— OS'], 0],
+      [152, 'Check', ['✓ QUIC', '— OS'], 0],
+      [169, 'Check', ['✓ QUIC', '— OS'], 0],
       // From 170 the whole row fits WITH the pill, so the tunnel hint is back on
       // the row beside both chips — never instead of one.
-      [170, 'Check', ['QUIC ✓', '— OS'], 0],
+      [170, 'Check', ['✓ QUIC', '— OS'], 0],
       // From 193 the tunnel chip fits beside both, so all three are on the row.
-      [193, 'Check', ['⇢ UDP', 'QUIC ✓', '— OS'], 0],
+      [193, 'Check', ['⇢ UDP', '✓ QUIC', '— OS'], 0],
       // The full button label returns once the row fits beside it: 115.63 needs
       // content 194 next to a 74px button (a 228px card).
-      [194, 'Check', ['⇢ UDP', 'QUIC ✓', '— OS'], 0],
+      [194, 'Check', ['⇢ UDP', '✓ QUIC', '— OS'], 0],
       // The full button label returns at 210: the three-chip row (128.41) needs
       // content 210 beside a 74px button (a 244px card).
-      [210, 'Check VPN', ['⇢ UDP', 'QUIC ✓', '— OS'], 0],
+      [210, 'Check VPN', ['⇢ UDP', '✓ QUIC', '— OS'], 0],
     ] as const) {
       const act = firstAction(FIRST_VPN_QUIC, contentWidth);
       expect(act.label, `content ${String(contentWidth)}`).toBe(label);
@@ -2189,10 +2195,10 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // a 'first' row was behind the pill too (44.3 + 4 + '✗ Win' 36.97 + 3 =
     // 88.27 of 90).
     for (const [over, texts] of [
-      [{ quicProbe: true }, ['QUIC ✓', '— OS']],
+      [{ quicProbe: true }, ['✓ QUIC', '— OS']],
       [{ quicMeasured: 'h2-only' }, ['⤵ QUIC', '— OS']],
       [{ quicProbe: false }, ['⤵ QUIC', '— OS']],
-      [{ quicMeasured: 'h3', osFingerprint: WINDOWS_OS }, ['QUIC ✓', '✗ Win']],
+      [{ quicMeasured: 'h3', osFingerprint: WINDOWS_OS }, ['✓ QUIC', '✗ Win']],
     ] as const) {
       const q = props({ vpn: true, capabilities: null, latencyMs: null, exitIp: null, ...over });
       expect(capsMode(q)).toBe('first');
@@ -2252,7 +2258,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       );
       expect(Array.from(caps.children).map((c) => c.textContent)).toEqual([
         'Check',
-        'QUIC ✓',
+        '✓ QUIC',
         '— OS',
       ]);
       cleanup();
@@ -2295,7 +2301,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(classes(udp)).not.toContain('text-status-error');
     // Polish — one fill + one ink for every non-green chip (the comp's
     // translucent slate + ink2; the near-black inset is gone), and the
-    // inferred 'QUIC ~' beside it wears exactly the same pair — a guess must
+    // inferred '~ QUIC' beside it wears exactly the same pair — a guess must
     // not read brighter than a measured negative.
     expect(classes(udp)).toEqual(expect.arrayContaining(['bg-ink-muted/15', 'text-ink-secondary']));
     expect(classes(udp)).not.toContain('bg-surface-inset');
@@ -2329,17 +2335,24 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(container.querySelector('[data-udp="true"], [data-udp="false"]')).toBeNull();
     const caps = byRegion(container, 'caps') as HTMLElement;
     const quic = caps.querySelector('[data-quic-inferred]') as HTMLElement;
-    expect(quic.textContent).toBe('QUIC ✓');
+    expect(quic.textContent).toBe('✓ QUIC');
     expect(quic.getAttribute('data-quic-inferred')).toBe('false');
     // Nothing is behind a pill on this row any more.
     expect(byComponent(caps, 'caps-overflow')).toBeNull();
     expect(tunnelUdp?.getAttribute('title')).toMatch(/UDP travels inside the VPN\./);
     cleanup();
-    // No relay measurement → no QUIC chip either (eligibility = a measurement).
+    // No relay measurement → the QUIC chip says so: "— QUIC", the missing state
+    // the Proxies tab and the list write for the same tunnel (gui-v0.1.72; the
+    // card used to draw nothing there, so one tunnel read "— QUIC" on two
+    // surfaces and silence on the third). Muted, and never a verdict.
     const { container: none } = render(
       <ProfilePhoneCard {...props({ vpn: true, capabilities: null, latencyMs: 61 })} />,
     );
-    expect(none.querySelector('[data-quic-inferred]')).toBeNull();
+    const missing = none.querySelector('[data-quic-inferred]') as HTMLElement;
+    expect(missing.textContent).toBe('— QUIC');
+    expect(missing.getAttribute('data-quic-unmeasured')).toBe('true');
+    expect(missing.getAttribute('title')).toMatch(/not measured yet — run Check VPN/);
+    expect(missing.className).not.toContain('text-status-ready');
     cleanup();
   });
 
@@ -2369,7 +2382,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
   it('the QUIC chip keeps [data-quic-inferred]: "~" inferred (muted), "✓" measured (green), "⤵" measured negative (muted, never red)', () => {
     const { container } = render(<ProfilePhoneCard {...props()} />);
     const inferred = container.querySelector('[data-quic-inferred="true"]') as HTMLElement;
-    expect(inferred.textContent).toBe('QUIC ~');
+    expect(inferred.textContent).toBe('~ QUIC');
     expect(classes(inferred)).not.toContain('text-status-ready');
     // Polish — a guess wears the SAME fill + ink as a measured negative.
     expect(classes(inferred)).toEqual(
@@ -2378,7 +2391,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     cleanup();
     const { container: h3 } = render(<ProfilePhoneCard {...props({ quicMeasured: 'h3' })} />);
     const green = h3.querySelector('[data-quic-inferred="false"]') as HTMLElement;
-    expect(green.textContent).toBe('QUIC ✓');
+    expect(green.textContent).toBe('✓ QUIC');
     expect(classes(green)).toContain('text-status-ready');
     cleanup();
     const { container: h2 } = render(<ProfilePhoneCard {...props({ quicMeasured: 'h2-only' })} />);
@@ -3598,7 +3611,7 @@ describe('P3 — via, caps, meta rows: pills and chips in one family', () => {
       'proxy-os-fingerprint',
     ) as HTMLElement;
     expect(os.getAttribute('data-os-tone')).toBe('match');
-    expect(os.textContent).toBe('✓ iOS/macOS');
+    expect(os.textContent).toBe('✓ Apple');
     expect(classes(os)).toEqual(
       expect.arrayContaining(['text-[9.5px]', 'font-semibold', 'rounded-md', 'text-status-ready']),
     );

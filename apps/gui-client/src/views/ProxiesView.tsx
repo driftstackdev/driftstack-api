@@ -14,6 +14,7 @@ import {
   AGED_CHIP_CLASS,
   agedChipAge,
   agedQuicReading,
+  NEUTRAL_CHIP_CLASS,
   ProxyCapabilityChips,
   serverReadingCapabilities,
   ProxyOsChip,
@@ -122,7 +123,8 @@ import {
   EXIT_GEO_UNAVAILABLE_TITLE,
   HTTP_VERIFIED_AT_LAUNCH,
   MISSING_API_KEY_NEXT_STEP,
-  NOT_ON_THIS_PLAN_LABEL,
+  QUIC_NOT_ON_PLAN_CHIP,
+  UDP_NOT_ON_PLAN_CHIP,
   RECHECK_ACTION,
   VPN_CHECK_IN_PROGRESS,
   VPN_PLAN_EXCLUDED_CHECK_NOTICE,
@@ -140,6 +142,7 @@ import {
   VPN_UDP_NOT_ON_PLAN_HINT,
   vpnQuicReading,
 } from '../lib/proxy-check-copy';
+import { READING_MARK, READING_WORD, badgeText } from '../lib/reading-badge-words';
 
 interface ListState {
   proxies: ProxyConfig[];
@@ -3195,27 +3198,22 @@ function ProxyRow({
           : undefined);
   const agedNowMs = Date.now();
 
-  // The capability cell of a row with nothing to chip: never tested, or down on
-  // the last test. One object so the chip's hover and the detail row's sentence
-  // are the same words.
-  const capsFallback =
-    result !== undefined
-      ? {
-          word: 'not verified',
-          title: 'This proxy was down on the last test — no protocols could be checked.',
-        }
-      : testing
-        ? // Owner item 9 (2026-09-24) — "measuring" while THIS client's Test is in
-          // flight, the state the OS chip beside it already says ('… OS'); the
-          // chip read "untested" beside it for the whole test.
-          {
-            word: 'testing…',
-            title: 'Testing now — which protocols work will show here when the test finishes.',
-          }
-        : {
-            word: 'untested',
-            title: 'Not tested yet — click Test to check which protocols work.',
-          };
+  // The capability cell of the ONE row with nothing to chip: nothing measured,
+  // and THIS client's first Test in flight. One object so the chip's hover and
+  // the detail row's sentence are the same words.
+  // Owner item 9 (2026-09-24) — "measuring" while the Test runs, the state the OS
+  // chip beside it already says ('… OS'); the chip read "untested" beside it for
+  // the whole test.
+  // ⛔ gui-v0.1.72 review — the other two arms are gone. "untested" had been
+  // unreachable since a row nothing measured drew "— UDP" "— QUIC"; and "not
+  // verified", for a proxy that was down on its last test, was one pill for two
+  // readings, a third wording of the missing state. That row draws its chips
+  // now, which say "— UDP" "— QUIC" with the reason in their hover
+  // (`proxyCapabilities`), like the list and the card's sheet.
+  const capsTesting = {
+    word: 'testing…',
+    title: 'Testing now — which protocols work will show here when the test finishes.',
+  };
   // Owner item 9 (2026-09-24) — a SOCKS5 row this Mac has not tested itself can
   // still hold DRIFTSTACK's readings (another Mac, a reinstall, the automatic
   // capability check). It showed "untested" beside the OS reading the same check
@@ -3248,7 +3246,7 @@ function ProxyRow({
           ).hint,
         },
       ]
-    : result !== undefined && reachable
+    : result !== undefined
       ? proxyCapabilities(result, quicMeasured, quicProbe, aged, {
           nowMs: agedNowMs,
           autoRecheck,
@@ -3256,12 +3254,12 @@ function ProxyRow({
           label: c.label,
           hint: c.hint,
         }))
-      : hasServerReadings
+      : hasServerReadings || (result === undefined && !testing)
         ? serverReadingCapabilities(udpProbe, quicMeasured, quicProbe, aged, {
             nowMs: agedNowMs,
             autoRecheck,
           }).map((c) => ({ label: c.label, hint: c.hint }))
-        : [{ label: capsFallback.word, hint: capsFallback.title }];
+        : [{ label: capsTesting.word, hint: capsTesting.title }];
 
   // ⚠️ V-857 — THREE states, not two. `undefined` = never probed; `null` =
   // probed and the echo round-trip did not complete through this proxy; an ip =
@@ -3528,7 +3526,9 @@ function ProxyRow({
                   nowMs={agedNowMs}
                 />
               </>
-            ) : result !== undefined && reachable ? (
+            ) : result !== undefined ? (
+              // This Mac's own test — including one that got nothing through the
+              // proxy, whose UDP and QUIC read "— UDP" "— QUIC" (not measured).
               <ProxyCapabilityChips
                 result={result}
                 quicMeasured={quicMeasured}
@@ -3538,7 +3538,11 @@ function ProxyRow({
                 nowMs={agedNowMs}
                 size="xs"
               />
-            ) : hasServerReadings ? (
+            ) : hasServerReadings || (result === undefined && !testing) ? (
+              // Owner item 9 (gui-v0.1.72) — and a row NOTHING has measured says
+              // so in the one vocabulary every surface shares: "— UDP", "— QUIC"
+              // beside "— OS" (it read "untested", one word for two readings,
+              // where the list said "— UDP" "— QUIC" about the same proxy).
               <ProxyCapabilityChips
                 result={undefined}
                 udpProbe={udpProbe}
@@ -3550,8 +3554,8 @@ function ProxyRow({
                 size="xs"
               />
             ) : (
-              <span className={UNMEASURED_CHIP_CLS} title={capsFallback.title}>
-                {capsFallback.word}
+              <span className={UNMEASURED_CHIP_CLS} title={capsTesting.title}>
+                {capsTesting.word}
               </span>
             )}
             {/* The measuring/VPN-cause rule for this chip is on `osFp` above. */}
@@ -3948,17 +3952,15 @@ function DotRun({ className, children }: { className: string; children: ReactNod
   );
 }
 
-/** A chip for something NOBODY has measured ("⇢ UDP", "QUIC untested",
- *  "untested"): a divider wash, which no measured chip sits on, and the muted
- *  ink. The wash is /30, not the /60 it was: ink-muted on /60 is 3.88:1 in dark
- *  (the wash is LIGHTER than the row there, where `bg-surface-inset` is darker)
- *  and the first repair — keeping /60 and stepping the ink up to ink-secondary —
- *  passed, but in the dark render it made the chip for a value nobody measured
- *  BRIGHTER than the measured "— OS" chip beside it. On /30 ink-muted clears 4.5
- *  on every ground a row has — plain 4.74 dark / 5.25 light, hovered 5.39 /
- *  4.90, selected 4.61 / 4.88 — and the chip reads quieter than its measured
- *  neighbours again, still visibly a pill in both themes. */
-const UNMEASURED_CHIP_CLS = 'rounded-sm bg-surface-divider/30 px-1 py-px text-[9px] text-ink-muted';
+/** A chip for something NOBODY has measured ("⇢ UDP", "— QUIC", and the
+ *  "testing…" of a first Test in flight): the NEUTRAL chip, the one "— OS"
+ *  beside it wears (ProxyCapabilities' NEUTRAL_CHIP_CLASS: surface-inset under
+ *  the muted ink, which clears 4.5 whatever the row's ground, being opaque).
+ *  ⛔ gui-v0.1.72 review — it wore a divider wash of its own (/30; /60 before
+ *  that measured 3.88:1 in dark), so one Network cell drew one state in two
+ *  looks: "⇢ UDP" "— QUIC" in the wash, "— OS" in the inset chip, plainly
+ *  visible in dark. The words are one vocabulary; so is the chip. */
+const UNMEASURED_CHIP_CLS = `rounded-sm px-1 py-px text-[9px] ${NEUTRAL_CHIP_CLASS}`;
 
 /** One latency reading of the Health cell: number (or state word), machine
  *  chip, meter. `whitespace-nowrap` + a non-wrapping flex is the point — see
@@ -4168,7 +4170,7 @@ function HealthPill({
  * a Mac actually measured. Telling a customer their tunnel lacks UDP because we
  * did not look is the failure this item exists to prevent.
  */
-function VpnUdpChip({
+export function VpnUdpChip({
   udpProbe,
   aged,
   autoRecheck = false,
@@ -4216,7 +4218,7 @@ function VpnUdpChip({
         {...(planExcluded === true ? { 'data-unmeasured': 'plan_excluded' } : {})}
         title={hint}
       >
-        {planExcluded === true ? `UDP — ${NOT_ON_THIS_PLAN_LABEL}` : '⇢ UDP'}
+        {planExcluded === true ? UDP_NOT_ON_PLAN_CHIP : '⇢ UDP'}
       </span>
     );
   }
@@ -4265,7 +4267,7 @@ function vpnUdpHint(
  * chip: WebRTC is derived from a SOCKS5 UDP grant this row does not have, and
  * the tunnel's own UDP state is `VpnUdpChip` above.
  */
-function VpnQuicChip({
+export function VpnQuicChip({
   quicMeasured,
   quicProbe,
   noFleetMac,
@@ -4342,8 +4344,11 @@ function VpnQuicChip({
         {/* ⛔ "untested" says a check has not happened YET, which is false when
             the plan has none to run: the customer presses the button, reads "not
             measured yet" again, and concludes the app is broken. The label says
-            what is true of the reading; the hover says what would change it. */}
-        {verdict.planExcluded === true ? `QUIC — ${NOT_ON_THIS_PLAN_LABEL}` : 'QUIC untested'}
+            what is true of the reading; the hover says what would change it.
+            Owner item 9 (gui-v0.1.72) — in the ONE vocabulary: "— QUIC" (it read
+            "QUIC untested", the list "— QUIC", the Simulator "HTTP/3: not
+            observed"), and the plan as its detail. */}
+        {verdict.planExcluded === true ? QUIC_NOT_ON_PLAN_CHIP : '— QUIC'}
       </span>
     );
   }
@@ -4536,6 +4541,19 @@ interface OvpnFixup {
 const OVPN_STRIP_FIXUP_LABEL = 'Remove unsupported lines (lower script-security to 1)';
 /** The new one. Backticks are how the rest of this editor writes a directive name. */
 const OVPN_CLIENT_FIXUP_LABEL = 'Add the missing `client` line';
+
+/** The add / edit form's UDP word for a Test result: the grid chip's own
+ *  capability (`proxyCapabilities`), in the one vocabulary. */
+function formUdpBadge(result: ProxyTestResult): string {
+  const udp = proxyCapabilities(result).find((c) => c.key === 'webrtc');
+  const mark =
+    udp === undefined || udp.unmeasured === true
+      ? READING_MARK.notMeasured
+      : udp.ok
+        ? READING_MARK.works
+        : READING_MARK.fallsBack;
+  return badgeText(mark, READING_WORD.udp);
+}
 
 export function ProxyForm({
   initial,
@@ -5371,8 +5389,15 @@ export function ProxyForm({
           </span>
           {testResult.reachable && (
             <span className="text-ink-secondary">
-              {testResult.auth_ok ? 'login ok' : 'login failed'} · {testResult.latency_ms}ms · UDP{' '}
-              {testResult.udp_associate ? '✓' : '✗'} · route {testResult.can_route ? '✓' : '✗'}
+              {/* The UDP reading in the one vocabulary (lib/reading-badge-words),
+                  read off the grid chip's own capability for this result: mark
+                  first; a proxy that does not relay UDP is a measured fall-back
+                  ('⤵ UDP', muted), never a red ✗; and a proxy that carried
+                  nothing (login refused, every CONNECT refused) took no reading
+                  at all ('— UDP'). It read "UDP ✓" / "UDP ✗" here while the grid
+                  beside it said "✓ UDP" / "⤵ UDP". */}
+              {testResult.auth_ok ? 'login ok' : 'login failed'} · {testResult.latency_ms}ms ·{' '}
+              {formUdpBadge(testResult)} · route {testResult.can_route ? '✓' : '✗'}
             </span>
           )}
           {!testResult.reachable && (

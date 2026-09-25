@@ -36,6 +36,7 @@ describe('SimulatorRecordingPane', () => {
       parentRenders += 1;
       return (
         <SimulatorRecordingPane
+          title="Record"
           recordings={stableRecordings}
           recordingId={live.id}
           sessionAvailable
@@ -65,6 +66,7 @@ describe('SimulatorRecordingPane', () => {
 
     render(
       <SimulatorRecordingPane
+        title="Record"
         recordings={new Map([[saved.id, saved]])}
         recordingId={null}
         sessionAvailable

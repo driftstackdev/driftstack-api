@@ -110,7 +110,7 @@ describe("the profile card's VPN UDP chip has three states", () => {
 
   it('VACUITY CONTROL a measured true is the green verdict', () => {
     const chip = udpChip(vpnCaps({ udpProbe: true }));
-    expect(chip.text).toBe('UDP ✓');
+    expect(chip.text).toBe('✓ UDP');
     expect(chip.attr).toBe('true');
     expect(chip.title).toBe(VPN_UDP_MEASURED_OK_TITLE);
     // The ONE green class on this row, and only a measurement may wear it.
@@ -183,7 +183,7 @@ function listProps(rows: ReadonlyArray<ProfileTableRow>): Parameters<typeof Prof
 }
 
 // 2026-09-24 (owner item 9) — ONE word for the UDP reading on every surface: the
-// list's chips now carry the card's own texts ('UDP ✓', '⤵ UDP', '⇢ UDP'); they
+// list's chips now carry the card's own texts ('✓ UDP', '⤵ UDP', '⇢ UDP'); they
 // were a bare '✓' / '⤵' and "UDP via tunnel". The states pinned here are unchanged.
 describe("the profiles list's VPN UDP cell has the same three states", () => {
   it('CRITICAL not measured — the routed-through pill, with the SAME sentence the card carries', () => {
@@ -213,7 +213,7 @@ describe("the profiles list's VPN UDP cell has the same three states", () => {
   it('VACUITY CONTROL a measured true renders the green chip with the tunnel wording', () => {
     render(<ProfilesTable {...listProps([listRow({ udp: 'ok' })])} />);
     expect(screen.queryByText('⇢ UDP')).toBeNull();
-    const chip = screen.getByText('UDP ✓');
+    const chip = screen.getByText('✓ UDP');
     expect(chip.getAttribute('title')).toBe(VPN_UDP_MEASURED_OK_TITLE);
     cleanup();
   });

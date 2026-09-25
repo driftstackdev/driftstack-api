@@ -995,7 +995,7 @@ describe('(h) — the profile card carries the VPN fleet outcome', () => {
     // OpenVPN row (2026-09-14), the last thing riding that pill after the OS
     // row had already been promoted for the same reason. "We could not probe
     // UDP here" is a statable fact; an unexplained pill is not. It is a chip
-    // now, with its OWN glyph — reusing `UDP ✓` (a verified relay) or `⤵ UDP`
+    // now, with its OWN glyph — reusing `✓ UDP` (a verified relay) or `⤵ UDP`
     // (a measured fall-back) would claim a probe that never ran — and the full
     // sentence is its title. 'UDP ?' (an unprobed SOCKS5 grant) still does not
     // exist: that row's caps region is the first-measurement 'Test' button.
@@ -1090,7 +1090,7 @@ describe('(o) — the card and the list say what the Proxies grid says for the s
     // What that reply measured is on the row: the relay probe's QUIC chip.
     expect(
       document.querySelector('[data-region="caps"] [data-quic-inferred="false"]')?.textContent,
-    ).toBe('QUIC ✓');
+    ).toBe('✓ QUIC');
   });
 
   it('the LIST row’s exit cell reads "unresolved" (message as title) for the same entry, not "no exit measured yet — run Check VPN"; the grid card on mount reads the cached pre-flight too', async () => {
@@ -2034,7 +2034,7 @@ describe.each(VPN_SCHEME_CASES)(
     it('the caps row shows the tunnel-UDP chip with its sentence, and never the SOCKS5 "UDP ?"', async () => {
       // Both tunnel schemes say the same thing about UDP, so both get the chip
       // (2026-09-14 — it used to ride the '+N' title; the owner reported that
-      // pill). The glyph is its own: not `UDP ✓`, which would claim a probe.
+      // pill). The glyph is its own: not `✓ UDP`, which would claim a probe.
       render(<ProfilesView onGoToSettings={vi.fn()} />);
       const udp = await waitFor(() => {
         const el = document.querySelector('[data-udp="tunnel"]');

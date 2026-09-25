@@ -124,6 +124,7 @@ import { TeamView } from '../views/TeamView';
 import { ProxiesView } from '../views/ProxiesView';
 import {
   SIMULATOR_SCENE_SIZE,
+  SIMULATOR_SCENE_SIZE_SMALL,
   SIMULATOR_SCENE_SIZE_WIDE,
   SimulatorStateScene,
   simulatorSceneLoadedMarker,
@@ -263,6 +264,9 @@ function auditDefaultSizes(stage: {
     'audit-simulator-agent-approval': SIMULATOR_SCENE_SIZE_WIDE,
     'audit-simulator-agent-done': SIMULATOR_SCENE_SIZE_WIDE,
     'audit-simulator-pair': SIMULATOR_SCENE_SIZE_WIDE,
+    // The Simulator's minimum window with the Session pane open — see
+    // simulator-scenes.tsx's `SIMULATOR_SCENE_SIZE_SMALL`.
+    'audit-simulator-agent-small': SIMULATOR_SCENE_SIZE_SMALL,
   };
 }
 
@@ -935,6 +939,8 @@ export function auditLoadedMarkers(name: AuditSceneName): ReadonlyArray<string> 
       return [simulatorSceneLoadedMarker('agent-done')];
     case 'audit-simulator-pair':
       return [simulatorSceneLoadedMarker('pair')];
+    case 'audit-simulator-agent-small':
+      return [simulatorSceneLoadedMarker('agent-small')];
   }
 }
 
@@ -1717,5 +1723,7 @@ export function AuditScene({ name }: { name: AuditSceneName }): JSX.Element {
       return <SimulatorGalleryStage name={name} kind="agent-done" />;
     case 'audit-simulator-pair':
       return <SimulatorGalleryStage name={name} kind="pair" />;
+    case 'audit-simulator-agent-small':
+      return <SimulatorGalleryStage name={name} kind="agent-small" />;
   }
 }

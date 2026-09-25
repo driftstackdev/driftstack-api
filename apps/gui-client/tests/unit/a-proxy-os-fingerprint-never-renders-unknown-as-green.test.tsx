@@ -113,7 +113,7 @@ describe('a trustworthy-LOOKING reading from an untrustworthy vantage', () => {
     const v = osFingerprintVerdict(fp('macos-or-ios'));
     expect(v.tone).toBe('match');
     expect(v.glyph).toBe('✓');
-    expect(v.label).toBe('iOS/macOS');
+    expect(v.label).toBe('Apple');
     expect(v.hint).toContain('matches the iOS device');
     expect(v.hint).toMatch(/forwards through more than one machine/i);
     expect(v.hint).toContain('some websites may reach a different one');

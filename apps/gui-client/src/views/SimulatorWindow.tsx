@@ -1933,24 +1933,45 @@ const SIM_PANE_ICON: Record<SimDrawerPane, JSX.Element> = {
   downloads: <IconDownload />,
   recording: <IconRecordDot />,
 };
-const SIM_PANE_TITLES: Record<SimDrawerPane, string> = {
-  session: 'Session',
-  controls: 'Controls',
-  diagnostics: 'Diagnostics',
-  cookies: 'Cookies',
-  network: 'Network',
-  files: 'Files',
-  downloads: 'Downloads',
-  recording: 'Recording',
-};
-const SIM_PANE_RAIL_LABELS: Record<SimDrawerPane, string> = {
+/** Each drawer section's ONE name — the rail button's accessible name, its
+ *  hover flyout, the open pane's title (`data-component="sim-pane-title"`) and
+ *  the browser bar's download indicator. Exported for the marketing capture's
+ *  static mirror of the rail (visual-harness/gallery.tsx `SimRailButton`), which
+ *  must say the same words.
+ *
+ *  ⛔ Each BEGINS WITH its rail word (`SIM_PANE_RAIL_LABELS`), as a whole word
+ *  (gui-v0.1.73 review). The rail said "Health" under a button named
+ *  "Diagnostics" and "Saved" under one named "Downloads", with the flyout and
+ *  the pane title agreeing with the name and not with the word on screen: two
+ *  names for one section, and a voice-control user saying the word they could
+ *  SEE reached nothing (WCAG 2.5.3, label in name). Where the rail word alone
+ *  is the whole name it IS the name; "Saved files" says what the saved things
+ *  are. simulator-window.test.tsx pins the rule. */
+export const SIM_PANE_TITLES: Record<SimDrawerPane, string> = {
   session: 'Session',
   controls: 'Controls',
   diagnostics: 'Health',
   cookies: 'Cookies',
   network: 'Network',
   files: 'Files',
-  downloads: 'Downloads',
+  downloads: 'Saved files',
+  recording: 'Record',
+};
+/** The rail's own one-word labels. ⛔ Each must fit the 42px under its icon
+ *  WHOLE, at the 9px floor, in any fallback face: "Downloads" measured 47px and
+ *  rendered "Downlo…" in every window (gui-v0.1.72) — an ellipsis is not a
+ *  label — and "Diagnostics" 50px, "Recording" 43.5px. Each is the first word of
+ *  its section's name (`SIM_PANE_TITLES`, above). Exported for the marketing
+ *  capture's static mirror of this rail, which must say the same words
+ *  (marketing-scenes.test.tsx pins it). */
+export const SIM_PANE_RAIL_LABELS: Record<SimDrawerPane, string> = {
+  session: 'Session',
+  controls: 'Controls',
+  diagnostics: 'Health',
+  cookies: 'Cookies',
+  network: 'Network',
+  files: 'Files',
+  downloads: 'Saved',
   recording: 'Record',
 };
 
@@ -2961,8 +2982,8 @@ function BrowserBar({
             <button
               type="button"
               data-component="simulator-download-indicator"
-              aria-label={`Downloads (${downloadCount})`}
-              title={`Downloads (${downloadCount}) — open the Downloads panel`}
+              aria-label={`${SIM_PANE_TITLES.downloads} (${downloadCount})`}
+              title={`${SIM_PANE_TITLES.downloads} (${downloadCount}) — open ${SIM_PANE_TITLES.downloads}`}
               onClick={onOpenDownloads}
               className="relative shrink-0 rounded-md p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary"
             >
@@ -3256,6 +3277,16 @@ function TabStrip({
  * keep it, but outside the content). Reads like an iPhone with a dark
  * safe-area. Drag-region (drag the window by the strip); inner content
  * pointer-events-none so a click on the strip falls through to drag.
+ *
+ * ⛔ It SCALES WITH THE SCREEN (gui-v0.1.72 follow-up). The island was a fixed
+ * 120×32 on a screen that is 211px wide at the Simulator's minimum window, so
+ * it lay over the clock ("7:4"), the Wi-Fi glyph and half the battery — and
+ * over the cellular bars at every screen under ~322px, 842x718 included. The
+ * strip is now a size container (`.sim-statusbar`, styles/index.css): the
+ * island is the real iPhone's share of the width (31%, at most 120×32), the
+ * side insets shrink with it, and the cellular glyph steps aside on a screen
+ * too narrow for all three. gui-visual-check's simulator sweep reports anything
+ * painted under the island (`coveredInWindow`).
  */
 function IosStatusBar({ timeZone }: { timeZone?: string }): JSX.Element {
   const time = useStatusClock(timeZone);
@@ -3264,23 +3295,36 @@ function IosStatusBar({ timeZone }: { timeZone?: string }): JSX.Element {
       aria-hidden="true"
       data-component="simulator-statusbar"
       data-tauri-drag-region
-      className="relative flex h-[40px] w-full shrink-0 items-center justify-between bg-black px-[24px] text-white"
+      className="sim-statusbar relative flex h-[40px] w-full shrink-0 items-center justify-between bg-black text-white"
     >
       {/* Dynamic island — centered in the strip (its natural home now that the
           strip is reserved space rather than an overlay). Proportioned to the real
           iPhone island (~125×37pt at the 393–402pt device width): wider + taller
           than the old 92×26 pill so it reads as the island, not a notch dot. A
-          faint top-rim highlight + soft outer shadow seat it as recessed glass. */}
+          faint top-rim highlight + soft outer shadow seat it as recessed glass.
+          Its size is `.sim-statusbar .sim-island` (styles/index.css). */}
       <div
         aria-hidden="true"
-        className="sim-island pointer-events-none absolute left-1/2 top-1/2 h-[32px] w-[120px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.06),0_1px_2px_rgba(0,0,0,0.6)]"
+        data-component="sim-island"
+        className="sim-island pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.06),0_1px_2px_rgba(0,0,0,0.6)]"
       />
-      <span className="pointer-events-none text-[14px] font-semibold tracking-tight tabular-nums">
+      <span
+        data-component="sim-status-clock"
+        className="sim-status-clock pointer-events-none text-[14px] font-semibold tracking-tight tabular-nums"
+      >
         {time}
       </span>
-      <div className="pointer-events-none flex items-center gap-[6px]">
-        {/* Cellular — four full bars. */}
-        <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor">
+      <div className="sim-status-glyphs pointer-events-none flex items-center gap-[6px]">
+        {/* Cellular — four full bars. The one glyph that steps aside on a
+            narrow screen (styles/index.css), as a real iPhone drops its least
+            important status item first. */}
+        <svg
+          className="sim-status-cellular"
+          width="18"
+          height="12"
+          viewBox="0 0 18 12"
+          fill="currentColor"
+        >
           <rect x="0" y="8" width="3" height="4" rx="1" />
           <rect x="5" y="6" width="3" height="6" rx="1" />
           <rect x="10" y="3" width="3" height="9" rx="1" />
@@ -3634,7 +3678,7 @@ export function CookiesPane({
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-white/10 px-3 pb-2 pt-2.5">
         <span className="flex items-center gap-1.5 font-sans text-[12px] font-semibold text-white">
           <span aria-hidden="true">🍪</span>
-          Cookies
+          <span data-component="sim-pane-title">{SIM_PANE_TITLES.cookies}</span>
         </span>
         {cookies !== null && (
           <span
@@ -11604,16 +11648,26 @@ function SimulatorWindowInner({
                   than "the agent has control". Tappable → opens the Session pane so the
                   founder can switch to Manual to take over. Bottom-anchored so it never
                   collides with the top-center stalled / freeze / transport badges. */}
-                {controlMode === 'ai' && (
+                {/* `effectiveControlMode`, not `controlMode`: the same value in the app
+                    (no override, no gallery fixture), and the one the gallery's
+                    agent scenes set — so the harness renders this pill, and the
+                    text gate measures it, at the sizes a customer sees it. */}
+                {effectiveControlMode === 'ai' && (
                   <button
                     type="button"
                     data-component="ai-driving-badge"
                     onClick={() => openPane('session')}
                     title="The agent is driving this session. Open the Session pane to switch to Manual and take control."
-                    className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-black/75 px-4 py-2 text-[11px] font-medium text-white shadow-lg backdrop-blur transition hover:bg-black/85"
+                    // ⛔ It WRAPS. It was one `whitespace-nowrap` line centred on the
+                    // phone, ~320px wide over a phone that is 261px at the 842×718
+                    // window and 232px at the minimum, so the phone's own overflow cut
+                    // it at both ends ("…switch to Manual to take cont", gui-v0.1.72).
+                    // Now it is as wide as its words up to the phone less 12px a side,
+                    // and takes a second line there; the dot keeps its size.
+                    className="absolute bottom-4 left-1/2 z-20 flex w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-2 rounded-2xl bg-black/75 px-4 py-2 text-left text-[11px] font-medium leading-snug text-white shadow-lg backdrop-blur transition hover:bg-black/85"
                   >
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
-                    Agent is driving — switch to Manual to take control
+                    <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-accent" />
+                    <span>Agent is driving — switch to Manual to take control</span>
                   </button>
                 )}
                 <div
@@ -12141,8 +12195,11 @@ function SimulatorWindowInner({
                         data-component="drawer-session"
                         className="rounded-lg bg-black/20 pb-1"
                       >
-                        <div className="px-3 pt-2 font-sans text-[11px] font-semibold text-white/90">
-                          Session
+                        <div
+                          data-component="sim-pane-title"
+                          className="px-3 pt-2 font-sans text-[11px] font-semibold text-white/90"
+                        >
+                          {SIM_PANE_TITLES.session}
                         </div>
                         <SessionControlSection
                           mode={effectiveControlMode}
@@ -12191,8 +12248,11 @@ function SimulatorWindowInner({
                         data-component="drawer-controls"
                         className="rounded-lg bg-black/20 py-1"
                       >
-                        <div className="px-3 pb-0.5 pt-1 font-sans text-[11px] font-semibold text-white/90">
-                          Controls
+                        <div
+                          data-component="sim-pane-title"
+                          className="px-3 pb-0.5 pt-1 font-sans text-[11px] font-semibold text-white/90"
+                        >
+                          {SIM_PANE_TITLES.controls}
                         </div>
                         {!browserMode && (
                           <NavigateAddressBar
@@ -12345,7 +12405,9 @@ function SimulatorWindowInner({
                                       <polyline points="3,13 8,13 11,5 14,19 16,13 21,13" />
                                     </svg>
                                   </span>
-                                  <span>Diagnostics</span>
+                                  <span data-component="sim-pane-title">
+                                    {SIM_PANE_TITLES.diagnostics}
+                                  </span>
                                   <button
                                     type="button"
                                     data-action="copy-diagnostics"
@@ -12551,15 +12613,16 @@ function SimulatorWindowInner({
                                         read off the capabilityReport the simulator already holds.
                                         Degrades to "measuring…" until the harness emits it. */}
                                     <ExitIpChip report={sessionCapabilityReport} />
-                                    {/* Item 11 (owner) — live HTTP/3 (QUIC) verdict for
-                                        THIS session, off the same capabilityReport. Latched
-                                        node-side; degrades to "measuring…" until observed,
-                                        never a false "no HTTP/3". */}
-                                    <QuicReadout report={sessionCapabilityReport} />
                                     {/* Owner item 9 — does the exit relay UDP (WebRTC
                                         and HTTP/3 need it): the card's and the grid's
-                                        states and words for the same reading. */}
+                                        states and words for the same reading — and, since
+                                        gui-v0.1.72, in their order: UDP, QUIC, OS. */}
                                     <UdpReadout report={sessionCapabilityReport} />
+                                    {/* Item 11 (owner) — live HTTP/3 (QUIC) verdict for
+                                        THIS session, off the same capabilityReport. Latched
+                                        node-side; "— QUIC" until observed, never a false
+                                        "no HTTP/3". */}
+                                    <QuicReadout report={sessionCapabilityReport} />
                                     {/* Item 11 (owner, N-2) — the exit's passive TCP/IP OS
                                         fingerprint {os · confidence}, off the same
                                         capabilityReport (control-plane measured, projected at
@@ -12654,7 +12717,7 @@ function SimulatorWindowInner({
                               <polyline points="8,7 12,3 16,7" />
                             </svg>
                           </span>
-                          <span>Files</span>
+                          <span data-component="sim-pane-title">{SIM_PANE_TITLES.files}</span>
                           {files.length > 0 && (
                             <span className="text-white/50">· {files.length}</span>
                           )}
@@ -12794,7 +12857,9 @@ function SimulatorWindowInner({
                                   <polyline points="8,10 12,14 16,10" />
                                 </svg>
                               </span>
-                              <span>Downloads</span>
+                              <span data-component="sim-pane-title">
+                                {SIM_PANE_TITLES.downloads}
+                              </span>
                               {downloads !== null && downloads.length > 0 && (
                                 <span className="text-white/50">· {downloads.length}</span>
                               )}
@@ -12888,6 +12953,7 @@ function SimulatorWindowInner({
                       this slice does not invent one. */}
                     {activePane === 'recording' && (
                       <SimulatorRecordingPane
+                        title={SIM_PANE_TITLES.recording}
                         recordings={recordings}
                         recordingId={recordingId}
                         sessionAvailable={sessionId !== ''}

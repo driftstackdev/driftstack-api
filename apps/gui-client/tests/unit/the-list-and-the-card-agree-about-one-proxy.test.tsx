@@ -314,18 +314,20 @@ describe('a SOCKS5 row whose two checks DISAGREE says so, identically on both su
     });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     const chip = await cardQuicChip();
-    await waitFor(() => expect(chip.textContent).toBe('QUIC ✓'));
+    await waitFor(() => expect(chip.textContent).toBe('✓ QUIC'));
     expect(chip.getAttribute('title')).toBe(
       'This proxy carries QUIC — HTTP/3 works through this exit.',
     );
     const listHint = await listUdpTitle();
-    expect(listHint).toBe('UDP works — WebRTC ✓; QUIC ✓');
+    expect(listHint).toBe(
+      'UDP works — WebRTC calls and media stream through this exit. HTTP/3 works.',
+    );
     expect(listHint).not.toContain('disagree');
   });
 });
 
 describe('a VPN row’s QUIC reading reaches the profiles LIST at all', () => {
-  it('CRITICAL a tunnel with a MEASURED relay verdict reads "QUIC ✓" in the list, not "QUIC not tested" — the list had no way to derive a tunnel’s QUIC state and said "not tested" about every one of them, beside a card showing the green. MUTATION: drop the `vpnQuic` branch in ProfilesView’s row derivation and this reds', async () => {
+  it('CRITICAL a tunnel with a MEASURED relay verdict reads "✓ QUIC" in the list, not "QUIC not tested" — the list had no way to derive a tunnel’s QUIC state and said "not tested" about every one of them, beside a card showing the green. MUTATION: drop the `vpnQuic` branch in ProfilesView’s row derivation and this reds', async () => {
     rowRef.vpn = true;
     seed({
       result: PLACEHOLDER,
@@ -343,8 +345,9 @@ describe('a VPN row’s QUIC reading reaches the profiles LIST at all', () => {
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     const listHint = await listUdpTitle();
     expect(listHint).toContain('UDP relays through this tunnel');
-    expect(listHint).toContain('QUIC ✓');
-    expect(listHint).not.toMatch(/QUIC not tested/);
+    // In words (gui-v0.1.73 review: it read "QUIC ✓", the mark after the word).
+    expect(listHint).toContain('HTTP/3 works.');
+    expect(listHint).not.toMatch(/QUIC not tested|HTTP\/3 has not been measured/);
   });
 
   it('CRITICAL a tunnel with an AGED relay verdict gets the aged SENTENCE in the list, in the past tense — not a green tick and not "not tested"', async () => {
@@ -365,7 +368,7 @@ describe('a VPN row’s QUIC reading reaches the profiles LIST at all', () => {
     const listHint = await listUdpTitle();
     expect(listHint).toContain('Last checked 9 hours ago.');
     expect(listHint).toContain('QUIC worked through this VPN then.');
-    expect(listHint).not.toMatch(/QUIC ✓/);
+    expect(listHint).not.toMatch(/✓ QUIC/);
   });
 
   it("CRITICAL a tunnel whose UDP was NEVER MEASURED still prints its measured QUIC verdict, and never a UDP negative — the normal state of every VPN row, and the one no other arm here covers. MUTATION: revert `udpCellTitle` to the two-way `r.udp === 'ok' ? OK : NONE` and point the pill back at the bare VPN_UDP_NOT_MEASURED_TITLE, and this reds", async () => {
@@ -390,15 +393,15 @@ describe('a VPN row’s QUIC reading reaches the profiles LIST at all', () => {
     });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     const listHint = await listUdpTitle();
-    // The measurement reaches the list…
-    expect(listHint).toContain('QUIC \u2713');
+    // The measurement reaches the list… (in words — it read "QUIC ✓")
+    expect(listHint).toContain('HTTP/3 works.');
     // …beside an honest ABSENCE, never a fabricated negative. A customer must not
     // be told their tunnel lacks UDP because nobody looked (the rule written on
     // VPN_UDP_MEASURED_NONE_TITLE itself), and least of all in the same breath as
     // a green QUIC tick, which would make the one tooltip contradict itself.
     expect(listHint).toContain('has not been measured yet');
     expect(listHint).not.toContain('No UDP through this tunnel');
-    expect(listHint).not.toMatch(/QUIC falls back to HTTP\/2/);
+    expect(listHint).not.toMatch(/(QUIC|HTTP\/3) falls back to HTTP\/2/);
   });
 
   it('VACUITY CONTROL — a tunnel nothing has measured still says so: the arm above is not "the list always claims QUIC"', async () => {
@@ -416,7 +419,7 @@ describe('a VPN row’s QUIC reading reaches the profiles LIST at all', () => {
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     const listHint = await listUdpTitle();
     expect(listHint).toContain('UDP relays through this tunnel');
-    expect(listHint).not.toMatch(/QUIC ✓/);
+    expect(listHint).not.toMatch(/✓ QUIC/);
     expect(listHint).not.toContain('worked through this VPN then');
   });
 });

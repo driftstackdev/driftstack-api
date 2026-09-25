@@ -8,7 +8,7 @@
 // which durations are abnormal). Active sessions live in
 // SessionsView; this is the post-mortem complement.
 
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
@@ -18,6 +18,7 @@ import { useSettings } from '../lib/SettingsContext';
 import { type Session } from '../lib/client';
 import { humanizeError } from '../lib/humanize-error';
 import { formatDeviceName } from './ProfilesView';
+import { READING_MARK, READING_WORD, badgeText } from '../lib/reading-badge-words';
 
 interface HistoryState {
   sessions: Session[];
@@ -191,16 +192,10 @@ export function SessionsHistoryView(): JSX.Element {
                   {/* The harness already reports what the egress could not do. It was
                       collected, stored and never shown, so a session that browsed with
                       no UDP associate or with DNS resolved locally looked identical to
-                      a clean one. Connection facts share one line; every other
-                      warning is its own sentence (see historyWarnings). */}
-                  {warned.limits.length > 0 && (
-                    <p
-                      data-component="history-connection-limits"
-                      className="mt-0.5 text-2xs text-status-warn"
-                    >
-                      Connection limits: {warned.limits.join(' · ')}
-                    </p>
-                  )}
+                      a clean one. Connection facts share one line, in the badge words
+                      every surface uses; every other warning is its own sentence (see
+                      historyWarnings). */}
+                  <ProxyLimits capabilities={s.egress_capabilities} />
                   {warned.notes.map((note) => (
                     <p
                       key={note}
@@ -226,13 +221,56 @@ export function SessionsHistoryView(): JSX.Element {
   );
 }
 
+/** One thing the session's connection could not do: its key (a data attribute
+ *  the every-badge-surface test reads, not copy), its words and, where the
+ *  words are a badge, the sentence behind them. */
+interface EgressLimit {
+  key: 'udp' | 'quic' | 'dns';
+  text: string;
+  title?: string;
+}
+
+const LIMIT_UDP: EgressLimit = {
+  key: 'udp',
+  text: badgeText(READING_MARK.fallsBack, READING_WORD.udp),
+  title: "No UDP on this session's connection — WebRTC used a slower fallback.",
+};
+const LIMIT_QUIC: EgressLimit = {
+  key: 'quic',
+  text: badgeText(READING_MARK.fallsBack, READING_WORD.quic),
+  title: 'HTTP/3 was off for this session — it used HTTP/2.',
+};
+
+/** The "Connection limits:" line of one ended session, or nothing when its
+ *  connection reported no limit (or never reported). "Connection", not "Proxy":
+ *  it is true of every session, including one with no proxy of its own.
+ *  Exported for the every-badge-surface test, which reads its UDP / QUIC
+ *  badges beside every other surface's. */
+export function ProxyLimits({ capabilities }: { capabilities: unknown }): JSX.Element | null {
+  const { limits } = historyWarnings({ egress_capabilities: capabilities });
+  if (limits.length === 0) return null;
+  return (
+    <p data-component="history-connection-limits" className="mt-0.5 text-2xs text-status-warn">
+      Connection limits:{' '}
+      {limits.map((limit, i) => (
+        <Fragment key={limit.key}>
+          {i > 0 ? ' · ' : ''}
+          <span data-egress-limit={limit.key} title={limit.title}>
+            {limit.text}
+          </span>
+        </Fragment>
+      ))}
+    </p>
+  );
+}
+
 /**
  * Where a published `egress_capabilities.warnings` code goes on a history row, and
  * the words it says there. A `limit` is a connection fact and joins the one
  * "Connection limits" line; a `note` is something that happened to the session and
  * is its own sentence.
  */
-type HistoryWarningWords = { readonly limit: string } | { readonly note: string };
+type HistoryWarningWords = { readonly limit: 'udp' | 'quic' } | { readonly note: string };
 
 /**
  * ⛔ THE ROW NEVER PRINTS A CODE. GET /v1/sessions carries `warnings` as codes, and
@@ -248,12 +286,13 @@ type HistoryWarningWords = { readonly limit: string } | { readonly note: string 
  * Whose fault each one is follows the server: `dead_proxy` is published only for a
  * session on the customer's own proxy, `default_connection_down` only for one with
  * none (session-capability-report-relay deriveWarnings), so the words can say so.
- * The two limits stay neutral ("not supported"), because a row written before the
- * server split them by proxy can carry the proxy form on a session without one.
+ * The two limits are the neutral reading badges ("⤵ UDP", "⤵ QUIC") with a hover
+ * that names no proxy, because a row written before the server split them by
+ * proxy can carry the proxy form on a session without one.
  */
 const WARNING_WORDS: Readonly<Record<string, HistoryWarningWords>> = {
-  udp_unsupported_by_proxy: { limit: 'UDP not supported' },
-  quic_unavailable: { limit: 'HTTP/3 not available' },
+  udp_unsupported_by_proxy: { limit: 'udp' },
+  quic_unavailable: { limit: 'quic' },
   dead_proxy: { note: 'Your proxy stopped answering while the session ran.' },
   default_connection_down: {
     note: "Driftstack's connection for this session dropped. That was on our side; nothing to fix at your end.",
@@ -291,11 +330,11 @@ const UNKNOWN_WARNING_NOTE = 'Another issue was reported for this session.';
  * Absent capabilities mean the harness never reported — NOT that everything passed
  * — so this returns nothing and says nothing rather than implying health.
  *
- * Both lists are de-duplicated: the capability flag and its warning can say the
- * same thing (`udp_associate: false` and `udp_unsupported_by_proxy`).
+ * Both lists are de-duplicated (limits by key): the capability flag and its
+ * warning can say the same thing (`udp_associate: false` and `udp_unsupported_by_proxy`).
  */
 function historyWarnings(s: { egress_capabilities: unknown }): {
-  limits: string[];
+  limits: EgressLimit[];
   notes: string[];
 } {
   const cap = s.egress_capabilities;
@@ -306,9 +345,14 @@ function historyWarnings(s: { egress_capabilities: unknown }): {
     dns_remote_resolve?: unknown;
     warnings?: unknown;
   };
-  const limits = new Set<string>();
+  const limits = new Map<EgressLimit['key'], EgressLimit>();
   const notes = new Set<string>();
-  if (c.udp_associate === false) limits.add('UDP not supported');
+  // gui-v0.1.73 review — the two READINGS are the badges every other surface
+  // draws for them (lib/reading-badge-words): "⤵ UDP" and "⤵ QUIC", the
+  // measured fall-back, never a fourth name ("UDP not supported"). What each
+  // one meant for the session stays a sentence, in its hover. The hover names
+  // no proxy: a session with no proxy of its own carries these too.
+  if (c.udp_associate === false) limits.set('udp', LIMIT_UDP);
   // ⛔ THIS LINE WAS `c.quic_route === false` AND COULD NEVER BE TRUE.
   // `quic_route` is 'proxy' | 'direct' | 'disabled' — a string enum — so the
   // comparison against a boolean is a type error the fixture hid: the test
@@ -316,7 +360,7 @@ function historyWarnings(s: { egress_capabilities: unknown }): {
   // `quic_route: true`, which is not a member of the enum and cannot be produced
   // by anything upstream. A test that can express what the writer cannot emit
   // certifies a branch that never runs.
-  if (c.quic_route === 'disabled') limits.add('HTTP/3 not available');
+  if (c.quic_route === 'disabled') limits.set('quic', LIMIT_QUIC);
   // ⚠️ THIS ONE IS CORRECT CODE ABOVE A BROKEN WRITER, and is left alone
   // deliberately. Local DNS resolution is named in this function's own doc as
   // the classic proxy leak, and the branch is right — but the sole writer
@@ -326,7 +370,9 @@ function historyWarnings(s: { egress_capabilities: unknown }): {
   // producer, not here. The measurement is being added as a per-PROXY fact
   // (ATYP=DOMAINNAME support, measured at validation) plus a per-session
   // structural fact; this stays ready for the day the value becomes real.
-  if (c.dns_remote_resolve === false) limits.add('DNS resolved outside the proxy');
+  if (c.dns_remote_resolve === false) {
+    limits.set('dns', { key: 'dns', text: 'DNS resolved outside the proxy' });
+  }
   if (Array.isArray(c.warnings)) {
     for (const w of c.warnings) {
       if (typeof w !== 'string' || w.length === 0) continue;
@@ -336,11 +382,12 @@ function historyWarnings(s: { egress_capabilities: unknown }): {
         ? WARNING_WORDS[w]
         : undefined;
       if (words === undefined) notes.add(UNKNOWN_WARNING_NOTE);
-      else if ('limit' in words) limits.add(words.limit);
+      else if ('limit' in words)
+        limits.set(words.limit, words.limit === 'udp' ? LIMIT_UDP : LIMIT_QUIC);
       else notes.add(words.note);
     }
   }
-  return { limits: [...limits], notes: [...notes] };
+  return { limits: [...limits.values()], notes: [...notes] };
 }
 
 // Mirrors SessionsView.formatTime — wall-clock of the last refresh.

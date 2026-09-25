@@ -602,7 +602,7 @@ describe('(m) M3 — the card’s Test whose exit probe fails reads the honest u
       expect(el, 'the card should show the fingerprint the cache carries').not.toBeNull();
       return el as HTMLElement;
     });
-    expect(onCard.textContent).toContain('iOS');
+    expect(onCard.textContent).toContain('Apple');
     fireEvent.click(await screen.findByRole('button', { name: '☰ List' }));
     const table = await screen.findByRole('table');
     // …and so does the ROW. Before the wire, this query returned null while the
@@ -615,7 +615,7 @@ describe('(m) M3 — the card’s Test whose exit probe fails reads the honest u
       ).not.toBeNull();
       return el as HTMLElement;
     });
-    expect(inRow.textContent).toContain('iOS');
+    expect(inRow.textContent).toContain('Apple');
     expect(inRow.getAttribute('title')).toMatch(/looks like|presents as/);
     cleanup();
   });

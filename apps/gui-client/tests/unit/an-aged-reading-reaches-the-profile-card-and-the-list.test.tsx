@@ -7,7 +7,7 @@
 // (`quicProbe`) began to age like its siblings. The Proxies tab was handed the
 // new props. The two PROFILE surfaces were not, so on them a relay reading older
 // than thirty minutes (and every one saved before relay readings were dated at
-// all) fell back to "QUIC ~ … not yet tested. Run Test", and the list's OS chip
+// all) fell back to "~ QUIC … not yet tested. Run Test", and the list's OS chip
 // simply vanished: "information goes missing", reintroduced one page over.
 //
 // Four arms per surface, through the REAL ProfilesView so the wiring is what is
@@ -309,14 +309,14 @@ describe('the profile CARD shows a reading that has aged out of the present tens
     expect(chip.getAttribute('data-quic-inferred')).toBe('false');
     // What it found AND how old it is. ⛔ PIN UPDATED 2026-09-17 with the window:
     // at 31 minutes the age did not fit the card's 206px default and rode in an
-    // `sr-only` span ("QUIC ✓" + " · 31 min ago"); an hours-unit suffix is
+    // `sr-only` span ("✓ QUIC" + " · 31 min ago"); an hours-unit suffix is
     // narrower (29.91px against 41.9), so at nine hours the tile PRINTS it and the
     // hidden span is correctly absent. The claim is the same — the age reaches the
     // reader either way — and the width arm below pins both branches.
-    expect(chip.textContent).toBe('QUIC ✓ · 9 h');
+    expect(chip.textContent).toBe('✓ QUIC · 9 h');
     expect(chip.querySelector('.sr-only')).toBeNull();
     // …never in the colour of a current verdict, NOR in the fill of a current
-    // non-verdict ('⤵ QUIC' and 'QUIC ~' wear bg-ink-muted/15): recessed + dashed.
+    // non-verdict ('⤵ QUIC' and '~ QUIC' wear bg-ink-muted/15): recessed + dashed.
     expect(chip.className).not.toContain('status-ready');
     expect(chip.className).not.toContain('bg-ink-muted/15');
     expect(chip.className).toContain('bg-surface-inset');
@@ -356,15 +356,15 @@ describe('the profile CARD shows a reading that has aged out of the present tens
       visibleChips(p, w).chips.map((c) => c.text);
     // The 178px column (144 of content): the trio has 1.32px to spare — no age,
     // and NOTHING is lost to make room for one (no '+N', same three chips).
-    expect(texts(aged(31), 144)).toEqual(['UDP ✓', 'QUIC ✓', '✓ Apple']);
+    expect(texts(aged(31), 144)).toEqual(['✓ UDP', '✓ QUIC', '✓ Apple']);
     expect(visibleChips(aged(31), 144).hiddenHints).toEqual([]);
     expect(visibleChips(aged(31), 144).chips.some((c) => c.ageShown === true)).toBe(false);
     // Reserved: 40.22 + (44.3 + 41.9) + (47.16 + 41.9) + 8 + the 3px floor = 226.48.
-    expect(texts(aged(31), 226)).toEqual(['UDP ✓', 'QUIC ✓', '✓ iOS/macOS']);
-    expect(texts(aged(31), 227)).toEqual(['UDP ✓', 'QUIC ✓ · 31 min', '✓ Apple · 31 min']);
+    expect(texts(aged(31), 226)).toEqual(['✓ UDP', '✓ QUIC', '✓ Apple']);
+    expect(texts(aged(31), 227)).toEqual(['✓ UDP', '✓ QUIC · 31 min', '✓ Apple · 31 min']);
     // Hours are narrower (29.91): 40.22 + 74.21 + 77.07 + 8 + 3 = 202.5.
-    expect(texts(aged(240), 203)).toEqual(['UDP ✓', 'QUIC ✓ · 4 h', '✓ Apple · 4 h']);
-    expect(texts(aged(240), 300)).toEqual(['UDP ✓', 'QUIC ✓ · 4 h', '✓ iOS/macOS · 4 h']);
+    expect(texts(aged(240), 203)).toEqual(['✓ UDP', '✓ QUIC · 4 h', '✓ Apple · 4 h']);
+    expect(texts(aged(240), 300)).toEqual(['✓ UDP', '✓ QUIC · 4 h', '✓ Apple · 4 h']);
     // A dated chip reserves what it prints: the literal plus its unit's widest suffix.
     const dated = visibleChips(aged(240), 300).chips.find((c) => c.key === 'quic');
     expect(dated?.width).toBeCloseTo(44.3 + 29.91, 5);
@@ -416,7 +416,7 @@ describe('the profile CARD shows a reading that has aged out of the present tens
     expect(quic?.textContent).toBe('✓QUIC · 9 h ago');
     const os = sheet.querySelector('[data-component="proxy-os-fingerprint"]');
     expect(os?.getAttribute('data-ok')).toBe('aged');
-    expect(os?.textContent).toBe('✓iOS/macOS · 9 h ago');
+    expect(os?.textContent).toBe('✓Apple · 9 h ago');
   });
 
   it('(a) ⛔ a row the automatic check will never take names its button — it promises nothing', async () => {
@@ -466,7 +466,7 @@ describe('the profile CARD shows a reading that has aged out of the present tens
     // ⛔ NOT the inferred `~`: "shown by nothing" is exactly what the cliff was,
     // and an inferred chip is how it looked. The reading is really rendered.
     expect(chip.getAttribute('data-quic-inferred')).toBe('false');
-    expect(chip.textContent).toContain('QUIC ✓');
+    expect(chip.textContent).toContain('✓ QUIC');
     cleanup();
 
     // …and one that tested LAST WEEK is aged too, from ITS OWN older date rather
@@ -488,7 +488,7 @@ describe('the profile CARD shows a reading that has aged out of the present tens
     expect(chip.outerHTML).toBe(
       '<span data-quic-inferred="false" title="This proxy carries QUIC — HTTP/3 works through this exit." ' +
         'class="inline-flex shrink-0 cursor-help items-center gap-0.5 whitespace-nowrap rounded-md px-1 py-px ' +
-        'text-[9.5px] font-semibold leading-4 bg-status-ready/10 text-status-ready">QUIC ✓</span>',
+        'text-[9.5px] font-semibold leading-4 bg-status-ready/10 text-status-ready">✓ QUIC</span>',
     );
     const os = container.querySelector(
       '[data-region="caps"] [data-component="proxy-os-fingerprint"]',
@@ -499,7 +499,7 @@ describe('the profile CARD shows a reading that has aged out of the present tens
     expect(os.outerHTML).toBe(
       '<span data-component="proxy-os-fingerprint" data-os-tone="match" ' +
         'class="inline-flex shrink-0 cursor-help items-center gap-0.5 whitespace-nowrap rounded-md px-1 py-px ' +
-        'text-[9.5px] font-semibold leading-4 bg-status-ready/10 text-status-ready">✓ iOS/macOS</span>',
+        'text-[9.5px] font-semibold leading-4 bg-status-ready/10 text-status-ready">✓ Apple</span>',
     );
   });
 
@@ -510,7 +510,7 @@ describe('the profile CARD shows a reading that has aged out of the present tens
     expect(chip.outerHTML).toBe(
       '<span data-quic-inferred="true" title="UDP works, so HTTP/3 is likely — not yet tested. Run Test or a session to confirm." ' +
         'class="inline-flex shrink-0 cursor-help items-center gap-0.5 whitespace-nowrap rounded-md px-1 py-px ' +
-        'text-[9.5px] font-semibold leading-4 bg-ink-muted/15 text-ink-secondary">QUIC ~</span>',
+        'text-[9.5px] font-semibold leading-4 bg-ink-muted/15 text-ink-secondary">~ QUIC</span>',
     );
     const os = container.querySelector(
       '[data-region="caps"] [data-component="proxy-os-fingerprint"]',
@@ -527,7 +527,7 @@ describe('the profiles LIST shows a reading that has aged out of the present ten
     const udp = await listUdpChip(container);
     await waitFor(() => expect(udp.getAttribute('title')).toContain('rechecked automatically'));
     expect(udp.getAttribute('title')).toBe(
-      'UDP works — WebRTC ✓. QUIC — Last checked 9 hours ago. It will be rechecked automatically. HTTP/3 worked through this exit then.',
+      'UDP works — WebRTC calls and media stream through this exit. QUIC — Last checked 9 hours ago. It will be rechecked automatically. HTTP/3 worked through this exit then.',
     );
     expect(udp.getAttribute('title')).not.toContain('not yet measured');
     const os = listOsChip(container);
@@ -536,7 +536,7 @@ describe('the profiles LIST shows a reading that has aged out of the present ten
     // The chip is exactly as wide as the current one it stands in for (the
     // column has no room for an age beside the label — measured, see
     // AgedOsCellChip), so the age is PRINTED on its own line under the chips.
-    expect(os?.textContent).toBe('✓iOS/macOS');
+    expect(os?.textContent).toBe('✓Apple');
     const age = container.querySelector('table [data-component="aged-reading-age"]');
     expect(age?.textContent).toBe('as of 9 h ago');
     expect(os?.closest('td')?.contains(age)).toBe(true);
@@ -567,14 +567,14 @@ describe('the profiles LIST shows a reading that has aged out of the present ten
     );
     expect(osTitle('Second')).toMatch(/^Last checked 9 hours ago\. It will be rechecked/);
     expect(udpTitle('Demo')).toBe(
-      'UDP works — WebRTC ✓. QUIC — Last checked 9 hours ago. Run Test to check it again. HTTP/3 worked through this exit then.',
+      'UDP works — WebRTC calls and media stream through this exit. QUIC — Last checked 9 hours ago. Run Test to check it again. HTTP/3 worked through this exit then.',
     );
     expect(osTitle('Demo')).toMatch(/^Last checked 9 hours ago\. Run Test to check it again\./);
   });
 
   it('(b) CRITICAL ⛔ THE UPGRADE CLIFF, on the list: an undated pre-upgrade verdict is dated by the migration and STATED — in the past tense — not reported as "not yet measured"', async () => {
     // ⛔ PIN UPDATED 2026-09-17 (review) — the list half of the card arm above.
-    // It pinned the present-tense "QUIC ✓" for a verdict whose age is unknown; the
+    // It pinned the present-tense "✓ QUIC" for a verdict whose age is unknown; the
     // backfill now clamps such a stamp into the aged band, so the list states the
     // reading in the past tense. The thing this arm exists to prove is unchanged:
     // the verdict is SAID, rather than being shown by nothing.
@@ -583,14 +583,14 @@ describe('the profiles LIST shows a reading that has aged out of the present ten
     const udp = await listUdpChip(container);
     expect(udp.getAttribute('title')).not.toContain('not yet measured');
     const title = udp.getAttribute('title') ?? '';
-    expect(title).toContain('UDP works — WebRTC ✓');
+    expect(title).toContain('UDP works — WebRTC calls and media stream through this exit.');
     expect(title).toContain('HTTP/3 worked through this exit then.');
     // …and it leads with the AGE, which is the whole difference between a
     // recovered reading and a fresh one.
     expect(title).toMatch(/QUIC — Last checked 8 hours ago\./);
     // NOT the present tense — the control that this arm did not simply swap one
     // wrong sentence for another.
-    expect(title).not.toMatch(/; QUIC ✓/);
+    expect(title).not.toContain('HTTP/3 works.');
   });
 
   it('(c) PIN a FRESH reading renders exactly as it did before the aged state existed', async () => {
@@ -599,16 +599,16 @@ describe('the profiles LIST shows a reading that has aged out of the present ten
     const udp = await listUdpChip(container);
     expect(udp.outerHTML).toBe(
       '<span class="inline-block whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold bg-status-ready/10 text-status-ready" ' +
-        'title="UDP works — WebRTC ✓; QUIC ✓">UDP ✓</span>',
+        'title="UDP works — WebRTC calls and media stream through this exit. HTTP/3 works." data-udp="true">✓ UDP</span>',
     );
-    // (2026-09-24, owner item 9) "UDP ✓" — the card's text AND the card's tone for
+    // (2026-09-24, owner item 9) "✓ UDP" — the card's text AND the card's tone for
     // this reading (ready/10; ready/20 measured 3.98:1 on the selected row in the
     // light theme once the chip carried a word the WCAG gate reads). It was a bare
     // "✓" under a column named UDP, which now holds QUIC and OS.
     const os = listOsChip(container) as HTMLElement;
     expect(os.getAttribute('data-ok')).toBeNull();
     expect(os.getAttribute('data-os-tone')).toBe('match');
-    expect(os.textContent).toBe('✓iOS/macOS');
+    expect(os.textContent).toBe('✓Apple');
     // HEAD's class string, byte for byte. This literal briefly carried
     // `whitespace-nowrap` because it was recorded while that class sat on the OS
     // chip in EVERY tone; it now lives on the aged branch alone, so a current chip
@@ -628,7 +628,9 @@ describe('the profiles LIST shows a reading that has aged out of the present ten
     seed({});
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
     const udp = await listUdpChip(container);
-    expect(udp.getAttribute('title')).toBe('UDP works — WebRTC ✓; QUIC likely (not yet measured)');
+    expect(udp.getAttribute('title')).toBe(
+      'UDP works — WebRTC calls and media stream through this exit. HTTP/3 is likely to work (not yet measured).',
+    );
     const os = listOsChip(container) as HTMLElement;
     expect(os.textContent).toBe('—OS');
     expect(os.getAttribute('data-os-tone')).toBe('unknown');
@@ -668,7 +670,7 @@ describe('a VPN row: an aged reading outranks "not measured", and is suppressed 
     expect(udp?.title).toBe(
       'Last checked 4 hours ago. Run Check VPN to check it again. UDP did not work through this VPN then.',
     );
-    expect(quic?.text).toBe('QUIC ✓');
+    expect(quic?.text).toBe('✓ QUIC');
     expect(quic?.attrs).toMatchObject({ 'data-ok': 'aged', 'data-aged-value': 'true' });
     expect(quic?.className).not.toContain('status-ready');
     expect(quic?.title).toBe(
@@ -741,7 +743,7 @@ describe('a VPN row: an aged reading outranks "not measured", and is suppressed 
     const sheet = container.querySelector('[data-component="card-details-sheet"]') as HTMLElement;
     const chips = sheet.querySelectorAll('[data-component="proxy-os-fingerprint"]');
     expect(chips).toHaveLength(1); // the tile's dated chip INSTEAD of the shared one
-    expect(chips[0]?.textContent).toBe('✓ iOS/macOS · 4 h ago');
+    expect(chips[0]?.textContent).toBe('✓ Apple · 4 h ago');
     expect(chips[0]?.getAttribute('data-ok')).toBe('aged');
     expect(chips[0]?.getAttribute('title')).toMatch(
       /^Last checked 4 hours ago\. Run Check VPN to check it again\./,

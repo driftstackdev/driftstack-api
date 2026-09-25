@@ -245,6 +245,38 @@ export const VPN_UDP_MEASURED_OK_TITLE =
 export const VPN_UDP_MEASURED_NONE_TITLE =
   'No UDP through this tunnel — measured from Driftstack’s network. WebRTC falls back to a slower, more detectable path and QUIC falls back to HTTP/2.';
 
+// ─── The QUIC reading, in a sentence ─────────────────────────────────────────
+//
+// gui-v0.1.73 review — the UDP chip's hover ends with what QUIC does, on the
+// profile card and in the profiles list, and it said it with badge marks AFTER
+// the words: "UDP works — WebRTC ✓; QUIC ✗ (HTTP/2 on last measure) through this
+// exit." The card's details sheet prints that hover as visible text, directly
+// above "⤵ QUIC — No HTTP/3 — …": the mark after the word, and ✗ (the red
+// OS-mismatch mark) for a fall-back the chip beside it draws as "⤵". A sentence
+// says the reading in WORDS, carries no badge mark (lib/reading-badge-words owns
+// those), and never says the opposite of the badge it sits beside. The card and
+// the list both read these, so the two hovers cannot drift apart again.
+
+/** The UDP chip's hover when UDP relays: what that makes possible, in the Proxies
+ *  tab's own words for the same chip (ProxyCapabilities). It read "WebRTC ✓". */
+export const UDP_WORKS_SENTENCE = 'UDP works — WebRTC calls and media stream through this exit.';
+
+/** The QUIC reading as the sentence after the UDP one — one per QUIC badge. */
+export const QUIC_SENTENCE = {
+  /** "✓ QUIC" */
+  works: 'HTTP/3 works.',
+  /** "⤵ QUIC" */
+  fallsBack: 'HTTP/3 falls back to HTTP/2.',
+  /** "~ QUIC" — the inference from a UDP grant. */
+  likely: 'HTTP/3 is likely to work (not yet measured).',
+  /** "— QUIC" */
+  notMeasured: 'HTTP/3 has not been measured yet.',
+  /** An aged "✓ QUIC". */
+  workedWhenLastChecked: 'HTTP/3 worked when last checked.',
+  /** An aged "⤵ QUIC". */
+  fellBackWhenLastChecked: 'HTTP/3 fell back to HTTP/2 when last checked.',
+} as const;
+
 // ─── The VPN row's QUIC reading ──────────────────────────────────────────────
 //
 // ⛔ (2026-09-17) IT MOVED HERE, and the header's "constants only" is now "copy,
@@ -261,6 +293,7 @@ export const VPN_UDP_MEASURED_NONE_TITLE =
 // from the import-free os-fingerprint-verdict, and the types are erased.
 
 import { agedReadingHint } from './os-fingerprint-verdict';
+import { READING_MARK, READING_WORD, badgeWithDetail } from './reading-badge-words';
 import type { MeasuredQuic } from './account-proxies';
 import type { AgedReading } from './proxy-probe-cache';
 
@@ -287,8 +320,21 @@ export const NO_TEST_MAC_QUIC_HINT = `Not measured yet — Driftstack was busy. 
 // now print the same "UDP — not on plan"; the whole sentence is the hover.
 export const NOT_ON_THIS_PLAN_LABEL = 'not on plan';
 /** The UDP chip's text for a reading the plan will never produce — grid, card
- *  and list. */
-export const UDP_NOT_ON_PLAN_CHIP = `UDP — ${NOT_ON_THIS_PLAN_LABEL}`;
+ *  and list. (gui-v0.1.72) In the ONE vocabulary (lib/reading-badge-words): the
+ *  missing state "— UDP", mark first, and the plan as its detail. It was "UDP —
+ *  not on plan", the word before the mark, on the one chip in the row that read
+ *  that way round. */
+export const UDP_NOT_ON_PLAN_CHIP = badgeWithDetail(
+  READING_MARK.notMeasured,
+  READING_WORD.udp,
+  NOT_ON_THIS_PLAN_LABEL,
+);
+/** …and QUIC's, on the surfaces with the room for both (the grid and the list). */
+export const QUIC_NOT_ON_PLAN_CHIP = badgeWithDetail(
+  READING_MARK.notMeasured,
+  READING_WORD.quic,
+  NOT_ON_THIS_PLAN_LABEL,
+);
 export const VPN_QUIC_NOT_ON_PLAN_HINT =
   'VPN proxies are on paid plans, so this tunnel is not tested and QUIC through it is not measured. Upgrade to use OpenVPN or WireGuard.';
 export const VPN_UDP_NOT_ON_PLAN_HINT =

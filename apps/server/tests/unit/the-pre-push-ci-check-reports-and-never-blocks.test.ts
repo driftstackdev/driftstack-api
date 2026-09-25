@@ -22,6 +22,15 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const HOOK = readFileSync(resolve(HERE, '..', '..', '..', '..', '.husky', 'pre-push'), 'utf8');
 /** The CI-check block: from its W-34 marker to the hook's closing line. */
 const BLOCK = HOOK.slice(HOOK.indexOf('# W-34'), HOOK.indexOf('pre-push gate clean'));
+/** The script the block runs (2026-09-25: the logic moved there so it can be
+ *  EXECUTED by a test — scripts/tests/the-pre-push-ci-line-is-the-verdict-for-
+ *  origin-mains-head.test.ts runs it in every state with a stand-in gh). */
+const SCRIPT = readFileSync(
+  resolve(HERE, '..', '..', '..', '..', 'scripts', 'ci-verdict-on-main.mjs'),
+  'utf8',
+);
+/** What the check says and does: the block and the script it runs. */
+const CHECK = `${BLOCK}\n${SCRIPT}`;
 
 describe('the pre-push CI check reports and never blocks', () => {
   it('CRITICAL it is ADVISORY — the block cannot fail the push', () => {
@@ -29,29 +38,33 @@ describe('the pre-push CI check reports and never blocks', () => {
     // over an urgent fix, which is the opposite of the continuous-deploy design.
     expect(BLOCK.length, 'the CI-check block must exist').toBeGreaterThan(200);
     expect(BLOCK).not.toMatch(/\bexit 1\b/);
+    // The script's own exit is 0 in every state, and the block does not trust it.
+    expect(BLOCK).toMatch(/node scripts\/ci-verdict-on-main\.mjs \|\| /);
+    expect(SCRIPT).toMatch(/process\.exitCode = 0/);
+    expect(SCRIPT).not.toMatch(/process\.exit\(1\)|exitCode = 1/);
   });
 
   it('CRITICAL "could not check" is reported, never silent', () => {
     // Silence on failure is the whole defect: it reads exactly like a green.
-    expect(BLOCK).toMatch(/COULD NOT CHECK/);
-    expect(BLOCK).toMatch(/Not a green/);
+    expect(CHECK).toMatch(/COULD NOT CHECK/);
+    expect(CHECK).toMatch(/Not a green/);
   });
 
   it('CRITICAL it reads a real VERDICT — in-progress and cancelled are excluded', () => {
     // Measured against the live API: an in-flight run returns "" and the latest
     // completed run was `cancelled`. Both would have been read as an answer.
-    expect(BLOCK).toContain('"success"');
-    expect(BLOCK).toContain('"failure"');
-    expect(BLOCK).toContain('"timed_out"');
-    expect(BLOCK, 'a cancelled or running result is not a verdict').not.toMatch(
-      /select\(\.status == "completed"\)\s*\)\s*\|\s*\.\[0\]/,
+    expect(SCRIPT).toContain("'success'");
+    expect(SCRIPT).toContain("'failure'");
+    expect(SCRIPT).toContain("'timed_out'");
+    expect(SCRIPT, 'a cancelled or running result is not a verdict').toMatch(
+      /run\.status !== 'completed'/,
     );
   });
 
   it('CRITICAL a red CI names the jobs the local gate does not run', () => {
     // The warning has to be actionable at the moment it fires, or it becomes the
     // next notice nobody acts on — which is what the placeholder command was.
-    expect(BLOCK).toMatch(/verify-suite/);
+    expect(SCRIPT).toMatch(/verify-suite/);
   });
 
   it('CRITICAL the verdict carries the RUN it read', () => {
@@ -60,12 +73,17 @@ describe('the pre-push CI check reports and never blocks', () => {
     // audited: there is no way to tell a stale read, a race, or a real red apart.
     // Reporting the sha is what makes the warning checkable rather than one more
     // thing to believe.
-    expect(BLOCK).toContain('headSha');
-    expect(BLOCK).toMatch(/\$ci_sha/);
+    // …and since 2026-09-25 the subject is ONE commit, the head of origin/main,
+    // and only that commit's runs are admitted: a verdict for another sha was
+    // what printed "green (7172d0cc5)" over a head with no verdict yet.
+    expect(SCRIPT).toContain('headSha');
+    expect(SCRIPT).toMatch(/r\.headSha === head/);
+    expect(SCRIPT).toContain('commits/main');
   });
 
   it('VACUITY CONTROL — the hook is the real file and the block was located', () => {
     expect(HOOK).toContain('refs/tags/gui-v*');
-    expect(BLOCK).toContain('gh run list');
+    expect(BLOCK).toContain('ci-verdict-on-main.mjs');
+    expect(SCRIPT).toContain("'run',\n          'list'");
   });
 });

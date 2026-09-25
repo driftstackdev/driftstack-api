@@ -800,9 +800,9 @@ describe('the proxies table fits the window without hiding anything', () => {
     // pinned is the MECHANISM each of those came from, against the gate's own
     // minimum — read from the gate, so the two cannot drift apart.
     // MUTATION: `text-[8px]` back on READING_CHIP_CLS → red. `opacity-60` back on
-    // a missing reading, OR on any wrapper above one → red. `bg-surface-divider/60`
-    // back on UNMEASURED_CHIP_CLS → red. `text-status-ready/80` back on the
-    // pool-stat label → red.
+    // a missing reading, OR on any wrapper above one → red. Any wash back on
+    // UNMEASURED_CHIP_CLS (the neutral chip since gui-v0.1.72) → red.
+    // `text-status-ready/80` back on the pool-stat label → red.
     const root = resolve(__dirname, '../../../..');
     const gate = readFileSync(resolve(root, 'scripts/gui-text-quality.mjs'), 'utf8');
     const minPx = Number(/const MIN_PX = (\d+);/.exec(gate)?.[1]);
@@ -904,23 +904,31 @@ describe('the proxies table fits the window without hiding anything', () => {
       }
     }
 
-    // …and the three chips nobody has measured, by name: on a VPN row and an
-    // HTTP row with no reading at all.
-    const unmeasured = [
-      ...table().querySelectorAll<HTMLElement>('[data-ok="unmeasured"]'),
-      // The HTTP row's Network cell (the status pill says "untested" too).
-      ...[
-        ...screen
-          .getByText('http-new')
-          .closest('tr')!
-          .children[3]!.querySelectorAll<HTMLElement>('span'),
-      ].filter((el) => el.textContent === 'untested'),
-    ];
+    // …and the chips nobody has measured, by name: on a VPN row and an HTTP row
+    // with no reading at all. (gui-v0.1.72 — the HTTP row's Network cell draws
+    // "— UDP" "— QUIC" in the one vocabulary, where it drew one "untested" pill.)
+    const unmeasured = [...table().querySelectorAll<HTMLElement>('[data-ok="unmeasured"]')];
+    const httpRow = screen.getByText('http-new').closest('tr')!;
+    expect(unmeasured.filter((el) => httpRow.contains(el)).map((el) => el.textContent)).toEqual([
+      '—UDP',
+      '—QUIC',
+    ]);
     expect(unmeasured.length).toBeGreaterThanOrEqual(3);
+    // ⛔ gui-v0.1.72 review — ONE look for one state: a reading nobody took wears
+    // the neutral chip the "— OS" beside it wears (NEUTRAL_CHIP_CLASS), not the
+    // tab's old "untested" wash, which put two looks in one Network cell.
+    const look = (el: Element): string =>
+      [...el.classList]
+        .filter((c) => /^(bg|text)-/.test(c) && !/^text-\[/.test(c))
+        .sort()
+        .join(' ');
     for (const chip of unmeasured) {
-      expect(washed, chip.textContent ?? '').toContain(chip);
-      expect(chip.className, chip.textContent ?? '').toMatch(/(^|\s)bg-surface-divider\/30(\s|$)/);
+      expect(chip.className, chip.textContent ?? '').toMatch(/(^|\s)bg-surface-inset(\s|$)/);
       expect(chip.className, chip.textContent ?? '').toMatch(/(^|\s)text-ink-muted(\s|$)/);
+      const os = chip.closest('tr')?.querySelector('[data-component="proxy-os-fingerprint"]');
+      if (os?.getAttribute('data-os-tone') === 'unknown' && os.getAttribute('data-ok') !== 'aged') {
+        expect(look(chip), chip.textContent ?? '').toBe(look(os));
+      }
     }
 
     // The aged chip: one phrase everywhere (nowrap), except in THIS table below

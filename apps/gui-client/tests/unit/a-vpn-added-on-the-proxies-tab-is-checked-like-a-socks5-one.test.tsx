@@ -238,7 +238,7 @@ describe('adding a VPN row on the Proxies tab runs the WHOLE check', () => {
       return el as Element;
     });
     expect(quic.getAttribute('data-unmeasured')).toBe('plan_excluded');
-    expect(quic.textContent).toBe(`QUIC — ${NOT_ON_THIS_PLAN_LABEL}`);
+    expect(quic.textContent).toBe(`— QUIC · ${NOT_ON_THIS_PLAN_LABEL}`);
     expect(quic.textContent).not.toMatch(/untested/i);
     expect(quic.getAttribute('title')).toMatch(/paid plans/i);
     // ⛔ The UDP chip beside it tells the same story IN ITS LABEL, not only in a
@@ -248,7 +248,7 @@ describe('adding a VPN row on the Proxies tab runs the WHOLE check', () => {
     const udp = document.querySelector('[data-component="vpn-udp-chip"]');
     expect(udp?.getAttribute('title')).toMatch(/paid plans/i);
     expect(udp?.getAttribute('data-unmeasured')).toBe('plan_excluded');
-    expect(udp?.textContent).toBe(`UDP — ${NOT_ON_THIS_PLAN_LABEL}`);
+    expect(udp?.textContent).toBe(`— UDP · ${NOT_ON_THIS_PLAN_LABEL}`);
   });
 
   it("CRITICAL ⛔ THE PLAN QUESTION IS ASKED OF THE FEATURE TABLE, NOT OF THE TIER’S NAME. It shipped as `tier === 'free'` — a hand-typed copy of a matrix the repo already publishes and the SERVER enforces from (`requireTierFeature(tier, 'vpnEgress')`). `free` is merely the only tier whose `vpnEgress` is false today, and guessing fails in the expensive direction: a future tier without VPN egress would upload the customer’s private key to be refused on arrival. MUTATION: `planExcludesVpnEgress` back to `tier === 'free'` and the first loop reds", () => {
@@ -300,7 +300,7 @@ describe('adding a VPN row on the Proxies tab runs the WHOLE check', () => {
       return el as Element;
     });
     expect(quic.getAttribute('data-unmeasured')).toBe('never_tested');
-    expect(quic.textContent).toBe('QUIC untested');
+    expect(quic.textContent).toBe('— QUIC');
   });
 
   it('⛔ CONTROL — an account that has NOT ANSWERED yet is not treated as Free: a refusal on a null /me would silently stop checking VPN rows for a paying customer during every round trip', async () => {

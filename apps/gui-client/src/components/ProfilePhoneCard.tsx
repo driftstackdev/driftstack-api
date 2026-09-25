@@ -152,9 +152,14 @@ import {
   VPN_UDP_MEASURED_NONE_TITLE,
   VPN_UDP_MEASURED_OK_TITLE,
   VPN_UDP_NOT_MEASURED_TITLE,
+  QUIC_NOT_ON_PLAN_CHIP,
   UDP_NOT_ON_PLAN_CHIP,
+  VPN_QUIC_NOT_ON_PLAN_HINT,
   VPN_UDP_NOT_ON_PLAN_HINT,
+  QUIC_SENTENCE,
+  UDP_WORKS_SENTENCE,
 } from '../lib/proxy-check-copy';
+import { READING_MARK, READING_WORD, badgeText } from '../lib/reading-badge-words';
 
 /** (o) — the pre-flight of a VPN/HTTP row: a DNS resolve of the configured
  *  endpoint (field names match the cache's `CachedEndpointVerdict`; typed
@@ -470,15 +475,30 @@ export const DEFAULT_CONTENT_WIDTH = 206;
  *  MEASURED 2026-09-12 in the live harness off CHIP_BASE at px-1 (Chromium @2x,
  *  after document.fonts.ready); re-measure the whole table, not one cell, when
  *  the chrome string or the font stack changes. */
+/** ⛔ gui-v0.1.72 (owner item 9) — THE ONE VOCABULARY (lib/reading-badge-words):
+ *  every chip reads mark-first ('✓ UDP', '✓ QUIC', '~ QUIC' — they were 'UDP ✓',
+ *  'QUIC ✓', 'QUIC ~'), a reading nobody took is '— UDP' / '— QUIC' on the row
+ *  that states it, the plan is the detail of the missing state ('— UDP · not on
+ *  plan', was 'UDP — not on plan'), and macOS-or-iOS is 'Apple' on EVERY surface
+ *  (the full '✓ iOS/macOS' 73.38 and '? iOS/macOS' 70.02 are gone — no card
+ *  shows them any more). RE-MEASURED 2026-09-25 the table's way (a CHIP_BASE
+ *  probe read out of this file, inside a card's caps row at ?w=178, Chromium
+ *  1200×1400 @2x, after document.fonts.ready, `document.fonts.size === 0`), with
+ *  the CONTROLS in the same run reproducing the old entries to the 1/64px —
+ *  'UDP ✓' 40.21875, 'QUIC ✓' 44.296875, 'QUIC ~' 42.03125, '✓ iOS/macOS'
+ *  73.375, '✓ Apple' 47.15625, '? OS' 29.96875, '— OS' 33.328125, 'UDP — not on
+ *  plan' 96.5. The reversed texts measure the same as before, glyph for glyph:
+ *  no trio below moves. */
 const CHIP_WIDTH: Readonly<Record<string, number>> = {
-  'UDP ✓': 40.22,
+  '✓ UDP': 40.22,
   '⤵ UDP': 39.47,
   '⇢ UDP': 39.78, // a VPN row's UDP: carried inside the tunnel, never probed
-  'QUIC ✓': 44.3,
-  'QUIC ~': 42.03,
+  '— UDP': 40.22, // not measured, on a row where another reading was
+  '✓ QUIC': 44.3,
+  '~ QUIC': 42.03,
   '⤵ QUIC': 43.55,
-  '✓ iOS/macOS': 73.38, // the full OS label
-  '✓ Apple': 47.16, // its compact form (OS_LABEL_COMPACT)
+  '— QUIC': 44.3, // not measured, on a row where another reading was
+  '✓ Apple': 47.16, // the ONE word for macOS-or-iOS, full and compact alike
   '✗ Windows': 62.14,
   '✗ Win': 36.97,
   '✗ Linux': 44.53, // fits at 144 in FULL, so it never compacts
@@ -489,7 +509,7 @@ const CHIP_WIDTH: Readonly<Record<string, number>> = {
   // Owner item 9 (2026-09-24) — a VPN row on a plan without VPN. MEASURED the
   // table's way (a CHIP_BASE probe inside a card body at ?w=178, 2x, fonts.size
   // 0), with '? OS' 29.97 and '✓ Apple' 47.16 reproduced in the same run.
-  'UDP — not on plan': 96.5,
+  '— UDP · not on plan': 102.45,
   // ⛔ V-219 (2026-09-14) — the '?' glyph now pairs with a NAMED OS, not only
   // with the bare 'OS' label. A reading taken through a multi-machine proxy is
   // withheld as neutral while still showing the stack it read, so every
@@ -508,7 +528,6 @@ const CHIP_WIDTH: Readonly<Record<string, number>> = {
   // OS fallback, as the provenance note above requires). CONTROLS in the same
   // run reproduced '? OS' at 29.96875 and '✓ Apple' at 47.15625 — the table's
   // 29.97 and 47.16 — so the method is the one these numbers came out of.
-  '? iOS/macOS': 70.02,
   '? Apple': 43.8,
   '? Windows': 59.45,
   '? Win': 34.28,
@@ -846,8 +865,8 @@ export function capsMode(p: CapsInput): CapsMode {
   if (p.vpn === true && (p.latencyMs !== null || tunnelUpNoLatency(p))) return 'measured';
   // Owner item 9 — a tunnel the plan will never check: there is no inline Check
   // to offer (it cannot run on this plan; the ⋯ menu's Check VPN says why), and
-  // the row states the plan fact at full width ("UDP — not on plan" · "— OS",
-  // 96.5 + 4 + 33.33 + the 3px floor = 136.83 of 144).
+  // the row states the plan fact at full width ("— UDP · not on plan" · "— OS",
+  // 102.45 + 4 + 33.33 + the 3px floor = 142.78 of 144).
   if (p.vpn === true && p.planExcludesVpn === true) return 'measured';
   // Owner item 9 (2026-09-24) — a SOCKS5 proxy this Mac has not tested but
   // Driftstack has: its UDP / QUIC readings ARE a measurement, so the row shows
@@ -936,7 +955,7 @@ const OVERFLOW_PILL_CLASS =
   'border border-dashed border-surface-divider bg-transparent text-ink-muted';
 
 /** The UDP chip's hover text (kept from v3): the WebRTC/QUIC consequence of the
- *  relay verdict, with the QUIC clause read from the CANONICAL quic chip — never
+ *  relay verdict, with the QUIC sentence read from the CANONICAL quic chip — never
  *  a guess from udp_associate. */
 function udpTitle(vpn: boolean, caps: ProxyCapability[] | null, quicCap?: ProxyCapability): string {
   // (V6 2026-09-16) ITEM 3 — the NOT-MEASURED sentence, now shared with the
@@ -946,21 +965,29 @@ function udpTitle(vpn: boolean, caps: ProxyCapability[] | null, quicCap?: ProxyC
   if (vpn) return VPN_UDP_NOT_MEASURED_TITLE;
   if (caps === null) return 'Run Test to check UDP (WebRTC + QUIC) support on this exit.';
   const udpOk = caps.find((c) => c.key === 'webrtc')?.ok ?? false;
-  if (!udpOk) return 'No UDP — WebRTC uses a slower fallback and QUIC falls back to HTTP/2.';
-  // An aged QUIC reading first: its cap still carries the inference's `inferred`
-  // flag (ProxyCapability.aged), and "not yet measured" is the one thing that is
-  // false of a proxy whose QUIC chip, beside this one, shows a dated reading.
-  const quicClause =
-    quicCap?.aged !== undefined
-      ? quicCap.aged.value
-        ? 'QUIC ✓ when last checked'
-        : 'QUIC ✗ (HTTP/2) when last checked'
-      : quicCap?.inferred === true
-        ? 'QUIC likely (not yet measured)'
-        : quicCap?.ok === true
-          ? 'QUIC ✓'
-          : 'QUIC ✗ (HTTP/2 on last measure)';
-  return `UDP works — WebRTC ✓; ${quicClause} through this exit.`;
+  // ⛔ gui-v0.1.73 review — the QUIC half is the QUIC CHIP's reading on both
+  // branches, in words. The no-UDP branch said "QUIC falls back to HTTP/2" from
+  // the UDP handshake alone, under a "✓ QUIC" Driftstack had measured through
+  // the same proxy; and the other branch wrote the reading with marks after the
+  // words ("WebRTC ✓; QUIC ✗ (HTTP/2 on last measure)"), which the details
+  // sheet prints as visible text right above the "⤵ QUIC" line.
+  const quic = quicSentence(quicCap);
+  if (!udpOk) return `No UDP — WebRTC uses a slower fallback. ${quic}`;
+  return `${UDP_WORKS_SENTENCE} ${quic}`;
+}
+
+/** What the QUIC chip beside the UDP one reads, as a sentence (QUIC_SENTENCE).
+ *  An aged reading first: its cap still carries the inference's `inferred` flag
+ *  (ProxyCapability.aged), and "not measured yet" is the one thing that is false
+ *  of a proxy whose QUIC chip shows a dated reading. */
+function quicSentence(quicCap: ProxyCapability | undefined): string {
+  if (quicCap === undefined || quicCap.unmeasured === true) return QUIC_SENTENCE.notMeasured;
+  if (quicCap.aged !== undefined)
+    return quicCap.aged.value
+      ? QUIC_SENTENCE.workedWhenLastChecked
+      : QUIC_SENTENCE.fellBackWhenLastChecked;
+  if (quicCap.inferred === true) return QUIC_SENTENCE.likely;
+  return quicCap.ok ? QUIC_SENTENCE.works : QUIC_SENTENCE.fallsBack;
 }
 
 /** A VPN row's QUIC verdict comes from the fleet relay probe or a live session,
@@ -1044,6 +1071,14 @@ function vpnQuicCap(
  *  themselves and never change.
  *  Kept HERE and not in lib/os-fingerprint-verdict.ts's OS_LABEL: the compact
  *  form is this row's geometry problem, not the verdict's meaning. */
+// ⛔ gui-v0.1.72 (owner item 9) — 'Apple' is no longer this row's SHORT form of
+// a longer word: it is the ONE word every surface uses for macOS-or-iOS
+// (lib/reading-badge-words, OS_LABEL in lib/os-fingerprint-verdict.ts), so its
+// entry here equals the full label and the chip has no compact form. The card
+// said '✓ Apple' and every other surface '✓ iOS/macOS' about one reading. The
+// reasoning below for the word itself (the family both members share, never
+// 'iOS') is unchanged; only its reach grew. A compact form may still SHORTEN a
+// word to a prefix of itself ('Win'), mark first.
 const OS_LABEL_COMPACT: Readonly<Record<FingerprintedOs, string>> = {
   'macos-or-ios': 'Apple',
   windows: 'Win',
@@ -1069,21 +1104,48 @@ const agedAttrs = (value: boolean): Readonly<Record<string, string>> => ({
   'data-aged-value': value ? 'true' : 'false',
 });
 
+/** Owner item 9 — the caps row's chip texts, in the ONE vocabulary every surface
+ *  shares (lib/reading-badge-words): the mark FIRST, then the word. They were
+ *  'UDP ✓' / 'QUIC ✓' / 'QUIC ~' here and on the list, '✓ UDP' / '✓ QUIC' on the
+ *  Proxies tab — one reading, two word orders (gui-v0.1.72). Every text below is
+ *  a CHIP_WIDTH key, measured. */
+const UDP_WORKS = badgeText(READING_MARK.works, READING_WORD.udp);
+const UDP_FALLS_BACK = badgeText(READING_MARK.fallsBack, READING_WORD.udp);
+const UDP_IN_TUNNEL = badgeText(READING_MARK.inTunnel, READING_WORD.udp);
+const UDP_NOT_MEASURED = badgeText(READING_MARK.notMeasured, READING_WORD.udp);
+const QUIC_WORKS = badgeText(READING_MARK.works, READING_WORD.quic);
+const QUIC_FALLS_BACK = badgeText(READING_MARK.fallsBack, READING_WORD.quic);
+const QUIC_LIKELY = badgeText(READING_MARK.likely, READING_WORD.quic);
+const QUIC_NOT_MEASURED = badgeText(READING_MARK.notMeasured, READING_WORD.quic);
+
 /**
  * R5 mode A — the chips a row is ELIGIBLE to show, in fixed order UDP → QUIC →
- * OS, plus the hints that never get a chip (a VPN's "UDP via tunnel", an OS
- * placeholder). Eligibility = a MEASUREMENT or a measured inference only:
- *   • UDP: 'UDP ✓' (green) when the relay was verified, '⤵ UDP' (muted — a
- *     measured fall-back, never red) when it was not; no chip on a VPN row;
- *   • QUIC: 'QUIC ✓' measured (green), '⤵ QUIC' measured negative (muted),
- *     'QUIC ~' inferred (muted, `data-quic-inferred="true"`);
- *   • OS: the shared ProxyOsChip for a match ('✓ iOS/macOS'), a mismatch ('✗
- *     Windows' — the ONE measured defect that stays red), a probe in flight
- *     ('… OS') or a determined-but-undecidable reading ('? OS' — a completed
- *     classification, see the eligibility test below); ONLY the '—' placeholder
- *     (never measured, or a REPORTED `unavailable` cause) is a hint, not a chip.
+ * OS, in the one vocabulary (lib/reading-badge-words: the mark first, then the
+ * word), plus the hints that never get a chip (a VPN's "UDP via tunnel"):
+ *   • UDP: '✓ UDP' (green) when the relay was verified, '⤵ UDP' (muted — a
+ *     measured fall-back, never red) when it was not; on a VPN row '⇢ UDP'
+ *     until something measures the tunnel; '— UDP' where nothing took it
+ *     (Driftstack measured QUIC and not UDP, or the proxy carried nothing on
+ *     its last test);
+ *   • QUIC: '✓ QUIC' measured (green), '⤵ QUIC' measured negative (muted),
+ *     '~ QUIC' inferred (muted, `data-quic-inferred="true"`), '— QUIC' not
+ *     measured;
+ *   • OS: the colour rule of the shared ProxyOsChip in this row's chrome — a
+ *     match ('✓ Apple'), a mismatch ('✗ Windows' — the ONE measured defect
+ *     that stays red), a probe in flight ('… OS'), a determined-but-undecidable
+ *     reading ('? Linux' — a completed classification, see the eligibility test
+ *     below), and '— OS' (never measured, or a REPORTED `unavailable` cause),
+ *     which is a chip too since C1/C2 (see the OS block below).
+ * The tile's 'first' and 'repair' rows state a missing UDP / QUIC with their
+ * action instead (`CARD_TILE_STATES_MISSING_BY_ITS_ACTION`); the sheet draws
+ * `sheetVpnChips` / the Proxies tab's chips.
  */
-export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: string[] } {
+export function capabilityChips(
+  p: CapsInput,
+  /** 'sheet' — the card's details sheet, which draws the Proxies tab's chips and
+   *  so a "— UDP" / "— QUIC" the tile leaves to its Test button (below). */
+  surface: 'tile' | 'sheet' = 'tile',
+): { eligible: CapChip[]; hidden: string[] } {
   const vpn = p.vpn === true;
   const aged = shownAgedReadings(p);
   const past = { nowMs: p.nowMs ?? Date.now(), autoRecheck: p.autoRecheck === true };
@@ -1097,10 +1159,22 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
   // tab's rule (`serverReadingCapabilities`), so the two cannot disagree. A chip
   // those readings do not cover is simply not drawn here, the card's one way of
   // saying "not measured" beside its Test button.
+  // ⛔ Owner item 9 (gui-v0.1.72) — a reading Driftstack did NOT take is stated
+  // ('— UDP', '— QUIC') whenever it took another one: the card used to drop it,
+  // so a proxy with a measured QUIC read "✓ QUIC ✓ Apple" here and "— UDP ✓ QUIC
+  // ✓ Apple" on the Proxies tab ("has not been measured, but QUIC did … it's
+  // very confusing"). With no reading at all the row is 'first' and its Test
+  // button says it; the chips stay off that row, which has 90px, not 144.
+  const serverMeasured = !vpn && caps === null && hasServerCapabilityReading(p);
+  // gui-v0.1.73 review — the SHEET is not the tile: with nothing measured it
+  // draws "— UDP" "— QUIC" beside "— OS" (the Proxies tab's chips, whenever no
+  // Test of this Mac's is running), so it lists them too — its hint list read
+  // one line, for the OS, under three chips.
+  const keepUnmeasured = serverMeasured || (surface === 'sheet' && !p.testing);
   const serverCaps =
     !vpn && caps === null
       ? serverReadingCapabilities(p.udpProbe, p.quicMeasured, p.quicProbe, aged, past).filter(
-          (c) => c.unmeasured !== true,
+          (c) => c.unmeasured !== true || keepUnmeasured,
         )
       : null;
   const quicCap = vpn
@@ -1117,7 +1191,7 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
     // is a statable fact, not a measurement worth hiding behind one.
     //
     // (V6 2026-09-16) ITEM 3 — THREE states, and they are told apart by glyph:
-    //   • a MEASURED relay       → 'UDP ✓' (green), like a SOCKS5 row's;
+    //   • a MEASURED relay       → '✓ UDP' (green), like a SOCKS5 row's;
     //   • a MEASURED fall-back   → '⤵ UDP' (muted) — a negative verdict, which
     //     only a probed `false` can reach;
     //   • NOT MEASURED           → '⇢ UDP', its OWN glyph, muted, saying
@@ -1141,10 +1215,10 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
     const udpText = planExcluded
       ? UDP_NOT_ON_PLAN_CHIP
       : !measured && agedUdp === undefined
-        ? '⇢ UDP'
+        ? UDP_IN_TUNNEL
         : udpOk
-          ? 'UDP ✓'
-          : '⤵ UDP';
+          ? UDP_WORKS
+          : UDP_FALLS_BACK;
     eligible.push({
       key: 'udp',
       text: udpText,
@@ -1182,9 +1256,23 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
           ? { 'data-udp': 'aged', ...agedAttrs(agedUdp.value) }
           : { 'data-udp': !measured ? 'tunnel' : p.udpProbe === true ? 'true' : 'false' },
     });
+  } else if (caps?.find((c) => c.key === 'webrtc')?.unmeasured === true) {
+    // gui-v0.1.72 review — this Mac's test got nothing through the proxy, so it
+    // took no UDP reading: '— UDP', never the '⤵ UDP' of a measured fall-back.
+    // (The tile is in its 'repair' row then and draws no chip; the sheet and
+    // the list read this one.)
+    const udp = caps.find((c) => c.key === 'webrtc');
+    eligible.push({
+      key: 'udp',
+      text: UDP_NOT_MEASURED,
+      width: chipWidth(UDP_NOT_MEASURED),
+      className: CHIP_MUTED_CLASS,
+      title: udp?.hint ?? '',
+      attrs: { 'data-udp': 'unmeasured' },
+    });
   } else if (caps !== null) {
     const udpOk = caps.find((c) => c.key === 'webrtc')?.ok ?? false;
-    const text = udpOk ? 'UDP ✓' : '⤵ UDP';
+    const text = udpOk ? UDP_WORKS : UDP_FALLS_BACK;
     eligible.push({
       key: 'udp',
       text,
@@ -1196,10 +1284,19 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
   } else {
     // Owner item 9 — Driftstack's UDP reading of a proxy this Mac never tested.
     const udp = serverCaps?.find((c) => c.key === 'webrtc');
-    if (udp !== undefined) {
+    if (udp?.unmeasured === true) {
+      eligible.push({
+        key: 'udp',
+        text: UDP_NOT_MEASURED,
+        width: chipWidth(UDP_NOT_MEASURED),
+        className: CHIP_MUTED_CLASS,
+        title: udp.hint,
+        attrs: { 'data-udp': 'unmeasured' },
+      });
+    } else if (udp !== undefined) {
       const agedUdp = udp.aged;
       const udpOk = agedUdp !== undefined ? agedUdp.value : udp.ok;
-      const text = udpOk ? 'UDP ✓' : '⤵ UDP';
+      const text = udpOk ? UDP_WORKS : UDP_FALLS_BACK;
       eligible.push({
         key: 'udp',
         text,
@@ -1216,15 +1313,38 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
     }
   }
 
-  if (quicCap !== undefined) {
+  if (quicCap?.unmeasured === true) {
+    // Owner item 9 — Driftstack took a UDP reading and no QUIC one: '— QUIC',
+    // the missing state every surface writes the same way.
+    eligible.push({
+      key: 'quic',
+      text: QUIC_NOT_MEASURED,
+      width: chipWidth(QUIC_NOT_MEASURED),
+      className: CHIP_MUTED_CLASS,
+      title: quicCap.hint,
+      attrs: { 'data-quic-inferred': 'false', 'data-quic-unmeasured': 'true' },
+    });
+  } else if (quicCap === undefined && vpn && capsMode(p) === 'measured' && !p.planExcludesVpn) {
+    // …and a tunnel whose check ran but carried no QUIC leg: the Proxies tab's
+    // and the list's '— QUIC', not silence. Only on the 'measured' row — the
+    // 'first' row has its Check button, and 90px.
+    eligible.push({
+      key: 'quic',
+      text: QUIC_NOT_MEASURED,
+      width: chipWidth(QUIC_NOT_MEASURED),
+      className: CHIP_MUTED_CLASS,
+      title: `QUIC not measured yet — run ${CHECK_VPN_ACTION} to measure it through this tunnel.`,
+      attrs: { 'data-quic-inferred': 'false', 'data-quic-unmeasured': 'true' },
+    });
+  } else if (quicCap !== undefined) {
     // ⛔ `aged` is read BEFORE `inferred` / `ok`: on an aged cap those two still
     // describe the inference the chip would otherwise have shown
     // (ProxyCapability.aged), and rendering them is the regression this closes —
-    // 'QUIC ~ … not yet tested. Run Test' on a proxy tested 31 minutes ago.
+    // '~ QUIC … not yet tested. Run Test' on a proxy tested 31 minutes ago.
     const agedQuic = quicCap.aged;
     const inferred = agedQuic === undefined && quicCap.inferred === true;
     const ok = agedQuic !== undefined ? agedQuic.value : quicCap.ok;
-    const text = inferred ? 'QUIC ~' : ok ? 'QUIC ✓' : '⤵ QUIC';
+    const text = inferred ? QUIC_LIKELY : ok ? QUIC_WORKS : QUIC_FALLS_BACK;
     eligible.push({
       key: 'quic',
       text,
@@ -1361,6 +1481,38 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
     });
   }
   return { eligible, hidden };
+}
+
+/**
+ * The details sheet's chips for a VPN row: every chip the tile is eligible for,
+ * plus the QUIC one the tile leaves to its action. On the tile's 'first' row
+ * (nothing checked yet) the "Check VPN" button states the missing QUIC reading
+ * (reading-badge-words `CARD_TILE_STATES_MISSING_BY_ITS_ACTION`), and a tunnel
+ * the plan will never check has no room for it beside "— UDP · not on plan".
+ * The sheet has the room, so it says it in the words every other surface uses:
+ * "— QUIC" ("— QUIC · not on plan"). gui-v0.1.72 review: the sheet said nothing
+ * about QUIC there while the Proxies tab and the list said "— QUIC".
+ */
+export function sheetVpnChips(p: CapsInput): CapChip[] {
+  const { eligible } = capabilityChips(p);
+  if (p.vpn !== true || eligible.some((c) => c.key === 'quic')) return eligible;
+  const plan = p.planExcludesVpn === true;
+  const text = plan ? QUIC_NOT_ON_PLAN_CHIP : QUIC_NOT_MEASURED;
+  const quic: CapChip = {
+    key: 'quic',
+    text,
+    width: chipWidth(text),
+    className: CHIP_MUTED_CLASS,
+    title: plan
+      ? VPN_QUIC_NOT_ON_PLAN_HINT
+      : `QUIC not measured yet — run ${CHECK_VPN_ACTION} to measure it through this tunnel.`,
+    attrs: plan
+      ? { 'data-quic-inferred': 'false', 'data-unmeasured': 'plan_excluded' }
+      : { 'data-quic-inferred': 'false', 'data-quic-unmeasured': 'true' },
+  };
+  // Display order UDP → QUIC → OS, like every row.
+  const at = eligible.findIndex((c) => c.key === 'os');
+  return at < 0 ? [...eligible, quic] : [...eligible.slice(0, at), quic, ...eligible.slice(at)];
 }
 
 export interface VisibleChips {
@@ -2343,11 +2495,9 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   const meta = visibleMeta(p, contentWidth, hasNote ? 2 : 1);
   // Phase C — what the sheet lists under Capabilities: every chip the row is
   // eligible for (its text and hint) and every hint that never gets a chip.
-  const allCaps = capabilityChips(p);
-  const capabilityHints = [
-    ...allCaps.eligible.map((c) => `${c.text} — ${c.title}`),
-    ...allCaps.hidden,
-  ];
+  const allCaps = capabilityChips(p, 'sheet');
+  const sheetCaps = vpn ? sheetVpnChips(p) : allCaps.eligible;
+  const capabilityHints = [...sheetCaps.map((c) => `${c.text} — ${c.title}`), ...allCaps.hidden];
   // The sheet has the room the tile does not, so an aged reading is printed here
   // with its age, by the SHARED chips — the same '✓ QUIC · 4 h ago' the Proxies
   // tab shows for the same cache entry. Same precedence as `capabilityChips`: an
@@ -2756,9 +2906,14 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                           nowMs={nowMs}
                           size="xs"
                         />
-                      ) : !vpn && hasServerCapabilityReading(p) ? (
+                      ) : !vpn && (hasServerCapabilityReading(p) || !p.testing) ? (
                         // Owner item 9 — Driftstack's readings of a proxy this Mac
                         // never tested: the SAME chips the Proxies tab draws for it.
+                        // …and with no reading at all, the same "— UDP" "— QUIC"
+                        // the tab draws (gui-v0.1.72 review: the sheet said nothing
+                        // while the tile's Test button stood for them). While this
+                        // client's first Test runs, nothing — as on the tab, where
+                        // the cell says the test is running.
                         <ProxyCapabilityChips
                           result={undefined}
                           udpProbe={p.udpProbe}
@@ -2770,9 +2925,9 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                           size="xs"
                         />
                       ) : null}
-                      {vpn && allCaps.eligible.some((c) => c.key !== 'os' || sheetVpnAgedOs) ? (
+                      {vpn && sheetCaps.some((c) => c.key !== 'os' || sheetVpnAgedOs) ? (
                         <div className="flex flex-wrap items-center gap-1">
-                          {allCaps.eligible
+                          {sheetCaps
                             .filter((c) => c.key !== 'os' || sheetVpnAgedOs)
                             .map((c) => (
                               <span
@@ -2790,13 +2945,18 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                         </div>
                       ) : null}
                       {sheetVpnAgedOs ? null : (
-                        <ProxyOsChip
-                          fingerprint={sheetFingerprint}
-                          aged={sheetAgedOs}
-                          autoRecheck={p.autoRecheck === true}
-                          nowMs={nowMs}
-                          size="xs"
-                        />
+                        // Content-wide, not stretched across the sheet: in this
+                        // flex column a bare chip took the column's whole width,
+                        // a bar under the "— UDP" "— QUIC" chips beside it.
+                        <div className="flex">
+                          <ProxyOsChip
+                            fingerprint={sheetFingerprint}
+                            aged={sheetAgedOs}
+                            autoRecheck={p.autoRecheck === true}
+                            nowMs={nowMs}
+                            size="xs"
+                          />
+                        </div>
                       )}
                       <ul data-component="capability-hints" className="flex flex-col gap-px">
                         {capabilityHints.map((hint) => (

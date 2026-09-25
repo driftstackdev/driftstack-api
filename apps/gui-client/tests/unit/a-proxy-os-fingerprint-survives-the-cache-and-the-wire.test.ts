@@ -350,8 +350,8 @@ describe('the wire', () => {
   it("CRITICAL a web-port reading from a multi-host MOBILE proxy survives every hop and is GREEN — the owner's VerizonNY, read as iOS/macOS where browserleaks read it; we present as an iPhone, so Darwin on the port websites use is a match", async () => {
     const v = await verdictThroughTheChain('mobile-web', true);
     expect(v.tone).toBe('match');
-    expect(v.label).toBe('iOS/macOS');
-    expect(v.hint).toMatch(/presents as iOS\/macOS/);
+    expect(v.label).toBe('Apple');
+    expect(v.hint).toMatch(/presents as Apple \(iOS or macOS\)/);
   });
 
   // ⛔ OWNER 2026-09-24 (item 9): "if it's a Apple, it should be green status". An

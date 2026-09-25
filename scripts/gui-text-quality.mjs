@@ -18,8 +18,19 @@
 //                  Live</span>`) is measured like a leaf;
 //   • size       — no readable text below MIN_PX (glyph-only spans skipped);
 //   • truncation — an element that clips its text (text-overflow: ellipsis +
-//                  scrollWidth > clientWidth) must carry a `title` or
-//                  `aria-label` on itself or within six ancestors.
+//                  scrollWidth > clientWidth) must carry a `title` on itself or
+//                  within six ancestors — the full text on hover. (Until
+//                  2026-09-25 an `aria-label` counted too; it shows nothing to
+//                  a sighted reader, and the Simulator rail's "Downlo…" passed
+//                  on its button's aria-label.)
+//   • clipped    — (2026-09-25) text CUT OFF by a box that clips it (overflow
+//                  hidden / clip, on the element or an ancestor) with no
+//                  ellipsis or line clamp to say so. Measured on the rendered
+//                  text itself; a scroller ends the walk for its axis (what it
+//                  hides is reachable). The Simulator's "Agent is driving —
+//                  switch to Manual to take cont" pill was one: nowrap, wider
+//                  than the phone, cut by the phone's own overflow — and no rule
+//                  here looked at anything but an ellipsis.
 //
 // ⛔ GRADIENTS ARE BACKGROUNDS (2026-09-24). The background walk used to read
 // `background-color` only. A surface painted with a gradient — the `background:`
@@ -40,11 +51,13 @@
 // styles/index.css — and this is the proof the token change closed them.
 //
 // POSITIVE CONTROL (`--control`): a 7px, 1.3:1 span, a clipped untitled span, a
-// mixed-content span faded to 2.46:1 by `opacity`, and white text on a
-// near-white gradient over a black `background-color` are injected into every
-// scene, and the run PASSES only when every scene in every theme reports exactly
-// those five findings (one SMALL, two CONTRAST, one GRADIENT CONTRAST, one
-// CUT-NO-TITLE, all attributed to data-component="scene-quality-control").
+// mixed-content span faded to 2.46:1 by `opacity`, white text on a near-white
+// gradient over a black `background-color`, an ellipsed label whose only name is
+// an ancestor's `aria-label`, and text cut off by a 24px box with no ellipsis are
+// injected into every scene, and the run PASSES only when every scene in every
+// theme reports exactly those seven findings (one SMALL, two CONTRAST, one
+// GRADIENT CONTRAST, two CUT-NO-TITLE, one CLIPPED, all attributed to
+// data-component="scene-quality-control").
 // An instrument that cannot see its own control is not measuring, and a clean
 // run from such an instrument would be the best-looking failure there is.
 //
@@ -116,6 +129,11 @@ const KNOWN_SCENES = [
 ];
 const ALL_THEMES = ['dark', 'light'];
 const MIN_PX = 9;
+/** Scenes whose root is `h-screen w-screen` — the Simulator is its own OS window,
+ *  so the BROWSER VIEWPORT is its window and must be exactly the declared size
+ *  (scripts/gui-visual-check.mjs's Phase E sets it the same way, for the same
+ *  reason). */
+const VIEWPORT_SCENE_PREFIX = 'audit-simulator';
 const FROZEN_NOW_ISO = '2026-06-15T06:42:00.000Z';
 const CONTROL_COMPONENT = 'scene-quality-control';
 
@@ -404,10 +422,15 @@ function measureStage(root, opts) {
     }
     return false;
   };
+  // ⛔ (2026-09-25) A `title` — the full text on hover — and NOTHING ELSE. This
+  // used to accept an `aria-label` too, and an aria-label is read to a screen
+  // reader and shown to nobody: the Simulator's rail label "Downloads" rendered
+  // "Downlo…" in every simulator scene and passed, because its BUTTON carried
+  // aria-label="Downloads". A sighted customer had no way to the rest of the word.
   const titled = (el) => {
     let e = el;
     for (let i = 0; i < 6 && e; i += 1) {
-      if (e.getAttribute && (e.getAttribute('title') || e.getAttribute('aria-label'))) return true;
+      if (e.getAttribute && e.getAttribute('title')) return true;
       e = e.parentElement;
     }
     return false;
@@ -423,6 +446,93 @@ function measureStage(root, opts) {
     cs.textOverflow === 'ellipsis' &&
     cs.overflow !== 'visible' &&
     el.scrollWidth > el.clientWidth + 1;
+  // A box that shortens its text ON PURPOSE, with a mark that says so: an
+  // ellipsis or a line clamp. Its cut is the truncation rule's business.
+  const marksItsCut = (cs) =>
+    cs.textOverflow === 'ellipsis' ||
+    (cs.webkitLineClamp !== undefined &&
+      cs.webkitLineClamp !== 'none' &&
+      cs.webkitLineClamp !== '');
+  // ⛔ (2026-09-25) CLIPPED — text cut off by a box that CLIPS (overflow hidden
+  // or clip, on the element or any ancestor) with NO ellipsis to say so: the
+  // words simply stop at an edge. The truncation rule above never saw it — it
+  // only looks at `text-overflow: ellipsis` on the element itself — and that is
+  // how the Simulator's "Agent is driving — switch to Manual to take cont" pill
+  // shipped: `whitespace-nowrap` on a pill wider than the phone, cut by the
+  // phone's own overflow. Measured on the RENDERED TEXT (a Range over the
+  // element's own text nodes), against each clipping ancestor in turn. A
+  // scroller (overflow auto / scroll) ends the walk for its axis: what it hides
+  // is reachable by scrolling. A 1px box is the `sr-only` idiom and is skipped.
+  const cutOff = (el, cs) => {
+    const texts = Array.from(el.childNodes).filter(
+      (n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== '',
+    );
+    if (texts.length === 0) return null;
+    const box = el.getBoundingClientRect();
+    if (box.width <= 1 || box.height <= 1) return null;
+    const range = document.createRange();
+    let left = Infinity;
+    let right = -Infinity;
+    let top = Infinity;
+    let bottom = -Infinity;
+    for (const t of texts) {
+      range.selectNodeContents(t);
+      for (const r of range.getClientRects()) {
+        if (r.width === 0 || r.height === 0) continue;
+        left = Math.min(left, r.left);
+        right = Math.max(right, r.right);
+        top = Math.min(top, r.top);
+        bottom = Math.max(bottom, r.bottom);
+      }
+    }
+    if (!Number.isFinite(left)) return null;
+    let xLive = true;
+    let yLive = true;
+    // Only boxes on the CONTAINING-BLOCK chain clip: an absolutely positioned
+    // box escapes every unpositioned ancestor between it and its containing
+    // block, and a fixed one escapes all of them bar a transformed/filtered/
+    // contained one — which is how a flyout or a popover sits outside an
+    // `overflow: hidden` parent without being cut. `mode` is the position that
+    // decides which ancestor is the next link.
+    let mode = cs.position;
+    const holdsFixed = (s) =>
+      (s.transform !== undefined && s.transform !== 'none') ||
+      (s.filter !== undefined && s.filter !== 'none') ||
+      (s.perspective !== undefined && s.perspective !== 'none') ||
+      /paint|layout|strict|content/.test(s.contain ?? '');
+    for (let e = el; e && e !== document.body && (xLive || yLive); e = e.parentElement) {
+      const s = e === el ? cs : getComputedStyle(e);
+      if (e !== el) {
+        const inChain =
+          mode === 'absolute'
+            ? (s.position !== undefined && s.position !== 'static') || holdsFixed(s)
+            : mode === 'fixed'
+              ? holdsFixed(s)
+              : true;
+        if (!inChain) continue;
+        mode = s.position;
+      }
+      const cutX = xLive && (s.overflowX === 'hidden' || s.overflowX === 'clip');
+      const cutY = yLive && (s.overflowY === 'hidden' || s.overflowY === 'clip');
+      if (cutX || cutY) {
+        // An ellipsis or a clamp on the clipping box is a MARKED cut — the
+        // truncation rule's, not this one's.
+        if (marksItsCut(s)) return null;
+        const c = e.getBoundingClientRect();
+        const overX = cutX ? Math.max(c.left - left, right - c.right) : 0;
+        const overY = cutY ? Math.max(c.top - top, bottom - c.bottom) : 0;
+        if (overX > 1 || overY > 1) {
+          return {
+            by: e === el ? 'itself' : describe(e),
+            over: Math.round(Math.max(overX, overY)),
+          };
+        }
+      }
+      if (s.overflowX === 'auto' || s.overflowX === 'scroll') xLive = false;
+      if (s.overflowY === 'auto' || s.overflowY === 'scroll') yLive = false;
+    }
+    return null;
+  };
   const hex = (c) =>
     '#' +
     c
@@ -437,6 +547,7 @@ function measureStage(root, opts) {
     small: [],
     contrast: [],
     truncatedNoTitle: [],
+    clipped: [],
     sizes: {},
   };
   const isGlyphOnly = (t) => /^[^\p{L}\p{N}]{1,3}$/u.test(t);
@@ -560,6 +671,10 @@ function measureStage(root, opts) {
         control,
       });
     }
+    if (!isGlyphOnly(text)) {
+      const cut = cutOff(el, cs);
+      if (cut !== null) out.clipped.push({ el: describe(el), by: cut.by, over: cut.over, control });
+    }
   }
   return out;
 }
@@ -572,15 +687,26 @@ function measureStage(root, opts) {
  *  painted, and it measures 21:1 and goes unreported — the control is MISSED.
  *  The fourth (2026-09-24) is white text on a near-white GRADIENT laid over a
  *  black `background-color`: a background-colour-only walk reads 21:1 and passes
- *  it, and it is painted at 1.04:1 — a GRADIENT finding, counted on its own. */
+ *  it, and it is painted at 1.04:1 — a GRADIENT finding, counted on its own.
+ *  The fifth and sixth (2026-09-25): an ellipsed label named only by an
+ *  ancestor's `aria-label` (CUT-NO-TITLE — the Simulator rail's "Downlo…"), and
+ *  text cut off by a 24px `overflow: hidden` box with no ellipsis (CLIPPED — the
+ *  agent-driving pill). The instrument before them read both as clean. */
 function injectControl(root, component) {
   const c = document.createElement('div');
   c.setAttribute('data-component', component);
+  // At the stage's top-left, over the scene: appended at the END of a stage that
+  // is exactly full (the first-run screen), the control was pushed below the
+  // stage's own clip, and the CLIPPED rule then saw every control element cut —
+  // a finding about where the control was put, not about the scene.
+  c.style.cssText = 'position:absolute;top:0;left:0;z-index:2147483647';
   c.innerHTML =
     '<span style="font-size:7px;color:#1a1f2e;background:#111827">control small+dim</span>' +
     '<span style="display:inline-block;width:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;background:#000">control clipped text that overflows</span>' +
     '<span style="display:inline-block;background:#000"><span style="opacity:0.3;color:#fff"><i aria-hidden="true">•</i> control faded mixed</span></span>' +
-    '<span style="display:inline-block;background-color:#000;background-image:linear-gradient(#fafafa,#fafafa);color:#fff">control on a gradient</span>';
+    '<span style="display:inline-block;background-color:#000;background-image:linear-gradient(#fafafa,#fafafa);color:#fff">control on a gradient</span>' +
+    '<span aria-label="control label named for a screen reader only"><span style="display:inline-block;width:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;background:#000">control ellipsed label with only an aria-label</span></span>' +
+    '<span style="display:inline-block;width:24px;overflow:hidden;white-space:nowrap;background:#000"><span style="color:#fff">control text cut off without an ellipsis</span></span>';
   root.appendChild(c);
 }
 
@@ -592,7 +718,15 @@ async function measureScene(context, entry, theme) {
   try {
     // The viewport is the stage's own size (from the list) plus a margin, so a
     // taller audit scene is never clipped by a viewport sized for the default.
-    await page.setViewportSize({ width: entry.width + 40, height: entry.height + 40 });
+    // ⛔ EXCEPT a scene whose root FILLS THE VIEWPORT (see VIEWPORT_SCENE_PREFIX):
+    // there the +40 is not a margin, it is 40px more window — and at 882×758 the
+    // Simulator's agent-driving pill fit a phone it is cut by at the 842×718 the
+    // scene declares. The gate measured a window no customer has.
+    const fills = scene.startsWith(VIEWPORT_SCENE_PREFIX);
+    await page.setViewportSize({
+      width: entry.width + (fills ? 0 : 40),
+      height: entry.height + (fills ? 0 : 40),
+    });
     await page.clock.setFixedTime(new Date(FROZEN_NOW_ISO));
     await page.goto(`${URL}?scene=${scene}${STAGE_QS}`, { waitUntil: 'networkidle' });
     const stage = page.locator(`[data-scene="${scene}"][data-ready="1"]`);
@@ -692,10 +826,13 @@ async function main() {
           );
         for (const t of real(res.truncatedNoTitle))
           console.log(`  CUT-NO-TITLE (+${t.over}px)  ${t.el}`);
+        for (const t of real(res.clipped))
+          console.log(`  CLIPPED (+${t.over}px, cut by ${t.by})  ${t.el}`);
         findings +=
           real(res.small).length +
           real(res.contrast).length +
           real(res.truncatedNoTitle).length +
+          real(res.clipped).length +
           res.unmeasured;
         if (CONTROL) {
           const seen = {
@@ -703,14 +840,19 @@ async function main() {
             contrast: ctl(res.contrast).filter((c) => c.gradient !== true).length,
             gradient: ctl(res.contrast).filter((c) => c.gradient === true).length,
             cut: ctl(res.truncatedNoTitle).length,
+            clipped: ctl(res.clipped).length,
           };
           const ok =
-            seen.small === 1 && seen.contrast === 2 && seen.gradient === 1 && seen.cut === 1;
+            seen.small === 1 &&
+            seen.contrast === 2 &&
+            seen.gradient === 1 &&
+            seen.cut === 2 &&
+            seen.clipped === 1;
           res.controlDetected = seen;
           res.controlOk = ok;
           if (!ok) controlMisses += 1;
           console.log(
-            `  CONTROL ${ok ? 'detected' : 'MISSED'} — small ${seen.small}/1 contrast ${seen.contrast}/2 gradient ${seen.gradient}/1 cut ${seen.cut}/1`,
+            `  CONTROL ${ok ? 'detected' : 'MISSED'} — small ${seen.small}/1 contrast ${seen.contrast}/2 gradient ${seen.gradient}/1 cut ${seen.cut}/2 clipped ${seen.clipped}/1`,
           );
         }
       }
@@ -727,7 +869,7 @@ async function main() {
   console.log(`\n${findings} finding(s) across ${cells} scene×theme cells → ${OUT}/report.json`);
   if (CONTROL) {
     console.log(
-      `control: ${cells - controlMisses}/${cells} cells detected all five injected findings`,
+      `control: ${cells - controlMisses}/${cells} cells detected all seven injected findings`,
     );
     process.exitCode = controlMisses > 0 ? 1 : 0;
     return;

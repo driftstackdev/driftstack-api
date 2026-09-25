@@ -211,17 +211,23 @@ describe('the four simulator gallery scenes — every surface agrees with data-s
 // mission word/sentence on TOP of it; the two must never disagree, and the
 // mission word of one scene must never leak into another's.
 
-const MISSION_WORD: Record<'agent-running' | 'agent-approval' | 'agent-done' | 'pair', string> = {
+const MISSION_WORD: Record<
+  'agent-running' | 'agent-approval' | 'agent-done' | 'pair' | 'agent-small',
+  string
+> = {
   'agent-running': 'Running',
   'agent-approval': 'Paused',
   'agent-done': 'Done',
   pair: 'Pair',
+  // `agent-running` at the minimum window: the same mission, the same word.
+  'agent-small': 'Running',
 };
 const MISSION_CASES: ReadonlyArray<{ name: AuditSceneName; kind: keyof typeof MISSION_WORD }> = [
   { name: 'audit-simulator-agent-running', kind: 'agent-running' },
   { name: 'audit-simulator-agent-approval', kind: 'agent-approval' },
   { name: 'audit-simulator-agent-done', kind: 'agent-done' },
   { name: 'audit-simulator-pair', kind: 'pair' },
+  { name: 'audit-simulator-agent-small', kind: 'agent-small' },
 ];
 
 describe('the four mission-axis scenes — a live connectivity state, PLUS its own mission word, never confused', () => {
@@ -265,7 +271,11 @@ describe('the four mission-axis scenes — a live connectivity state, PLUS its o
   }
 
   it("VACUITY CONTROL — the four mission words are actually distinct (a detector that can't tell them apart would pass vacuously)", () => {
-    const words = Object.values(MISSION_WORD);
+    // `agent-small` is a WINDOW of `agent-running`, not a fifth mission: it
+    // shares its word by design, so it is not one of the words that must differ.
+    const words = Object.entries(MISSION_WORD)
+      .filter(([kind]) => kind !== 'agent-small')
+      .map(([, word]) => word);
     expect(new Set(words).size).toBe(words.length);
   });
 });

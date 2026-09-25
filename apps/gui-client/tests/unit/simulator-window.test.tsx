@@ -85,7 +85,8 @@ vi.mock('../../src/lib/livekit-connection-stats', () => ({
   CONNECTION_STATS_INTERVAL_MS: 3000,
 }));
 
-const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
+const { SimulatorWindow, SIM_PANE_RAIL_LABELS, SIM_PANE_TITLES } =
+  await import('../../src/views/SimulatorWindow');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
 
 /** WCAG 2.1 contrast of a `text-white/<alpha>` class composited over the simulator's
@@ -674,7 +675,9 @@ describe('SimulatorWindow — floating iPhone', () => {
       ['diagnostics', 'Health'],
       ['cookies', 'Cookies'],
       ['files', 'Files'],
-      ['downloads', 'Downloads'],
+      // The pane's own word ("Files the page saved"): "Downloads" is 47px at the
+      // rail's 9px floor and read "Downlo…" in its 42px (gui-v0.1.72).
+      ['downloads', 'Saved'],
       ['recording', 'Record'],
     ] as const) {
       const persistent = rail?.querySelector(`[data-component="sim-rail-label-${pane}"]`);
@@ -682,6 +685,51 @@ describe('SimulatorWindow — floating iPhone', () => {
       expect(persistent?.className).not.toContain('opacity-0');
     }
     expect(rail?.querySelector('[data-component="sim-rail-end"]')?.textContent).toContain('End');
+  });
+
+  // gui-v0.1.73 review — one section, one name. The rail said "Saved" under an
+  // icon whose name, hover flyout and pane title all said "Downloads", and
+  // "Health" over "Diagnostics": a voice-control user saying the word they SEE
+  // reached nothing (WCAG 2.5.3, label in name), and a sighted one read two
+  // names for one section. The rail word is the first word of the section's
+  // name now, and the name is what the flyout and the open pane's title say.
+  it('ONE name per section: the rail word opens the button’s name (WCAG 2.5.3 label in name), and the flyout and the open pane’s title say that name', () => {
+    for (const pane of Object.keys(SIM_PANE_TITLES) as Array<keyof typeof SIM_PANE_TITLES>) {
+      const word = SIM_PANE_RAIL_LABELS[pane];
+      const name = SIM_PANE_TITLES[pane];
+      expect(
+        name === word || name.startsWith(`${word} `),
+        `${pane}: the name "${name}" must begin with the rail word "${word}"`,
+      ).toBe(true);
+    }
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&session=agt_x');
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const rail = container.querySelector('[data-component="sim-drawer-rail"]') as HTMLElement;
+    const buttons = Array.from(
+      rail.querySelectorAll<HTMLButtonElement>('button[data-component^="sim-rail-"]'),
+    ).filter((b) => b.getAttribute('data-component') !== 'sim-rail-end');
+    expect(buttons.length).toBeGreaterThanOrEqual(7);
+    for (const button of buttons) {
+      const pane = (button.getAttribute('data-component') ?? '').replace(/^sim-rail-/, '');
+      const name = button.getAttribute('aria-label') ?? '';
+      const word =
+        button.querySelector(`[data-component="sim-rail-label-${pane}"]`)?.textContent ?? '';
+      expect(
+        name === word || name.startsWith(`${word} `),
+        `${pane}: the button is named "${name}" under the word "${word}"`,
+      ).toBe(true);
+      // The immediate hover flyout — the button's last span.
+      expect(button.querySelector(':scope > span:last-of-type')?.textContent, pane).toBe(name);
+      fireEvent.click(button);
+      const title = container.querySelector(
+        '[data-component="sim-drawer-pane"] [data-component="sim-pane-title"]',
+      );
+      expect(title?.textContent, `${pane}: the open pane's title`).toBe(name);
+    }
   });
 
   it('brands the toolbar: Drift mark + profile name (primary) with the device muted beside it', () => {

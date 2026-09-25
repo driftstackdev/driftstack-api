@@ -7,6 +7,10 @@ import {
 } from '../lib/recordings';
 
 export interface SimulatorRecordingPaneProps {
+  /** The section's name — the drawer rail's button name and hover flyout
+   *  (SimulatorWindow `SIM_PANE_TITLES.recording`), so the pane is titled with
+   *  the word the rail shows. */
+  title: string;
   recordings: ReadonlyMap<string, Recording>;
   recordingId: string | null;
   sessionAvailable: boolean;
@@ -27,6 +31,7 @@ function formatRecordingBytes(bytes: number): string {
  * strip, browser chrome, and every other drawer pane in SimulatorWindow.
  */
 export function SimulatorRecordingPane({
+  title,
   recordings,
   recordingId,
   sessionAvailable,
@@ -63,7 +68,7 @@ export function SimulatorRecordingPane({
   return (
     <section data-component="drawer-recording" className="space-y-2.5 text-[11px] text-white/80">
       <div className="flex items-center gap-2 font-sans text-[11px] font-semibold text-white">
-        <span>Recording</span>
+        <span data-component="sim-pane-title">{title}</span>
         {isRecording && (
           <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-red-400">
             <span

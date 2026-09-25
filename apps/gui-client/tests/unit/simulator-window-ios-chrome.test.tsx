@@ -12,6 +12,8 @@
 import { useEffect } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 function immediateControl<T>(value: T): Promise<T> {
   return {
@@ -202,16 +204,43 @@ describe('SimulatorWindow — iOS bezel chrome', () => {
     if (overlay) expect(overlay.className).toContain('animate-keyboard-in');
   });
 
-  it('sizes the Dynamic Island chunkier than the old thin pill (h-32/w-120)', () => {
+  it('sizes the Dynamic Island as a share of the screen — at most the 120×32 it always was — so it never lies over the clock (gui-v0.1.72)', () => {
+    // A fixed 120×32 island on the 211px screen of the minimum window covered
+    // the clock ("7:4"), the Wi-Fi glyph and half the battery. The strip is a
+    // size container now and styles/index.css sizes everything in it by its
+    // width; the geometry itself is measured by gui-visual-check's simulator
+    // sweep (`coveredInWindow`), at every simulator scene size.
     const { container } = renderSim();
-    const island = container.querySelector<HTMLElement>(
-      '[data-component="simulator-statusbar"] .pointer-events-none.rounded-full',
+    const bar = container.querySelector<HTMLElement>('[data-component="simulator-statusbar"]');
+    expect(bar?.classList.contains('sim-statusbar')).toBe(true);
+    const island = bar?.querySelector<HTMLElement>('[data-component="sim-island"]');
+    expect(island?.classList.contains('sim-island')).toBe(true);
+    expect(island?.className).toContain('rounded-full');
+    // No fixed width or height on the element: one would override nothing and
+    // mislead the next reader, and a px width is exactly the old defect.
+    expect(island?.className).not.toMatch(/\b[wh]-\[\d+px\]/);
+    expect(
+      bar
+        ?.querySelector('[data-component="sim-status-clock"]')
+        ?.classList.contains('sim-status-clock'),
+    ).toBe(true);
+    expect(bar?.querySelector('.sim-status-glyphs svg.sim-status-cellular')).not.toBeNull();
+    const css = readFileSync(resolve(__dirname, '../../src/styles/index.css'), 'utf8');
+    expect(css).toMatch(
+      /\.sim-statusbar \{[^}]*container-type: inline-size;[^}]*container-name: simstatus;/,
     );
-    expect(island).not.toBeNull();
-    // 120×32 (aspect ~3.75) — closer to the real iPhone 15/16 island than the old pill.
-    expect(island?.className).toContain('w-[120px]');
-    expect(island?.className).toContain('h-[32px]');
-    expect(island?.className).not.toContain('w-[112px]');
-    expect(island?.className).not.toContain('w-[92px]');
+    // 31% — the real iPhone's 125 of 393pt — capped at 120, the 15:4 kept.
+    expect(css).toMatch(
+      /\.sim-statusbar \.sim-island \{[^}]*width: min\(120px, 31cqw\);[^}]*aspect-ratio: 15 \/ 4;/,
+    );
+    expect(css).toMatch(
+      /\.sim-statusbar \.sim-status-clock \{[^}]*margin-left: clamp\(14px, 6\.2cqw, 24px\);/,
+    );
+    expect(css).toMatch(
+      /\.sim-statusbar \.sim-status-glyphs \{[^}]*margin-right: clamp\(14px, 6\.2cqw, 24px\);/,
+    );
+    expect(css).toMatch(
+      /@container simstatus \(max-width: 289px\) \{\s*\.sim-status-cellular \{\s*display: none;/,
+    );
   });
 });

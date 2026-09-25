@@ -45,37 +45,43 @@ function report(over: Partial<AgentSessionCapabilityReport>): AgentSessionCapabi
   };
 }
 
+// gui-v0.1.72 (owner item 9) — every line below reads the ONE vocabulary every
+// surface shares (lib/reading-badge-words): the QUIC badge the card, the list and
+// the Proxies tab draw ("✓ QUIC", "⤵ QUIC", "— QUIC"), mark first; what only a
+// live session knows — a real HTTP/3 connection, its count — is the badge's
+// DETAIL after " · ". It read "HTTP/3 ✓ live", "HTTP/3: not observed" and
+// "HTTP/3: none yet (0 connections)", the Simulator's own word for the reading.
 describe('QuicReadout', () => {
-  it('renders "not observed" when there is no report yet — never "measuring…", never a negative', () => {
+  it('renders "— QUIC" (not observed) when there is no report yet — never "measuring…", never a negative', () => {
     render(<QuicReadout report={null} />);
-    const el = screen.getByText('HTTP/3: not observed');
+    const el = screen.getByText('— QUIC');
     expect(el.getAttribute('data-state')).toBe('not-observed');
     expect(screen.queryByText(/measuring/i)).toBeNull();
-    expect(screen.queryByText(/HTTP\/3 ✓/)).toBeNull();
+    expect(screen.queryByText(/✓/)).toBeNull();
   });
 
-  it('renders "not observed" when the report is present but carries neither the flag nor a count — absence is not a negative verdict', () => {
+  it('renders "— QUIC" (not observed) when the report is present but carries neither the flag nor a count — absence is not a negative verdict', () => {
     // The whole point: an absent h3_connection_observed must not read as "no HTTP/3".
     render(<QuicReadout report={report({})} />);
-    const el = screen.getByText('HTTP/3: not observed');
+    const el = screen.getByText('— QUIC');
     expect(el.getAttribute('data-state')).toBe('not-observed');
     expect(screen.queryByText(/measuring/i)).toBeNull();
-    expect(screen.queryByText(/HTTP\/3 ✓/)).toBeNull();
+    expect(screen.queryByText(/✓/)).toBeNull();
   });
 
-  it('CRITICAL a MEASURED count of 0 without the flag is "none yet (0 connections)" — a measurement, not "not observed"', () => {
+  it('CRITICAL a MEASURED count of 0 without the flag is "— QUIC · no HTTP/3 yet" — its own state, not "not observed"', () => {
     render(<QuicReadout report={report({ h3_connection_count: 0 })} />);
-    const el = screen.getByText('HTTP/3: none yet (0 connections)');
+    const el = screen.getByText('— QUIC · no HTTP/3 yet');
     expect(el.getAttribute('data-state')).toBe('none-yet');
-    expect(screen.queryByText(/not observed/)).toBeNull();
+    expect(screen.queryByText(/^— QUIC$/)).toBeNull();
     expect(screen.queryByText(/measuring/i)).toBeNull();
     // Still NOT the green verdict: zero connections is not "HTTP/3 carried".
-    expect(screen.queryByText(/HTTP\/3 ✓/)).toBeNull();
+    expect(screen.queryByText(/✓/)).toBeNull();
   });
 
-  it('renders the green live verdict once an HTTP/3 connection was observed', () => {
+  it('renders the green live verdict once an HTTP/3 connection was observed — the QUIC badge, with the live HTTP/3 as its detail', () => {
     render(<QuicReadout report={report({ h3_connection_observed: true })} />);
-    const el = screen.getByText(/HTTP\/3 ✓ live/);
+    const el = screen.getByText(/^✓ QUIC · HTTP\/3 live/);
     expect(el.getAttribute('data-state')).toBe('observed');
   });
 
@@ -83,21 +89,21 @@ describe('QuicReadout', () => {
     render(
       <QuicReadout report={report({ h3_connection_observed: true, h3_connection_count: 0 })} />,
     );
-    expect(screen.getByText(/HTTP\/3 ✓ live/).getAttribute('data-state')).toBe('observed');
+    expect(screen.getByText(/^✓ QUIC · HTTP\/3 live/).getAttribute('data-state')).toBe('observed');
   });
 
   it('surfaces the connection count when more than one h3 connection was observed', () => {
     render(
       <QuicReadout report={report({ h3_connection_observed: true, h3_connection_count: 3 })} />,
     );
-    expect(screen.getByText(/HTTP\/3 ✓ live · 3 connections/)).toBeTruthy();
+    expect(screen.getByText(/^✓ QUIC · HTTP\/3 live · 3 connections$/)).toBeTruthy();
   });
 
   it('does not tack on a count for a single connection', () => {
     render(
       <QuicReadout report={report({ h3_connection_observed: true, h3_connection_count: 1 })} />,
     );
-    expect(screen.getByText(/HTTP\/3 ✓ live$/)).toBeTruthy();
+    expect(screen.getByText(/^✓ QUIC · HTTP\/3 live$/)).toBeTruthy();
   });
 
   it('(S1) the muted absence lines ("not observed", "none yet") clear WCAG AA (4.5) on the drawer chrome', () => {
@@ -146,7 +152,7 @@ function wcagContrast(a: Rgb, b: Rgb): number {
 }
 
 describe('QuicReadout — the observed verdict on the simulator chrome', () => {
-  it('(review) "HTTP/3 ✓ live" wears text-status-ready, which only clears AA on the #17181d card at the DARK token — so it depends on the simulator\'s dark scope', () => {
+  it('(review) "✓ QUIC · HTTP/3 live" wears text-status-ready, which only clears AA on the #17181d card at the DARK token — so it depends on the simulator\'s dark scope', () => {
     // T4 darkened the light --status-ready-rgb for light surfaces; on the Egress
     // card (bg-black/20 over #1d1e24 = #17181d, dark in both themes) that value
     // reads 2.66 — the gate's own light-simulator finding — while the dark value
@@ -160,7 +166,7 @@ describe('QuicReadout — the observed verdict on the simulator chrome', () => {
     const el = container.querySelector(
       '[data-component="sim-quic-readout"][data-state="observed"]',
     );
-    expect(el?.textContent).toBe('HTTP/3 ✓ live · 4 connections');
+    expect(el?.textContent).toBe('✓ QUIC · HTTP/3 live · 4 connections');
     expect(el?.className.split(/\s+/)).toContain('text-status-ready');
     const card: Rgb = [0x17, 0x18, 0x1d];
     expect(wcagContrast(modeRgb('status-ready', 'dark'), card)).toBeGreaterThanOrEqual(4.5);

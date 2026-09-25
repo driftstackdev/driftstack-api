@@ -149,14 +149,17 @@ describe('the rail icon LOOK change leaves everything else identical', () => {
     const names = Array.from(rail?.querySelectorAll('button') ?? []).map((b) =>
       b.getAttribute('aria-label'),
     );
+    // gui-v0.1.73 review — three names moved to the word their rail button
+    // shows (SIM_PANE_TITLES: "Health", "Saved files", "Record"); the order and
+    // the icon swap this pin guards are untouched.
     expect(names).toEqual([
       'Session',
       'Controls',
-      'Diagnostics',
+      'Health',
       'Cookies',
       'Files',
-      'Downloads',
-      'Recording',
+      'Saved files',
+      'Record',
       'End session',
     ]);
   });

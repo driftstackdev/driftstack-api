@@ -7,7 +7,7 @@
 // and the real ProfilesView grid inside the real AppWindow, real wire bodies
 // driven through the real button), 2026-09-12, BEFORE the fix:
 //
-//   check #1  fleet ok, quic_ok:true              → row: `✓ QUIC`, card: `QUIC ✓`
+//   check #1  fleet ok, quic_ok:true              → row: `✓ QUIC`, card: `✓ QUIC`
 //   check #2  fleet ok, quic_detail "skipped: …"  → row: `QUIC untested`
 //             (TUNNEL UP · 61 ms FROM THE TEST MAC · 🇩🇪 198.51.100.7 Frankfurt)
 //

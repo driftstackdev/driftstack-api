@@ -48,18 +48,23 @@ function report(over: Partial<AgentSessionCapabilityReport>): AgentSessionCapabi
 }
 
 describe('OsReadout', () => {
-  it('renders "not measured" when there is no report yet — and names the action that measures it', () => {
+  // gui-v0.1.72 (owner item 9) — every OS line below reads the ONE vocabulary
+  // every surface shares (lib/reading-badge-words): the badge the Proxies tab,
+  // the card and the list draw ("✓ Apple", "✗ Windows", "? Windows", "— OS"),
+  // mark first, with the confidence and the age as its detail after " · ". It
+  // read "OS: Windows · medium", "OS: ✓ iOS/macOS · high", "OS: not measured".
+  it('renders "— OS" (not measured) when there is no report yet — and names the action that measures it', () => {
     render(<OsReadout report={null} />);
-    const el = screen.getByText(/^OS: not measured$/);
+    const el = screen.getByText(/^— OS$/);
     expect(el).toBeTruthy();
     expect(el.getAttribute('data-state')).toBe('not-measured');
     expect(el.getAttribute('title')).toMatch(/run Test on this profile/i);
   });
 
-  it('renders "not measured" when the report is present but os_fingerprint is ABSENT — absence is not a placeholder OS', () => {
+  it('renders "— OS" (not measured) when the report is present but os_fingerprint is ABSENT — absence is not a placeholder OS', () => {
     // The whole point: an absent os_fingerprint must not read as a known OS.
     render(<OsReadout report={report({})} />);
-    const el = screen.getByText(/^OS: not measured$/);
+    const el = screen.getByText(/^— OS$/);
     expect(el.getAttribute('data-state')).toBe('not-measured');
     expect(screen.queryByText(/·/)).toBeNull();
   });
@@ -67,8 +72,11 @@ describe('OsReadout', () => {
   it('(o) O4 — a VPN session says the fingerprint is NOT AVAILABLE, never "run Test": a tunnel has no SOCKS5 stack to fingerprint, so that advice can never work', () => {
     for (const kind of ['openvpn', 'wireguard'] as const) {
       const { unmount } = render(<OsReadout report={report({ proxy_kind: kind })} />);
-      const el = screen.getByText(/^OS: not available for a VPN tunnel$/);
+      // The missing state's one badge; WHY (a tunnel has no stack to read) is
+      // its hover, as it is on the card and the Proxies tab.
+      const el = screen.getByText(/^— OS$/);
       expect(el.getAttribute('data-state')).toBe('not-available');
+      expect(el.getAttribute('title') ?? '').toMatch(/not available for VPN/i);
       expect(el.getAttribute('title') ?? '').not.toMatch(/run Test/i);
       unmount();
     }
@@ -85,11 +93,12 @@ describe('OsReadout', () => {
 
   // ⛔ 2026-09-24 (owner item 9) — the OS is named in the customer's words
   // ('Windows', 'iOS/macOS'), never the wire id ('windows', 'macos-or-ios').
-  it('renders "<OS> · <confidence>" once the exit OS fingerprint was observed', () => {
+  it('renders "<mark> <OS> · <confidence> confidence" once the exit OS fingerprint was observed', () => {
     render(
       <OsReadout report={report({ os_fingerprint: { os: 'windows', confidence: 'medium' } })} />,
     );
-    const el = screen.getByText(/OS: Windows · medium/);
+    // Withheld (no vantage flag): the card's and the grid's "? Windows".
+    const el = screen.getByText(/^\? Windows · medium confidence$/);
     expect(el.getAttribute('data-state')).toBe('observed');
     // Neutral, not a status colour (mirrors ExitIpChip's text-white/70).
     expect(el.className).toContain('text-white/70');
@@ -99,7 +108,7 @@ describe('OsReadout', () => {
     render(
       <OsReadout report={report({ os_fingerprint: { os: 'macos-or-ios', confidence: 'high' } })} />,
     );
-    const el = screen.getByText(/OS: ✓ iOS\/macOS · high/);
+    const el = screen.getByText(/^✓ Apple · high confidence$/);
     expect(el.className).toContain('text-status-ready');
     expect(el.className).not.toContain('text-white/70');
   });
@@ -129,7 +138,7 @@ describe('OsReadout', () => {
     // ×10 keeps it in days, which is what this arm is about.
     const at = new Date(NOW - OS_FINGERPRINT_TTL_MS * 10).toISOString();
     render(<OsReadout report={observed(at)} nowMs={NOW} />);
-    const el = screen.getByText(/OS: Windows · high ·/);
+    const el = screen.getByText(/^\? Windows · high confidence ·/);
     expect(el.getAttribute('data-age')).toBe('aged');
     expect(el.textContent ?? '').toMatch(/·\s*\d+\s*d ago$/);
     // And the title says the one thing a customer can do about it, plus WHY the
@@ -141,7 +150,7 @@ describe('OsReadout', () => {
   it('CRITICAL a FRESH reading says nothing about age — "just now" on every session is noise, and the label has to mean something when it appears', () => {
     const at = new Date(NOW - 5 * 60 * 1000).toISOString();
     render(<OsReadout report={observed(at)} nowMs={NOW} />);
-    const el = screen.getByText(/^OS: Windows · high$/);
+    const el = screen.getByText(/^\? Windows · high confidence$/);
     expect(el.getAttribute('data-age')).toBe('fresh');
     expect(el.textContent ?? '').not.toMatch(/ago/);
   });
@@ -162,7 +171,7 @@ describe('OsReadout', () => {
 
   it('an UNDATED reading still renders — a control plane that predates the stamp is a gap in OUR plumbing, not evidence about the customer\'s proxy, and blanking it would read as "never measured"', () => {
     render(<OsReadout report={observed(undefined)} nowMs={NOW} />);
-    const el = screen.getByText(/^OS: Windows · high$/);
+    const el = screen.getByText(/^\? Windows · high confidence$/);
     expect(el.getAttribute('data-state')).toBe('observed');
     expect(el.getAttribute('data-age')).toBe('undated');
   });
@@ -170,7 +179,7 @@ describe('OsReadout', () => {
   it('CONTROL — a stamp in the FUTURE reads as current, never as a negative age. Clock skew between the box and this Mac is real, and "-3 d ago" is worse than saying nothing.', () => {
     const at = new Date(NOW + 60 * 60 * 1000).toISOString();
     render(<OsReadout report={observed(at)} nowMs={NOW} />);
-    const el = screen.getByText(/^OS: Windows · high$/);
+    const el = screen.getByText(/^\? Windows · high confidence$/);
     expect(el.getAttribute('data-age')).toBe('fresh');
   });
 

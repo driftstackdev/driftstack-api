@@ -173,7 +173,9 @@ describe('SimulatorWindow — file-download Downloads section (W2856)', () => {
       expect(b).not.toBeNull();
       return b as HTMLButtonElement;
     });
-    expect(indicator.getAttribute('aria-label')).toBe('Downloads (2)');
+    // gui-v0.1.73 review — the section's one name (SIM_PANE_TITLES.downloads),
+    // the word its rail button shows first.
+    expect(indicator.getAttribute('aria-label')).toBe('Saved files (2)');
     expect(
       container.querySelector('[data-component="simulator-download-count"]')?.textContent,
     ).toBe('2');
