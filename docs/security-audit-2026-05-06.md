@@ -2,7 +2,7 @@
 
 V-246. Walks `apps/server/` auth + payment + data-handling code paths
 against the "would I be embarrassed if this hit production with the
-first paying customer?" bar. Conducted via Explore agent reading 14
+first paying customer?" bar. Conducted as a code read of 14
 service/lib/route files; findings cross-checked by line citations.
 
 ## Summary
@@ -169,35 +169,35 @@ Pre-launch security audit revisit four days after V-246. Closure status per find
 
 Re-checked the four pre-launch slices that landed since V-246 for new findings. Each was reviewed against the same six checks the original audit applied (scope-reach, plaintext-leakage, idempotency, audit-log injection, account-scope leakage, web-session-token security).
 
-### V-481 — granular API key scopes (Track A wave 2)
+### V-481 — granular API key scopes (Track A)
 
 - `requireScope` mirrored at two call sites (`lib/errors-helpers.ts` + `services/auth.ts`); the unit test matrix at `tests/unit/scope-check.test.ts` (41 cases) asserts both sites evaluate the same predicate. **CLEAN.**
 - Broad-satisfies-granular invariant: `read` satisfies `read:sessions` etc., but granular keys do NOT satisfy broad checks — narrow keys stay narrow. Asserted in tests. **CLEAN.**
 - No new scope can reach `/v1/admin/*` — `driftstack_internal_admin` is the gate, and granular scopes are explicitly enumerated as customer-only verbs (`read`/`write`/`admin` on customer resources). **CLEAN.**
 
-### V-484 — audit-log filter extensions (Track A wave 3)
+### V-484 — audit-log filter extensions (Track A)
 
 - New query params (`from` / `to` / `actor_type` / `target_resource_id`) all parse through Zod; malformed values return 400 (`from=not-a-date` test pinned). **CLEAN.**
 - All filters apply against `accountId = ctx.account.id` — no cross-account leakage path exists; route still calls `accountAudit.list(ctx, opts)` which scopes at the service layer. **CLEAN.**
 - `target_resource_id` is bounded to 200 chars; SQL parameterised via Drizzle's `eq`. No injection vector. **CLEAN.**
 
-### V-485 — per-tier feature gating (Track A wave 4)
+### V-485 — per-tier feature gating (Track A)
 
 - `requireTierFeature(tier, feature)` is a pure boolean lookup against `TIER_FEATURES[tier][feature]`. No side effect, no DB hit, no IO. **CLEAN.**
 - Registry is read-only at module load; no runtime mutation paths exist. **CLEAN.**
 - The guard throws `ForbiddenError` (existing, RFC 9457 typed) rather than a custom error — error handling is consistent with the rest of the API. **CLEAN.**
 
-### V-494 — log + Sentry redaction (Track C wave 4)
+### V-494 — log + Sentry redaction (Track C)
 
 - pino redact list now covers `password` / `new_password` / `current_password` / `code` (TOTP) / `recovery_code(s)` / `secret` / `signing_secret` / `webhook_secret` / `client_secret` / `totp_secret` / `mfaSecret` / `stripe-signature` header. **CLEAN.**
 - Sentry beforeSend mirrors the pino list with case-insensitive key matching at every nesting depth. Unit test pins the matrix (12 cases) including cycle safety. **CLEAN.**
 - Defense-in-depth posture: pino is best-effort (developers may forget to nest fields under `body.*`); Sentry's recursive walker catches leakage that bypasses pino. Both layers must fail open for a secret to leak. **CLEAN.**
 
-### V-486 — Postmark templates (Track A wave 5)
+### V-486 — Postmark templates (Track A)
 
 - Two new templates (`quota-warning`, `session-event-digest`) — DRAFT copy only; no firing logic; no PII enters the renderer pre-activation. When wired (V-486-followup), the dedupe column writes are atomic per the existing `firstSuccessEmailSentAt` pattern. **PRE-CLEAN.**
 
-### V-487 — NowPayments scaffold (Track A wave 6)
+### V-487 — NowPayments scaffold (Track A)
 
 - `verifyNowpaymentsSignature` uses `timingSafeEqual` for the constant-time HMAC compare. **CLEAN.**
 - Canonicalises JSON body (sorts keys at every level) before HMAC — protects against the `{"a":1,"b":2}` vs `{"b":2,"a":1}` variant attack. Unit test pins (10 cases) including non-JSON raw-body fallback. **CLEAN.**

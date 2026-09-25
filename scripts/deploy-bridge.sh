@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # V-278 / V-667.C — manual-deploy bridge for the systemd+node Hetzner
 # servers (until .github/workflows/deploy.yml is rewritten per the
-# docs/internal/2026-05-15-deploy-pipeline-mismatch.md verdict).
+# internal 2026-05-15 deploy-pipeline mismatch verdict).
 #
 # Today: prod runs systemd + bare node at /opt/driftstack/api, and the
 # deploy.yml docker-compose path doesn't apply (no docker on the box,
@@ -23,7 +23,7 @@
 #   ./scripts/deploy-bridge.sh staging <SHA>  # deploys a specific SHA
 #
 # Pre-reqs:
-#   - SSH access to root@<host> (autopilot pubkey appended 2026-05-12)
+#   - SSH access to root@<host> (automation deploy key appended 2026-05-12)
 #   - git + Node 22 + npm available on the host (verified 2026-05-15)
 #
 # WARNING: production rollouts are gated on staging being green for
@@ -131,7 +131,7 @@ if [ "$ENV" = "staging" ] && [ "${DEPLOY_SKIP_STAGING_DB_ISOLATION_CHECK:-0}" !=
     echo "[bridge]   staging .env DATABASE_URL host = $STAGING_DB_HOST" >&2
     echo "[bridge]   prod    .env DATABASE_URL host = $PROD_DB_HOST" >&2
     echo "[bridge]   Expected post-ARC-2 (2026-05-19): staging = ep-lingering-math, prod = ep-aged-pond" >&2
-    echo "[bridge]   See docs/internal/2026-05-19-staging-and-prod-share-neondb.md §RESOLVED" >&2
+    echo "[bridge]   See the internal 2026-05-19 staging/prod shared-NeonDB notes (§RESOLVED)" >&2
     exit 3
   fi
 fi

@@ -4,7 +4,7 @@
 // is a RATCHET: it says a number did not get worse. No arm of it can tell a
 // working scanner from one whose patterns stopped matching — a scanner that
 // matched nothing would satisfy every arm of a ratchet at once, and read as the
-// four lanes having finished. These are the arms that say it matches.
+// cleanup work having finished. These are the arms that say it matches.
 //
 // Three properties are worth naming because each one has a way of failing that
 // looks like success:
@@ -12,7 +12,7 @@
 //   FIXTURES, BOTH DIRECTIONS. Planted internal text is found; ordinary
 //   customer copy (Node.js, `node:crypto`, ISO-8601, SHA-256, RFC 7807, a
 //   semantic version, a UUID, HTTP/2, macOS) is not. A rule that over-matches
-//   makes the lanes chase ghosts; a rule that under-matches ships the thing.
+//   makes the cleanup chase ghosts; a rule that under-matches ships the thing.
 //
 //   THE ALLOW-LIST IS A SPAN, NOT A LINE. `node:crypto` on the same line as
 //   "the session node" must suppress the first and report the second. Allowing
@@ -77,7 +77,7 @@ describe('shipped-text scanner — what it finds', () => {
     expect(scanText('the box forces --script-security 1')[0]?.class).toBe(INTERNAL_VOCABULARY);
   });
 
-  it('reports the line and the matched text, so a lane can go straight to it', () => {
+  it('reports the line and the matched text, so a fixer can go straight to it', () => {
     const body = ['line one', 'line two', 'a comment citing W834 here', 'line four'].join('\n');
     const found = scanText(body);
     expect(found).toHaveLength(1);

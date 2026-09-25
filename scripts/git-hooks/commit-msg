@@ -10,8 +10,14 @@
 #     party tooling trailers, ZERO "Generated with" footers, ZERO robot
 #     emoji markers, ZERO noreply@<tool>.com addresses.
 #   - V-211 anonymity   — ZERO founder framing, ZERO personal-name
-#     references (currently: Joel, Joeltheunissen, Theunissen) in
+#     references (listed outside the repo, see scripts/personal-names.mjs) in
 #     commit subject or body.
+#
+# Git identity policy: every commit is authored and committed as
+# `Driftstack <dev@driftstack.dev>`, set per clone with
+#   git config --local user.name "Driftstack"
+#   git config --local user.email "dev@driftstack.dev"
+# and never under a personal name or address.
 #
 # Canonical source — version-controlled. Install per-clone with
 # `scripts/install-git-hooks.sh` (copies this file to .git/hooks/).
@@ -48,19 +54,32 @@ REJECT_PATTERNS_V205=(
 )
 
 # V-211 anonymity patterns. Match standalone tokens — avoid biting
-# "foundered" / "foundation" / "Joeline" inside larger words.
+# "foundered" / "foundation" inside larger words.
 # Trailing boundary is [^[:alpha:]] rather than [^[:alnum:]] deliberately.
-# Excluding digits as well as letters let a name followed immediately by digits
-# through — which is the form a real address takes — while the documented
-# purpose of the boundary is only to avoid biting "foundered", "foundation" and
-# "Joeline" inside larger WORDS. Those three still do not match; a name followed
+# Excluding digits as well as letters let a word followed immediately by digits
+# through — which is the form a real handle or address takes — while the
+# documented purpose of the boundary is only to avoid biting "foundered" and
+# "foundation" inside larger WORDS. Those still do not match; a word followed
 # by digits now does.
 REJECT_PATTERNS_V211=(
   '(^|[^[:alnum:]])[Ff]ounder([^[:alpha:]]|$)'
-  '(^|[^[:alnum:]])[Jj]oel([^[:alpha:]]|$)'
-  '(^|[^[:alnum:]])[Tt]heunissen([^[:alpha:]]|$)'
-  '(^|[^[:alnum:]])[Jj]oeltheunissen([^[:alpha:]]|$)'
 )
+
+# V-211 personal names are NOT spelled out here, and not hashed here either: a
+# digest of a name is reversed by hashing a public name list. The list lives
+# outside the repo — DRIFTSTACK_PERSONAL_NAMES, or the file at
+# DRIFTSTACK_PERSONAL_NAMES_FILE (default ~/.config/driftstack/personal-names.txt)
+# — and scripts/personal-names.mjs matches the message against it, folding case
+# and accents, so a name next to digits, punctuation or an `@` is caught and a
+# longer word containing one is not. With no list configured it checks its
+# canary word only and says so on stderr. Exit 1 = a name was found; anything
+# else = the check could not run, and the hook fails CLOSED on that rather than
+# waving the message through.
+HOOK_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PERSONAL_NAMES="$HOOK_DIR/../personal-names.mjs"
+if [[ ! -f "$PERSONAL_NAMES" ]]; then
+  PERSONAL_NAMES="$(git rev-parse --show-toplevel)/scripts/personal-names.mjs"
+fi
 
 fail() {
   local pattern="$1"
@@ -86,5 +105,14 @@ for PATTERN in "${REJECT_PATTERNS_V211[@]}"; do
     fail "$PATTERN" "V-211 anonymity — no founder/personal-name in commits"
   fi
 done
+
+NAME_RC=0
+NAME_HITS=$(node "$PERSONAL_NAMES" "$MSG_FILE") || NAME_RC=$?
+if [[ $NAME_RC -eq 1 ]]; then
+  fail "a personal name (line:column word — $(echo "$NAME_HITS" | tr '\n' ' '))" "V-211 anonymity — no founder/personal-name in commits"
+elif [[ $NAME_RC -ne 0 ]]; then
+  echo "✗ commit-msg: the V-211 personal-name check could not run (exit $NAME_RC)." >&2
+  exit 1
+fi
 
 exit 0

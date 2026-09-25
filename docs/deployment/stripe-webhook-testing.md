@@ -163,7 +163,7 @@ Once staging has a Hetzner host + a real public URL:
    pointed at `https://staging.driftstack.dev/v1/webhooks/stripe`.
 2. Copy the signing secret. SSH into the staging host and write it
    to the staging .env (`STRIPE_WEBHOOK_SECRET=whsec_...`)
-   per the locked stripe-credential-handling memory — never paste
+   per the locked stripe-credential-handling rule — never paste
    webhook secrets into chat or PR diffs.
 3. Restart the staging server.
 4. From the Stripe Dashboard → Developers → Webhooks → select the
@@ -179,7 +179,7 @@ After commercial activation (entity registered + KvK + BV in place):
 1. **Live-mode** webhook endpoint in the Stripe Dashboard pointed at
    `https://api.driftstack.dev/v1/webhooks/stripe`.
 2. Live-mode signing secret goes via SSH-write to the prod .env per
-   the stripe-credential-handling memory (live keys NEVER through
+   the stripe-credential-handling rule (live keys NEVER through
    chat or PR).
 3. **Before** enabling the endpoint, send a test webhook from the
    Dashboard's "Send test webhook" UI. Confirm 200 + ledger row

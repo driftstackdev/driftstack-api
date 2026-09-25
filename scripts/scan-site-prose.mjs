@@ -44,12 +44,13 @@
 // `vantage`) — imported, not restated, so the two scanners cannot quietly
 // diverge on what "fleet" means. Three more (`interpose`, `macworker`,
 // `undetectable`) have no rule there and are added here. The personal-name
-// patterns are `apps/server/tests/unit/public-app-v211-personal-name-sweep
-// .test.ts`'s own `PERSONAL_NAME_PATTERNS` (Joel / Theunissen /
-// Joeltheunissen) — copied rather than imported, because that file is a
-// vitest spec, not an importable module, and pinned identical to it on
-// purpose so the two cannot drift. An email pattern is added beside them,
-// allowing only `@driftstack.dev` / `@driftstack.io` addresses, which are the
+// rule is `scripts/personal-names.mjs`'s matcher — the one every V-211 guard
+// shares (the commit-msg hook, the public-app and SDK sweeps), imported rather
+// than copied so they cannot drift. The names themselves live outside the repo
+// (see that file); with no list configured the rule checks its canary word only
+// and says so once. An email pattern is
+// added beside it, allowing only `@driftstack.dev` / `@driftstack.io`
+// addresses, which are the
 // ones a customer page is allowed to publish.
 //
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,6 +76,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { personalNameHits } from './personal-names.mjs';
 import { RULES as SHIPPED_TEXT_RULES } from './scan-shipped-text.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -338,18 +340,13 @@ const SITE_ONLY_RULES = Object.freeze([
   },
 ]);
 
-// apps/server/tests/unit/public-app-v211-personal-name-sweep.test.ts's own
-// PERSONAL_NAME_PATTERNS, pinned identical on purpose — see the header.
+// V-211: `find` reports every listed name, handle or address in the text, via
+// scripts/personal-names.mjs (case- and accent-folded; a longer word containing
+// a name is not a hit, a name beside digits or an `@` is).
 const PERSONAL_NAME_RULES = Object.freeze([
-  { id: 'personal-name-joel', pattern: /\b[Jj]oel\b/g, why: 'a personal name (V-211)' },
   {
-    id: 'personal-name-theunissen',
-    pattern: /\b[Tt]heunissen\b/g,
-    why: 'a personal name (V-211)',
-  },
-  {
-    id: 'personal-name-joeltheunissen',
-    pattern: /\b[Jj]oeltheunissen\b/g,
+    id: 'personal-name',
+    find: (text) => personalNameHits(text).map(({ index, word }) => ({ index, text: word })),
     why: 'a personal name (V-211)',
   },
   {
@@ -401,6 +398,13 @@ export function scanText(text, file) {
   const starts = lineStarts(text);
   const findings = [];
   for (const rule of RULES) {
+    if (rule.find) {
+      for (const hit of rule.find(text)) {
+        const { line, column } = lineOf(starts, hit.index);
+        findings.push({ file, rule: rule.id, why: rule.why, line, column, text: hit.text });
+      }
+      continue;
+    }
     const re = new RegExp(rule.pattern.source, rule.pattern.flags);
     re.lastIndex = 0;
     let m = re.exec(text);

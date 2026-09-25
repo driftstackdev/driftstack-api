@@ -23,7 +23,7 @@ status-subscription **confirm + unsubscribe email links** (they target
 
 ## ✅ COMPLETE 2026-05-29 — CNAME added (founder), domain live + verified end-to-end (`status.driftstack.io/` 200; `/subscribe/confirm?token=` + `/unsubscribe?token=` serve + the `?token=` query survives the trailing-slash redirect). No further action needed. (Original remaining step, kept for the record:)
 
-## The ONE remaining step (needs DNS write — the agent's token is `zone:read` only)
+## The ONE remaining step (needs DNS write — the deploy automation's token is `zone:read` only)
 
 Add a single proxied CNAME in the `driftstack.io` zone:
 

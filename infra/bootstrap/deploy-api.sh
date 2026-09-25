@@ -7,7 +7,7 @@
 #
 # Pre-requisites:
 #   - bootstrap.sh has run on the target host (V-278.A).
-#   - The agent's SSH key is authorized for `root` on the target.
+#   - The deploy automation's SSH key is authorized for `root` on the target.
 #   - Local build is up-to-date (`npm run build` in repo root).
 #   - `infra/env-templates/$ROLE.env` exists with REAL secrets
 #     (NOT the .template; copy to a sibling, fill in REDACTED values).
@@ -131,7 +131,7 @@ ssh "root@$HOST" "
 
 # 4b. Fleet control-plane WS vhost (PRODUCTION only) — fleet.driftstack.dev is a DIRECT
 # grey-cloud origin so the long-lived Mac-worker control WS isn't Cloudflare-mangled
-# (the Code=57 / -1011 flap; bus W2863/W2866, the founder's sim-bug fix). Installed only
+# (the Code=57 / -1011 flap; W2863/W2866, the founder's sim-bug fix). Installed only
 # when its Let's Encrypt cert is present (else `nginx -t` would fail on the missing cert
 # and 502 the whole box); the $connection_upgrade map is always safe to drop in. If the
 # cert is absent the workers fall back to the CF-proxied api. and the flap returns — so

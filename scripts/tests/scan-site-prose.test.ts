@@ -30,6 +30,7 @@ import {
   stripNonProse,
 } from '../scan-site-prose.mjs';
 import { RULES as SHIPPED_TEXT_RULES } from '../scan-shipped-text.mjs';
+import { CANARY_WORD } from '../personal-names.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -83,8 +84,8 @@ describe('scan-site-prose — the rule list finds real hits (positive control)',
     const prose =
       'Our harness talks to the fleet over the control-plane and the control plane. ' +
       'See observer notes and vantage points from an interpose hook on a macworker host. ' +
-      'It is undetectable. Contact Joel Theunissen, also written Joeltheunissen, at ' +
-      'joel@gmail.com.';
+      `It is undetectable. Contact ${CANARY_WORD} at ` +
+      'someone@gmail.com.';
     const found = scanText(prose, 'fixture.txt');
     const rulesHit = new Set(found.map((f) => f.rule));
     for (const rule of RULES) {
@@ -231,35 +232,31 @@ describe('scan-site-prose — the shared rules cannot drift from scan-shipped-te
   });
 });
 
-describe('scan-site-prose — personal-name rules stay pinned to the V-211 sweep', () => {
-  const v211Test = read(
-    resolve(HERE, '..', '..', 'apps/server/tests/unit/public-app-v211-personal-name-sweep.test.ts'),
-  );
+describe('scan-site-prose — the personal-name rule uses the shared V-211 matcher', () => {
+  it("CRITICAL this scanner's personal-name rule is scripts/personal-names.mjs's matcher — imported, not copied, so the scanner, the commit-msg hook and the public-app / SDK sweeps cannot disagree about who is named, and no scanner spells a name out", () => {
+    const rule = RULES.find((r) => r.id === 'personal-name') as
+      | { find?: (text: string) => { index: number; text: string }[] }
+      | undefined;
+    expect(rule, "this scanner has no 'personal-name' rule").toBeDefined();
+    expect(rule?.find, 'the rule reports hits through the shared matcher').toBeTypeOf('function');
+    expect(rule?.find?.(`see ${CANARY_WORD}.`)).toEqual([{ index: 4, text: CANARY_WORD }]);
+    expect(rule?.find?.('customer')).toEqual([]);
+    const source = read(resolve(HERE, '..', 'scan-site-prose.mjs'));
+    expect(source).toMatch(/import \{ personalNameHits \} from '\.\/personal-names\.mjs';/);
+  });
 
-  it("CRITICAL this scanner's Joel/Theunissen/Joeltheunissen patterns are byte-identical to public-app-v211-personal-name-sweep.test.ts's PERSONAL_NAME_PATTERNS — copied, not imported (that file is a vitest spec), so a change to one without the other is caught here rather than silently drifting", () => {
-    const sources = [
-      { id: 'personal-name-joel', literal: '/\\b[Jj]oel\\b/' },
-      { id: 'personal-name-theunissen', literal: '/\\b[Tt]heunissen\\b/' },
-      { id: 'personal-name-joeltheunissen', literal: '/\\b[Jj]oeltheunissen\\b/' },
-    ];
-    for (const { id, literal } of sources) {
-      expect(v211Test, `V-211 sweep no longer contains ${literal}`).toContain(literal);
-      const mine = RULES.find((r) => r.id === id);
-      expect(mine, `this scanner has no rule '${id}'`).toBeDefined();
-      expect(`/${mine?.pattern.source}/`).toBe(literal);
+  it('CRITICAL finds a listed name in every casing and beside digits or an address — driven through the real matcher by its canary word, which is on the list whether or not a real list is configured', () => {
+    const cap = CANARY_WORD[0]!.toUpperCase() + CANARY_WORD.slice(1);
+    for (const v of [CANARY_WORD, cap, CANARY_WORD.toUpperCase(), `${CANARY_WORD}89`]) {
+      const found = scanText(v, 'fixture.txt').filter((f) => f.rule === 'personal-name');
+      expect(found.length, `'${v}' was not matched by the personal-name rule`).toBe(1);
+      expect(found[0]?.column).toBe(1);
+      expect(found[0]?.text).toBe(v.replace(/89$/, ''));
     }
   });
 
-  it('CRITICAL matches the same canonical violators the V-211 sweep pins: Joel / joel / Theunissen / theunissen / Joeltheunissen', () => {
-    const violators = ['Joel', 'joel', 'Theunissen', 'theunissen', 'Joeltheunissen'];
-    for (const v of violators) {
-      const found = scanText(v, 'fixture.txt');
-      expect(found.length, `'${v}' was not matched by any personal-name rule`).toBeGreaterThan(0);
-    }
-  });
-
-  it('tolerates compounds the same way the V-211 sweep does — "Joeline" is not a hit', () => {
-    expect(scanText('Joeline', 'fixture.txt')).toEqual([]);
+  it('tolerates compounds the same way the V-211 sweep does — a listed name plus "ine" is another word, not a hit', () => {
+    expect(scanText(`${CANARY_WORD}ine`, 'fixture.txt')).toEqual([]);
   });
 });
 

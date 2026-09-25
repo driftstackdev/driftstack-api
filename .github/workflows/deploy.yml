@@ -4,10 +4,10 @@
 # Triggered on push to main. The previous docker-compose approach
 # (image build → ghcr.io push → docker compose pull) did not match
 # what prod actually runs — production is bare-systemd + Node 22 at
-# /opt/driftstack/api (per docs/internal/2026-05-15-deploy-pipeline-
-# mismatch.md). Operators have been deploying via
+# /opt/driftstack/api (per the internal 2026-05-15 deploy-pipeline
+# mismatch notes). Operators have been deploying via
 # scripts/deploy-bridge.sh manually since 2026-05-15 (10+ successful
-# Wave 1062 prod deploys).
+# prod deploys).
 #
 # Option B keeps deploy-bridge.sh as the SOURCE OF TRUTH and has the
 # GH Actions runner call it. Single execution path for both manual

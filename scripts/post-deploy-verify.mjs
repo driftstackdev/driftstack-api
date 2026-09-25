@@ -75,7 +75,7 @@ const checks = [
   checkAdminCostConfigRoute,
   checkOpenapi,
   checkUnknownPath404,
-  // Activation-gate posture invariants (Wave 1119+).
+  // Activation-gate posture invariants (Slice 1119.x onward).
   // Each gated route registers a 503 FeatureUnavailable stub when
   // its AppDeps service is omitted from bootstrap. Without these
   // checks, a regression that forgets the `else` branch in app.ts
@@ -289,7 +289,7 @@ async function checkStatusIncidentDetailRoute() {
 }
 
 async function checkAgentSessionsModeRoute() {
-  // Slice 3 (Wave 29-NNN ARC 3) — POST /v1/agent-sessions/:id/mode
+  // Slice 3 (ARC 3) — POST /v1/agent-sessions/:id/mode
   // requires auth. An unauthed POST against a fake session id should
   // return 401 (auth gate fires before the session existence check).
   // 404 indicates the route wasn't registered (agent-sessions repo
@@ -324,7 +324,7 @@ async function checkAgentSessionsModeRoute() {
 }
 
 async function checkAgentSessionsInputEventRoute() {
-  // Slice 4+5 (Wave 29-NNN ARC 3) — POST /v1/agent-sessions/:id/
+  // Slice 4+5 (ARC 3) — POST /v1/agent-sessions/:id/
   // input-event requires auth. Same probe pattern as /mode above.
   const url = `${baseUrl}/v1/agent-sessions/ses_00000000-0000-0000-0000-000000000000/input-event`;
   let res;

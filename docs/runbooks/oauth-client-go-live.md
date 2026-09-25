@@ -16,8 +16,7 @@ validation step.
 The sections below document the activation procedure for the next
 operator who needs to re-run it (recovery scenario, new provider
 addition, signing-secret rotation, etc.). The 2026-05-16 deploy
-followed this exact sequence end-to-end (waves 16+ in the session
-log).
+followed this exact sequence end-to-end.
 
 ## Founder verdicts (locked 2026-05-15)
 
@@ -196,8 +195,8 @@ password / magic-link sign-in continues unaffected.
 
 ## Related
 
-- `docs/internal/2026-05-15-prod-wire-up-batch-report.md` — track-by-
-  track status across the full Wave 1054+ ladder.
+- The internal 2026-05-15 prod wire-up batch report — track-by-track
+  status across the full rollout ladder.
 - `apps/server/src/services/oauth-client-service.ts` — service-impl
   with all 3 founder verdicts encoded.
 - `apps/server/src/lib/oauth-client-providers.ts` — provider

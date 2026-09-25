@@ -190,6 +190,12 @@ jobs:
         #
         # `--all` keeps the scope identical (root config + --coverage) and adds
         # the exit-code, unhandled-error and file-count checks on top.
+        #
+        # V-211: the personal names the anonymity guards reject are not in the
+        # repository. They come from this secret; without it the guards check
+        # their canary word only and emit a `::warning::` saying so.
+        env:
+          DRIFTSTACK_PERSONAL_NAMES: ${{ secrets.DRIFTSTACK_PERSONAL_NAMES }}
         run: node scripts/verify-suite.mjs --all
 
   e2e:

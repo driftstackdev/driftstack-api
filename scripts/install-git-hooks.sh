@@ -45,8 +45,8 @@ fi
 # `core.hooksPath` overrides .git/hooks entirely. This repo sets it to
 # `.husky/_` via the package.json `prepare` script, so every hook copied above
 # is inert, and this script previously reported success anyway. That is how the
-# V-205 attribution hook came to sit in .git/hooks unread while both CLAUDE.md
-# and AGENTS.md described it as enforcing: a message carrying a tool co-author
+# V-205 attribution hook came to sit in .git/hooks unread while the contributor
+# guidelines described it as enforcing: a message carrying a tool co-author
 # trailer committed cleanly.
 #
 # Not an error — husky's `.husky/<hook>` files are the ones that run, and they

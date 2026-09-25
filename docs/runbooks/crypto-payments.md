@@ -152,7 +152,7 @@ Check the server logs for `nowpayments-webhooks` component entries:
   If the raw form verifies and the canonical form does not, this is the
   serialisation divergence, not a secret mismatch — do not rotate the
   secret, and escalate. Tracked as the open item in
-  `docs/internal/2026-06-03-crypto-payment-path-security-audit.md`,
+  the internal 2026-06-03 crypto-payment-path security audit,
   which is to be confirmed against a real sandbox IPN before the rail
   is enabled.
 

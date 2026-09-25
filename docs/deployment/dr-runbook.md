@@ -55,7 +55,7 @@ DNS hijack). Code + DB intact (Neon is separate; code is in git).
 2. Run the deploy automation (which lives in `[TODO]` — currently
    manual; document the scripted version once it exists).
 3. SSH-write the prod .env (Stripe keys, signing secrets, Postmark
-   token, etc.) per the locked stripe-credential-handling memory
+   token, etc.) per the locked stripe-credential-handling rule
    and the operational register.
 4. Confirm `/health` returns 200 + `/ready` returns 200 with all
    readiness checks green.
@@ -75,7 +75,7 @@ application write corrupted production data. Neon is healthy.
    minute before the corrupting commit landed:
 
    ```
-   git -C /Users/john/code/driftstack-api log --oneline -20
+   git log --oneline -20   # from the repository root
    # Find the bad commit; subtract a minute from its committer time.
    ```
 

@@ -1,6 +1,6 @@
 {
   "annotations": { "list": [] },
-  "description": "Arc 4 Wave 2.B sub-slice 8.22 — bundled-LLM resolution observability. Counters: driftstack_bundled_llm_request_total{outcome}, driftstack_bundled_llm_error_total{kind}.",
+  "description": "Arc 4 phase 2.B, slice 8.22 — bundled-LLM resolution observability. Counters: driftstack_bundled_llm_request_total{outcome}, driftstack_bundled_llm_error_total{kind}.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,

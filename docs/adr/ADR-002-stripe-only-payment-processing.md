@@ -13,7 +13,7 @@ A superseding ADR is owed and has no author yet (see the note below).**
 > ingress at `/v1/webhooks/nowpayments`, `crypto_orders` +
 > `crypto_entitlements` tables, `CryptoTierActivationService` with refund
 > clawback, and a dedicated security audit
-> (`docs/internal/2026-06-03-crypto-payment-path-security-audit.md`).
+> (internal, 2026-06-03).
 >
 > So the decision changed and the record did not. Per `docs/adr/README.md` the
 > convention is that a superseded ADR keeps its number and gets

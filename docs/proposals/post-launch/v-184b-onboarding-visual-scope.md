@@ -1,12 +1,12 @@
 # V-184b — Onboarding visual UX scope proposal
 
 **Status:** Tier 3 scope outline — surfaces for founder redline. Contains NO autonomously-drafted customer-facing copy; lists the **structural shape** of what V-184b would change, marks each Tier 3 copy decision with `[FOUNDER COPY]` so the redline pass is bounded.
-**Source:** Autopilot direction 2026-05-05 — "V-184b Tier 3 onboarding visual UX (founder-redline Tier 3 — DRAFT working-tree only, NOT commit; founder reviews on wake)".
+**Source:** Work-queue direction 2026-05-05 — "V-184b Tier 3 onboarding visual UX (founder-redline Tier 3 — DRAFT working-tree only, NOT commit; founder reviews before landing)".
 **V-184a baseline:** `apps/customer-dashboard/src/pages/{signup,verify-email,welcome,select-tier,first-session}.astro` — all five Tier 1 scaffolding pages exist with minimal placeholder UX.
 
 ## Why a scope proposal instead of a working-tree draft
 
-Per autopilot guardrails: "T3 (security architecture, customer data handling, pricing/$-numbers, marketing language): NEVER autonomously decide. If encountered, draft + surface for founder, move to next T1."
+Per the decision-authority guardrails: "T3 (security architecture, customer data handling, pricing/$-numbers, marketing language): NEVER autonomously decide. If encountered, draft + surface for founder, move to next T1."
 
 V-184b is largely customer-facing copy + visual decisions. Drafting actual `.astro` content would mean making autonomous Tier 3 calls on tone, hierarchy, conversion messaging, and brand voice. Rather than draft choices the founder might reject anyway, this proposal lists the SHAPE of changes per page so the founder can:
 
@@ -28,7 +28,7 @@ These are the `V-219*` PHASE 3 patterns already approved + landed elsewhere; saf
 
 ### 1. `signup.astro`
 
-**Structural changes the autopilot can safely propose:**
+**Structural changes engineering can safely propose:**
 
 - Add a `progress-step` component (visual: 5-step indicator with current step highlighted in oxblood-700) at top of the form panel. Same pattern across all 5 onboarding pages. Founder picks: highlighted vs filled-bar style.
 - Add an inline link to `/legal/terms` + `/legal/privacy` near the submit button (acceptance via the implicit "by clicking Create account" pattern, not a separate checkbox). Server side: legal-acceptance gate (V-049) handles the API-key issuance gate; signup itself doesn't require explicit consent UI per current design. Confirm with founder whether the implicit-acceptance pattern stays or flips to explicit-checkbox.
@@ -69,17 +69,17 @@ These are the `V-219*` PHASE 3 patterns already approved + landed elsewhere; saf
 
 ### 4. `select-tier.astro`
 
-**Tier 3 sensitivity is HIGHEST on this page** — this is where the customer commits to a tier with $-amount visible. Per autopilot guardrails: "pricing/$-numbers: NEVER autonomously decide."
+**Tier 3 sensitivity is HIGHEST on this page** — this is where the customer commits to a tier with $-amount visible. Per the decision-authority guardrails: "pricing/$-numbers: NEVER autonomously decide."
 
-**Structural changes the autopilot can safely propose (NO pricing-touching):**
+**Structural changes engineering can safely propose (NO pricing-touching):**
 
 - Same progress-step indicator (step 4/5).
-- Tier comparison shape — table vs card-row vs vertical-list. Founder picks; autopilot does NOT pick.
+- Tier comparison shape — table vs card-row vs vertical-list. Founder picks; engineering does NOT pick.
 - "Start with trial pack" CTA must be visually distinct from "Skip to paid tier" path (per ADR-003 — trial pack is the recommended onboarding path).
 
 **Tier 3 copy + numeric redlines:**
 
-- `[FOUNDER COPY + PRICING]` Tier names + descriptions + $-amounts. Per founder's locked tier-3-explicit-values memory, the canonical numbers live in `driftstack-repo` file 127 — autopilot must not invent any numbers here. Source: `packages/api-types/src/capabilities.ts` for the per-tier display strings.
+- `[FOUNDER COPY + PRICING]` Tier names + descriptions + $-amounts. Per founder's locked tier-3-explicit-values rule, the canonical numbers live in `driftstack-repo` file 127 — engineering must not invent any numbers here. Source: `packages/api-types/src/capabilities.ts` for the per-tier display strings.
 - `[FOUNDER COPY]` Trial-pack pitch ($2.99 / 14 days / $0.18-per-hour decrement per ADR-003 — those numbers are locked, but the pitch language is open).
 
 ### 5. `first-session.astro`
@@ -112,7 +112,7 @@ These are the `V-219*` PHASE 3 patterns already approved + landed elsewhere; saf
 ## Recommended next step on founder wake
 
 1. Founder reviews this proposal, marks structural items APPROVE / REJECT.
-2. Founder provides COPY for the `[FOUNDER COPY]` markers OR delegates back to autopilot with constraints (e.g. "use marketing-site voice; no $-numbers; max 25 words per heading").
-3. Either the founder or a future autopilot session translates the redlines into actual `.astro` edits, lands as V-184b-1 / V-184b-2 etc. per page (smaller PRs preferred for onboarding flow).
+2. Founder provides COPY for the `[FOUNDER COPY]` markers OR delegates back to engineering with constraints (e.g. "use marketing-site voice; no $-numbers; max 25 words per heading").
+3. Either the founder or a future engineering pass translates the redlines into actual `.astro` edits, lands as V-184b-1 / V-184b-2 etc. per page (smaller PRs preferred for onboarding flow).
 
 This proposal itself is committed (it's structural, not customer-facing copy). The actual page edits remain unwritten until founder redline.

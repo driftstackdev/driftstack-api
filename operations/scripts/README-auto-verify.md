@@ -3,7 +3,7 @@
 `auto-verify-session.mjs` drives a **real** Driftstack agent session end-to-end —
 exactly the way the desktop GUI (`apps/gui-client`) does — and asserts the
 behaviours that otherwise have to be checked by hand in the floating-iPhone
-simulator. Run it on autopilot (CI, a cron, a `/loop`) to catch regressions in
+simulator. Run it unattended (CI or a cron) to catch regressions in
 the launch → stream → navigate → tabs → cookies path before a human notices.
 
 ## What it checks
@@ -40,7 +40,7 @@ WebRTC build or a LiveKit-less deployment doesn't read as a product regression.
 egress, and report **which tier** passed so the verdict is honest about what was
 proven. The test account has **no proxy** (loopback egress), so a real page
 **content load** hangs past the window — but the box's control-plane handlers
-fire regardless (A3 box-trace, bus W2940/W2945), and those are what these checks
+fire regardless (harness box-trace, W2940/W2945), and those are what these checks
 assert:
 
 - **`TAB_SWITCH`** — the box replies `activateTabResult { type, requestId, ok? }`
@@ -198,8 +198,8 @@ self-verify proxy-independently):
   OVERALL: PASS
 ```
 
-> **`TAB_SWITCH` now PASSES on the ack** with no proxy: A3's box-trace (bus
-> W2940/W2945) proved the box DOES fire `handleActivateTab ENTER gate=true` and
+> **`TAB_SWITCH` now PASSES on the ack** with no proxy: the harness box-trace
+> (W2940/W2945) proved the box DOES fire `handleActivateTab ENTER gate=true` and
 > emits an `activateTabResult{ok}` on a no-profile session — the handler is
 > healthy; only the egress-dependent **content** load was hanging past the
 > window, which the old url-change-only assertion mis-read as a handler fault.

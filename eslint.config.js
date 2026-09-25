@@ -42,7 +42,7 @@ export default tseslint.config(
       // require a separate parser config; the scripts are short +
       // .mjs ESM-only so the cost outweighs the value.
       'scripts/**',
-      // Operational autopilot scripts (e.g. the headless simulator
+      // Operational unattended scripts (e.g. the headless simulator
       // self-verify harness) — same standalone-.mjs case as `scripts/**`
       // above: ESM-only, outside any tsconfig, not type-checked here.
       'operations/scripts/**',

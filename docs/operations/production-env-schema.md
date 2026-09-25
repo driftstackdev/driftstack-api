@@ -118,7 +118,7 @@ When `STRIPE_SECRET_KEY` + `DRIFTSTACK_TIER_PRICE_IDS` are set, the BillingServi
 DRIVER=webkit
 ```
 
-Pre-launch / dev: `DRIVER=mock`. Production: `DRIVER=webkit` once the WebKit-fork driver is wired (cross-repo dep on Agent 1's bridge).
+Pre-launch / dev: `DRIVER=mock`. Production: `DRIVER=webkit` once the WebKit-fork driver is wired (cross-repo dep on the fork's bridge).
 
 ## What's NOT in production .env
 
@@ -155,7 +155,7 @@ When provisioning a fresh production environment from zero, the order:
 6. Postmark → `POSTMARK_*`.
 7. Sentry → `SENTRY_*`.
 8. Stripe live-mode + price IDs → `STRIPE_*` + `DRIFTSTACK_TIER_PRICE_IDS` (post-BV-KvK closure).
-9. WebKit-fork driver → `DRIVER=webkit` (post-Agent-1 bridge integration).
+9. WebKit-fork driver → `DRIVER=webkit` (post-fork bridge integration).
 
 Each step independently — partial completion lets the server bootstrap with reduced functionality. Bootstrap log clearly states which integrations are wired vs which are NOT-wired.
 

@@ -131,7 +131,7 @@ The decision is reversible: if the dashboard hits Astro's complexity ceiling (re
 
 ## Decision authority
 
-This is **architectural / structural** — surfaces for founder review per the Decision authority section in AGENTS.md. No commit until founder confirms the recommendation (or redirects to one of B / C / D).
+This is **architectural / structural** — surfaces for founder review per the project's decision-authority policy. No commit until founder confirms the recommendation (or redirects to one of B / C / D).
 
 ## Related docs
 

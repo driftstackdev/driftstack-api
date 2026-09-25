@@ -113,7 +113,7 @@ the Mac desktop. The GUI client + dashboard are unchanged.
 `DRIVER=webkit` returns `DriverNotIntegratedError` per design — every
 method of `drivers/webkit.ts` throws. That is unchanged and is NOT
 conditional on V-333b, which has shipped: the production WebKit driver
-is the fork in the Agent 1 repo and lands separately.
+is in the WebKit fork's own repo and lands separately.
 
 ## Resetting between runs
 
@@ -161,7 +161,7 @@ up -d`.
   URL scheme registration test on macOS.
 - `docs/operations/launch-day-runbook.md` — production launch steps
   (different from this — production targets Hetzner).
-- Agent 1 owns the WebKit driver's harness branching for the eventual
+- The WebKit fork owns the WebKit driver's harness branching for the eventual
   DRIVER=webkit integration. There is no document for it in this repo
-  yet — ask on the A2-A3 bus rather than following a path here, so this
+  yet — ask the harness side rather than following a path here, so this
   list does not carry a link that resolves to nothing during an incident.

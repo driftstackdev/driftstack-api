@@ -293,17 +293,17 @@ try {
     return { label, base, net, dips, maxDip, trace, verdict };
   }
 
-  // STRAY-MOVE: the decisive regression for A3's W2770 fork gate (the proven back-up cause).
+  // STRAY-MOVE: the decisive regression for the W2770 fork gate (the proven back-up cause).
   // Scroll down a bit, lift (touchEnd), then send a touchMove with NO active finger at a y
   // far BELOW the drag end → the buggy fork reads a big NEGATIVE delta off the stale
   // lastTouchPoint and scrolls the page back UP. Pre-W2770: luma DROPS (bounce reproduced).
   // Post-W2770 (m_driftstackTouchActive gate): the move is ignored → luma FLAT.
   // sameId=true → the stray move reuses the JUST-ENDED finger's touchId (a "late move
-  // after touchEnd" — matches A3's exact repro). sameId=false → a fresh orphan id (no
-  // touchStart at all). Try BOTH so the probe reliably reproduces A3's down-less-move
+  // after touchEnd" — matches the harness's exact repro). sameId=false → a fresh orphan id (no
+  // touchStart at all). Try BOTH so the probe reliably reproduces the harness's down-less-move
   // bounce regardless of whether the fork keys the gate on touchId or on a global flag.
   async function runStrayMove(label, sameId) {
-    console.log(`\n=== STRAY-MOVE [${label}] (regression for A3 W2770 down-less-move gate) ===`);
+    console.log(`\n=== STRAY-MOVE [${label}] (regression for W2770 down-less-move gate) ===`);
     const X = 200;
     const id = tid++;
     await publish({ type: 'touchStart', x: X, y: 700, touchId: id });
@@ -478,13 +478,13 @@ try {
     return { label: 'e2e', base, net, dips, maxDip, trace, verdict, noScroll, bounce };
   }
 
-  // STUCK-FINGER: the dropped-touchEnd case A3 found (audit #5 → fork fix W2780). Scroll
+  // STUCK-FINGER: the dropped-touchEnd case the harness found (audit #5 → fork fix W2780). Scroll
   // down but DROP the touchEnd, wait past the 250ms re-anchor window, then send a late move
   // on the still-"active" finger. A fork WITHOUT W2780 lets the stale finger FLING the page
   // (luma jumps); WITH W2780 (>250ms gap => re-anchor) the late move is re-anchored => no
   // fling (luma flat). Always sends a final touchEnd to clean up the stuck finger.
   async function runStuckFinger() {
-    console.log(`\n=== STUCK-FINGER (regression for A3 W2780 dropped-touchEnd fling) ===`);
+    console.log(`\n=== STUCK-FINGER (regression for W2780 dropped-touchEnd fling) ===`);
     const X = 200;
     const id = tid++;
     await publish({ type: 'touchStart', x: X, y: 700, touchId: id });
@@ -615,13 +615,11 @@ try {
       console.log('A clean monotonic drag itself bounced => fork mishandles even clean input.');
       exitCode = 3;
     } else if (strayBounce) {
-      console.log(
-        'A down-less move bounced the page (A3 W2770 root cause) — gate not yet live here.',
-      );
+      console.log('A down-less move bounced the page (W2770 root cause) — gate not yet live here.');
       exitCode = 3;
     } else if (out.some((r) => r.flung)) {
       console.log(
-        'A dropped-touchEnd stuck finger FLUNG the page (A3 W2780 case) — expected pre-W2780; the W2770 down-less-move path is clean. Re-run after W2780 deploys to confirm RE-ANCHORED.',
+        'A dropped-touchEnd stuck finger FLUNG the page (W2780 case) — expected pre-W2780; the W2770 down-less-move path is clean. Re-run after W2780 deploys to confirm RE-ANCHORED.',
       );
       exitCode = 5;
     } else if (cleanScrolled) {

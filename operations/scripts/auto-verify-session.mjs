@@ -122,7 +122,7 @@ const COOKIES_TIMEOUT_MS = 15_000;
 //   - TAP_URL             : a page whose primary link navigates somewhere distinct,
 //                           so a successful tap is provable by a page_state url change.
 const DEVICE_LOGICAL_WIDTH = 402;
-// A3's 2026-06-29 black-band fix: the box captures inner_height now, so the
+// The harness's 2026-06-29 black-band fix: the box captures inner_height now, so the
 // content frame is 714 (was 874), and the GUI no longer applies a TAP_Y_OFFSET
 // (the durable ÷STREAM_DPR-removal maps coords 1:1 to the 402×714 track). Harness
 // updated to match: no Y offset, 714-tall logical frame.
@@ -367,7 +367,7 @@ async function sendScrollDrag(room, { fromX, fromY, dy, steps = 6 }) {
 
 // ── page_state parsing (mirror SimulatorWindow.tsx onData) ────────────
 // Accept BOTH the proposed {type:'page_state', url, loading, progress} envelope
-// AND A3's shipped HarnessOutbound.PageState {state, url, title} where
+// AND the harness's shipped HarnessOutbound.PageState {state, url, title} where
 // state ∈ loading|loaded|errored|stalled.
 function parseMaybePageState(bytes) {
   let msg;
@@ -730,14 +730,14 @@ async function runLiveKitChecks(info) {
   }
 
   // ── CHECK 3/3a TAB SWITCH — exact GUI A→B→A wire + warm return ──
-  // Settle after the NAVIGATE above before issuing the tab switch. A3 (W2926)
+  // Settle after the NAVIGATE above before issuing the tab switch. W2926
   // found that firing `navigate` then `activateTab` within ~2ms collides two
   // concurrent `wd.navigate` calls on one WebContent → the activateTab WD /url
   // returns -1005 → the activateTabResult flips to `error` even though the page
   // switches. A human never navigates+switches in 2ms; this settle removes the
   // self-inflicted collision so the check measures the real tab-switch path.
   //
-  // PROXY-INDEPENDENCE (A3 box-trace, W2940/W2945): the switch HANDLER is
+  // PROXY-INDEPENDENCE (harness box-trace, W2940/W2945): the switch HANDLER is
   // proxy-independent — the box fires `handleActivateTab ENTER gate=true` and
   // emits an `activateTabResult { type, requestId, ok? }` ack over THIS data
   // channel the moment it accepts the request. The subsequent CONTENT switch
@@ -1061,7 +1061,7 @@ async function runLiveKitChecks(info) {
   // Navigate to a page with ONE provable link (example.com → iana.org), then tap
   // its rect.
   //
-  // PROXY-INDEPENDENCE (A3 box-trace, W2940/W2945): a tap is proxy-independent at
+  // PROXY-INDEPENDENCE (harness box-trace, W2940/W2945): a tap is proxy-independent at
   // the INPUT layer — the box fires `[INPUT-RX] FIRST DataChannel input received`
   // then `[INPUT-INJECT] DISPATCHED OK`. CRUCIALLY, those are box-side LOGS, not
   // data-channel messages: the input-event contract (agent-input-event.ts) has NO

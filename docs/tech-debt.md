@@ -120,7 +120,7 @@ See V-231 V-log entry for the full reasoning chain.
 2. Conversion-rate telemetry on the onboarding funnel (post-launch ETA) shows a clear drop-off step.
 3. Founder bandwidth opens up post-launch and the polish becomes the highest-leverage T3 work.
 
-**Implementation when revived:** The proposal at `docs/proposals/post-launch/v-184b-onboarding-visual-scope.md` carries the per-page scope outline + `[FOUNDER COPY]` markers. Founder reds in copy + structure picks → autopilot lands per-page Astro edits as V-184b-1 through V-184b-5. Estimated mechanical-edit effort: ~30min per page once founder copy is set.
+**Implementation when revived:** The proposal at `docs/proposals/post-launch/v-184b-onboarding-visual-scope.md` carries the per-page scope outline + `[FOUNDER COPY]` markers. Founder reds in copy + structure picks → engineering lands per-page Astro edits as V-184b-1 through V-184b-5. Estimated mechanical-edit effort: ~30min per page once founder copy is set.
 
 ---
 

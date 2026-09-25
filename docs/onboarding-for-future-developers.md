@@ -95,10 +95,10 @@ The full layout description with intent per file lives in `docs/architecture.md`
 Three docs you'll consult:
 
 - **`docs/decisions.md`** — D-NNN entries. Every architectural decision (vendor choice, schema shape, naming convention) is recorded here. When in doubt about why something is a certain way, search this doc first.
-- **`docs/verification-log.md`** — V-NNN entries. Append-only empirical log of every substantive change. Pairs with each commit's V-NNN tag in its message. The "next" section at the end usually tells you what's coming.
+- **The V-NNN verification records** (kept internally) — V-NNN entries. Append-only empirical log of every substantive change. Pairs with each commit's V-NNN tag in its message. The "next" section at the end usually tells you what's coming.
 - **`docs/adr/`** — long-form ADRs for architectural deviations from the planned approach. Read these when working in their domain (ADR-001 hosting, ADR-002 Stripe-only, ADR-003 trial pack, ADR-004 two-ladder pricing, ADR-005 observability draft, ADR-006 audit retention draft).
 
-AGENTS.md at the repo root captures the full operational discipline: test standards, marketing-copy review cadence, decision-authority levels (Routine / Architectural / Contractual), commit pattern (push-to-main with V-NNN tag), what's in scope vs out of scope.
+The contributor guidelines capture the full operational discipline: test standards, marketing-copy review cadence, decision-authority levels (Routine / Architectural / Contractual), commit pattern (push-to-main with V-NNN tag), what's in scope vs out of scope.
 
 ## Common things you might want to do
 
@@ -133,9 +133,9 @@ Same as above plus:
 
 ### Add a new sub-processor (vendor)
 
-This is a Tier 2 architectural decision per AGENTS.md. Surface for approval first; don't silently add. Once approved:
+This is a Tier 2 architectural decision per the project's decision-authority policy. Surface for approval first; don't silently add. Once approved:
 
-1. Update `AGENTS.md` sub-processor list.
+1. Update the locked sub-processor list (V-052).
 2. Update `docs/legal/dpa.md` Annex 3 sub-processor table.
 3. Update `docs/legal/privacy-policy.md` sub-processor disclosure.
 4. Bump legal-doc version (forces re-acceptance).
@@ -180,7 +180,7 @@ expects.
 If you want to dive deeper before making your first change:
 
 - Read `docs/architecture.md` end-to-end.
-- Skim the most recent 5-10 V-log entries (`tail -300 docs/verification-log.md`) for current state of the world.
+- Skim the most recent 5-10 V-log entries in the internal verification records for current state of the world.
 - Look at the V-079 (auth flow) or V-082 (billing flow) commits as examples of "what landing a feature end-to-end looks like."
 
 If you have a specific change in mind, open the relevant test file first — it'll tell you the expected contract more reliably than the docs.

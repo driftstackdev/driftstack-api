@@ -88,7 +88,7 @@ bash scripts/post-deploy-verify.mjs --base-url https://api.driftstack.dev
 
 ## Cross-references
 
-- V-545.A surface + V-545.B implementation phases: `docs/internal/v545-status-page-enhancements.md`
+- V-545.A surface + V-545.B implementation phases: the internal V-545 status-page enhancement notes
 - Sub-processor RSS feed: `apps/marketing-site/src/pages/trust/sub-processors/feed.xml.ts`
 - Postmark templates: `apps/server/src/services/email.ts` (search for `status-incident-`)
 - Throttle repo: `apps/server/src/db/incident-update-notifications-repo.ts`

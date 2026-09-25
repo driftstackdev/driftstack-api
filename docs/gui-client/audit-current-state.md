@@ -174,7 +174,7 @@ Possibilities:
 - `/v1/account` — exists? Need to verify in `apps/server/src/routes/`.
 - A new `/v1/account/me` or `/v1/account/limits` endpoint.
 
-If the existing surface doesn't expose this, **the contract addition needs to happen in `apps/server` first** (Tier-1 backend work), then `@driftstack/sdk` regen, then GUI consumption. Per autopilot guardrails: "GUI client connects to driftstack-api endpoints — if new endpoints needed, add them in apps/server first with proper auth/scope, then consume from gui-client."
+If the existing surface doesn't expose this, **the contract addition needs to happen in `apps/server` first** (Tier-1 backend work), then `@driftstack/sdk` regen, then GUI consumption. Per the GUI client guardrails: "GUI client connects to driftstack-api endpoints — if new endpoints needed, add them in apps/server first with proper auth/scope, then consume from gui-client."
 
 **P0 dependency chain:**
 

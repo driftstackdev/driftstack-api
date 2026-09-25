@@ -11,11 +11,11 @@
 //   Error: ENOENT: no such file or directory, open
 //   '/var/folders/.../T/<id>/ssr/.tmp-...'
 //
-// The visible symptom is a collapsed suite — A3 measured a run drop from 26,400
+// The visible symptom is a collapsed suite — one measured run dropped from 26,400
 // tests to 645 — reported as collection errors rather than as an obviously
 // stale cache. The remedy (`rm -rf node_modules/.vite`) is trivial once you
 // know it; the cost is the hour spent not knowing. It has now cost time in at
-// least two agents' runs.
+// least two separate runs.
 //
 // This removes ONLY cache directories that actually reference a missing temp
 // path, so a healthy cache is left alone and the usual warm-start speed is

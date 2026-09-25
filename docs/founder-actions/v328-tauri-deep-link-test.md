@@ -4,11 +4,11 @@ V-328 wires the GUI client to register a `driftstack://` URL scheme,
 so the dashboard's auth-confirmation page can hand off to the desktop
 app via OS deep-link instead of the V-268 polling loop.
 
-This document captures the founder action items that the autopilot
+This document captures the founder action items that the implementation
 slice could not run / could not validate. Code is on `main`; the
 native bundle path needs an actual run on each OS before release.
 
-## Code already on main (autopilot slice)
+## Code already on main (implementation slice)
 
 - `apps/gui-client/src-tauri/Cargo.toml`: added
   `tauri-plugin-deep-link = "2.0"` dependency.

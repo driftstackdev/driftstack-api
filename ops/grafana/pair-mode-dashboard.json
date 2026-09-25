@@ -1,6 +1,6 @@
 {
   "annotations": { "list": [] },
-  "description": "Arc 4 Wave 2.B sub-slice 8.22 — pair-mode state machine observability. Source counter: driftstack_pair_mode_transition_total{from,to}.",
+  "description": "Arc 4 phase 2.B, slice 8.22 — pair-mode state machine observability. Source counter: driftstack_pair_mode_transition_total{from,to}.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,

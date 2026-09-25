@@ -3,7 +3,7 @@
 Quick reference for the operator-facing scripts in this directory.
 Read-only and dry-run modes are clearly marked. All deploy-related
 scripts require SSH access to the Hetzner hosts (`root@<host>`;
-autopilot pubkey appended 2026-05-12).
+automation deploy key appended 2026-05-12).
 
 ## Deploy + revert toolchain
 
@@ -48,11 +48,6 @@ Full runbook: `docs/runbooks/deploy-bridge.md`.
 | `check-bench-regression.mjs`    | V-165 — advisory perf check; see docs/benchmarks/regression-check.md. |
 | `check-subprocessor-mirror.mjs` | V-493 — DPA Annex 3 ↔ sub-processors data-source parity check.        |
 | `generate-changelog.sh`         | Cuts a SDK changelog entry from git log between tags.                 |
-
-## V-528 privatization toolkit
-
-`v528-*.sh` — one-off helpers used when splitting the repo into
-public + private mirrors. See `docs/internal/v528-repo-privatization-runbook.md`.
 
 ## Conventions
 

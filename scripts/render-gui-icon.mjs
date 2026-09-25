@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 // 2026-05-20 — composite the brand D-mark on a near-black rounded-square
 // background. Earlier rev produced a transparent-bg icon; on macOS the
@@ -8,7 +9,9 @@ import { readFileSync } from 'node:fs';
 // feedback ("black background with the D instead of white"). The
 // squircle radius matches macOS's icon-mask radius (~22% of edge).
 
-const SVG_PATH = '/Users/john/code/driftstack-api/apps/marketing-site/public/driftstack-mark.svg';
+const SVG_PATH = fileURLToPath(
+  new URL('../apps/marketing-site/public/driftstack-mark.svg', import.meta.url),
+);
 const OUT_PATH = '/tmp/icon-source.png';
 const SIZE = 1024;
 const PADDING = 96; // logo inset so the D doesn't crowd the squircle edge

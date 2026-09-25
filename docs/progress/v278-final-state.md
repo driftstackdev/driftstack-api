@@ -26,7 +26,7 @@
 **HEAD at checkpoint:** `632a5f2`
 **TLS posture:** Cloudflare Full (strict), TLS 1.3 customer-edge ↔ Cloudflare ↔ origin
 
-## Live URLs (6/6 HTTP 200, Rule L empirical proof)
+## Live URLs (6/6 HTTP 200, empirical proof)
 
 | URL                                   | HTTP | Served by                                                      |
 | ------------------------------------- | ---- | -------------------------------------------------------------- |
@@ -43,7 +43,7 @@
 
 - **Tooling:** `python3-certbot-dns-cloudflare` (Ubuntu 24.04 system
   package).
-- **Auth:** the agent's Cloudflare API token (`Zone:DNS:Edit`)
+- **Auth:** the deploy automation's Cloudflare API token (`Zone:DNS:Edit`)
   via `/etc/letsencrypt/cf-dns-creds.ini`.
 - **Cert paths:**
   - prod: `/etc/letsencrypt/live/api.driftstack.dev/{fullchain,privkey}.pem`
@@ -51,7 +51,7 @@
     (SAN: `staging.driftstack.dev` + `api.staging.driftstack.dev`)
 - **Renewal:** certbot's systemd timer auto-renews every ~60 days.
   Both certs expire 2026-08-07; first auto-renewal lands ~July.
-- **TLS handshake captured (Rule L empirical):**
+- **TLS handshake captured (empirical):**
 
 ```
 TLSv1.3 / AEAD-CHACHA20-POLY1305-SHA256
@@ -71,7 +71,7 @@ on the `cfut_` token, `/v4/certificates` returns
 `code 1016 User is not authorized`. Pivoted to Let's Encrypt;
 functionally equivalent posture (publicly-trusted CA, auto-renewed),
 just a different CA. To switch to Cloudflare Origin CA later, the
-founder shares their Origin CA Key + agent re-runs cert generation.
+founder shares their Origin CA Key + engineering re-runs cert generation.
 
 ## Sub-processor map (live; matches DPA Annex 3)
 
@@ -119,7 +119,7 @@ founder shares their Origin CA Key + agent re-runs cert generation.
 | F-001 mobile UI | Need device + URL + screenshot to reproduce; surface unclear (marketing / dashboard / docs?).                    |
 | F-003 OAuth     | Founder registers OAuth apps at Google Cloud Console + GitHub Developer Settings; supplies Client IDs + Secrets. |
 | NowPayments     | Crypto rail re-evaluation per ADR-002 — no provider chosen yet; not on critical-launch path.                     |
-| LiveKit         | V-306-V-308 GUI client streaming; Agent 1 territory + LiveKit account provisioning.                              |
+| LiveKit         | V-306-V-308 GUI client streaming; WebKit-fork territory + LiveKit account provisioning.                          |
 | V-413 Tier-3    | Audit IP/UA leak in account-audit payloads — pending founder verdict on scrub strategy.                          |
 | BV KvK closure  | ~2026-05-21; gates Stripe live-mode keys + commercial activation. Test-mode wired today.                         |
 | Origin CA Key   | Optional — only needed if founder wants Cloudflare Origin CA over Let's Encrypt for the origin leg.              |
@@ -147,7 +147,7 @@ See [`tuesday-pickup.md`](./tuesday-pickup.md) for the full queue. Top
 | V-278.M      | Full (strict) TLS upgrade with Let's Encrypt origin certs (DNS-01).                                                    |
 | V-278 (post) | GIT_SHA injection on /version; CORS allow-list env-driven; dashboard PUBLIC_API_BASE_URL fixed.                        |
 
-## Commit trail (this session, in order)
+## Commit trail (this checkpoint, in order)
 
 ```
 85aee83  V-468: docs/sdk/installation — fold V-455 closure additions
@@ -161,6 +161,6 @@ b3fe4eb  V-278.M: Full (strict) TLS upgrade — Let's Encrypt DNS-01 origin cert
 632a5f2  F-001/F-002/F-003: founder feedback inbox post-V-278.M
 ```
 
-(Plus 18+ V-NNN slices earlier in the session covering V-455 audit
+(Plus 18+ V-NNN slices earlier in the same batch covering V-455 audit
 closure across customer + admin OpenAPI + 3 SDKs + tests + docs.
-Full trail in `docs/verification-log.md`.)
+Full trail in the internal verification records.)

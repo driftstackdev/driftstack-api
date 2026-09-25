@@ -36,8 +36,8 @@ export default defineConfig({
       //     points (branches) and IMPROVES functions by 0.14. The blocker was
       //     the number, and the number says removing this line is free — but
       //     changing what CI enforces is still a decision somebody makes, not
-      //     one a measurement makes for them. See A2-PRODUCTION-READINESS
-      //     item 5e.
+      //     one a measurement makes for them. See the production-readiness
+      //     assessment, item 5e.
       //   - api-types schemas — Zod runtime, no .test.ts imports.
       //   - Astro apps (marketing-site, customer-dashboard) — typechecked
       //     by `astro check`, not under vitest scope.

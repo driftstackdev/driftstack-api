@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// Generate ARCHETYPE_REGISTRY in packages/api-types/src/common.ts from Agent-1's
+// Generate ARCHETYPE_REGISTRY in packages/api-types/src/common.ts from the fork's
 // authoritative catalog, and — with --check — fail when the two have drifted.
 //
 // ⛔ WHY THIS EXISTS. Until 2026-09-14 the registry was a hand-transcribed
 // TypeScript literal that said it was "synced from" the catalog. Nothing
 // generated it and nothing checked it, so it silently fell 24 entries behind
-// (81 vs 105) while BOTH sides looked healthy: A1's freshness gate proved the
+// (81 vs 105) while BOTH sides looked healthy: the fork's freshness gate proved the
 // catalog matched the archetype configs, and our build proved the registry
 // compiled. Both were true. Neither was watching the join between them.
 //
-// This is the other half of A1's `archetype-catalog-fresh` gate. Theirs reds
+// This is the other half of the fork's `archetype-catalog-fresh` gate. Theirs reds
 // when the catalog drifts from the archetype directory; this reds when the
 // registry drifts from the catalog. Between them nobody has to remember to
 // re-sync, which is the point — a manual step here is a step that gets skipped,
@@ -19,9 +19,13 @@
 //   node scripts/gen-archetype-registry.mjs            # rewrite the block
 //   node scripts/gen-archetype-registry.mjs --check    # exit 1 on drift
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { argv, exit } from 'node:process';
 
-const CATALOG = '/Users/john/code/driftstack/operations/archetype-catalog.json';
+// The catalog lives in the device repo, checked out beside this one under
+// $HOME/code/driftstack. When it is absent (CI, a clean clone) --check skips.
+const CATALOG = join(homedir(), 'code', 'driftstack', 'operations', 'archetype-catalog.json');
 const TARGET = new URL('../packages/api-types/src/common.ts', import.meta.url).pathname;
 const BEGIN = '  // <generated:archetype-registry> — regenerate, do not hand-edit';
 const END = '  // </generated:archetype-registry>';
@@ -59,7 +63,7 @@ const versionKey = (v) => {
 };
 
 function entryFor(row) {
-  // ⛔ The slug passes through VERBATIM. A1's catalog note makes slug == the
+  // ⛔ The slug passes through VERBATIM. The catalog's own note makes slug == the
   // session-create archetype field, so any transform here desyncs the selector
   // from what the API accepts. Point releases now carry a THIRD component on
   // either side (`safari26_6_1`, `ios18_4_1`).
@@ -67,7 +71,7 @@ function entryFor(row) {
   const device = row.model;
   const iosVersion = canonicalVersion(strip(row.ios, 'iOS'));
   const safariVersion = canonicalVersion(strip(row.safari, 'Safari'));
-  // ⛔ canvasFamily is READ, never derived. A1 asserts it per entry from the
+  // ⛔ canvasFamily is READ, never derived. The catalog asserts it per entry from the
   // config's own canvas_family field, and it is NOT a pure function of the
   // Safari version in practice: an iphone17promax built at 26.2 from a 26.4
   // template inherited 'B' when the 26.4 split makes 26.2 Family A. Deriving it
@@ -116,7 +120,7 @@ function entryFor(row) {
   //   status     GENERATOR-owned upstream, derived from the config validator.
   //              `ready` means "this config is well-formed" — correct UA, correct
   //              geometry, correct id. 99 rows are ready.
-  //   lifecycle  A1-owned. "Should a customer be able to pick this, and how
+  //   lifecycle  owned by the fork's catalog. "Should a customer be able to pick this, and how
   //              strong is the claim?" 96 rows should be offered.
   //
   // The gap is three archetypes whose configs are perfectly valid and which the

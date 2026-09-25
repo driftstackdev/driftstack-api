@@ -6,7 +6,7 @@ Roll-up of every item between current state and "first paying customer can sign 
 
 - This checklist = single-page audit + priority queue.
 - Per-runbook detail lives in `docs/founder-actions/v*.md` + `docs/deployment/*.md` + `docs/operations/*.md`.
-- Per-V-NNN history lives in `docs/verification-log.md`.
+- Per-V-NNN history lives in the internal verification records.
 
 > **⚠ V-1154 — this file's roll-up predates most of what it tracks.** The date below is
 > 2026-05-07; the tree has moved a long way since, and two rows were marking shipped work
@@ -35,7 +35,7 @@ SDK + audit cleanup absorbed).
 > The roll-up above is from **2026-05-09 (V-361)**, and this page has NOT been
 > re-rolled since — so treat it as a 2026-05 snapshot with the corrections below
 > applied, not as current state. For how far behind that is, compare the roll-up
-> reference against the head of `docs/verification-log.md`; the gap was ~400
+> reference against the head of the internal verification records; the gap was ~400
 > entries when this warning was written on 2026-08-10 and only grows. Quoting a
 > fixed number here would itself go stale, which is the failure this warning is
 > about.
@@ -47,7 +47,7 @@ SDK + audit cleanup absorbed).
 > **Deliberately NOT changed:** every item whose truth lives OUTSIDE this repo —
 > Hetzner provisioning, Cloudflare Pages projects, Neon/Upstash/R2/Postmark/Sentry
 > env population, Stripe live keys, the Apple Developer cert, KvK closure, counsel
-> review, and whether any `*-v0.1.0` tag has fired. `CLAUDE.md` asserts prod and
+> review, and whether any `*-v0.1.0` tag has fired. The contributor guidelines assert prod and
 > staging are already live at `api.driftstack.dev` / `staging.driftstack.dev`, which
 > would close several queue items, but that is repo-recorded context and this file
 > should not silently flip an infrastructure claim on the strength of another
@@ -85,7 +85,7 @@ SDK + audit cleanup absorbed).
 | Free entry tier                            | READY           | eng     | yes (READY)    | perpetual free tier; no card, expiry, one-time purchase, or prepaid credit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Rate limiting (V-251)                      | READY           | eng     | yes (READY)    | per-account token bucket + per-IP gates on auth endpoints                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Driver: mock                               | READY           | eng     | n/a            | dev/test only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Driver: webkit                             | PENDING ENG     | Agent 1 | yes            | cross-repo dep on Agent 1's V-203 Phase 2A + V-372–V-378 readback-path remediation. Agent 2 ValidationHarnessRecaptureBridge stays mocked until then                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Driver: webkit                             | PENDING ENG     | fork    | yes            | cross-repo dep on the WebKit fork's V-203 Phase 2A + V-372–V-378 readback-path remediation. The server-side ValidationHarnessRecaptureBridge stays mocked until then                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | OpenAPI 3.1 spec emit                      | READY           | eng     | yes (READY)    | `/openapi.json` + Scalar UI at `/docs/`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Test coverage                              | READY           | eng     | n/a            | the suite is green repo-wide; the FILE counts live in `scripts/verify-suite.mjs` as `EXPECTED_TEST_FILES` / `EXPECTED_TEST_FILES_ALL`, which are ratchets raised in the same commit that adds a file and are themselves guarded — read them rather than a figure frozen here. V-1083: this cell used to quote a file/test count measured 2026-08-10 with Postgres + Redis wired so the DB-gated integration files ran; it was ~230 files and ~1,650 tests behind within nine days, which is precisely the failure the staleness warning above describes, reproduced by the one row that tried to be current. Reproducing that measurement needs a migrated disposable database, because 98 integration files gate on DATABASE_URL and write. |
 
@@ -261,8 +261,8 @@ Remaining, in priority order:
 - ~~Crypto rail re-evaluation (deferred per ADR-002 supersedure to fiat-only)~~ — **SHIPPED, not deferred** (2026-08-10 check): eight customer-facing `/v1/billing/crypto-*` routes, a signature-verified NowPayments IPN ingress, `crypto_orders` + `crypto_entitlements`, tier activation with refund clawback, and receipts (json/txt/pdf). ADR-002 still reads Stripe-only and now carries a reality note; the superseding ADR is unwritten.
 - GUI ProfilesView/RecordingsView/ProxiesView further polish (V-275–V-277 closed empty-states).
 
-## Cross-repo dependencies (Agent 1)
+## Cross-repo dependencies (WebKit fork)
 
 - **WebKit-fork driver integration** (V-203 Phase 2A + V-372–V-378 readback-path remediation). Currently `DRIVER=mock` in production; switching to `DRIVER=webkit` requires the bridge.
-- **`ValidationHarnessRecaptureBridge`** stays mocked until Agent 1's bridge ships.
-- **None of the above block Agent 2 launch-infrastructure work** — Agent 2 ships everything except the actual session-execution layer; Agent 1 lands the actual fleet.
+- **`ValidationHarnessRecaptureBridge`** stays mocked until the fork's bridge ships.
+- **None of the above block server launch-infrastructure work** — this repo ships everything except the actual session-execution layer; the WebKit fork lands the actual fleet.

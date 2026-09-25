@@ -27,20 +27,6 @@ apps/docs/dist/
 apps/status-site/.astro/
 apps/status-site/dist/
 
-# Frozen verification-log archive. Append-only history, never hand-edited again, and large
-# enough that Prettier needs more heap than the pre-commit hook gives it. Same rationale as the
-# lockfiles above: reformatting produces a large meaningless diff on a file nobody should touch.
-docs/verification-log-archive-through-v1200.md
-docs/verification-log-archive-through-v1499.md
-docs/verification-log-archive-through-v1671.md
-docs/verification-log-archive-through-v1919.md
-#
-# ⛔ Each archive is listed LITERALLY, and a glob here would be a silent mistake.
-# `no-formatted-markdown-outgrows-the-format-hook` keeps this list honest by reading
-# it, and its matcher is literal (`rel === p || rel.endsWith(p)`) — so a glob would
-# satisfy Prettier while leaving that guard red on a hook that was in fact fine.
-# One line per archive, added by hand at each split.
-
 # Byte-exact mirror of the driftstack OVPN file-reference contract. Prettier must
 # NOT touch it: the cross-source drift guard (packages/api-types/tests/
 # openvpn-file-reference-contract.test.ts) asserts it is byte-identical to the

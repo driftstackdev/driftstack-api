@@ -63,4 +63,4 @@ Where: the GUI legs run on the Mac where the app is installed; load/driving from
 
 The fix is on `origin/main` but in no `gui-v*` tag; gui-v0.1.15 is owed before the treated
 leg exists. Neither leg has been run: the GUI legs need the installed desktop app driven on
-the owner's Mac, which A2 does not launch unattended.
+the owner's Mac, which is not launched unattended.

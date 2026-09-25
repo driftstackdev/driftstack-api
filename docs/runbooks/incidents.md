@@ -63,7 +63,7 @@ Customer reports arrive through three channels:
 
 1. **Acknowledge within 30 min during business hours, end of next
    business day otherwise.** Acknowledgement is a non-AI human
-   reply per Rule J — do not auto-respond. Even a single sentence
+   reply per the support policy — do not auto-respond. Even a single sentence
    ("Got it, looking now — will have a status update by EOD") is
    enough. The acknowledgement starts the customer's clock.
 
@@ -138,8 +138,8 @@ Customer reports arrive through three channels:
    (Neon's PITR is on by default), capture Redis with `BGSAVE`,
    pull last 24h of pino logs (Hetzner journalctl). Do this
    _before_ any cleanup that might destroy state.
-3. **Open a private incident document** at
-   `docs/internal/incidents/YYYY-MM-DD-<slug>.md` — internal-only,
+3. **Open a private incident document** in the private notes
+   repo (`incidents/YYYY-MM-DD-<slug>.md`) — internal-only,
    never push to a public branch until the post-mortem (§6).
 4. **Establish timeline.** UTC timestamps for every observation
    and action. The timeline IS the incident — without it the
@@ -371,8 +371,8 @@ proximate trigger.>
 
 Each action item that requires code becomes a V-NNN slice.
 Each that requires policy change becomes a `decisions.md`
-entry. Each that's "just remember this" becomes a memory
-write per Rule E (agent self-locks).
+entry. Each that's "just remember this" becomes a runbook or
+checklist entry, so it does not depend on anyone's recall.
 
 ## Customer communication
 

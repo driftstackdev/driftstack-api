@@ -35,14 +35,14 @@ V-031:
 - **Main repo** (`/operations/verification-log.md`) — fingerprint
   closure work (V-031–V-143+ as of this writing). All entries below
   cite this stream by default.
-- **Control-plane repo** (this repo, `docs/verification-log.md`) —
+- **Control-plane repo** (this repo's internal verification records) —
   API / SDK / GUI / contract work (V-031–V-039 as of this writing).
   No fingerprint residuals are tracked here.
 
 When CAPABILITIES.md cites a V-ID, default is main repo unless
 suffixed `[control]`.
 
-## How Agent 1 (WebKit fork) adds entries
+## How the WebKit fork adds entries
 
 The structure is **additive**: drop new entries into the relevant
 category table without re-templating. The table column order is
@@ -171,7 +171,7 @@ rule.
 ## Categories with no current open residuals
 
 These categories have been measured by the rig and currently have
-zero open deltas. Listed here so Agent 1 can drop new entries in
+zero open deltas. Listed here so the WebKit fork can drop new entries in
 without re-templating when a new surface is discovered.
 
 - **Apple secure-context surfaces** (`apple.ApplePaySession.*` —

@@ -13,7 +13,7 @@
 // re-syncing one command, so closing that red is "run this", not "remember how to
 // copy a file byte-for-byte".
 //
-// Cross-source pin with the node parse-reject (A3 8a03a3929); canonical lives at
+// Cross-source pin with the node parse-reject (harness 8a03a3929); canonical lives at
 // driftstack/operations/contracts/openvpn-file-reference-fixtures.json.
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';

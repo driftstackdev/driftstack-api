@@ -185,7 +185,7 @@ only buys future-edit consistency.
 ### Gap 6 — Anonymity policy compliance check (V-211)
 
 Grepped customer-dashboard + admin-panel pages and src for
-`Joël | Theunissen | joeltheunissen89` references. **Zero hits**
+personal-name references. **Zero hits**
 across both apps. V-211 audit already cleaned these surfaces; no
 backslide.
 
@@ -247,7 +247,7 @@ is justified post-launch.
 
 Audit passes:
 
-- `grep -rn -i "Joël|Theunissen|joeltheunissen"` across customer-
+- a case-insensitive `grep -rn -i` for every personal-name spelling across customer-
   dashboard + admin-panel app sources: zero hits.
 - `apps/customer-dashboard/src/styles/base.css` ⟂
   `apps/admin-panel/src/styles/base.css`: byte-identical.

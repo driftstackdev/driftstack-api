@@ -5,7 +5,7 @@
 //
 // It creates a real agent session (mirrors the GUI: profile_id + manual),
 // connects to the session's LiveKit room as an ordinary participant (a headless
-// Playwright/chromium page running livekit-client — A3 confirmed the box injects
+// Playwright/chromium page running livekit-client — the harness confirmed the box injects
 // data-channel InputEvents from ANY participant), publishes navigate + tap
 // InputEvents EXACTLY like the GUI (apps/gui-client/src/lib/livekit.ts), then
 // reads back where each tap landed by polling the server's page-state for the
@@ -27,7 +27,7 @@
 //
 // NOTE: this never prints DS_KEY or the LiveKit token. Diagnostic-first: it logs
 // whatever each observation source returns each tick, so the first run TELLS us
-// which source reflects the tap (A3's page_state emit may ride a later deploy).
+// which source reflects the tap (the harness's page_state emit may ride a later deploy).
 
 import { chromium } from 'playwright';
 
@@ -51,7 +51,7 @@ const getOpt = (name, def) => {
 const KEEP = getFlag('--keep');
 // --cleantap: send a zero-move touchStart+touchEnd (what the GUI emits for a TAP)
 // instead of a {type:'tap'} — verifies the box treats a no-move touch as a tap, not
-// a scroll (A3 W2736/W2737 clean-gesture confirmation).
+// a scroll (W2736/W2737 clean-gesture confirmation).
 const CLEANTAP = getFlag('--cleantap');
 const PROBE_URL = getOpt('--url', 'https://driftstack.io/sim-probe.html');
 // Title-band compensation to mimic the GUI's devY (set --ycomp 32 to verify the
@@ -216,7 +216,7 @@ try {
           /* ignore */
         }
       });
-      // Capture inbound DataChannel messages (A3's HarnessOutbound page_state etc.)
+      // Capture inbound DataChannel messages (the harness's HarnessOutbound page_state etc.)
       // so we can VERIFY the exact live-URL wire shape the GUI consumer must parse.
       window.__dsData = [];
       room.on(LK.RoomEvent.DataReceived, (payload) => {
@@ -330,7 +330,7 @@ try {
   // Verify the page-state STORE populates after navigate (the live-URL source the
   // GUI polls): GET /v1/agent-sessions/:id/page-state should return {state,url,…}
   // once the box's control-plane pageState frame lands. null here = not reaching
-  // the server store (coordinate A3).
+  // the server store (coordinate with the harness).
   try {
     const o0 = await observe(sid);
     console.log(
@@ -413,7 +413,7 @@ try {
     );
   }
 
-  // 5b. dump inbound DataChannel messages (A3 page_state etc.) — verify the exact
+  // 5b. dump inbound DataChannel messages (harness page_state etc.) — verify the exact
   // live-URL wire shape the GUI consumer (SimulatorWindow page_state parser) must
   // match, instead of guessing it.
   try {

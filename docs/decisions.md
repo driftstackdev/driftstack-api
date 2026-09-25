@@ -2,7 +2,7 @@
 
 Chronological record of decisions affecting the `driftstack-api` repo. Each entry is summary-level; full rationale lives in the V-log entry (when evidence-based) or in a planning doc (when strategic).
 
-Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the decision, the reasoning, and the decision-authority level per `AGENTS.md`:
+Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the decision, the reasoning, and the decision-authority level per the project's decision-authority policy:
 
 - **Routine** — implementation detail inside the locked stack; landed and recorded
 - **Architectural** — vendor / dependency / structural; surface for review before commit
@@ -14,7 +14,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 
 - **Decision:** Node 22 LTS, TypeScript 5.x strict, Fastify, Drizzle on Postgres 17, ioredis on Redis 7, Zod (single source of truth, OpenAPI 3.1 generated), Vitest + Supertest + Playwright, Pino, Docker Compose, GitHub Actions.
 - **Reasoning:** locked; chosen for tight TS ergonomics, codegen-friendly schemas, mature ecosystems, single-source validation/types.
-- **Tier:** 3 (set in spec; agent does not change without surfacing).
+- **Tier:** 3 (set in spec; not changed without surfacing for review).
 - **V-log:** V-001 captures the verified install + green typecheck/lint/test on this stack.
 
 ## D-002 — Workspace layout: `apps/server` + `packages/api-types`
@@ -53,17 +53,17 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Tier:** 1.
 - **V-log:** V-001.
 
-## D-007 — Push-to-main, no PR workflow (mirrors WebKit agent)
+## D-007 — Push-to-main, no PR workflow (mirrors WebKit fork)
 
 - **Decision:** every commit is pushed directly to main. No PRs, no branches, no review workflow. Verification log + decision log capture the why.
-- **Reasoning:** mirrors the WebKit fork repo's `D-12` pattern. Small team, no other reviewers, two parallel agents — the per-feature PR ceremony has zero value and adds friction to autonomous work. The discipline is enforced by the V-log + decisions.md, not by gatekeeping.
+- **Reasoning:** mirrors the WebKit fork repo's `D-12` pattern. Small team, no other reviewers, two parallel workstreams — the per-feature PR ceremony has zero value and adds friction to continuous work. The discipline is enforced by the V-log + decisions.md, not by gatekeeping.
 - **Tier:** 2 (process; mirrors WebKit repo precedent).
 - **V-log:** V-001.
 
 ## D-008 — License: MIT
 
 - **Decision:** repo licensed MIT.
-- **Reasoning:** matches WebKit fork repo policy stated in agent brief. Permissive enough that future SDK / customer integrations don't need a special license carve-out.
+- **Reasoning:** matches WebKit fork repo policy stated in the project brief. Permissive enough that future SDK / customer integrations don't need a special license carve-out.
 - **Tier:** 2 (confirmed in brief).
 - **V-log:** V-001.
 
@@ -326,7 +326,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 
   Migration path: `loadSettings()` detects pre-V-241 customers with `apiKey` in settings.json on first call, transparently copies to keychain, rewrites the JSON without the apiKey field. One-shot; no customer action. Failure mode (keychain write fails) leaves apiKey in settings.json so the customer isn't suddenly logged out.
 
-- **Tier:** 3 (security architecture / customer-data handling — autonomously decided per founder direction 2026-05-06 explicit autopilot grant).
+- **Tier:** 3 (security architecture / customer-data handling — decided per founder direction 2026-05-06, which explicitly delegated it).
 - **V-log:** V-241.
 - **Revert path:** if keyring-rs proves to be a build-time blocker on a target platform, revert by removing the `keyring` dependency + restoring settings.ts to the plugin-store-only path. Migration in reverse direction (keychain → settings.json) would need a one-shot read-and-rewrite. Not anticipated.
 
@@ -353,7 +353,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 
   Privacy contract is defense-in-depth: never intentionally send PII (no API keys, profile data, request bodies, customer email/name); the `beforeSend` scrubber catches the case where a stack trace accidentally captures a credential-shaped field. Sentry's `sendDefaultPii` is also off.
 
-- **Tier:** 3 (security architecture / customer-data handling — autonomously decided per founder direction 2026-05-06 explicit autopilot grant).
+- **Tier:** 3 (security architecture / customer-data handling — decided per founder direction 2026-05-06, which explicitly delegated it).
 - **V-log:** V-242.
 - **Revert path:** if telemetry becomes a customer-trust concern (e.g. someone files a complaint), set `tracesSampleRate=0` and remove the cloud-default in one PR; default everywhere becomes "off unless opt-in". Customer-facing impact: minor loss of crash signal for cloud customers who didn't actively opt in. Reversible without schema or contract changes.
 
@@ -375,7 +375,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 
   CI workflow uses `tauri-apps/tauri-action@v0` which encapsulates the build-bundle-sign sequence. Three GitHub Actions secrets needed: `TAURI_UPDATER_PUBKEY` (public key embedded in builds), `TAURI_UPDATER_PRIVKEY` (private key for signing), `TAURI_UPDATER_PRIVKEY_PASSWORD` (passphrase set during key generation). Founder runbook at `docs/founder-actions/v243-tauri-updater-keys.md` documents the one-time `npx tauri signer generate` step + GitHub secret upload.
 
-- **Tier:** 3 (distribution architecture / customer trust + signing — autonomously decided per founder direction 2026-05-06 explicit autopilot grant).
+- **Tier:** 3 (distribution architecture / customer trust + signing — decided per founder direction 2026-05-06, which explicitly delegated it).
 - **V-log:** V-243.
 - **Revert path:** if Tauri Updater proves problematic (Tauri 2.x bugs, signing key issues, etc.), customers can always download a fresh release manually from GitHub. Switch to Sparkle (macOS) + a separate Windows installer + Linux package mirror would be ~3-day rework; reversible at any pre-customer-volume point.
 
@@ -392,7 +392,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
   - Founder direction 2026-05-07 ("I want all pages such as legal pages, and everything live, and I can review post-launch") is the explicit grant. The pre-publication blocker was set 2026-05-03; this decision supersedes the gate (3) line for the DRAFT-banner case.
   - `POST /v1/legal/accept` (V-048 acceptance machinery) is NOT wired to these draft versions — customer acceptance still requires counsel-reviewed content + content_hash. So no customer is bound by the DRAFT pages. The pages exist as transparency surface, not as a contract instrument.
 
-- **Tier:** 3 (compliance + customer-trust posture — autonomously decided per founder direction 2026-05-07 extended Tier-3 content authority for legal pages).
+- **Tier:** 3 (compliance + customer-trust posture — decided per founder direction 2026-05-07, which extended Tier-3 content authority to legal pages).
 - **V-log:** V-255.
 - **Revert path:** if founder judges the DRAFT banner insufficient, one revert: `git revert <V-255-sha>` restores the four routes to 404s; the canonical drafts in `docs/legal/*.md` are unaffected. Counsel review proceeds on its own timeline; banner removal is a separate V-NNN that wires `POST /v1/legal/accept` to the counsel-reviewed content.
 
@@ -408,7 +408,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
   - In-process emit is sync + zero-latency. Putting the emit OUTSIDE the `Promise.all` of email + outbound-webhook fan-out keeps SSE notification latency at ~0ms even when other channels are slow.
   - The migration path is documented inline in `incident-event-bus.ts`: when scale demands it, the right answer is sticky-session routing OR a dedicated SSE relay process — not Redis Pub/Sub bridging that breaks deterministic at-most-once semantics.
 
-- **Tier:** 1 (architecture decision within standard ecosystem; auto-decide per founder direction 2026-05-08 autonomous-decision-guidance).
+- **Tier:** 1 (architecture decision within standard ecosystem; decided without escalation per founder direction 2026-05-08 decision guidance).
 - **V-log:** V-295e.
 - **Revert path:** if a multi-instance deploy demands cross-process pub/sub, swap `IncidentEventBus` for a Redis-backed implementation. The interface (`subscribe(listener) → unsubscribe`) is stable. The lifecycle dispatch in bootstrap doesn't need to change.
 
@@ -424,7 +424,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
   - The `max(existing, now + 24h)` invariant prevents accidentally extending an already-expiring key's life. Customer intent ("this key expires next Tuesday") is preserved.
   - Simpler model: a key has an expires_at. When you rotate, that timestamp shifts forward by 24h (or stays at the prior shorter date). When the timestamp passes, the key stops working. No state machine, no enum, no separate revocation table.
 
-- **Tier:** 1 (architecture decision within standard ecosystem; auto-decide per founder direction 2026-05-08 autonomous-decision-guidance).
+- **Tier:** 1 (architecture decision within standard ecosystem; decided without escalation per founder direction 2026-05-08 decision guidance).
 - **V-log:** V-296.
 - **Revert path:** if customers complain about the 24h grace being too long/short, the constant in `apps/server/src/services/api-keys.ts:rotate()` is one number to change. If they complain about not being able to revoke immediately during grace, V-049's existing DELETE /v1/api-keys/:id endpoint already handles that — rotation does NOT prevent immediate revoke.
 
@@ -440,7 +440,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
   - The `X-Driftstack-Export-Truncated: true|false` header signals when the cap was hit so power users know to fetch more via cursor pagination.
   - Per-export ceiling is preferable to streaming because the JSON envelope shape (`{generated_at, account_id, row_count, truncated, data}`) requires `row_count` + `truncated` to be set before the body streams. Streaming would force a different envelope shape.
 
-- **Tier:** 1 (architecture decision within standard ecosystem; auto-decide per founder direction 2026-05-08 autonomous-decision-guidance).
+- **Tier:** 1 (architecture decision within standard ecosystem; decided without escalation per founder direction 2026-05-08 decision guidance).
 - **V-log:** V-297.
 - **Revert path:** if customers exceed the cap regularly, change `EXPORT_MAX_ROWS` in `apps/server/src/routes/account-audit.ts` (one constant). Or implement true streaming JSON via a different envelope. Both reversible at any pre-customer-volume point.
 
@@ -459,7 +459,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
   - **Persistent one-way state with bounded retention.** Client-secret, pending-authorization, authorization-code and access-token plaintext never lands in PostgreSQL; only SHA-256 digests do. Pending consent and codes are persistent and single-use across restarts/replicas. Approval atomically replaces one pending authorization with one code; exchange atomically consumes that code, revalidates live client and account authority, and creates the backing API-key/OAuth-token rows, so a crash cannot strand accepted consent or burn a valid code without a token. Account-scoped clients can be approved only by their registered account; deleting that account cascades the client rather than widening it into a null-bound marketplace client. The exact published 13-scope third-party allowlist is enforced during both staging and approval; broad/deprecated/new API-key scopes fail closed rather than inheriting into OAuth. Revoking a client atomically revokes every access-token authority it issued; rotating only the client secret leaves existing bearer tokens valid until revoke/expiry. One restart-safe hourly scheduled chain deletes provider authorizations and codes older than their five-minute validity and OAuth-token rows at or past their one-hour expiry. Deduplicated scheduler enqueues serialize the canonical account/job tuple with a transaction-scoped PostgreSQL advisory lock before rechecking and inserting, so concurrent bootstrap replicas cannot seed parallel chains. In-handler re-arms ignore pending current/older rows (`run_at <= current.run_at`) but still deduplicate every future successor: the first delivery or legacy duplicate peer inserts one successor, while every retry/peer after that committed enqueue observes it and cannot fan out the chain. Cleanup intentionally retains the expired backing `api_keys` actor rows because historical sessions and audit records may still reference those IDs; their fixed expiry keeps them non-authenticating.
   - **Hosted human-consent boundary.** Integrators redirect the customer's browser to `https://app.driftstack.io/oauth/authorize/`, never directly to the provider-internal staging API. The Dashboard captures one bounded canonical S256 request, preserves it across same-origin sign-in, displays only server-bound app/scope/callback fields, and requires an explicit Approve or Cancel action. The intermediate `authorization_id` remains provider-internal. Registered callbacks are bounded to 2,048 characters, reject userinfo and fragments, and require HTTPS except for loopback development; callback parameters are constructed through the URL API so an existing registered query is preserved safely.
 
-- **Tier:** 1 (architecture decision within standard ecosystem; auto-decide per founder direction 2026-05-08 autonomous-decision-guidance).
+- **Tier:** 1 (architecture decision within standard ecosystem; decided without escalation per founder direction 2026-05-08 decision guidance).
 - **V-log:** V-488, V-617, V-618, V-619, V-620, V-621.
 - **Revert path:**
   - If customers demand JWTs for federated trust (rare for SaaS API consumers): introduce a JWT format alongside opaque, gate per OAuth-client. Migration is opt-in.
@@ -504,7 +504,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Reasoning:** verified in each SDK's source rather than taken from the guard that measured it. TypeScript's mapper falls through to `new DriftstackError(toOpts(p.status >= 500 ? 'internal' : 'bad_request', p))`, and kind `internal` is retryable — its own comment calls this "intentionally unchanged". Python resolves `PROBLEM_TYPE_TO_ERROR.get(problem_type, DriftstackError)`, and `is_retryable` is `isinstance(err, (TransportError, InternalError, RateLimitError))`, which the base class is not. So the same 5xx is a transient retryable failure to one customer and a hard failure to another, decided by the language they chose.
 - **The trigger fires routinely.** The gap opens exactly when the server grows a problem type an installed SDK predates. `PROBLEM_TYPES` holds 32 and has grown four times in recent work. A customer on an older Python or Go SDK stops retrying transient server errors until they upgrade, and nothing tells them.
 - **What is undecided is the semantics, not the code.** Making Python and Go retry an unknown 5xx aligns them with the documented "retry generic 5xx" policy; making TypeScript stop aligns all three on "only retry what you understand". Both are defensible and both change published retry behaviour, which `docs/architecture/sdk-versioning.md` treats as a compatibility-relevant change. Recorded unplaced rather than guessed.
-- **V-log:** measured by `cross-sdk-problem-type-coverage-parity` through a 34-case matrix across all three mappers. Its header raised the split on the agent bus; V-1538 re-verified it in source and moved it here, because a decision whose only home is a bus message is one nobody re-reads.
+- **V-log:** measured by `cross-sdk-problem-type-coverage-parity` through a 34-case matrix across all three mappers. Its header raised the split for review; V-1538 re-verified it in source and moved it here, because a decision whose only home is a coordination message is one nobody re-reads.
 - **Where it is checked:** that guard fails if any SDK stops mapping a canonical type, so the _coverage_ half cannot regress. The retryability split itself is deliberately not pinned — pinning it would freeze the disagreement this entry asks a reviewer to resolve.
 
 ## D-2026-08-24-04 — What happens to profiles above the cap after a downgrade (open)

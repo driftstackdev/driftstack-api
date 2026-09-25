@@ -1,4 +1,4 @@
-# Arc 4 Wave 2.B sub-slice 8.21 (v2-#8) — Prometheus alert rules.
+# Arc 4 phase 2.B, slice 8.21 (v2-#8) — Prometheus alert rules.
 #
 # Consumed by Prometheus / VictoriaMetrics via the configured
 # alertmanager. The rule file is mounted at the scrape target on

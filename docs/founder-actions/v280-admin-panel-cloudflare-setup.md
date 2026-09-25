@@ -10,8 +10,8 @@ remaining gap is the Cloudflare Pages project + DNS for
 ## Symptom that drove this runbook
 
 Customer reports they can't see the admin panel — `admin.driftstack.io`
-returns DNS-NXDOMAIN (no record exists). Account
-`joeltheunissen89@gmail.com` is correctly enrolled in
+returns DNS-NXDOMAIN (no record exists). The staff
+account is correctly enrolled in
 `DRIFTSTACK_STAFF_EMAILS` on the api server, so the `/v1/admin/*` scope
 gate would let them through if they could only reach the panel.
 
@@ -45,7 +45,7 @@ gate would let them through if they could only reach the panel.
 ## Verification (after deploy lands)
 
 - `curl -I https://admin.driftstack.io/` should return 200.
-- Log into the customer dashboard as `joeltheunissen89@gmail.com`. The
+- Log into the customer dashboard as a staff account. The
   web-session synthetic api-key gets `driftstack_internal_admin`
   appended via the `DRIFTSTACK_STAFF_EMAILS` env-var allowlist on the
   api server (already set in prod 2026-05-19).

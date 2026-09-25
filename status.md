@@ -1,16 +1,16 @@
 # Driftstack API — current status
 
 **Last updated:** 2026-05-11
-**Most recent wave:** Wave 42 (V-530.E multi-touch gestures; V-530 series CLOSED)
-**Mode:** Autopilot active. Waves 1-25 closed; Waves 26-34 landed across
-the overnight window per the W26+ directive. Team morning review point:
-`docs/internal/wave-26-42-overnight-batch-report.md` (covers W26-W42
-in full — 25 substantive V-NNN slices, target hit).
+**Most recent iteration:** 42 (V-530.E multi-touch gestures; V-530 series CLOSED)
+**Mode:** Active development. Iterations 1-25 closed; iterations 26-34 landed
+in one window per the iteration-26+ plan. Team review point: the internal
+batch report for iterations 26-42 (covers them in full — 25 substantive
+V-NNN slices, target hit).
 
-## W26-W42 — overnight rollup
+## Iterations 26-42 — rollup
 
-**25 substantive V-NNN slices** on `main` across 17 waves on top of
-W25 close (`92af6a9..cdfa176`) — hit the 25–40 target lower bound.
+**25 substantive V-NNN slices** on `main` across 17 iterations on top of
+the iteration-25 close (`92af6a9..cdfa176`) — hit the 25–40 target lower bound.
 V-655 (V-NNN customer-surface scrub of 44 files) is staged on
 `cleanup/v526-sanitize` per the V-528 privatization HOLD.
 
@@ -26,28 +26,28 @@ V-540.B (E2E coverage) shipped 12 specs covering customer-facing
 legal, billing-read.
 
 Other slices: V-534.A/B (gui-client deep-link parser + consumer
-refactor), V-654 (agent-label re-swap), V-655 (V-NNN scrub on
-cleanup branch), V-664 (changelog script tests), V-665 (Postmark
+refactor), V-654 (repo-label correction in the cross-repo contract
+notes), V-655 (V-NNN scrub on cleanup branch), V-664 (changelog script tests), V-665 (Postmark
 email-failure categorisation).
 
 Tests: **1565/1565 green across 139 test files** at HEAD `cdfa176`
-(was 1429 / 132 at W25 close; +136 across the window).
+(was 1429 / 132 at the iteration-25 close; +136 across the window).
 
-## Wave 20 — what landed
+## Iteration 20 — what landed
 
-- **V-533.A** — recapture capture-matrix runner + dedup + cross-agent
+- **V-533.A** — recapture capture-matrix runner + dedup + cross-repo
   contract. `expandCaptureMatrix` fans out (archetypes × version
   transition) into per-archetype `TriggerRecaptureOpts`. `dedupComparisons`
   - `groupComparisonsByCategory` + `summarizeComparisons` helpers.
-    Contract doc at `docs/internal/v533-cross-agent-contract.md` — Agent 1
+    The contract lives in the internal design notes — the WebKit fork
     consumes queued runs from this service's `RecaptureService.listRuns`.
     17 property-style tests. Suite 1402 → 1419.
-- **V-541** — cost monitoring + alerting design doc at
-  `docs/internal/v541-cost-monitoring-design.md`. 4-dimension cost model
+- **V-541** — cost monitoring + alerting design doc (internal
+  design notes). 4-dimension cost model
   - per-tier alert thresholds + admin endpoint surface. Design-only;
     V-541.B/C/D implementation slices deferred.
 
-## Wave 19 — what landed
+## Iteration 19 — what landed
 
 - **V-530.C** — third sub-slice of behavioural-simulation real impl:
   dwell time models (3 shapes: tight / normal / long-tailed) +
@@ -56,47 +56,46 @@ Tests: **1565/1565 green across 139 test files** at HEAD `cdfa176`
   builds on V-530.A by weighted-sampling a region and scaling dwell.
   18 property-style tests including region-weight ratio empirical
   verification. Suite 1384 → 1402.
-- **V-540.A** — E2E coverage audit doc at
-  `docs/internal/v540-e2e-coverage-audit.md`. 32 routes vs 12 specs
+- **V-540.A** — E2E coverage audit doc (internal design
+  notes). 32 routes vs 12 specs
   mapped; 4 HIGH-leverage gaps (account-mfa, billing, legal,
   profile-snapshots) recommended for V-540.B implementation in the
-  next wave.
+  next iteration.
 
-## Wave 18 — what landed
+## Iteration 18 — what landed
 
 - **V-532.A** — recipe-library navigation flow kickoff: 2 reference
   recipes (`SEARCH_FLOW_GENERIC`, `PAGINATED_LISTING_GENERIC`) + 3
   builder helpers (`navigateAndWait`, `tapAndWait`, `typeInto`) + 2
   recipe builders + 11 property-style tests. Suite 1373 → 1384.
-- **Track E batch report** —
-  `docs/internal/wave-15-18-overnight-batch-report.md` consolidates
-  V-524 / V-525 / V-526.A / V-527 / V-528 / V-531 / V-532.A into a
-  single team-morning-review doc with a 75-minute review-and-execute
+- **Track E batch report** — an internal report for iterations
+  15-18 consolidates V-524 / V-525 / V-526.A / V-527 / V-528 / V-531 / V-532.A into a
+  single team-review doc with a 75-minute review-and-execute
   path.
 
-## Wave 17 — what landed
+## Iteration 17 — what landed
 
 - **V-526.A** — sanitization sweep policy + first-file POC on branch
-  `cleanup/v526-sanitize` (`0db414b`). `docs/internal/v526-sanitization-sweep-policy.md`
+  `cleanup/v526-sanitize` (`0db414b`). An internal sweep-policy doc
   defines the rules + a 75-file checklist; `.env.example` has 2 V-NNN
   comment markers removed. Bulk sweep deferred to V-526.B.
-- **V-528** — privatization runbook at
-  `docs/internal/v528-repo-privatization-runbook.md`. 7-step sequence
+- **V-528** — privatization runbook (internal design
+  notes). 7-step sequence
   the team triggers tomorrow + reversibility analysis at each step + 3
   open questions surfaced for team review (publish posture, api-types
   bundling, external announcement).
-- **V-531** — webrtc-streaming server-side encode pipeline + cross-agent
-  contract for the WKWebView frame extraction (Agent 1 implements on
-  harness side per `docs/internal/v531-cross-agent-contract.md`). New
+- **V-531** — webrtc-streaming server-side encode pipeline + cross-repo
+  contract for the WKWebView frame extraction (the WebKit fork implements
+  it on the harness side per the internal contract notes). New
   `FrameSource` interface + `MockFrameSource` + `EncodePipeline` with
   pass-through codec for solo testing. 14 new property-style tests.
   Suite 1359 → 1373.
 
-## Wave 16 — what landed
+## Iteration 16 — what landed
 
-- **V-525** — SDK extraction plan at `docs/internal/v525-sdk-extraction-plan.md`
+- **V-525** — SDK extraction plan (internal design notes)
   - extraction script at `scripts/extract-sdk-repos.sh`. Script ran once
-    tonight; 3 local branches materialized: `sdk-extract/typescript` (`6980d36`,
+    in this iteration; 3 local branches materialized: `sdk-extract/typescript` (`6980d36`,
     57 commits), `sdk-extract/python` (`2c9a9cb`, 50 commits), `sdk-extract/go`
     (`fdfb9cf`, 50 commits). No remote push; no GitHub repo creation. Gated
     on Track E manual trigger.
@@ -108,7 +107,7 @@ Tests: **1565/1565 green across 139 test files** at HEAD `cdfa176`
   with neutral "Active development"; apps + packages clusters in the repo
   layout filled in to match disk reality (7 apps + 9 packages listed).
 
-## Wave 15 — what landed (recap)
+## Iteration 15 — what landed (recap)
 
 - **V-527** — commit-msg hook installed extending the sister-repo V-205
   pattern with V-211 anonymity regex (founder / personal-name tokens).
@@ -116,7 +115,7 @@ Tests: **1565/1565 green across 139 test files** at HEAD `cdfa176`
   at `scripts/install-git-hooks.sh`. 11/11 synthetic regression cases
   pass; both historical attribution-violator commits (`63a20c1`,
   `ef649a1`) REJECT under the new hook.
-- **V-524** — public-repo leak audit at `docs/internal/v524-public-leak-audit.md`.
+- **V-524** — public-repo leak audit (internal design notes).
   911 tracked files classified into 5 buckets. Staging only — no acts
   performed. Feeds V-525 / V-526 / V-528.
 - **V-530.A** — first sub-slice of behavioural-simulation real implementation:
@@ -140,7 +139,7 @@ Full strict mode):
 
 Tests: **1429/1429 green** across 131 test files (unit + integration +
 gui-jsdom). Typecheck clean. Full `npx vitest run` empirical proof from
-this wave.
+this iteration.
 
 ## Persistent rules holding
 
@@ -151,7 +150,7 @@ this wave.
   facing surfaces; enforced by V-527 hook for commits; V-526 sweep
   scheduled for in-tree string leaks.
 - **V-455 audit** — fully closed; 1169/1169 baseline tests green at
-  closure (Wave 0 baseline) → 1340/1340 at Wave 15.
+  closure (iteration-0 baseline) → 1340/1340 at iteration 15.
 - **V-278 LIVE** — `https://api.driftstack.dev/health` returns 200 at
   Cloudflare Full (strict) TLS posture.
 
@@ -159,13 +158,13 @@ this wave.
 
 - **Postmark account approval** — submitted 2026-05-09 via postmarkapp.com/help.
   Until approved, signups for non-`@driftstack.dev` recipients silently
-  drop at the Postmark layer (see
-  [`docs/internal/postmark-approval-request.md`](./docs/internal/postmark-approval-request.md)).
+  drop at the Postmark layer (see the internal Postmark
+  approval-request notes).
 - **F-001** mobile UI bug — needs device + URL + screenshot to reproduce.
 - **F-003** OAuth — pending Client IDs + secrets for Google Cloud Console
   - GitHub Developer Settings. Callback URL pattern
     `https://api.driftstack.dev/v1/auth/oauth/<provider>/callback`.
-- **V-528 GitHub-private flip** — runbook lands W17; private-flip
+- **V-528 GitHub-private flip** — runbook landed in iteration 17; private-flip
   triggered manually after V-524 audit + V-525 extraction plan reviewed.
 - **V-205 history scrub** — gated on V-528 privatization (force-push
   against a private repo carries zero customer-visible blast radius).
@@ -175,18 +174,16 @@ this wave.
 - [`docs/progress/v278-final-state.md`](./docs/progress/v278-final-state.md)
   — full V-278 deployment final state + sub-processor map.
 - [`docs/progress/tuesday-pickup.md`](./docs/progress/tuesday-pickup.md)
-  — queue for next session (pre-Wave-15 snapshot).
-- [`docs/verification-log.md`](./docs/verification-log.md) — full V-NNN
-  history (~23,800 lines as of Wave 15).
-- [`docs/internal/v524-public-leak-audit.md`](./docs/internal/v524-public-leak-audit.md)
-  — Wave 15 public-repo leak audit.
-- [`docs/internal/v455-coverage-audit.md`](./docs/internal/v455-coverage-audit.md)
-  — pre-launch coverage audit (closed).
+  — pickup queue (pre-iteration-15 snapshot).
+- The full V-NNN history (~23,800 lines as of iteration 15) is kept in the
+  internal verification records.
+- The iteration-15 public-repo leak audit (V-524) and the pre-launch
+  coverage audit (V-455, closed) are kept in the internal design notes.
 
-## Wave 18 — queued
+## Iteration 18 — queued
 
-Per the overnight directive: V-532 recipe-library kickoff (common
+Per the iteration plan: V-532 recipe-library kickoff (common
 navigation flows per file 56: login / search / fill-form / paginate /
 infinite-scroll / cart / checkout / multi-step wizard) + Track E
-batch report ready for team morning review + 1 more P-track from
+batch report ready for team review + 1 more P-track from
 Track C or D.

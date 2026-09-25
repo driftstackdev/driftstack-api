@@ -116,7 +116,7 @@ Emails stop firing; the rest of the API continues unaffected.
   `classifyEmailError`.
 - `apps/server/src/lib/config.ts:readPostmarkConfig` — env-var
   parsing.
-- `docs/internal/postmark-approval-request.md` — the original
+- The internal Postmark approval request — the original
   submission, kept for audit history.
 - `scripts/chaos/01-postmark-outage.sh` — outage drill.
 - `scripts/smoke-postmark.mjs` — go-live smoke test.

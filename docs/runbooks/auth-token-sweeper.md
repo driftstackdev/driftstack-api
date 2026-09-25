@@ -5,8 +5,7 @@ token tables (`email_verify_tokens` / `magic_link_tokens` /
 `password_reset_tokens`). Lives at
 `apps/server/src/services/auth-flows-sweeper.ts`.
 
-Context: the 2026-05-20 stale-row audit
-(`docs/internal/2026-05-20-stale-row-audit.md`) flagged that
+Context: the 2026-05-20 internal stale-row audit flagged that
 `consumeAuthToken()` only marks rows as consumed; nothing currently
 deletes them. Same shape of bug as the 2026-05-19 `scheduled_jobs`
 accumulation incident but pre-scale (~10 rows at 10 customers;
@@ -106,6 +105,5 @@ these rows anyway.
 - `apps/server/src/services/auth-flows-sweeper.ts` — service impl.
 - `apps/server/src/db/auth-flows-repo.ts` — `deleteStaleAuthTokens`
   Drizzle query.
-- `docs/internal/2026-05-20-stale-row-audit.md` — original audit.
 - `apps/server/tests/unit/services-auth-flows-sweeper.test.ts` —
   unit tests (4 cases).

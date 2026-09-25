@@ -1,8 +1,8 @@
 # deploy-bridge + revert-bridge runbook
 
 Operator-facing summary of the manual-SSH-deploy + auto-revert
-toolchain that bridges the docker-compose-vs-systemd mismatch (see
-`docs/internal/2026-05-15-deploy-pipeline-mismatch.md`).
+toolchain that bridges the docker-compose-vs-systemd mismatch (see the
+internal 2026-05-15 deploy-pipeline mismatch notes).
 
 ## TL;DR — three commands
 
@@ -155,8 +155,8 @@ status, then `bash scripts/deploy-bridge.sh prod`.
   npm install dropped transitive deps. Fixed at commit `5a67945` —
   the bridge now uses `npm ci` (lockfile-strict). Don't switch back.
 - **`Refusing to boot: DASHBOARD_ORIGIN must be set`**: env var
-  missing on the target. See `project_dashboard_origin_single_source`
-  memory entry. SSH-write `DASHBOARD_ORIGIN=` to `.env`, chmod 600,
+  missing on the target (it drives the auth-flow and CLI-authorize
+  URLs, and has no default in production). SSH-write `DASHBOARD_ORIGIN=` to `.env`, chmod 600,
   restart.
 - **`/version git_sha does not match expected`**: SHA-resolution
   race. Fixed at commit `bdabba6` — deploy-bridge now fetches

@@ -290,10 +290,10 @@ If any red: stop, close the gap, re-verify.
 
 ---
 
-## V-516 launch-day amendments (post-Wave-11 state)
+## V-516 launch-day amendments (pre-launch batch state)
 
-The following items, shipped during Waves 1–11 of the autopilot
-run, should be confirmed during T-24h or T-0 alongside the
+The following items, shipped during the pre-launch build
+batches, should be confirmed during T-24h or T-0 alongside the
 checklist above.
 
 ### T-24h additions

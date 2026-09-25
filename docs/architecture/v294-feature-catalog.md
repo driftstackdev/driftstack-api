@@ -1,6 +1,6 @@
 # V-294 — Feature catalog (production-ready scope)
 
-**Source**: Comprehensive survey of `/Users/john/Downloads/driftstack-planning 2/` (132 planning files, files 00-131). Cross-referenced against `docs/verification-log.md` (V-001 → V-293) + `docs/launch/pre-launch-checklist.md` (V-287 refresh) for current-state classification.
+**Source**: Comprehensive survey of the planning archive (132 planning files, files 00-131). Cross-referenced against the internal verification records (V-001 → V-293) + `docs/launch/pre-launch-checklist.md` (V-287 refresh) for current-state classification.
 
 **Purpose**: Single load-bearing scope artifact for the V-295+ multi-week production-ready arc. Founder direction 2026-05-07 retired the deferred-post-launch pattern; every previously-deferred feature ships in v1 unless V-294 surfaces it as legitimately out-of-scope.
 
@@ -8,7 +8,7 @@
 > has since advanced by hundreds of entries.**
 >
 > The Source line above states the basis: cross-referenced against
-> `docs/verification-log.md` at **V-293**. That is the freshness marker this
+> the internal verification records at **V-293**. That is the freshness marker this
 > document has, and it is a better one than a date because it is checkable — the
 > log's highest entry when this note was written was V-871, so the classifications
 > are 578 entries behind their own stated basis.
@@ -32,7 +32,7 @@
 - **IN-FLIGHT** — partial implementation on `main`; V-NNN entry exists but feature is not customer-complete.
 - **DEFERRED** — known-needed; not yet started; targeted by V-295+ slice.
 - **UNDISCOVERED** — referenced in planning files but never started + not in current V-NNN backlog.
-- **AGENT-1** — feature lives in the WebKit-fork repo (Agent 1 territory); Agent 2 doesn't ship.
+- **FORK** — feature lives in the WebKit-fork repo; this repo doesn't ship it.
 - **OUT-OF-SCOPE** — surveyed but explicitly cut from v1 (e.g. enterprise-tier-only, post-launch growth, year-2 ambition).
 
 ---
@@ -47,12 +47,12 @@
 | IN-FLIGHT    | 6     | ~12                    | 1                      |
 | DEFERRED     | 41    | ~95                    | 12                     |
 | UNDISCOVERED | 53    | ~190                   | 18                     |
-| AGENT-1      | 18    | n/a (cross-repo)       | n/a                    |
+| FORK         | 18    | n/a (cross-repo)       | n/a                    |
 | OUT-OF-SCOPE | 8     | n/a                    | n/a                    |
 
-**Aggregate Agent-2 launch scope**: ~297 Tier-1 hours of feature work + ~31 legal page updates spread across the V-295+ slice arc. At 6h/day sustained = ~50 working days = ~10 weeks. Aligns with founder's "15-25 day conservative pre-V-294 estimate; multi-week arc" framing — V-294 catalog refines upward to ~10 weeks once UNDISCOVERED features are folded in.
+**Aggregate launch scope for this repo**: ~297 Tier-1 hours of feature work + ~31 legal page updates spread across the V-295+ slice arc. At 6h/day sustained = ~50 working days = ~10 weeks. Aligns with founder's "15-25 day conservative pre-V-294 estimate; multi-week arc" framing — V-294 catalog refines upward to ~10 weeks once UNDISCOVERED features are folded in.
 
-This converges with Agent 1's V-383+ multi-week native-pipeline-alignment arc (4-12 weeks); both arcs target the same first-paying-customer-ready landing window.
+This converges with the WebKit fork's V-383+ multi-week native-pipeline-alignment arc (4-12 weeks); both arcs target the same first-paying-customer-ready landing window.
 
 ---
 
@@ -97,7 +97,7 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 30. **V-324** Admin: chargeback dispute workflow.
 31. **V-325** Admin: tax / VAT reports + MOSS export.
 32. **V-326** Admin: revenue dashboard (MRR / ARR / churn / LTV).
-33. **V-327** Admin: detection vendor monitoring UI (per planning file 48; cross-feeds Agent 1's harness output).
+33. **V-327** Admin: detection vendor monitoring UI (per planning file 48; cross-feeds the fork's harness output).
 34. **V-328** Admin: feature flags UI.
 35. **V-329** Admin: plan configuration UI (adjust plan parameters / test mode).
 36. **V-330** Admin: email template editor.
@@ -129,7 +129,7 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 56. **V-350** Pattern extraction into reusable test utilities (factor V-289/V-290/V-291/V-292/V-293 mock helpers).
 57. **V-351** Performance optimization passes (auth-cache hot path / scrypt warmup / rate-limit consume) beyond V-286 baseline.
 58. **V-352** Disaster recovery runbook expansion (planning file 13 + 59).
-59. **V-353** Mac fleet management runbook expansion (planning file 104 + 63; mostly Agent 1 territory but Agent 2 control-plane integration).
+59. **V-353** Mac fleet management runbook expansion (planning file 104 + 63; mostly WebKit-fork work, with control-plane integration here).
 60. **V-354** Monitoring stack: Sentry custom dashboards + alert thresholds tuning.
 61. **V-355** Customer support response template library (planning file 14).
 62. **V-356** Discord / GitHub Discussions integration with tickets.
@@ -178,7 +178,7 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 | Custom persona configuration                         | UNDISCOVERED | V-NNN+ | 8       | —             |
 | Per-session behavioral override                      | UNDISCOVERED | V-NNN+ | 4       | —             |
 
-(Note: behavioral realism IMPLEMENTATION is Agent 1's territory — WebKit-fork modifications. Agent 2 ships the API surface that exposes the parameters.)
+(Note: behavioral realism IMPLEMENTATION lives in the WebKit fork — fork modifications. This repo ships the API surface that exposes the parameters.)
 
 **Proxy integration** (planning file 03 + 11 + 17):
 
@@ -396,7 +396,7 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 | Tax / VAT / MOSS reports                          | UNDISCOVERED | V-325         | 8       | —             |
 | Revenue dashboard                                 | UNDISCOVERED | V-326         | 8       | —             |
 | Detection vendor monitoring                       | UNDISCOVERED | V-327         | 8       | —             |
-| Mac fleet management UI                           | AGENT-1      | n/a           | n/a     | —             |
+| Mac fleet management UI                           | FORK         | n/a           | n/a     | —             |
 | Incident management UI                            | SHIPPED      | V-338         | —       | —             |
 | Postmortem generation                             | DEFERRED     | V-318         | 4       | —             |
 | Feature flags UI                                  | UNDISCOVERED | V-328         | 6       | —             |
@@ -536,7 +536,7 @@ Per founder direction "every previously-deferred feature ships in v1 unless V-29
 - **Penetration testing** — annual engagement; year-2 budget.
 - **Self-hosted licensing v2** — different commercial model; year-2.
 - **Customer logos / case studies** — post-launch (no customers yet).
-- **WebGPU on iOS 26 fingerprint surface** — Agent-1 territory; cross-repo dep.
+- **WebGPU on iOS 26 fingerprint surface** — WebKit-fork work; cross-repo dep.
 
 ---
 

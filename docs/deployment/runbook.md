@@ -6,7 +6,7 @@ production traffic exists; the structure is in place so an incident
 in the first weeks of paid traffic doesn't catch us flat-footed.
 
 > **Status**: pre-launch. Everything in `[TODO]` is a known gap and
-> should be filled before the first paying customer (see AGENTS.md
+> should be filled before the first paying customer (see the policy on
 > "publish vs commercial activation" — commercial activation is gated
 > on entity registration, but ops infra needs to be ready when that
 > gate opens).
@@ -74,7 +74,7 @@ Symptoms: customers paying but subscription state not updating.
 4. If signature verification is failing, the webhook signing secret
    in `STRIPE_WEBHOOK_SECRET` is out of sync with the
    Dashboard endpoint config — rotate via Hetzner SSH-write per
-   the locked stripe-credential-handling memory.
+   the locked Stripe credential-handling rule.
 
 ### DLQ growth (webhook deliveries to customer endpoints)
 
@@ -133,7 +133,7 @@ that exceeds routine triage (customer-facing communication, rolling
 back a migration, suspending an account suspected of abuse, ANY
 financial action), wait for the founder to authorize. Document the
 issue, take read-only diagnostic steps, and surface for explicit
-approval per the locked decision-authority policy in AGENTS.md.
+approval per the locked decision-authority policy.
 
 ## Log-handling — PII posture
 

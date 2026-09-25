@@ -61,8 +61,8 @@ docs page). The ops workflow:
    plaintext; the secret is shown ONCE — copy it into the
    founder's password manager + the email reply to the developer.
 4. Reply to the developer with the credentials. Use the standard
-   template (see `docs/internal/v663-customer-success-templates.md`,
-   "OAuth client onboarding" section once it exists).
+   template (the internal customer-success templates, "OAuth client
+   onboarding" section once it exists).
 
 ## Lookup + audit
 

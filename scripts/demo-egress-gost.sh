@@ -6,8 +6,8 @@
 # and the harness daemon (DRIFTSTACK_SOCKS5_PROXY) both point at 127.0.0.1:1080,
 # so chaining here routes all demo session egress through the real upstream proxy
 # WITHOUT any component needing the upstream credentials — they live only in the
-# gitignored repo-root .env (DRIFTSTACK_DEMO_SOCKS5_*), never in code or on the
-# agent bus.
+# gitignored repo-root .env (DRIFTSTACK_DEMO_SOCKS5_*), never in code or in
+# shared notes.
 #
 # Usage:  bash scripts/demo-egress-gost.sh
 # Requires: gost on PATH; repo-root .env with DRIFTSTACK_DEMO_SOCKS5_{HOST,PORT,USER,PASS}.

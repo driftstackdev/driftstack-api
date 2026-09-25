@@ -58,4 +58,4 @@ echo "$V2" | grep -qaiE '"topBandSuspected": *false'    && ok "no-top-band"   "n
 
 echo "=== verdict: ${pass} pass / ${fail} fail ==="
 [ "$fail" -eq 0 ] && { echo "ALL GREEN — safe to ask the founder to test."; exit 0; }
-echo "NOT all green — fix before asking the founder. (re-run after A3's box settles if no-video/422)"; exit 1
+echo "NOT all green — fix before asking the founder. (re-run after the harness box settles if no-video/422)"; exit 1

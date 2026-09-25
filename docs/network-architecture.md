@@ -433,5 +433,5 @@ Three V-051 open questions resolved by founder direction in V-052
 ---
 
 _§1–§5 documented in V-051; §4 "Decided architecture" + revocation
-flow + JWT rotation event format added in V-052. Agent 1's fleet
+flow + JWT rotation event format added in V-052. The fork's fleet
 integration may begin against the §4 contract as documented._

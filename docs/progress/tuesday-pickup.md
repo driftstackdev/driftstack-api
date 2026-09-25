@@ -8,11 +8,10 @@
 > Both are corrected inline. Treat every other line here as of its date.
 
 **Last updated:** 2026-05-09 (paused per founder cost-discipline)
-**Resume condition:** founder explicit reactivation Tuesday (weekly
-token reset).
+**Resume condition:** founder explicit reactivation Tuesday.
 
-Per Rule M minimum 2 P-track parallel slices on resume; per Rule K
-NEVER STOP once reactivated. Per memory #18 sustained throughput
+On resume, run at least 2 P-track slices in parallel and keep working
+the queue until it is empty. Sustained throughput
 target 15-25 slices / 8h.
 
 ## Priority queue
@@ -137,8 +136,8 @@ the `stg:` key prefix in favour of physical isolation.
 
 ### 9. PLANNING-INDEX.md continuation
 
-Per memory rule #12: when V-294 catalog saturates, consult
-`/mnt/project/PLANNING-INDEX.md` (118 planning files). The catalog is
+Standing rule: when the V-294 catalog saturates, consult
+the planning index, `PLANNING-INDEX.md` (118 planning files). The catalog is
 ~50% saturated; expect this to land mid-Tuesday session.
 
 ## Items NOT to pick up without founder direction
@@ -156,17 +155,17 @@ Per memory rule #12: when V-294 catalog saturates, consult
   chosen.~~ **SHIPPED** — five `/v1/billing/crypto-*` routes are registered
   (checkout, quote, orders, order detail, cancel), with `crypto_orders` and
   `crypto_entitlements` tables behind them (V-827).
-- **LiveKit** — Agent 1 territory.
+- **LiveKit** — device-side work in the WebKit fork.
 - **Organic growth / paid acquisition / launch comms** — out of
-  Agent 2 scope.
+  this repo's scope.
 
 ## Pre-resume sanity checks (Tuesday)
 
 Run before picking up the queue:
 
 ```
-git -C /Users/john/code/driftstack-api log -1 --oneline
-git -C /Users/john/code/driftstack-api status --short
+git log -1 --oneline     # from the repository root
+git status --short
 npm run typecheck && npm run lint && npm run format:check && npm test
 ssh -o BatchMode=yes root@128.140.37.74 'systemctl is-active driftstack-api'
 ssh -o BatchMode=yes root@116.203.22.197 'systemctl is-active driftstack-api'

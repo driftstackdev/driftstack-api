@@ -3,7 +3,7 @@
 **Target date:** geruisloze omzetting completes ~2026-05-21 (KvK).
 **Founder track:** legal entity setup (eenmanszaak → BV), Stripe/Mollie
 billing entity, ToS authoring entity, Moneybird invoicing — all
-**out of scope** for this repo per `AGENTS.md`.
+**out of scope** for this repo per the repository scope policy.
 
 This document scopes only the **platform-side configuration**
 changes — what stuff in this repo + the published artifacts has to
@@ -100,8 +100,8 @@ is org-neutral (no person name embedded). Leave.
 ### D. Apple Developer signing identity — founder action
 
 The `APPLE_SIGNING_IDENTITY` env var in `PACKAGING.md` references
-the founder's personal cert ("Developer ID Application: Joël
-Theunissen (XXXXXXXXXX)"). Post-KvK, the BV mints its own
+the founder's personal cert (a "Developer ID Application: …
+(XXXXXXXXXX)" identity in a personal name). Post-KvK, the BV mints its own
 Developer ID cert and the env var swaps. No code change in this
 repo — just an updated value in the founder's `~/.driftstack/build.env`.
 
@@ -116,7 +116,7 @@ founder does these via the registry web UIs after KvK closure:
 
 | Registry                   | Current owner                                    | Transfer to                                                              |
 | -------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------ |
-| npm `@driftstack` org      | personal `joeltheunissen89-alt` (org admin)      | BV-owned account; add as org admin, remove personal account              |
+| npm `@driftstack` org      | personal account (org admin)                     | BV-owned account; add as org admin, remove personal account              |
 | PyPI `driftstack-sdk`      | personal account                                 | BV-owned PyPI account; transfer ownership via Account Settings → Members |
 | Go modules                 | (no central registry; Go modules are git-tagged) | n/a — module path stays                                                  |
 | GitHub `driftstackdev` org | personal (org admin)                             | BV-owned GitHub account; add as org admin, remove personal               |

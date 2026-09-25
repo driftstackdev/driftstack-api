@@ -9,8 +9,8 @@
 # Idempotent: re-running deletes existing extraction branches and re-splits.
 # Safe: branches are local refs — never pushed by this script.
 #
-# Trigger from the Driftstack team tomorrow runs this script after the
-# overnight wave window, then pushes each branch to its new GitHub repo
+# Trigger: the Driftstack team runs this script after the current
+# batch lands, then pushes each branch to its new GitHub repo
 # manually (the push is the irreversible step; this script's output is
 # fully reversible until then).
 set -euo pipefail

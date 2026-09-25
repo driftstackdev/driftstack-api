@@ -349,7 +349,7 @@ the docs pages.
 
 ## After the release
 
-- `docs/verification-log.md` — one entry naming the three versions, the
+- The internal verification records — one entry naming the three versions, the
   CI-green sha, and the registry checks above that actually ran.
 - If a customer is waiting on the release, tell them in the same session. The
   registry being updated is not the same event as the customer knowing.

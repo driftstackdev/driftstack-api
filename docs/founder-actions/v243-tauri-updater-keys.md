@@ -98,5 +98,5 @@ If the private key is suspected compromised:
 ## Related
 
 - D-2026-05-06-03 (this decision).
-- V-243 (V-log entry for the autopilot work landing this scaffold).
+- V-243 (V-log entry for the work landing this scaffold).
 - Tauri Updater docs: https://tauri.app/v1/guides/distribution/updater/

@@ -162,5 +162,5 @@ When `/v2/*` does ship, expect:
 
 - SDK versioning policy: `docs/architecture/sdk-versioning.md` (V-177).
 - OpenAPI spec generation: `apps/server/src/lib/openapi.ts`.
-- Locked tech-stack: `AGENTS.md` (Zod single-source-of-truth).
+- Locked tech-stack: the contributor guidelines (Zod single-source-of-truth).
 - Webhook event catalog: `docs/api/webhook-events.md` (V-203).

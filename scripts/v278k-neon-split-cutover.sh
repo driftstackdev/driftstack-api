@@ -13,8 +13,8 @@
 # Pre-reqs:
 #   - neonctl CLI authenticated (NEON_API_KEY in env or `neonctl auth`)
 #   - SSH keys appended to /root/.ssh/authorized_keys on both servers
-#     (pre-authorized 2026-05-12 — see docs/internal/2026-05-15-
-#     autopilot-session-wrap.md)
+#     (pre-authorized 2026-05-12 — see the internal 2026-05-15
+#     session wrap-up notes)
 #   - pg_dump + psql 16+ locally
 #
 # Modes:

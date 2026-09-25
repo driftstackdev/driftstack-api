@@ -43,19 +43,19 @@ Before step 1, run the two GUI render gates from the repo root (they need the gu
 
 ## ⛔ Before you write a single line of release notes: verify each claim on the running artifact
 
-Owner directive, 2026-09-12: _"ensure all tasks really get completed on next release update, and that
-the agents responsible for tasks also finish it"_. It was earned. In the wave that became 0.1.52, four
-items were reported finished by the agent that owned them while the thing the owner had described was
+Owner directive, 2026-09-12: every task on the next release update must really be completed, and
+finished by whoever is responsible for it. It was earned. In the batch that became 0.1.52, four
+items were reported finished by whoever owned them while the thing the owner had described was
 still there:
 
-| what the agent finished                        | what was still open                                                                             |
+| what was reported finished                     | what was still open                                                                             |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | the `+1` no longer hid a MEASURED OS chip      | on a proxy with **no** reading — the owner's own case — the pill was unchanged                  |
 | a harness literal was updated                  | `theme-token-parity.test.ts` pinned the old one; the pre-push gate rejected the push            |
 | a refusal reason was added to the error type   | two of the three copies of that enum, including the customer-facing docs table, did not have it |
 | every local gate passed on a chip-width change | the Linux geometry gate failed on the one row that fit by a single pixel                        |
 
-The pattern is one thing, and it is not carelessness: **an agent's brief and the owner's sentence are
+The pattern is one thing, and it is not carelessness: **a task's brief and the owner's sentence are
 different propositions, and the brief is the one with the acceptance criteria attached.** A green test is
 evidence about what the test states. It is not evidence that a person looking at the screen sees what
 they asked to see.

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Wave 1119 / Slice 1119.1 — Stripe products + prices bootstrap script.
+// Slice 1119.1 — Stripe products + prices bootstrap script.
 //
 // Idempotently creates the 6 self-serve Stripe products + 12 recurring
 // prices the API server expects in DRIFTSTACK_TIER_PRICE_IDS. Run once per
@@ -174,7 +174,7 @@ async function ensurePrice(tier, period, productId, amountCents, recurring) {
 }
 
 async function main() {
-  process.stdout.write('Driftstack Stripe bootstrap — Wave 1119 / Slice 1119.1\n');
+  process.stdout.write('Driftstack Stripe bootstrap — Slice 1119.1\n');
   process.stdout.write(`Using key prefix: ${SECRET_KEY.slice(0, 7)}…\n`);
   if (DRY_RUN) {
     process.stdout.write(

@@ -65,7 +65,7 @@ status `launch` or `available`.
 
 `ARCHETYPE_DISPLAY_LABEL` and `archetypeDisplayLabel(id)` are DERIVED from the
 registry, so adding a device is adding one registry entry — not editing a
-hardcoded list. Slugs must match Agent-1's atlas naming (the identifier shape
+hardcoded list. Slugs must match the fork's atlas naming (the identifier shape
 above). Registering a slug as `planned` before its atlas lands is expected:
 the customer-facing selector surfaces only populated (`launch` / `reference`)
 archetypes, and a `planned` entry "lights up" automatically when its status

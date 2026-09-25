@@ -207,5 +207,5 @@ not at WS-handshake time).
 - `apps/gui-client/src/lib/session-stream.ts` — `createPollingFrameStream`
   is the existing stream-source abstraction; a
   `createLiveKitFrameStream` sibling lands in the V-531.B follow-up.
-- `docs/internal/2026-05-15-prod-wire-up-batch-report.md` — Track E
+- The internal 2026-05-15 prod wire-up batch report — Track E
   status + 6-step remaining slice plan.

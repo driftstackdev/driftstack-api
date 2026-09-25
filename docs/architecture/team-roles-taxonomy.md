@@ -1,7 +1,7 @@
 # Team roles taxonomy
 
 **Status:** locked as of V-142 (2026-05-05) per founder DECISION 5 in
-the overnight directive.
+the founder directive of that date.
 **Owner:** Driftstack engineering.
 **Audience:** engineers working on multi-seat account support, which has
 SHIPPED — `team_members` + `team_invites` in the schema, six routes under
