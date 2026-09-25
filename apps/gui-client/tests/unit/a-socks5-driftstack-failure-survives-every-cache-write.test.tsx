@@ -217,6 +217,7 @@ const { ProfilesView } = await import('../../src/views/ProfilesView');
 const { ProxiesView } = await import('../../src/views/ProxiesView');
 const { saveProbeResult, __resetMaterialEditsForTests } =
   await import('../../src/lib/proxy-probe-cache');
+const { serverFallbackFailureNotice } = await import('../../src/lib/proxy-check-copy');
 
 const REASON = 'The proxy did not answer. Check the host and port, and that it is online.';
 const FLEET_FAILED: AccountProxyTestResult = {
@@ -298,5 +299,72 @@ describe('G2 — a SOCKS5 row’s Driftstack failure survives every cache write,
     fireEvent.click(await screen.findByRole('button', { name: 'Re-test' }));
     await waitFor(() => expect(screen.queryByText('fails from Driftstack')).toBeNull());
     expect(storedProbe('p1')?.fleetFailureReason).toBeUndefined();
+  });
+});
+
+// Review major 2 — when no machine on the network profiles run on is free, the
+// route falls back to Driftstack's SERVER, which checks the proxy itself and
+// answers `ok:false, measured_from:'control_plane'` with no `not_run`. That was
+// saved as "fails from Driftstack" and retired the fleet's readings; and because
+// only a fleet answer lifts a fleet failure, the next ok from that same server
+// (44 ms) sat beside the pill, on the grid, after a remount and on the card —
+// with nothing free on the fleet, for good. A server's failure is a labelled
+// notice now, saved nowhere; the fleet's readings stand beside it.
+describe('review major 2 — a failure Driftstack’s server measured is a notice, never "fails from Driftstack"', () => {
+  const CP_REASON = 'The proxy was too slow to respond. It may be overloaded — try again shortly.';
+  const CP_FAILED: AccountProxyTestResult = {
+    ok: false,
+    reason: CP_REASON,
+    measured_from: 'control_plane',
+  };
+  const CP_OK: AccountProxyTestResult = {
+    ok: true,
+    latency_ms: 44,
+    measured_from: 'control_plane',
+  };
+
+  it('CRITICAL grid: a server failure, then a server ok — no "fails from Driftstack" at any point (the grid, a remount, the card); the notice says where the check ran; the fleet’s readings stay', async () => {
+    testAccountProxy.mockResolvedValueOnce({ ...FLEET_OK, latency_ms: 180, quic_probe: true });
+    const grid = render(<ProxiesView />);
+    await waitFor(() => expect(testAccountProxy).toHaveBeenCalled());
+    await waitFor(() => expect(storedProbe('p1')?.serverLatencyMs).toBe(180));
+    testAccountProxy.mockResolvedValue(CP_FAILED);
+    fireEvent.click(await screen.findByRole('button', { name: 'Test' }));
+    const notice = await screen.findAllByText(serverFallbackFailureNotice(CP_REASON));
+    expect(notice.length).toBeGreaterThan(0);
+    expect(notice[0]?.textContent).toMatch(/^Checked from Driftstack’s server, not the network/);
+    expect(screen.queryByText('fails from Driftstack')).toBeNull();
+    expect(storedProbe('p1')?.fleetFailureReason).toBeUndefined();
+    expect(storedProbe('p1')?.serverLatencyMs, 'the fleet’s number stands').toBe(180);
+    expect(storedProbe('p1')?.quicProbe).toBe(true);
+
+    // …then the same server finds it fine.
+    testAccountProxy.mockResolvedValue(CP_OK);
+    fireEvent.click(await screen.findByRole('button', { name: 'Re-test' }));
+    await waitFor(() => expect(storedProbe('p1')?.serverLatencyMs).toBe(44));
+    expect(screen.queryByText('fails from Driftstack')).toBeNull();
+    expect(screen.queryByText(serverFallbackFailureNotice(CP_REASON))).toBeNull();
+
+    grid.unmount();
+    const again = render(<ProxiesView />);
+    await waitFor(() => expect(screen.getAllByText(/44/).length).toBeGreaterThan(0));
+    expect(screen.queryByText('fails from Driftstack')).toBeNull();
+    again.unmount();
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await screen.findAllByText(/london-socks/);
+    expect(screen.queryByText('fails from Driftstack')).toBeNull();
+  });
+
+  it('CRITICAL card: the card’s Test answered by the server’s failure shows its notice on the tile, and no "fails from Driftstack"; nothing is saved', async () => {
+    await saveProbeResult('p1', USABLE, Date.now() - 60_000);
+    testAccountProxy.mockResolvedValue(CP_FAILED);
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+    fireEvent.click(await screen.findByLabelText(/Test proxy from this Mac/));
+    const row = await screen.findByText('server check failed — retest');
+    expect(row.getAttribute('title')).toContain(serverFallbackFailureNotice(CP_REASON));
+    expect(screen.queryByText('fails from Driftstack')).toBeNull();
+    expect(storedProbe('p1')?.fleetFailureReason).toBeUndefined();
+    expect(storedProbe('p1')?.exitSupersededAt).toBeUndefined();
   });
 });

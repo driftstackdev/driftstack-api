@@ -30,7 +30,7 @@ import {
 } from '../views/agent-chat/icons';
 import { Kpi } from '../views/CommandCenterView';
 import { TierBadge } from '../components/TierBadge';
-import { VPN_NOT_STORED_CHECK_NOTICE } from '../lib/proxy-check-copy';
+import { serverFallbackFailureNotice, VPN_NOT_STORED_CHECK_NOTICE } from '../lib/proxy-check-copy';
 // Marketing scenes (below) — the app's real window chrome + the cockpit readouts.
 import { TitleBar } from '../components/TitleBar';
 import { Sidebar, type SidebarViewKind } from '../components/Sidebar';
@@ -520,6 +520,21 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       monogram: 'PM',
       hue: 20,
       vpnFailure: 'The proxy did not answer. Check the host and port, and that it is online.',
+      onEdit: noop,
+    }),
+  },
+  {
+    // Review major 2 — a SOCKS5 Test whose failure Driftstack's SERVER measured
+    // (nothing on the network profiles run on was free): a muted notice on the
+    // "when" row with the sentence in its title, never the pill above.
+    label: 'healthy · socks5 · server check failed (notice)',
+    props: base({
+      name: 'lisbon checkout',
+      monogram: 'LC',
+      hue: 200,
+      vpnNotice: serverFallbackFailureNotice(
+        'The proxy was too slow to respond. It may be overloaded — try again shortly.',
+      ),
       onEdit: noop,
     }),
   },

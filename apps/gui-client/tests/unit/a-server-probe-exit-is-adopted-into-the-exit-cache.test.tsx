@@ -308,7 +308,12 @@ describe('persistServerProbe — the observed exit lands in the exit-geo cache f
 
   it('a failed outcome invents no exit for a tunnel that did not come up — it records only the failure (proxy-accuracy audit G2)', async () => {
     await saveEndpointResult('vpn1', { resolved: true, ip: '198.51.100.1', message: 'ok' }, 1);
-    await persistServerProbe('vpn1', { kind: 'failed', at: NOW, reason: 'no' });
+    await persistServerProbe('vpn1', {
+      kind: 'failed',
+      at: NOW,
+      reason: 'no',
+      vantage: { measuredFrom: 'fleet' },
+    });
     const e = (await loadProbeCache())['vpn1'];
     expect(e?.exitIp).toBeUndefined();
     expect(e?.fleetFailureReason).toBe('no');

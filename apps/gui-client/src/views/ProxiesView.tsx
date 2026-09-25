@@ -93,6 +93,7 @@ import {
   deriveProbeViewWithEndpointRows,
   ensureAccountProxyRow,
   fleetFailureReasons,
+  isServerFallbackFailure,
   persistHealedOpenvpn,
   persistServerProbe,
   runInstalledCapabilityRefresh,
@@ -129,6 +130,7 @@ import {
   QUIC_NOT_ON_PLAN_CHIP,
   UDP_NOT_ON_PLAN_CHIP,
   RECHECK_ACTION,
+  serverFallbackFailureNotice,
   VPN_CHECK_IN_PROGRESS,
   VPN_PLAN_EXCLUDED_CHECK_NOTICE,
   VPN_PLAN_EXCLUDED_TALLY_REASON,
@@ -1660,7 +1662,13 @@ export function ProxiesView(): JSX.Element {
    * (b) — the two used to be one inline block and one nothing, which is how a
    * VPN row never showed a fleet number.
    */
-  function applyServerProbeOutcome(id: string, outcome: ServerProbeOutcome): void {
+  function applyServerProbeOutcome(
+    id: string,
+    outcome: ServerProbeOutcome,
+    /** The row is a SOCKS5 proxy — its `failed` answer is Driftstack's verdict
+     *  only when a fleet Mac gave it (`isServerFallbackFailure`). */
+    socks5 = false,
+  ): void {
     // Follow-up A — a refusal BY THE PLAN is recorded with its sentence; any other
     // answer (a verdict, another kind of not-run) retires it. `unavailable` learned
     // nothing and moves nothing, exactly as `noFleetMac` below.
@@ -1774,6 +1782,13 @@ export function ProxiesView(): JSX.Element {
       // dates it by the observation and refuses one the fleet has since
       // contradicted; adopting it here at reply time put "tunnel down"'s
       // dropped exit straight back on the grid beside "No fleet Mac was free".
+    } else if (socks5 && isServerFallbackFailure(outcome)) {
+      // ⛔ Verdict major 2 — Driftstack's SERVER could not use the proxy (no fleet
+      // Mac was free, so the control plane measured it). A real measurement from a
+      // different machine: it is shown as its own labelled notice, and nothing the
+      // fleet measured goes — the cache write stores nothing for it either
+      // (`persistServerProbe`), so the two cannot disagree on the next emit.
+      setVpnNotices((m) => ({ ...m, [id]: serverFallbackFailureNotice(outcome.reason) }));
     } else if (outcome.kind === 'failed') {
       // ⛔ The server says this proxy is NOT usable, while the native probe
       // from this Mac said it was. That disagreement is real information —
@@ -1931,7 +1946,7 @@ export function ProxiesView(): JSX.Element {
           }
           if (leg.kind === 'tested') {
             // The ok / failed application is shared with the VPN row's check (b).
-            applyServerProbeOutcome(p.id, leg.outcome);
+            applyServerProbeOutcome(p.id, leg.outcome, true);
             void persistServerProbe(p.id, leg.outcome);
           }
         }

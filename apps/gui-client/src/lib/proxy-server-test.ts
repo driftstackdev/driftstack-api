@@ -199,6 +199,29 @@ export type ServerProbeOutcome =
       kind: 'unavailable';
     };
 
+/**
+ * Proxy-accuracy audit G2, second pass (verdict major 2) — a SOCKS5 `failed`
+ * answer that did NOT come from a fleet Mac. When no fleet Mac can answer, the
+ * route falls back to the control plane's own SOCKS5 probe and answers
+ * `ok:false, measured_from:'control_plane'` with no `not_run`: a real
+ * measurement, but from Driftstack's server — a different machine and address
+ * from the one that runs the profile (report §4.1 ranks it below the fleet). G2
+ * (a) saved it as "fails from Driftstack" and retired the fleet's readings, and
+ * G2 (f) let only a FLEET answer lift it, so a later control-plane `ok` from the
+ * very same server could not — with no fleet Mac free it never cleared.
+ *
+ * ⛔ So only a fleet failure is Driftstack's verdict about a SOCKS5 proxy. This
+ * one is shown as its own labelled notice (`serverFallbackFailureNotice`, in
+ * proxy-check-copy) and writes nothing. An absent vantage
+ * (a server from before T-1 labelled nothing) is not a fleet answer either.
+ * VPN rows never reach here: the route answers a VPN fleet miss with `not_run`.
+ */
+export function isServerFallbackFailure(
+  outcome: ServerProbeOutcome,
+): outcome is Extract<ServerProbeOutcome, { kind: 'failed' }> {
+  return outcome.kind === 'failed' && outcome.vantage?.measuredFrom !== 'fleet';
+}
+
 /** (i) I5 — the notice both surfaces show for an `unavailable` outcome. It is
  *  NOT a verdict: the last fleet verdict (the cache's failure sentence, or the
  *  row's measured fields) stands beside it, and it goes when the next check
@@ -510,6 +533,11 @@ export async function persistServerProbe(
   opts: { adoptExit?: boolean } = {},
 ): Promise<ProbeCacheMap | null> {
   if (outcome.kind === 'failed') {
+    // ⛔ Verdict major 2 — a SOCKS5 failure is Driftstack's verdict only when a
+    // fleet Mac gave it. The control-plane fallback's failure is shown as a
+    // labelled notice by the caller and stored nowhere: saved here it retired the
+    // fleet's readings, and no later answer from that same server could lift it.
+    if (opts.adoptExit !== true && isServerFallbackFailure(outcome)) return null;
     // (h) finding 3 — the sentence is persisted with the stamp, so the card and
     // a remounted grid render the same verdict the view that ran the check did.
     // ⛔ Proxy-accuracy audit G2 (a) — for a SOCKS5 caller (no `adoptExit`) too.

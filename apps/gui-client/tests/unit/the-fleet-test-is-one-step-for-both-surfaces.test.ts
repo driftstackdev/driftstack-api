@@ -255,12 +255,17 @@ describe('persistServerProbe — one cache write for both surfaces', () => {
     expect(cleared?.['p1']?.serverLatencyMs).toBeUndefined();
   });
 
-  it('VACUITY CONTROL — `unavailable` writes nothing and returns null; a SOCKS5 `failed` is written (G2) as the stamp and the sentence beside this Mac’s own verdict', async () => {
+  it('VACUITY CONTROL — `unavailable` writes nothing and returns null; a SOCKS5 `failed` from a fleet Mac is written (G2) as the stamp and the sentence beside this Mac’s own verdict', async () => {
     await saveProbeResult('p1', OK, 1);
     expect(await persistServerProbe('p1', { kind: 'unavailable' })).toBeNull();
     expect((await loadProbeCache())['p1']).toEqual({ result: OK, at: 1 });
     expect(
-      await persistServerProbe('p1', { kind: 'failed', at: NOW, reason: 'no' }),
+      await persistServerProbe('p1', {
+        kind: 'failed',
+        at: NOW,
+        reason: 'no',
+        vantage: { measuredFrom: 'fleet' },
+      }),
     ).not.toBeNull();
     expect((await loadProbeCache())['p1']).toEqual({
       result: OK,
@@ -599,6 +604,54 @@ describe('G2 — a SOCKS5 Driftstack failure is saved, and only a later Driftsta
     const e = (await loadProbeCache())['p1'];
     expect(e?.fleetFailureReason).toBeUndefined();
     expect(e?.serverLatencyMs).toBe(40);
+  });
+
+  // ⛔ Review major 2 — when no fleet Mac can answer, the route falls back to its
+  // own SOCKS5 probe and answers `ok:false, measured_from:'control_plane'` with no
+  // `not_run`. That is Driftstack's SERVER, a different machine and address from
+  // the one that runs the profile (report §4.1 ranks it below the fleet), so it is
+  // not Driftstack's verdict about the proxy: saved as "fails from Driftstack" it
+  // retired the fleet's readings, and — since only a fleet answer lifts a fleet
+  // failure (f) — a later ok from that same server could never clear it.
+  // MUTATION: drop the `isServerFallbackFailure` return in persistServerProbe and
+  // every arm below reds.
+  it('CRITICAL (major 2) a control-plane FAILURE writes nothing — through the Test and the automatic check — and retires no fleet reading; a control-plane ok after it leaves no failure', async () => {
+    await saveProbeResult('p1', OK, 1);
+    await saveServerProbeResult(
+      'p1',
+      { latencyMs: 180, measuredFrom: 'fleet', nodeId: 'mac-07', quicProbe: true, udpProbe: true },
+      3,
+    );
+    const before = (await loadProbeCache())['p1'];
+    const cpFailed = serverProbeOutcome(
+      {
+        ok: false,
+        reason: 'The proxy was too slow to respond. It may be overloaded — try again shortly.',
+        measured_from: 'control_plane',
+      },
+      NOW,
+    );
+    expect(cpFailed.kind).toBe('failed');
+    expect(await persistServerProbe('p1', cpFailed)).toBeNull();
+    expect(await persistAutomaticServerProbe({ id: 'p1', scheme: 'socks5' }, cpFailed)).toBeNull();
+    expect((await loadProbeCache())['p1'], 'nothing the fleet measured goes').toEqual(before);
+    await persistServerProbe(
+      'p1',
+      serverProbeOutcome({ ok: true, latency_ms: 44, measured_from: 'control_plane' }, NOW + 1_000),
+    );
+    const e = (await loadProbeCache())['p1'];
+    expect(e).not.toHaveProperty('fleetFailureReason');
+    expect(e).not.toHaveProperty('exitSupersededAt');
+    expect(e?.serverLatencyMs).toBe(44);
+    expect(e?.measuredFrom).toBe('control_plane');
+  });
+
+  it('CONTROL (major 2) an UNLABELLED failure (a server from before replies named where they were measured) is not a fleet verdict either; the same failure from a fleet Mac is', async () => {
+    await saveProbeResult('p1', OK, 1);
+    expect(await persistServerProbe('p1', { kind: 'failed', at: NOW, reason: 'no' })).toBeNull();
+    expect((await loadProbeCache())['p1']).toEqual({ result: OK, at: 1 });
+    expect(await persistServerProbe('p1', failed())).not.toBeNull();
+    expect((await loadProbeCache())['p1']?.fleetFailureReason).toBe(refused);
   });
 
   it('the automatic check writes a failure only onto a row that already holds a Driftstack answer — a timer never paints one on a row nobody asked Driftstack about', async () => {

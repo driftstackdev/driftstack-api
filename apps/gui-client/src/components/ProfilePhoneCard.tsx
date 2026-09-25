@@ -143,6 +143,8 @@ import {
   EXIT_GEO_UNAVAILABLE_TITLE,
   RECHECK_ACTION,
   RETEST_ACTION,
+  isServerFallbackFailureNotice,
+  SERVER_FALLBACK_FAILURE_ROW,
   VPN_LATENCY_NOT_MEASURED,
   VPN_NO_API_KEY_CHECK_NOTICE,
   VPN_NO_EXIT_YET_SHORT,
@@ -343,7 +345,10 @@ export interface ProfilePhoneCardProps {
   endpoint?: EndpointPreflight | null;
   /** (h) — the server's sentence when the last tunnel test was NOT RUN (a live
    *  session holds the tunnel, no fleet Mac was free…). A muted notice, never
-   *  a failure; the card keeps its prior data beside it. */
+   *  a failure; the card keeps its prior data beside it. On a SOCKS5 row the
+   *  card draws ONE notice: a failure Driftstack's SERVER measured when nothing
+   *  on the network profiles run on was free (`serverFallbackFailureNotice`),
+   *  never as a failure pill. Every other notice stays gated on `vpn` (#16). */
   vpnNotice?: string;
   /** When the bound proxy was last checked (ISO), rendered as a relative
    *  "checked" stamp beside the latency. (h) finding 5 — for a VPN row the
@@ -2026,6 +2031,10 @@ export function vpnNoticeClause(notice: string): string {
   // the row and the button that fixes it.
   if (notice === VPN_NOT_STORED_CHECK_NOTICE) return 'not saved — check again';
   if (notice === VPN_NO_API_KEY_CHECK_NOTICE) return 'needs an API key — Settings';
+  // Review major 2 — a SOCKS5 Test's failure measured from Driftstack's server:
+  // the row says a check failed and where the next step is; WHERE it ran and the
+  // server's own sentence are in the title.
+  if (isServerFallbackFailureNotice(notice)) return SERVER_FALLBACK_FAILURE_ROW;
   const rest = notice.replace(/^(?:Endpoint resolves|Address found)\.\s*/, '').trim();
   return rest === '' ? notice : rest;
 }
@@ -2988,7 +2997,8 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     </p>
                   </DetailRow>
                 ) : null}
-                {vpn && p.vpnNotice !== undefined ? (
+                {p.vpnNotice !== undefined &&
+                (vpn || isServerFallbackFailureNotice(p.vpnNotice)) ? (
                   <DetailRow fact="vpn-notice" label="Notice">
                     <p data-component="proxy-vpn-notice" role="status" className="break-words">
                       {p.vpnNotice}
@@ -3513,11 +3523,16 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               >
                 {vpnFailureClause(p.vpnFailure)}
               </div>
-            ) : vpn && p.vpnNotice !== undefined ? (
+            ) : p.vpnNotice !== undefined && (vpn || isServerFallbackFailureNotice(p.vpnNotice)) ? (
               // (h) — the tunnel test was NOT RUN: a notice in muted ink, never
               // the red banner (and never the busy amber: on this tile that is
               // the slow-latency colour, and a not-run notice is not a caution).
               // Polish: the row shows the NEXT STEP, the sentence is the title.
+              // ⛔ Review major 2 — and on a SOCKS5 row, the one notice that is
+              // its own: a Test whose failure came from Driftstack's server (not
+              // the network profiles run on) says so HERE, and nowhere as "fails
+              // from Driftstack". Any other notice stays VPN-only (#16: a VPN
+              // notice outlives a scheme change in the map).
               <div
                 data-component="proxy-vpn-notice"
                 role="status"

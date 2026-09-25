@@ -27,6 +27,28 @@ export const CHECK_ENDPOINT_ACTION = 'Check endpoint';
  *  (proxy-accuracy audit G2 — the card never showed it for a SOCKS5 row). */
 export const FLEET_FAILED_PILL = 'fails from Driftstack';
 
+/** Proxy-accuracy audit G2, review major 2 — a SOCKS5 Test whose failure was
+ *  measured by Driftstack's SERVER (no machine on the network profiles run on
+ *  was free, so the server checked the proxy itself). A real result, from a
+ *  different place: it is shown as this notice beside the row and saved
+ *  nowhere, never as {@link FLEET_FAILED_PILL}. `reason` is the server's own
+ *  sentence. The lead names WHERE the check ran, in the words the latency
+ *  label uses for the same place (proxy-vantage.ts: "from the server"). */
+export const SERVER_FALLBACK_FAILURE_LEAD =
+  'Checked from Driftstack’s server, not the network your profiles run on:';
+export function serverFallbackFailureNotice(reason: string): string {
+  return `${SERVER_FALLBACK_FAILURE_LEAD} ${reason} Test again to check from there.`;
+}
+/** Whether a row notice is {@link serverFallbackFailureNotice}'s — the ONE
+ *  notice the profile card draws on a SOCKS5 row. Its other notices stay gated
+ *  on the scheme (#16): the notices map is keyed by id and outlives a scheme
+ *  change, so a VPN row's notice must not surface on the SOCKS5 row it became. */
+export function isServerFallbackFailureNotice(notice: string | undefined): boolean {
+  return notice !== undefined && notice.startsWith(SERVER_FALLBACK_FAILURE_LEAD);
+}
+/** The profile card's one-line form of that notice; the sentence is its title. */
+export const SERVER_FALLBACK_FAILURE_ROW = 'server check failed — retest';
+
 /** Both buttons once the row holds a pre-flight verdict. */
 export const RECHECK_ACTION = 'Re-check';
 

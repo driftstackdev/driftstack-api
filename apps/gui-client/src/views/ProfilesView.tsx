@@ -146,6 +146,7 @@ import { endpointUnresolvedCopy, isSocks5Probeable, isVpnScheme } from '../lib/p
 import { capabilityRecheckPromises, withProxyProbe } from '../lib/proxy-probe-sweeper';
 import { useDisplayClock } from '../lib/use-display-clock';
 import {
+  serverFallbackFailureNotice,
   VPN_NO_API_KEY_CHECK_NOTICE,
   VPN_PLAN_EXCLUDED_CHECK_NOTICE,
   VPN_NOT_STORED_CHECK_NOTICE,
@@ -156,6 +157,7 @@ import {
   deriveProbeViewWithEndpointRows,
   ensureAccountProxyRow,
   fleetFailureReasons,
+  isServerFallbackFailure,
   persistServerProbe,
   serverProbeStamps,
   serverVerdictUsable,
@@ -2817,6 +2819,13 @@ export function ProfilesView({
               setVpnNotices((m) => ({ ...m, [px.id]: socks5FleetTestNotStoredNotice(leg.error) }));
             }
             if (leg.kind === 'tested') {
+              // ⛔ Verdict major 2 — the grid's rule: a failure Driftstack's SERVER
+              // measured (no fleet Mac was free) is a labelled notice here, never
+              // "fails from Driftstack" — the write below stores nothing for it.
+              if (isServerFallbackFailure(leg.outcome)) {
+                const notice = serverFallbackFailureNotice(leg.outcome.reason);
+                setVpnNotices((m) => ({ ...m, [px.id]: notice }));
+              }
               const next = await persistServerProbe(px.id, leg.outcome);
               if (next !== null) setProbeCache(next);
             }
