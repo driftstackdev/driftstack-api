@@ -46,8 +46,10 @@ describe('W368.C status-site /history page content parity', () => {
     expect(body).toMatch(
       /Resolved incidents started in the last 90 days, plus every incident that\s+is still open regardless of age/,
     );
+    // P4 (2026-09-25) — the link is the brand's AA accent-text tone (tokens from
+    // the shared package); the site's oxblood ramp is gone.
     expect(body).toMatch(
-      /<a href="\/" class="text-oxblood-700 underline">live status page<\/a> shows\s+every active incident plus the last 30 days of resolved history/,
+      /<a href="\/" class="font-medium text-accent-text underline">live status page<\/a> shows\s+every active incident plus the last 30 days of resolved history/,
     );
   });
 
@@ -75,7 +77,9 @@ describe('W368.C status-site /history page content parity', () => {
   });
 
   it('cross-link to / (live status home) pinned', () => {
-    expect(body).toMatch(/<a href="\/" class="text-oxblood-700 underline">live status page<\/a>/);
+    expect(body).toMatch(
+      /<a href="\/" class="font-medium text-accent-text underline">live status page<\/a>/,
+    );
     expect(existsSync(INDEX)).toBe(true);
   });
 

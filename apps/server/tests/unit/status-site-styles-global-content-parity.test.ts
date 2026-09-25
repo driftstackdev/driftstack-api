@@ -25,9 +25,14 @@ describe('status-site styles/global content parity', () => {
     expect(body).toMatch(/@import 'tailwindcss';/);
   });
 
-  it("Fleet two-axis framing pinned: status synced with the light-first product — 'Customers checking status during an incident see the same brand surface as driftstack.io.' Drift to a different theme would create a brand-jarring mid-incident UX", () => {
-    expect(body).toMatch(/Fleet rework \(2026-06-12\) — status-site synced with marketing-site \+/);
-    expect(body).toMatch(/customer-dashboard: light\+violet default/);
+  // P4 (2026-09-25) — the framing sentence changed with the theme: status is
+  // now the desktop app's light theme (tokens from the shared package), not the
+  // retired "light+violet" web palette the old comment named.
+  it("Framing pinned: status in the same look as the rest of the product — the desktop app's light theme — 'Customers checking status during an incident see the same brand surface as driftstack.io.' Drift to a different theme would create a brand-jarring mid-incident UX", () => {
+    expect(body).toMatch(
+      /Status in the same look as the rest of the product: the desktop app's\s*light theme, the one every Driftstack surface now opens in\./,
+    );
+    expect(body).not.toMatch(/light\+violet default/);
     expect(body).toMatch(
       /Customers\s*checking status during an incident see the same brand surface as\s*driftstack\.io\./,
     );

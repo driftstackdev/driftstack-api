@@ -159,20 +159,29 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     );
   });
 
-  it('keeps mobile browser chrome aligned with the dark-only status surface', () => {
-    expect(body).toMatch(/<html lang="en" data-mode="dark" data-accent="oxblood">/);
-    expect(body).toMatch(/<meta name="theme-color" content="#0f172a" \/>/);
+  // P4 (2026-09-25) — status is no longer dark-only; it is the desktop app's
+  // light theme, and ONLY light. A theme toggle would have to remember the
+  // choice in client storage, and the privacy policy says this page stores
+  // nothing on the visitor's device (privacy-policy-storage-claims-hold-in-code).
+  // The browser chrome is the light page ground (surface-base).
+  it('keeps mobile browser chrome aligned with the light-only status surface (the app’s light page ground), with no theme switch that would need client storage', () => {
+    expect(body).toMatch(/<html lang="en" data-mode="light" data-accent="oxblood">/);
+    expect(body).toMatch(/<meta name="theme-color" content="#ebedf2" \/>/);
+    expect(body).not.toMatch(/data-mode="dark"/);
+    expect(body).not.toMatch(/data-theme-toggle/);
+    // (the storage absence itself is privacy-policy-storage-claims-hold-in-code's)
+    expect(body).not.toMatch(/prefers-color-scheme/);
   });
 
-  it('R13 header: "Driftstack" wordmark + middot + "status" subtitle — using dark-theme ink tokens (text-ink-primary / text-ink-muted) after the status-site dark migration', () => {
+  it('R13 header: "Driftstack" wordmark + middot + "status" subtitle — ink tokens, with STACK in the AA accent-text tone (P4: the retired glow-red also coloured outage badges)', () => {
     expect(body).toMatch(
-      /<span class="text-base font-black italic tracking-tight text-ink-primary">DRIFT<span class="text-glow-red">STACK<\/span><\/span>/,
+      /<span class="text-base font-black italic tracking-tight text-ink-primary">DRIFT<span class="text-accent-text">STACK<\/span><\/span>/,
     );
     expect(body).toMatch(/<span class="text-ink-muted">·<\/span>/);
     expect(body).toMatch(/<span class="text-ink-muted">status<\/span>/);
   });
 
-  it('R13 header right-nav: driftstack.io external cross-link — dark-theme ink-muted -> ink-primary hover after status-site migration', () => {
+  it('R13 header right-nav: driftstack.io external cross-link — ink-muted -> ink-primary hover', () => {
     expect(body).toMatch(
       /<a href="https:\/\/driftstack\.io" class="text-ink-muted hover:text-ink-primary">\s*driftstack\.io\s*<\/a>/,
     );
@@ -191,7 +200,9 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
   });
 
   it('single max-w-3xl content container (narrow, focused — not the wide marketing-site max-w-6xl), with the skip-link target', () => {
-    expect(body).toMatch(/<main\b[^>]*\bclass="mx-auto max-w-3xl px-6 py-10">/);
+    // P4 — w-full flex-1: the main column grows so the footer sits at the
+    // viewport's bottom edge on a short page.
+    expect(body).toMatch(/<main\b[^>]*\bclass="mx-auto w-full max-w-3xl flex-1 px-6 py-10">/);
     expect(body).toMatch(/<main\b[^>]*\bid="main-content"[^>]*\btabindex="-1"/);
   });
 
@@ -205,10 +216,10 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     expect(body).toMatch(/Skip to main content/);
   });
 
-  it('R13 html lang="en" + light+violet header (surface-divider border, not the old invisible white/10) + min-h-screen body — the Fleet light theme is applied via the data-mode/data-accent attributes and the page markup uses the adaptive surface/ink tokens', () => {
-    expect(body).toMatch(/<html lang="en" data-mode="dark" data-accent="oxblood">/);
+  it('R13 html lang="en" + header (surface-divider border, not the old invisible white/10) + a full-height column body — the light theme (P4 default) is applied via the data-mode/data-accent attributes and the page markup uses the adaptive surface/ink tokens', () => {
+    expect(body).toMatch(/<html lang="en" data-mode="light" data-accent="oxblood">/);
     expect(body).toMatch(/<header class="border-b border-surface-divider bg-surface-raised">/);
-    expect(body).toMatch(/<body class="min-h-screen">/);
+    expect(body).toMatch(/<body class="flex min-h-screen flex-col">/);
   });
 
   it('title rendered verbatim (no app-suffix unlike admin "${title} · Driftstack admin")', () => {

@@ -21,7 +21,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
 
 <StatusLayout title="Driftstack — Confirm status subscription" noindex>
   <section class="mb-8">
-    <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Subscribe</p>
+    <p class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Subscribe</p>
     <h1 class="mt-2 text-3xl font-semibold tracking-tight text-ink-primary">
       Confirm your subscription
     </h1>
@@ -31,7 +31,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     <!-- Default pane: the confirm call fires on load. -->
     <div
       id="confirm-pending"
-      class="rounded-lg border border-surface-divider bg-surface-raised p-6 shadow-xs"
+      class="rounded-xl border border-surface-divider bg-surface-raised p-6 shadow-lift"
       role="status"
       aria-live="polite"
     >
@@ -41,11 +41,11 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     <!-- Success pane (200): confirmation recorded. -->
     <div
       id="confirm-success"
-      class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-6 shadow-xs"
+      class="hidden rounded-xl border border-status-ready/40 border-l-4 border-l-status-ready bg-surface-raised p-6 shadow-lift"
       role="status"
       aria-live="polite"
     >
-      <p class="text-sm font-medium text-emerald-300">Subscription confirmed.</p>
+      <p class="text-sm font-semibold text-status-ready">Subscription confirmed.</p>
       <p class="mt-3 text-sm text-ink-secondary">
         You'll now receive an email when we post a service-status incident,
         at most one an hour while it stays open, and again when it resolves —
@@ -59,11 +59,11 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     <!-- Error pane (400 / 404 / 429 / network). -->
     <div
       id="confirm-error"
-      class="hidden rounded-lg border border-red-500/30 bg-red-500/5 p-6 shadow-xs"
+      class="hidden rounded-xl border border-incident-red/40 border-l-4 border-l-incident-red bg-surface-raised p-6 shadow-lift"
       role="alert"
       aria-live="assertive"
     >
-      <p id="confirm-error-message" class="text-sm font-medium text-red-300"></p>
+      <p id="confirm-error-message" class="text-sm font-semibold text-incident-red"></p>
       <p class="mt-3 text-sm text-ink-secondary">
         You can <a href="/subscribe/" class="underline hover:text-ink-primary">subscribe again</a>
         to get a fresh confirmation link.
@@ -72,11 +72,11 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
 
     <div
       id="confirm-unknown"
-      class="hidden rounded-lg border border-amber-400/30 bg-amber-400/5 p-6 shadow-xs"
+      class="hidden rounded-xl border border-status-busy/40 border-l-4 border-l-status-busy bg-surface-raised p-6 shadow-lift"
       role="status"
       aria-live="polite"
     >
-      <p class="text-sm font-medium text-amber-200">Confirmation outcome is unknown.</p>
+      <p class="text-sm font-semibold text-status-busy">Confirmation outcome is unknown.</p>
       <p class="mt-3 text-sm text-ink-secondary">
         The request timed out after the one-time link was sent. The server
         may already have confirmed your subscription and sent its welcome

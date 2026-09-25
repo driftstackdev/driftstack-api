@@ -85,8 +85,12 @@ describe('W790 status-site src content parity bundle', () => {
 
     expect(p).toMatch(/<img\s*\n\s+src="\/driftstack-mark\.svg\?v=4"\s*\n\s+alt="Driftstack"/);
     expect(p).toMatch(
-      /<span class="text-base font-black italic tracking-tight text-ink-primary">DRIFT<span class="text-glow-red">STACK<\/span><\/span>\s*\n\s+<span class="text-ink-muted">·<\/span>\s*\n\s+<span class="text-ink-muted">status<\/span>/,
+      /<span class="text-base font-black italic tracking-tight text-ink-primary">DRIFT<span class="text-accent-text">STACK<\/span><\/span>\s*\n\s+<span class="text-ink-muted">·<\/span>\s*\n\s+<span class="text-ink-muted">status<\/span>/,
     );
+    // P4 (2026-09-25) — STACK is the brand's AA accent-text tone (as on the
+    // docs and in the app), not the retired glow-red, which also coloured
+    // outage badges and so made the brand and an outage the same red.
+    expect(p).not.toMatch(/glow-red/);
   });
 
   it("CRITICAL Dutch-BV + operational-data-only privacy framing pinned. The 'Driftstack is a Dutch BV. Status data is operational only — never customer data' wording is the load-bearing privacy contract for the no-auth public page.", () => {
@@ -137,21 +141,34 @@ describe('W790 status-site src content parity bundle', () => {
     expect(p).toMatch(/snapshot-only data never proves\s*\n\/\/ an operational all-clear/);
   });
 
-  it('CRITICAL index 3-severity badge map pinned — minor (amber) / major (orange) / outage (red). Drift to a different color taxonomy would mismatch dashboard incident-severity convention.', () => {
+  // P4 (2026-09-25) — the badges moved off the raw Tailwind palette onto the
+  // app's status tokens (the desktop app's pill: wash + rim + text, with a dot).
+  // Severity keeps its ladder, now amber (busy) / incident-red wash / SOLID
+  // incident red; the lifecycle phases before resolved are neutral and resolved
+  // is the ready green. status-site-theme-content-parity measures every pair.
+  it('CRITICAL index 3-severity badge map pinned — minor (busy amber) / major (incident-red wash) / outage (solid incident red). Drift to a different color taxonomy would mismatch the incident-severity convention.', () => {
     const p = read(PAGE_INDEX);
 
-    expect(p).toMatch(/minor: \['bg-amber-50', 'text-amber-700'\]/);
-    expect(p).toMatch(/major: \['bg-orange-50', 'text-orange-700'\]/);
-    expect(p).toMatch(/outage: \['bg-red-50', 'text-red-700'\]/);
+    expect(p).toMatch(
+      /minor: \['border-status-busy\/30', 'bg-status-busy\/15', 'text-status-busy'\]/,
+    );
+    expect(p).toMatch(
+      /major: \['border-incident-red\/30', 'bg-incident-red\/15', 'text-incident-red'\]/,
+    );
+    expect(p).toMatch(/outage: \['border-incident-red', 'bg-incident-red', 'text-ink-inverted'\]/);
   });
 
   it('CRITICAL index 4-status badge map pinned — investigating/identified/monitoring/resolved. Matches W789 admin-panel mocks 4-status enum + incident lifecycle.', () => {
     const p = read(PAGE_INDEX);
 
-    expect(p).toMatch(/investigating: \['bg-amber-50', 'text-amber-700'\]/);
-    expect(p).toMatch(/identified: \['bg-blue-50', 'text-blue-700'\]/);
-    expect(p).toMatch(/monitoring: \['bg-indigo-50', 'text-indigo-700'\]/);
-    expect(p).toMatch(/resolved: \['bg-emerald-50', 'text-emerald-700'\]/);
+    for (const phase of ['investigating', 'identified', 'monitoring']) {
+      expect(p).toContain(
+        `${phase}: ['border-ink-muted/30', 'bg-ink-muted/15', 'text-ink-secondary'],`,
+      );
+    }
+    expect(p).toMatch(
+      /resolved: \['border-status-ready\/30', 'bg-status-ready\/15', 'text-status-ready'\]/,
+    );
   });
 
   it("CRITICAL index 4-state overall STATE_TITLE pinned — operational/degraded/outage/unknown. The 'STATE_TITLE.unknown = Status currently unavailable' is the load-bearing partial-degradation framing.", () => {
@@ -332,7 +349,7 @@ describe('W790 status-site src content parity bundle', () => {
       /Resolved incidents started in the last 90 days, plus every incident that\s*\n\s+is still open regardless of age/,
     );
     expect(p).toMatch(
-      /<a href="\/" class="text-oxblood-700 underline">live status page<\/a> shows\s*\n\s+every active incident plus the last 30 days of resolved history\./,
+      /<a href="\/" class="font-medium text-accent-text underline">live status page<\/a> shows\s*\n\s+every active incident plus the last 30 days of resolved history\./,
     );
     expect(p).toMatch(/if \(feed\.truncated\)/);
     expect(p).not.toMatch(/listed indefinitely|complete record/);

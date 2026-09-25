@@ -29,8 +29,11 @@ describe('status-site/pages/404 content parity', () => {
   });
 
   it("'Page not found.' headline + 404 section-label tag pinned. Drift to a different headline would mismatch the rest of the 404 family across the customer-dashboard / marketing-site 404 pages", () => {
+    // P4 (2026-09-25) — a sans section label (the desktop app's .section-label):
+    // the old font-mono stack names no font the status site ships, so Chrome
+    // painted the eyebrow in Courier.
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-ink-muted">404<\/p>/,
+      /<p class="text-xs font-semibold uppercase tracking-wider text-ink-muted">404<\/p>/,
     );
     expect(body).toMatch(
       /<h1 class="mt-4 text-3xl font-semibold tracking-tight text-ink-primary">Page not found\.<\/h1>/,

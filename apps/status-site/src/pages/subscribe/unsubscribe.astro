@@ -21,7 +21,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
 
 <StatusLayout title="Driftstack — Unsubscribe from status emails" noindex>
   <section class="mb-8">
-    <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Unsubscribe</p>
+    <p class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Unsubscribe</p>
     <h1 class="mt-2 text-3xl font-semibold tracking-tight text-ink-primary">
       Unsubscribe from status emails
     </h1>
@@ -31,7 +31,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     <!-- Default pane: the unsubscribe call fires on load. -->
     <div
       id="unsub-pending"
-      class="rounded-lg border border-surface-divider bg-surface-raised p-6 shadow-xs"
+      class="rounded-xl border border-surface-divider bg-surface-raised p-6 shadow-lift"
       role="status"
       aria-live="polite"
     >
@@ -41,11 +41,11 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     <!-- Success pane (200): unsubscribed. -->
     <div
       id="unsub-success"
-      class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-6 shadow-xs"
+      class="hidden rounded-xl border border-status-ready/40 border-l-4 border-l-status-ready bg-surface-raised p-6 shadow-lift"
       role="status"
       aria-live="polite"
     >
-      <p class="text-sm font-medium text-emerald-300">You've been unsubscribed.</p>
+      <p class="text-sm font-semibold text-status-ready">You've been unsubscribed.</p>
       <p class="mt-3 text-sm text-ink-secondary">
         We won't send you any more service-status emails. You can
         <a href="/subscribe/" class="underline hover:text-ink-primary">subscribe again</a>
@@ -56,11 +56,11 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     <!-- Unknown pane: the request was sent but its response timed out. -->
     <div
       id="unsub-unknown"
-      class="hidden rounded-lg border border-amber-500/30 bg-amber-500/5 p-6 shadow-xs"
+      class="hidden rounded-xl border border-status-busy/40 border-l-4 border-l-status-busy bg-surface-raised p-6 shadow-lift"
       role="status"
       aria-live="polite"
     >
-      <p class="text-sm font-medium text-amber-200">Your unsubscribe may already be complete.</p>
+      <p class="text-sm font-semibold text-status-busy">Your unsubscribe may already be complete.</p>
       <p class="mt-3 text-sm text-ink-secondary">
         The request timed out after it was sent, so the server may already have stopped future
         status emails. Do not reload or open this unsubscribe link again. No action is needed now;
@@ -71,11 +71,11 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     <!-- Error pane (400 / 404 / 429 / network). -->
     <div
       id="unsub-error"
-      class="hidden rounded-lg border border-red-500/30 bg-red-500/5 p-6 shadow-xs"
+      class="hidden rounded-xl border border-incident-red/40 border-l-4 border-l-incident-red bg-surface-raised p-6 shadow-lift"
       role="alert"
       aria-live="assertive"
     >
-      <p id="unsub-error-message" class="text-sm font-medium text-red-300"></p>
+      <p id="unsub-error-message" class="text-sm font-semibold text-incident-red"></p>
       <p class="mt-3 text-sm text-ink-secondary">
         If you keep receiving emails, use the unsubscribe link in the most
         recent one — links from older emails expire when a newer email is

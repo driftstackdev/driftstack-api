@@ -116,8 +116,11 @@ describe('W379.B cross-app 404 pages content parity', () => {
     });
 
     it('status-site uses slate-500 chip (not oxblood like the others — neutral palette)', () => {
+      // P4 (2026-09-25) — a sans section label (the desktop app's .section-label):
+      // the old font-mono stack names no font the status site ships, so Chrome
+      // painted the eyebrow in Courier.
       expect(body).toMatch(
-        /<p class="font-mono text-xs uppercase tracking-widest text-ink-muted">404<\/p>/,
+        /<p class="text-xs font-semibold uppercase tracking-wider text-ink-muted">404<\/p>/,
       );
     });
   });

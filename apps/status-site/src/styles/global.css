@@ -1,66 +1,57 @@
 @import 'tailwindcss';
 
-@custom-variant dark (&:is(.dark *));
+/* P4 (2026-09-25) — the status site takes the desktop app's theme from the
+   shared package (packages/design-tokens, whose tests fail if it and the app
+   ever disagree): tokens.css holds the app's light and dark modes on the
+   data-mode axis, and theme-v4.css maps them to Tailwind v4 utilities —
+   bg-surface-*, text-ink-*, bg-accent, text-accent-text, *-status-ready /
+   busy / error, rounded-xl, shadow-lift. This file no longer declares a
+   palette of its own: the hand-kept surface/ink/glow-red/oxblood/slate
+   values it carried (dark only, with a light block that still resolved the
+   accent to violet) are gone, and so is the markup's raw amber/emerald/red
+   palette. The site is the app's light theme, and ONLY light: a theme switch
+   would have to remember the choice on the visitor's device, and the privacy
+   policy says this page stores nothing there. */
+@import '@driftstack/design-tokens/tokens.css';
+@import '@driftstack/design-tokens/theme-v4.css';
+
+/* No `dark:` variant: the site has one mode. The old `.dark` class variant
+   was dead (nothing ever set the class) and is gone. */
 
 @theme {
-  --color-oxblood-50: #fbf3f4;
-  --color-oxblood-100: #f5e1e3;
-  --color-oxblood-200: #ebbfc4;
-  --color-oxblood-300: #dc939c;
-  --color-oxblood-400: #c8606e;
-  --color-oxblood-500: #a83b4d;
-  --color-oxblood-600: #8d2c3e;
-  --color-oxblood-700: #722f37;
-  --color-oxblood-800: #5e2730;
-  --color-oxblood-900: #4f242b;
-  --color-oxblood-950: #2b0f15;
-
-  --color-slate-50: #f8fafc;
-  --color-slate-100: #f1f5f9;
-  --color-slate-200: #e2e8f0;
-  --color-slate-300: #cbd5e1;
-  --color-slate-400: #94a3b8;
-  --color-slate-500: #64748b;
-  --color-slate-600: #475569;
-  --color-slate-700: #334155;
-  --color-slate-800: #1e293b;
-  --color-slate-900: #0f172a;
-  --color-slate-950: #020617;
-
-  --color-surface-base: #0f172a;
-  --color-surface-raised: #1e293b;
-  --color-surface-elevated: #334155;
-  --color-surface-inset: #020617;
-  --color-surface-divider: #475569;
-
-  --color-ink-primary: #f8fafc;
-  --color-ink-secondary: #cbd5e1;
-  --color-ink-muted: #94a3b8;
-  --color-ink-inverted: #0f172a;
-
-  --color-glow-red: #e23847;
-  --color-glow-red-soft: #f25366;
-  --color-glow-red-deep: #a8202d;
-
-  /* Fleet rework (2026-06-12): the accent + surface/ink values below are
-     OVERRIDDEN by the two-axis token blocks at the end of this file —
-     light+violet default, dark preserved under [data-mode='dark']. */
-  --color-accent: #6d5efc;
-  --color-accent-strong: #5847e0;
-
-  --font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
-  --font-mono: Berkeley Mono, ui-monospace, SFMono-Regular, monospace;
-
   --container-prose: 65ch;
+}
+
+/* ── The incident red ────────────────────────────────────────────────────
+   Status is the one surface where "red" has to mean "something is broken",
+   next to a brand accent that is itself a red. The app's own error red
+   (#a6352e light, #f87171 dark) sits only 13.4° / 9.9° of hue from the
+   oxblood accent (#a83b4d, 350.1°), so an outage badge would read as brand.
+   The status site's red is moved toward vermilion, past the app's 25° rule
+   (the gap it keeps between the accent and every status hue):
+     #983d16 — hue 18.0°, 27.9° from the accent; 6.61:1 on a card, 5.95:1
+               on the page ground, 5.24:1 on its own /15 wash over a card;
+               the white label on the solid fill 6.97:1
+   It stays 21.1° of hue from the amber busy colour, and every badge still
+   says its word (OUTAGE, MAJOR, MINOR), so no state is told apart by hue
+   alone. (If the site ever gains a dark mode, #fb8e60 was measured for it:
+   17.8° hue, 6.37:1 on the dark card, 4.92:1 on its wash, 7.77:1 for the
+   dark label on the fill.)
+   apps/server/tests/unit/status-site-theme-content-parity.test.ts
+   re-measures all of this from the values below. */
+:root {
+  --incident-red-rgb: 152 61 22;
+}
+
+@theme inline {
+  --color-incident-red: rgb(var(--incident-red-rgb));
 }
 
 /*
   The default border color has changed to `currentcolor` in Tailwind CSS v4,
   so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
+  looks the same as it did with Tailwind CSS v3. The fallback is the app's
+  hairline (surface-divider), which follows the mode.
 */
 @layer base {
   *,
@@ -68,13 +59,12 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
+    border-color: rgb(var(--surface-divider-rgb, 205 211 220));
   }
 }
 
-/* Fleet rework (2026-06-12) — status-site synced with marketing-site +
-   customer-dashboard: light+violet default (the rest of the product is
-   now light-first), dark preserved under [data-mode='dark']. Customers
+/* Status in the same look as the rest of the product: the desktop app's
+   light theme, the one every Driftstack surface now opens in. Customers
    checking status during an incident see the same brand surface as
    driftstack.io. */
 
@@ -109,6 +99,24 @@
   }
 }
 
+/* The overall status card reads at a glance: a 4px rim in the state's own
+   hue down its leading edge (the dot beside the headline carries the same
+   colour, and the headline says it in words). The state comes from
+   index.astro's renderOverall, which sets data-state on the card. */
+.status-banner {
+  border-left-width: 4px;
+  border-left-color: rgb(var(--status-idle-rgb));
+}
+.status-banner[data-state='operational'] {
+  border-left-color: rgb(var(--status-ready-rgb));
+}
+.status-banner[data-state='degraded'] {
+  border-left-color: rgb(var(--status-busy-rgb));
+}
+.status-banner[data-state='outage'] {
+  border-left-color: rgb(var(--incident-red-rgb));
+}
+
 /* Global reduced-motion baseline — matches the other customer-facing
    surfaces. Un-layered + !important so it wins over Tailwind's animate-* /
    transition utilities; motion-sensitive users (often checking status
@@ -123,43 +131,4 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-}
-
-/* ── Fleet two-axis token values (2026-06-12 rework; contract:
-   the internal 2026-06-12 design-system spec). Tailwind v4 utilities
-   resolve --color-* at use-time, so redefining them per axis flips the
-   whole site with ZERO markup changes. Defaults (on :root) = light. */
-:root,
-[data-mode='light'] {
-  --color-surface-base: #f2f3f6;
-  --color-surface-raised: #ffffff;
-  --color-surface-elevated: #ffffff;
-  --color-surface-inset: #ebecf0;
-  --color-surface-divider: #e4e6ec;
-  --color-ink-primary: #0f1014;
-  --color-ink-secondary: #474a55;
-  --color-ink-muted: #8a8d99;
-  --color-ink-inverted: #ffffff;
-  /* accent: glow-red names stay (markup unchanged) but resolve violet */
-  --color-glow-red: #6d5efc;
-  --color-glow-red-soft: #8b7dff;
-  --color-glow-red-deep: #5847e0;
-  --color-oxblood-700: #6d5efc;
-  --color-oxblood-600: #5847e0;
-}
-[data-mode='dark'] {
-  --color-surface-base: #0f172a;
-  --color-surface-raised: #1e293b;
-  --color-surface-elevated: #334155;
-  --color-surface-inset: #020617;
-  --color-surface-divider: #475569;
-  --color-ink-primary: #f8fafc;
-  --color-ink-secondary: #cbd5e1;
-  --color-ink-muted: #94a3b8;
-  --color-ink-inverted: #0f172a;
-  --color-glow-red: #e23847;
-  --color-glow-red-soft: #f25366;
-  --color-glow-red-deep: #a8202d;
-  --color-oxblood-700: #722f37;
-  --color-oxblood-600: #8d2c3e;
 }

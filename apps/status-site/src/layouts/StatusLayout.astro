@@ -14,16 +14,26 @@ const {
   noindex = false,
 } = Astro.props;
 const canonicalUrl = Astro.site ? new URL(Astro.url.pathname, Astro.site) : undefined;
+// P4 (2026-09-25) — the desktop app's light theme, and ONLY light: the privacy
+// policy (section 3.9) says this page stores nothing on the visitor's device,
+// and remembering a theme choice would need client storage
+// (privacy-policy-storage-claims-hold-in-code guards it). Nothing follows the
+// system theme either, as on every surface. theme-color is the light page
+// ground (surface-base #ebedf2).
+//
+// <body> is a column that fills the viewport and <main>
+// grows (flex-1), so on a short page (an incident, a 404) the footer sits at
+// the bottom edge instead of leaving a strip of page ground under it.
 ---
 
 <!doctype html>
-<html lang="en" data-mode="dark" data-accent="oxblood">
+<html lang="en" data-mode="light" data-accent="oxblood">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Status is dark-only; keep iOS Safari's status-bar/chrome aligned
-         with --color-surface-base instead of flashing the bright UA default. -->
-    <meta name="theme-color" content="#0f172a" />
+    <!-- Keep iOS Safari's status-bar/chrome aligned with the light page ground
+         instead of flashing the UA default. -->
+    <meta name="theme-color" content="#ebedf2" />
     <meta name="generator" content={Astro.generator} />
     <meta name="description" content={description} />
     <meta name="robots" content={noindex ? 'noindex,nofollow' : 'index,follow'} />
@@ -45,11 +55,11 @@ const canonicalUrl = Astro.site ? new URL(Astro.url.pathname, Astro.site) : unde
     <title>{title}</title>
     <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=4" />
   </head>
-  <body class="min-h-screen">
+  <body class="flex min-h-screen flex-col">
     {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR users skip the header nav. */}
     <a
       href="#main-content"
-      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-glow-red focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-accent focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-accent-on"
     >
       Skip to main content
     </a>
@@ -63,7 +73,7 @@ const canonicalUrl = Astro.site ? new URL(Astro.url.pathname, Astro.site) : unde
             height="24"
             class="inline-block h-6 w-6"
           />
-          <span class="text-base font-black italic tracking-tight text-ink-primary">DRIFT<span class="text-glow-red">STACK</span></span>
+          <span class="text-base font-black italic tracking-tight text-ink-primary">DRIFT<span class="text-accent-text">STACK</span></span>
           <span class="text-ink-muted">·</span>
           <span class="text-ink-muted">status</span>
         </a>
@@ -74,7 +84,7 @@ const canonicalUrl = Astro.site ? new URL(Astro.url.pathname, Astro.site) : unde
         </nav>
       </div>
     </header>
-    <main id="main-content" tabindex="-1" class="mx-auto max-w-3xl px-6 py-10">
+    <main id="main-content" tabindex="-1" class="mx-auto w-full max-w-3xl flex-1 px-6 py-10">
       <slot />
     </main>
     <footer class="mt-12 border-t border-surface-divider bg-surface-raised">

@@ -20,18 +20,18 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   description="Read the latest timeline, impact, and resolution details for a Driftstack service incident."
 >
   <nav class="mb-6 text-sm">
-    <a href="/" class="text-ink-muted hover:text-ink-primary">← Back to status</a>
+    <a href="/" class="text-ink-secondary hover:text-ink-primary">← Back to status</a>
   </nav>
 
   <section id="loading" class="mb-12">
-    <div class="rounded-lg border border-surface-divider bg-surface-raised p-5 text-sm text-ink-muted">
+    <div class="rounded-xl border border-surface-divider bg-surface-raised p-5 text-sm text-ink-secondary">
       Loading incident…
     </div>
   </section>
 
   <section id="error" class="mb-12 hidden">
     <div
-      class="rounded-lg border border-red-500/30 bg-red-500/10 p-5 text-sm text-ink-primary"
+      class="rounded-xl border border-incident-red/40 border-l-4 border-l-incident-red bg-surface-raised p-5 text-sm text-ink-primary"
       role="alert"
     >
       <p id="error-message">Incident not found.</p>
@@ -42,26 +42,29 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       <button
         type="button"
         data-incident-retry
-        class="mt-3 hidden rounded-md border border-red-400/60 px-3 py-1.5 text-xs font-medium hover:bg-red-500/10 disabled:cursor-wait disabled:opacity-60"
+        class="mt-3 hidden rounded-md border border-surface-divider bg-surface-elevated px-3 py-1.5 text-xs font-medium text-ink-primary hover:bg-surface-inset disabled:cursor-wait disabled:opacity-60"
       >Retry</button>
     </div>
   </section>
 
+  {/* P4 (2026-09-25) — the incident is a card (the app's card recipe),
+      the timeline a second card below it, so the page reads as the same
+      furniture as the status home. */}
   <article id="incident" class="mb-12 hidden">
-    <header class="mb-3">
+    <header class="rounded-xl border border-surface-divider bg-surface-raised p-6 shadow-lift">
       <div class="flex flex-wrap items-center gap-2">
         <span id="severity-badge"></span>
         <span id="status-badge"></span>
       </div>
-      <h1 id="title" class="mt-3 text-xl font-semibold text-ink-primary"></h1>
+      <h1 id="title" class="mt-3 text-xl font-semibold tracking-tight text-ink-primary sm:text-2xl"></h1>
       <p id="meta" class="mt-1 text-xs text-ink-muted"></p>
+      <p id="description" class="mt-4 whitespace-pre-wrap text-sm text-ink-secondary"></p>
     </header>
-    <p id="description" class="mb-6 whitespace-pre-wrap text-sm text-ink-secondary"></p>
 
-    <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-muted">
+    <h2 class="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-ink-muted">
       Timeline
     </h2>
-    <ol id="timeline" class="space-y-3"></ol>
+    <ol id="timeline" class="space-y-4 rounded-xl border border-surface-divider bg-surface-raised p-6"></ol>
   </article>
 
   <section class="text-xs text-ink-muted">
@@ -79,16 +82,19 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
   }
+  // P4 (2026-09-25) — the same badge maps as index.astro (the app's status
+  // pill in the app's status tokens; colour carries severity, the phases
+  // before "resolved" are neutral).
   const SEVERITY_BADGE = {
-    minor: ['bg-amber-50', 'text-amber-700'],
-    major: ['bg-orange-50', 'text-orange-700'],
-    outage: ['bg-red-50', 'text-red-700'],
+    minor: ['border-status-busy/30', 'bg-status-busy/15', 'text-status-busy'],
+    major: ['border-incident-red/30', 'bg-incident-red/15', 'text-incident-red'],
+    outage: ['border-incident-red', 'bg-incident-red', 'text-ink-inverted'],
   };
   const STATUS_BADGE = {
-    investigating: ['bg-amber-50', 'text-amber-700'],
-    identified: ['bg-blue-50', 'text-blue-700'],
-    monitoring: ['bg-indigo-50', 'text-indigo-700'],
-    resolved: ['bg-emerald-50', 'text-emerald-700'],
+    investigating: ['border-ink-muted/30', 'bg-ink-muted/15', 'text-ink-secondary'],
+    identified: ['border-ink-muted/30', 'bg-ink-muted/15', 'text-ink-secondary'],
+    monitoring: ['border-ink-muted/30', 'bg-ink-muted/15', 'text-ink-secondary'],
+    resolved: ['border-status-ready/30', 'bg-status-ready/15', 'text-status-ready'],
   };
 
   function fmtIso(iso) {
@@ -97,7 +103,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
 
   function badge(text, classes) {
     const cls = (classes ?? []).join(' ');
-    return `<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${cls}">${escapeHtml(text)}</span>`;
+    return `<span class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${cls}"><span class="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true"></span>${escapeHtml(text)}</span>`;
   }
 
   function escapeHtml(s) {
@@ -179,7 +185,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       .map(
         (u) => `
           <li class="relative pl-5 border-l border-surface-divider">
-            <span class="absolute left-[-5px] top-1 inline-block h-2 w-2 rounded-full bg-oxblood-700"></span>
+            <span class="absolute left-[-5px] top-1.5 inline-block h-2 w-2 rounded-full ${u.status === 'resolved' ? 'bg-status-ready' : 'bg-ink-muted'}"></span>
             <div class="flex flex-wrap items-baseline gap-2">
               ${badge(u.status, STATUS_BADGE[u.status])}
               <span class="text-xs text-ink-muted">${escapeHtml(fmtIso(u.posted_at))}</span>

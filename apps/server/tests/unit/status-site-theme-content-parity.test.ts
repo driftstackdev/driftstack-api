@@ -1,21 +1,28 @@
-// W794 — apps/status-site src/styles/global.css content parity.
-// One-hundred-twentieth in the cross-SDK drift-guard series. Pins the
+// W794 — apps/status-site src/styles/global.css content parity. Pins the
 // status-site theme.
 //
-// W368 — migrated to Tailwind v4: the theme now lives in the `@theme` block
-// of global.css (the v3 tailwind.config.mjs was deleted; v4 is CSS-first +
-// auto-detects content, so darkMode/content-glob config concepts are gone and
-// the palette/font/prose tokens are `--color-*`/`--font-*`/`--container-*` vars).
-// The brand VALUES are unchanged — this guard now pins them in their v4 home.
+// W368 — migrated to Tailwind v4: the theme lives in global.css (CSS-first).
 //
-// Fleet — the status-site surface MUST stay synced with marketing-
-// site/customer-dashboard/docs. Customers checking status during an
-// incident shouldn't experience a brand-jarring light theme when the
-// rest of the product is dark.
+// P4 (2026-09-25) — SUPERSEDES the W794 palette pins. They held the status
+// site's own hand-kept palette: an 11-shade oxblood and slate ramp, dark-only
+// surface/ink values, and a "glow-red" (#e23847) brand accent that also
+// coloured outage badges — with a light block that still resolved the accent
+// to violet. The site now takes the desktop app's theme from the shared
+// package (packages/design-tokens), and only its LIGHT theme — a theme switch
+// would have to remember the choice in client storage, which the privacy policy
+// says this page never does — and the markup's raw Tailwind palette (amber,
+// orange, red, blue, indigo, emerald) is gone. What is pinned here instead:
+//   - the package imports, and that no token value is re-declared locally;
+//   - the one colour the status site adds: its incident red, MEASURED — at
+//     least 25° of hue from the brand accent (the app's own rule for status
+//     hues), AA on every ground it sits on, and its label AA on the solid fill;
+//   - every incident badge's text/ground pair, MEASURED from the maps the
+//     pages actually render;
+//   - no raw palette class anywhere in the site's source (with a control).
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -26,118 +33,211 @@ function read(p: string): string {
 }
 
 const GLOBAL_CSS = resolve(REPO_ROOT, 'apps/status-site/src/styles/global.css');
+const SRC = resolve(REPO_ROOT, 'apps/status-site/src');
+const TOKENS = JSON.parse(read(resolve(REPO_ROOT, 'packages/design-tokens/tokens.json'))) as {
+  accent: Record<string, string>;
+  modes: Record<'light' | 'dark', Record<string, string>>;
+};
+const TOKENS_CSS = read(resolve(REPO_ROOT, 'packages/design-tokens/dist/tokens.css'));
+
+type Rgb = readonly [number, number, number];
+const rgb = (hex: string): Rgb => [
+  parseInt(hex.slice(1, 3), 16),
+  parseInt(hex.slice(3, 5), 16),
+  parseInt(hex.slice(5, 7), 16),
+];
+function luminance([r, g, b]: Rgb): number {
+  const lin = (c: number): number => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+function contrast(a: Rgb, b: Rgb): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+  return (hi + 0.05) / (lo + 0.05);
+}
+const wash = (fg: Rgb, alpha: number, bg: Rgb): Rgb => [
+  fg[0] * alpha + bg[0] * (1 - alpha),
+  fg[1] * alpha + bg[1] * (1 - alpha),
+  fg[2] * alpha + bg[2] * (1 - alpha),
+];
+/** HSL hue, the measure the app's own 25° rule uses. */
+function hue([r, g, b]: Rgb): number {
+  const [rn, gn, bn] = [r / 255, g / 255, b / 255];
+  const max = Math.max(rn, gn, bn);
+  const d = max - Math.min(rn, gn, bn);
+  if (d === 0) return 0;
+  const h = max === rn ? ((gn - bn) / d) % 6 : max === gn ? (bn - rn) / d + 2 : (rn - gn) / d + 4;
+  return (h * 60 + 360) % 360;
+}
+const hueGap = (a: number, b: number): number => {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+};
+
+/** The incident red as global.css declares it (the site has one mode). */
+function incidentRed(css: string): Rgb {
+  const m = css.match(/:root \{\s*\n\s*--incident-red-rgb: (\d+) (\d+) (\d+);/);
+  expect(m, '--incident-red-rgb').not.toBeNull();
+  return [Number(m?.[1]), Number(m?.[2]), Number(m?.[3])];
+}
 
 describe('W794 status-site theme content parity', () => {
   it('theme file exists at canonical path', () => {
     expect(existsSync(GLOBAL_CSS)).toBe(true);
   });
 
-  // ─── Tailwind v4 engine framing ───────────────────────────────
-
-  it("CRITICAL `@import 'tailwindcss'` pinned (Tailwind v4 — replaces the v3 3-directive header). Drift to dropping it skips the whole engine.", () => {
+  it("CRITICAL `@import 'tailwindcss'` pinned, then the shared tokens: tokens.css (the app's two modes on data-mode) and theme-v4.css (its Tailwind v4 utilities). Drift to dropping either leaves every surface-*/ink-*/status-* class without a value", () => {
     const p = read(GLOBAL_CSS);
-    expect(p).toMatch(/@import 'tailwindcss';/);
+    const imports = [...p.matchAll(/^@import '([^']+)';$/gm)].map((m) => m[1]);
+    expect(imports).toEqual([
+      'tailwindcss',
+      '@driftstack/design-tokens/tokens.css',
+      '@driftstack/design-tokens/theme-v4.css',
+    ]);
   });
 
-  it('CRITICAL darkMode-by-class pinned as the v4 `@custom-variant dark (&:is(.dark *))`. Drift to a media-query variant would let the status-site flicker light/dark on OS settings.', () => {
+  it('CRITICAL the site has ONE mode: no `dark:` variant (the dead `.dark` class variant nothing ever set is gone), nothing follows the OS setting, and the layout pins data-mode="light" with no theme switch (a remembered choice would need client storage the privacy policy says this page never uses)', () => {
     const p = read(GLOBAL_CSS);
-    expect(p).toMatch(/@custom-variant dark \(&:is\(\.dark \*\)\);/);
+    expect(p).not.toMatch(/@custom-variant dark/);
+    expect(p).not.toMatch(/&:is\(\.dark \*\)/);
+    expect(p).not.toMatch(/prefers-color-scheme/);
+    const layout = read(join(SRC, 'layouts', 'StatusLayout.astro'));
+    expect(layout).toMatch(/<html lang="en" data-mode="light" data-accent="oxblood">/);
+    expect(layout).not.toMatch(/data-theme-toggle/);
   });
 
-  // ─── @theme palette tokens ────────────────────────────────────
-
-  it('CRITICAL oxblood 11-shade palette pinned — locked at #722f37 base / 700. Matches marketing-site oxblood-700 brand-anchor color.', () => {
+  it('CRITICAL no hand-kept palette survives: no oxblood/slate ramp, no glow-red, no local surface/ink values, no violet, and no canonical token re-declared (the app is the only source)', () => {
     const p = read(GLOBAL_CSS);
-
-    const shades: Array<[string, string]> = [
-      ['50', '#fbf3f4'],
-      ['100', '#f5e1e3'],
-      ['200', '#ebbfc4'],
-      ['300', '#dc939c'],
-      ['400', '#c8606e'],
-      ['500', '#a83b4d'],
-      ['600', '#8d2c3e'],
-      ['700', '#722f37'],
-      ['800', '#5e2730'],
-      ['900', '#4f242b'],
-      ['950', '#2b0f15'],
-    ];
-    for (const [shade, hex] of shades) {
-      expect(p, `oxblood-${shade}`).toMatch(new RegExp(`--color-oxblood-${shade}: ${hex};`));
+    for (const retired of [
+      '--color-oxblood-',
+      '--color-slate-',
+      '--color-glow-red',
+      '--color-surface-',
+      '--color-ink-',
+      '--color-accent:',
+      '#e23847',
+      '#6d5efc',
+      '#f2f3f6',
+    ]) {
+      expect(p, retired).not.toContain(retired);
     }
+    const packageNames = new Set(
+      [...TOKENS_CSS.matchAll(/^\s*(--[a-z0-9-]+):/gm)].map((m) => m[1] as string),
+    );
+    expect(packageNames.has('--surface-base-rgb')).toBe(true);
+    const declared = [...p.matchAll(/^\s*(--[a-z0-9-]+):/gm)].map((m) => m[1] as string);
+    expect(declared.filter((n) => packageNames.has(n))).toEqual([]);
   });
 
-  it('CRITICAL slate 11-shade palette pinned. Slate is the neutral-color base for dark surfaces — drift to a different scale would mismatch the cross-app palette.', () => {
+  it('CRITICAL the incident red is at least 25° of hue from the brand accent (the app’s rule for status hues), so an outage never reads as the brand — and the app’s own error red would not be (CONTROL: 13.4°), which is why the status site has its own', () => {
     const p = read(GLOBAL_CSS);
+    const accentHue = hue(rgb(TOKENS.accent.accent as string));
+    const red = incidentRed(p);
+    expect(hueGap(accentHue, hue(red)), 'incident red').toBeGreaterThanOrEqual(25);
+    const appError = rgb(TOKENS.modes.light['status-error'] as string);
+    expect(hueGap(accentHue, hue(appError)), 'app error red').toBeLessThan(25);
+    expect(p).toMatch(/:root \{\s*\n\s*--incident-red-rgb: 152 61 22;/);
+    expect(p).toMatch(/--color-incident-red: rgb\(var\(--incident-red-rgb\)\);/);
+  });
 
-    const slateShades: Array<[string, string]> = [
-      ['50', '#f8fafc'],
-      ['100', '#f1f5f9'],
-      ['200', '#e2e8f0'],
-      ['300', '#cbd5e1'],
-      ['400', '#94a3b8'],
-      ['500', '#64748b'],
-      ['600', '#475569'],
-      ['700', '#334155'],
-      ['800', '#1e293b'],
-      ['900', '#0f172a'],
-      ['950', '#020617'],
-    ];
-    for (const [shade, hex] of slateShades) {
-      expect(p, `slate-${shade}`).toMatch(new RegExp(`--color-slate-${shade}: ${hex};`));
+  it('CRITICAL the incident red clears AA (4.5:1) as text on a card, on the page ground and on its own /15 wash over a card, and the solid fill carries its label (ink-inverted) at AA — measured', () => {
+    const p = read(GLOBAL_CSS);
+    const t = TOKENS.modes.light;
+    const red = incidentRed(p);
+    const raised = rgb(t['surface-raised'] as string);
+    const base = rgb(t['surface-base'] as string);
+    expect(contrast(red, raised), 'on card').toBeGreaterThanOrEqual(4.5);
+    expect(contrast(red, base), 'on ground').toBeGreaterThanOrEqual(4.5);
+    expect(contrast(red, wash(red, 0.15, raised)), 'on /15 wash').toBeGreaterThanOrEqual(4.5);
+    expect(contrast(rgb(t['ink-inverted'] as string), red), 'label on fill').toBeGreaterThanOrEqual(
+      4.5,
+    );
+  });
+
+  // Every badge the pages render, resolved to colours. A badge sits inside an
+  // incident card (surface-raised). `bg-X/NN` is a wash of X at NN% over the
+  // card; `bg-X` alone is a solid fill.
+  function colourOf(name: string): Rgb {
+    if (name === 'incident-red') return incidentRed(read(GLOBAL_CSS));
+    const hex = TOKENS.modes.light[name];
+    expect(hex, `token ${name}`).toBeDefined();
+    return rgb(hex as string);
+  }
+  function badgePairs(page: string): Array<{ key: string; text: string; bg: string }> {
+    const body = read(join(SRC, 'pages', page));
+    const pairs: Array<{ key: string; text: string; bg: string }> = [];
+    for (const map of body.matchAll(
+      /const (STATUS_BADGE|SEVERITY_BADGE) = \{([\s\S]*?)\n\s*\};/g,
+    )) {
+      for (const row of (map[2] ?? '').matchAll(/^\s*([a-z]+): \[([^\]]*)\]/gm)) {
+        const classes = [...(row[2] ?? '').matchAll(/'([^']+)'/g)].map((c) => c[1] as string);
+        const text = classes.find((c) => c.startsWith('text-'))?.slice(5);
+        const bg = classes.find((c) => c.startsWith('bg-'))?.slice(3);
+        expect(text && bg, `${page} ${row[1]}`).toBeTruthy();
+        pairs.push({ key: `${map[1]}.${row[1]}`, text: text as string, bg: bg as string });
+      }
     }
+    return pairs;
+  }
+
+  it('CRITICAL every incident badge (severity + lifecycle, on the home, incident and history pages) clears AA over its own background on a card — measured from the maps the pages render', () => {
+    const pages = ['index.astro', 'incident.astro', 'history.astro'];
+    const byPage = pages.map((p) => badgePairs(p));
+    // Anti-vacuity: 3 severities + 4 lifecycle states on each page, and the
+    // three pages carry the SAME maps (one recipe, not three drifting copies).
+    for (const pairs of byPage) expect(pairs).toHaveLength(7);
+    expect(byPage[1]).toEqual(byPage[0]);
+    expect(byPage[2]).toEqual(byPage[0]);
+    const card = rgb(TOKENS.modes.light['surface-raised'] as string);
+    for (const { key, text, bg } of byPage[0] ?? []) {
+      const [bgName, alphaPct] = bg.split('/') as [string, string | undefined];
+      const ground = alphaPct
+        ? wash(colourOf(bgName), Number(alphaPct) / 100, card)
+        : colourOf(bgName);
+      const ratio = contrast(colourOf(text), ground);
+      expect(ratio, `${key}: text-${text} on bg-${bg}`).toBeGreaterThanOrEqual(4.5);
+    }
+    // CONTROL — the measurement fails a real near-miss: the app's status pill
+    // on the PAGE ground instead of a card (busy text on its /20 wash, 4.2).
+    const nearMiss = contrast(
+      colourOf('status-busy'),
+      wash(colourOf('status-busy'), 0.2, rgb(TOKENS.modes.light['surface-base'] as string)),
+    );
+    expect(nearMiss).toBeLessThan(4.5);
+    // The outage is the loudest: a SOLID incident-red fill.
+    const index = read(join(SRC, 'pages', 'index.astro'));
+    expect(index).toMatch(
+      /outage: \['border-incident-red', 'bg-incident-red', 'text-ink-inverted'\],/,
+    );
   });
 
-  it('CRITICAL surface 5-token palette pinned — base/raised/elevated/inset/divider. Matches the dark-mode surface vocabulary across customer-dashboard + admin-panel.', () => {
-    const p = read(GLOBAL_CSS);
-
-    expect(p).toMatch(/--color-surface-base: #0f172a;/);
-    expect(p).toMatch(/--color-surface-raised: #1e293b;/);
-    expect(p).toMatch(/--color-surface-elevated: #334155;/);
-    expect(p).toMatch(/--color-surface-inset: #020617;/);
-    expect(p).toMatch(/--color-surface-divider: #475569;/);
-  });
-
-  it('CRITICAL ink 4-token palette pinned — primary/secondary/muted/inverted. Drift to a different vocabulary would mismatch cross-app text-color tokens.', () => {
-    const p = read(GLOBAL_CSS);
-
-    expect(p).toMatch(/--color-ink-primary: #f8fafc;/);
-    expect(p).toMatch(/--color-ink-secondary: #cbd5e1;/);
-    expect(p).toMatch(/--color-ink-muted: #94a3b8;/);
-    expect(p).toMatch(/--color-ink-inverted: #0f172a;/);
-  });
-
-  it('CRITICAL glow-red 3-token palette pinned — red/red-soft/red-deep. The cross-app glow-red is the brand accent for incident severity badges (matches W790 status-site index 3-severity SEVERITY_BADGE outage red).', () => {
-    const p = read(GLOBAL_CSS);
-
-    expect(p).toMatch(/--color-glow-red: #e23847;/);
-    expect(p).toMatch(/--color-glow-red-soft: #f25366;/);
-    expect(p).toMatch(/--color-glow-red-deep: #a8202d;/);
-  });
-
-  it('CRITICAL Geist + Berkeley Mono font-family pair pinned. Matches the cross-app font-family contract (docs + customer-dashboard + admin-panel all use Geist sans + Berkeley Mono).', () => {
-    const p = read(GLOBAL_CSS);
-
-    expect(p).toMatch(/--font-sans: Geist, ui-sans-serif, system-ui, sans-serif;/);
-    expect(p).toMatch(/--font-mono: Berkeley Mono, ui-monospace, SFMono-Regular, monospace;/);
+  it('CRITICAL no raw Tailwind palette colour anywhere in the status site’s source — status hues are the app’s status tokens or the incident red (with a CONTROL that the scan finds one)', () => {
+    const RAW =
+      /\b(?:bg|text|border|ring|from|to|via|fill|stroke|outline|divide|decoration)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|oxblood|glow)-\d{2,3}\b/g;
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory()
+          ? walk(join(dir, e.name))
+          : /\.(astro|css|ts)$/.test(e.name)
+            ? [join(dir, e.name)]
+            : [],
+      );
+    const files = walk(SRC);
+    expect(files.length).toBeGreaterThanOrEqual(9);
+    const hits = files.flatMap((f) => [...read(f).matchAll(RAW)].map((m) => `${f}: ${m[0]}`));
+    expect(hits).toEqual([]);
+    expect('class="bg-amber-50 text-emerald-700 border-red-500/30"'.match(RAW)).toEqual([
+      'bg-amber-50',
+      'text-emerald-700',
+      'border-red-500',
+    ]);
   });
 
   it('CRITICAL prose container width 65ch pinned (v4 `--container-prose`, was maxWidth.prose). The 65-char measure is the readable-line-length anchor; matches docs W786 reference contract.', () => {
     const p = read(GLOBAL_CSS);
     expect(p).toMatch(/--container-prose: 65ch;/);
-  });
-
-  // ─── src/styles/global.css base layer (unchanged by the v4 migration) ─
-
-  it("CRITICAL R13 dark-surface-synced-with-others framing pinned. The 'R13 — status-site dark surface synced with marketing-site + customer-dashboard + docs. Customers checking status during an incident shouldn\\'t experience a brand-jarring light theme when the rest of the product is dark' wording is the load-bearing brand-consistency rationale.", () => {
-    const p = read(GLOBAL_CSS);
-
-    expect(p).toMatch(
-      /\/\* Fleet rework \(2026-06-12\) — status-site synced with marketing-site \+\s*\n\s+customer-dashboard: light\+violet default/,
-    );
-    expect(p).toMatch(
-      /Customers\s*\n\s+checking status during an incident see the same brand surface as\s*\n\s+driftstack\.io\./,
-    );
   });
 
   it('CRITICAL mode-axis color-scheme pinned: :root light + [data-mode=dark] override — form-control widgets follow the axis.', () => {
@@ -167,6 +267,23 @@ describe('W794 status-site theme content parity', () => {
     const p = read(GLOBAL_CSS);
 
     expect(p).toMatch(/@layer base \{/);
+  });
+
+  it('P4 the overall status card carries a 4px rim in its state’s hue (ready / busy / incident red, idle while loading or unknown), keyed off the data-state renderOverall sets', () => {
+    const p = read(GLOBAL_CSS);
+    expect(p).toMatch(/\.status-banner \{\s*\n\s*border-left-width: 4px;/);
+    expect(p).toMatch(
+      /\.status-banner\[data-state='operational'\] \{\s*\n\s*border-left-color: rgb\(var\(--status-ready-rgb\)\);/,
+    );
+    expect(p).toMatch(
+      /\.status-banner\[data-state='degraded'\] \{\s*\n\s*border-left-color: rgb\(var\(--status-busy-rgb\)\);/,
+    );
+    expect(p).toMatch(
+      /\.status-banner\[data-state='outage'\] \{\s*\n\s*border-left-color: rgb\(var\(--incident-red-rgb\)\);/,
+    );
+    const index = read(join(SRC, 'pages', 'index.astro'));
+    expect(index).toMatch(/class="status-banner /);
+    expect(index).toMatch(/card\.dataset\.state = state;/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

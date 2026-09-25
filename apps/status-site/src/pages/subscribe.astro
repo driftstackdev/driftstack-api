@@ -19,7 +19,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   description="Subscribe to double-opt-in email notifications for new and resolved Driftstack service incidents."
 >
   <section class="mb-8">
-    <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Subscribe</p>
+    <p class="text-xs font-semibold uppercase tracking-wider text-ink-muted">Subscribe</p>
     <h1 class="mt-2 text-3xl font-semibold tracking-tight text-ink-primary">
       Get incident emails
     </h1>
@@ -33,7 +33,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   <section class="mb-12">
     <form
       id="subscribe-form"
-      class="rounded-lg border border-surface-divider bg-surface-raised p-6 shadow-xs"
+      class="rounded-xl border border-surface-divider bg-surface-raised p-6 shadow-lift"
       novalidate
     >
       <label for="email-input" class="block text-sm font-medium text-ink-secondary">
@@ -48,12 +48,12 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
         aria-describedby="subscribe-status"
         aria-invalid="false"
         placeholder="you@example.com"
-        class="mt-2 block w-full rounded-md border border-surface-divider px-3 py-2 text-sm focus:border-oxblood-700 focus:outline-hidden focus:ring-1 focus:ring-oxblood-700"
+        class="mt-2 block w-full rounded-md border border-surface-divider bg-surface-inset px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-hidden focus:ring-1 focus:ring-accent-ring"
       />
       <button
         id="submit-btn"
         type="submit"
-        class="mt-4 inline-flex items-center rounded-md bg-oxblood-700 px-4 py-2 text-sm font-medium text-white hover:bg-oxblood-600 disabled:opacity-50"
+        class="mt-4 inline-flex items-center rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-on transition-colors hover:bg-accent-fill-hover active:bg-accent-active focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
       >
         Subscribe
       </button>
@@ -71,11 +71,11 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
          page reload. -->
     <div
       id="subscribe-confirm"
-      class="mt-6 hidden rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-6 shadow-xs"
+      class="mt-6 hidden rounded-xl border border-status-ready/40 border-l-4 border-l-status-ready bg-surface-raised p-6 shadow-lift"
       role="status"
       aria-live="polite"
     >
-      <p class="text-sm font-medium text-emerald-300">
+      <p class="text-sm font-semibold text-status-ready">
         Confirmation email sent to <span id="confirm-email" class="font-mono"></span>.
       </p>
       <p class="mt-3 text-sm text-ink-secondary">
@@ -93,7 +93,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       <button
         id="subscribe-another-btn"
         type="button"
-        class="mt-4 inline-flex items-center rounded-md border border-surface-divider px-3 py-1.5 text-xs font-medium text-ink-secondary hover:border-ink-muted hover:text-ink-primary"
+        class="mt-4 inline-flex items-center rounded-md border border-surface-divider bg-surface-elevated px-3 py-1.5 text-xs font-medium text-ink-primary hover:bg-surface-inset"
       >
         Subscribe another address
       </button>
@@ -101,11 +101,11 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
 
     <div
       id="subscribe-unknown"
-      class="mt-6 hidden rounded-lg border border-amber-400/30 bg-amber-400/5 p-6 shadow-xs"
+      class="mt-6 hidden rounded-xl border border-status-busy/40 border-l-4 border-l-status-busy bg-surface-raised p-6 shadow-lift"
       role="status"
       aria-live="polite"
     >
-      <p class="text-sm font-medium text-amber-200">
+      <p class="text-sm font-semibold text-status-busy">
         Confirmation-email delivery is unknown for
         <span id="unknown-email" class="font-mono"></span>.
       </p>
@@ -156,17 +156,19 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
 
   function setStatus(message, kind) {
     if (!status) return;
+    // P4 (2026-09-25) — the status line sits on the form's card, in the
+    // app's ready green or the status site's incident red (both AA there).
     status.classList.remove(
       'hidden',
-      'text-emerald-700',
-      'text-red-700',
+      'text-status-ready',
+      'text-incident-red',
       'text-ink-secondary',
     );
     status.classList.add(
       kind === 'success'
-        ? 'text-emerald-700'
+        ? 'text-status-ready'
         : kind === 'error'
-          ? 'text-red-700'
+          ? 'text-incident-red'
           : 'text-ink-secondary',
     );
     status.textContent = message;
