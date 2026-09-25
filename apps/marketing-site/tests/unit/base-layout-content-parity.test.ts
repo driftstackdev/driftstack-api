@@ -16,7 +16,8 @@
 //     twitter:card=summary_large_image/twitter:title/description/
 //     image).
 //   • Inline SVG favicon (oxblood #722F37 D-badge).
-//   • /og-default.png fallback for ogImage.
+//   • /og-light.png fallback for ogImage (2026-09-25: the light card under a
+//     new name; the dark /og-default.png stays on disk, unreferenced here).
 //   • Header + Footer components imported.
 //   • <slot /> inside <main class="flex-1">.
 
@@ -37,7 +38,9 @@ function read(p: string): string {
 
 describe('W382.B marketing-site BaseLayout.astro content parity', () => {
   it('makes only genuinely overflowing code blocks keyboard-scrollable and reverses the generated tab stop responsively', () => {
-    expect(body).toContain("document.querySelectorAll('pre')");
+    // 2026-09-25: long-form prose tables scroll inside their own box on a
+    // phone (base.css .prose-tk table), so they join the <pre> blocks here.
+    expect(body).toContain("document.querySelectorAll('pre, .prose-tk table')");
     expect(body).toMatch(/block\.scrollWidth > block\.clientWidth \+ 1/);
     expect(body).toContain("block.setAttribute('tabindex', '0')");
     expect(body).toContain("block.setAttribute('data-scroll-focus', 'true')");
@@ -85,12 +88,16 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     expect(body).toMatch(/\{!noindex && <link rel="canonical" href=\{canonical\} \/>\}/);
   });
 
-  it('OG image fallback: /og-default.png at the site root', () => {
-    expect(body).toMatch(/Defaults to \/og-default\.png at the site root/);
+  it('OG image fallback: /og-light.png at the site root', () => {
+    // 2026-09-25 — the site-wide card is redrawn light and ships under a NEW
+    // name instead of a ?v= bump of /og-default.png (/*.png is immutable for a
+    // year at the edge; a new name is the one cache key every crawler honours),
+    // so the fallback URL carries no query any more.
+    expect(body).toMatch(/Defaults to \/og-light\.png at the site root/);
     expect(body).toMatch(
-      /const ogImageBase = new URL\(ogImage \?\? '\/og-default\.png', Astro\.site\)\.toString\(\);/,
+      /const ogImageUrl = new URL\(ogImage \?\? '\/og-light\.png', Astro\.site\)\.toString\(\);/,
     );
-    expect(body).toMatch(/const ogImageUrl = ogImage \? ogImageBase : `\$\{ogImageBase\}\?v=2`;/);
+    expect(body).not.toMatch(/og-default\.png'/);
   });
 
   it('noindex conditional: noindex,nofollow vs index,follow', () => {
@@ -159,23 +166,25 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
       dom.window.document.querySelectorAll<HTMLButtonElement>('[data-theme-toggle]'),
     );
     expect(controls).toHaveLength(2);
-    expect(
-      controls.every(
-        (control) =>
-          control.getAttribute('aria-label') === 'Switch to light theme' &&
-          control.getAttribute('title') === 'Switch to light theme' &&
-          control.getAttribute('aria-pressed') === 'false',
-      ),
-    ).toBe(true);
-
-    controls[0]?.click();
-    expect(dom.window.document.documentElement.getAttribute('data-mode')).toBe('light');
+    // 2026-09-25 — the page opens LIGHT, so the controls first offer dark (and
+    // report the light mode as pressed); one click flips both ways round.
     expect(
       controls.every(
         (control) =>
           control.getAttribute('aria-label') === 'Switch to dark theme' &&
           control.getAttribute('title') === 'Switch to dark theme' &&
           control.getAttribute('aria-pressed') === 'true',
+      ),
+    ).toBe(true);
+
+    controls[0]?.click();
+    expect(dom.window.document.documentElement.getAttribute('data-mode')).toBe('dark');
+    expect(
+      controls.every(
+        (control) =>
+          control.getAttribute('aria-label') === 'Switch to light theme' &&
+          control.getAttribute('title') === 'Switch to light theme' &&
+          control.getAttribute('aria-pressed') === 'false',
       ),
     ).toBe(true);
     dom.window.close();
@@ -222,14 +231,15 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
   });
 
   it('html lang="en" + charset UTF-8 + viewport meta', () => {
-    // Fleet token axes (2026-06-12 rework): dark+oxblood = today's look until
-    // the index Fleet port flips the default to light+violet (founder-locked).
-    expect(body).toMatch(/<html lang="en" data-mode="dark" data-accent="oxblood">/);
+    // Token axes: light+oxblood is the default since 2026-09-25 (the desktop
+    // app's white theme on every surface; dark+oxblood before that).
+    expect(body).toMatch(/<html lang="en" data-mode="light" data-accent="oxblood">/);
     expect(body).toMatch(/<meta charset="UTF-8" \/>/);
     expect(body).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1" \/>/);
   });
 
-  it('og-default.png fallback file exists in public/', () => {
+  it('og-light.png fallback file exists in public/ (and the frozen dark og-default.png still does: docs.driftstack.io and cached previews point at it)', () => {
+    expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/public/og-light.png'))).toBe(true);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/public/og-default.png'))).toBe(true);
   });
 

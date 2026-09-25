@@ -23,6 +23,11 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LAYOUT = resolve(REPO_ROOT, 'apps/marketing-site/src/layouts/LegalLayout.astro');
+// 2026-09-25 — the prose colours live in the site's ONE prose recipe,
+// `prose-tk` (the typography plugin's `tk` theme in tailwind.config.mjs),
+// which the /docs/* pages and /pricing/crypto use too; LegalLayout keeps only
+// its layout modifiers. The colour arms below read the recipe there.
+const TAILWIND = resolve(REPO_ROOT, 'apps/marketing-site/tailwind.config.mjs');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -83,20 +88,27 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
     expect(body).not.toMatch(/prose-h1:hidden/);
   });
 
-  it('prose link styling: tk-accent-text + hover-underline (S24 2026-07-06: link base tone is the AA-safe accent-text pair, S23 link pattern; prose-invert dropped with the light default)', () => {
-    expect(body).toMatch(
-      /prose-a:text-tk-accent-text prose-a:no-underline hover:prose-a:underline/,
-    );
+  it('prose link styling: the prose-tk recipe — links in the AA-safe accent-text, never the rose accent-2 (S24 2026-07-06 link tone; 2026-09-25 the recipe moved to tailwind.config.mjs)', () => {
+    expect(body).toMatch(/class="prose prose-tk max-w-none /);
+    expect(body).not.toMatch(/prose-slate|prose-invert|tk-accent-2/);
+    const tw = read(TAILWIND);
+    expect(tw).toMatch(/'--tw-prose-links': 'rgb\(var\(--accent-text-rgb\)\)'/);
+    expect(tw).toMatch(/'--tw-prose-headings': 'rgb\(var\(--ink-rgb\)\)'/);
+    expect(tw).toMatch(/'--tw-prose-body': 'rgb\(var\(--ink-2-rgb\)\)'/);
   });
 
-  it('prose code styling: surface-inset background + mono + rounded + ink-primary text + no before/after pseudo-content', () => {
-    expect(body).toMatch(
-      /prose-code:rounded prose-code:bg-tk-bg prose-code:px-1\.5 prose-code:py-0\.5 prose-code:font-mono prose-code:text-sm prose-code:text-tk-ink prose-code:before:content-none prose-code:after:content-none/,
-    );
+  it('prose code styling: the prose-tk recipe gives inline code a rounded inset chip with no before/after pseudo-content', () => {
+    const tw = read(TAILWIND);
+    expect(tw).toMatch(/backgroundColor: 'rgb\(var\(--hover-rgb\)\)'/);
+    expect(tw).toMatch(/'code::before': \{ content: 'none' \}/);
+    expect(tw).toMatch(/'code::after': \{ content: 'none' \}/);
   });
 
-  it('prose pre styling: slate-900 background + slate-100 text (dark code blocks)', () => {
-    expect(body).toMatch(/prose-pre:bg-slate-900 prose-pre:text-slate-100/);
+  it('prose pre styling: code blocks sit on the dark island (--code-bg / --code-ink), not the retired slate-900 / slate-100', () => {
+    expect(body).not.toMatch(/prose-pre:bg-slate-900/);
+    const tw = read(TAILWIND);
+    expect(tw).toMatch(/'--tw-prose-pre-bg': 'var\(--code-bg\)'/);
+    expect(tw).toMatch(/'--tw-prose-pre-code': 'var\(--code-ink\)'/);
   });
 
   it('aria-label="Other legal documents" + "Other legal documents" heading', () => {

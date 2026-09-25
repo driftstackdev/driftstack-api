@@ -9,7 +9,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 ---
 
 <BaseLayout title="Crypto payments — troubleshooting — Driftstack" description="Decision tree for crypto payment problems: stuck orders, missing confirmations, network mismatches, partial payments.">
-  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+  <article class="prose prose-tk mx-auto max-w-3xl px-6 py-12">
     <h1>Crypto payments — troubleshooting</h1>
 
     <p class="lead">
@@ -177,5 +177,5 @@ curl -H "Authorization: Bearer $DRIFTSTACK_API_KEY" \\
       <li><a href="/docs/billing-faq/">Billing FAQ</a></li>
       <li><a href="https://docs.driftstack.io/webhooks/crypto-events/"><code>crypto.order.paid</code> webhook events</a></li>
     </ul>
-  </main>
+  </article>
 </BaseLayout>

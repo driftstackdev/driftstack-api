@@ -346,9 +346,9 @@ describe('W599.B /use-cases/web-scraping (data teams)', () => {
       /Billing turns on one number: how many sessions run at the same time — think browser tabs\. Hours inside that number are never billed\./,
     );
     expect(body).not.toMatch(/There is one cap/);
-    expect(body).toMatch(
-      /<a href="\/glossary\/#sdk" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">SDK<\/a>/,
-    );
+    // 2026-09-25 — the site's accent-link recipe (base.css): accent-text at
+    // rest and on hover (the rose accent-2 hover was 3.4–3.7:1 as text).
+    expect(body).toMatch(/<a href="\/glossary\/#sdk" class="accent-link">SDK<\/a>/);
     expect(body).toMatch(/— a ready-made code library —/);
     // Cross-source: the second cap the old wording denied is live on every
     // paid API tier, so "one cap" can never be re-derived from the data.

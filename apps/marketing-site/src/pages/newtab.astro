@@ -43,24 +43,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#060608" />
+    <meta name="theme-color" content="#0f172a" />
     <meta name="robots" content="noindex,nofollow" />
     <title>New Tab · Driftstack</title>
     <style>
-      /* Inline copy of the dark+oxblood tokens — keep the values in sync with
-         the internal 2026-07-03 design-system v2 dashboard notes (marketing's
-         --ink-3 deliberately runs #8c8c96, not the dashboard's #73737f — AA
-         on #060608; see apps/marketing-site/src/styles/base.css). */
+      /* Inline copy of the DARK tokens — this page stays dark: it opens inside
+         the Simulator's streamed iPhone, which the desktop app pins dark. Since
+         2026-09-25 the values are @driftstack/design-tokens' dark mode (the
+         desktop app's slate dark, the same palette the site's dark toggle
+         uses) and the one accent #a83b4d, inlined because this page loads no
+         stylesheet: base #0f172a, surface #1e293b, ink #f1f5f9 / #cbd5e1 /
+         #94a3b8 (6.96:1 on the base, 5.71:1 on the surface), divider #475569,
+         accent-text #e8a0ab for the STACK wordmark, and the darkening fill
+         hover #9a3446 under the white button label (7.11:1). */
       :root {
-        --bg: #060608;
-        --surface: #14141a; /* S20 sync: dark layer-separation ladder (base.css) */
-        --ink: #f5f5f7;
-        --ink-2: #b0b0bb;
-        --ink-3: #8c8c96;
-        --border: #2c2c38; /* S20 sync */
-        --accent: #9b3b46;
-        --accent-2: #c04b58;
-        --glow: rgba(155, 59, 70, 0.32);
+        --bg: #0f172a;
+        --surface: #1e293b;
+        --ink: #f1f5f9;
+        --ink-2: #cbd5e1;
+        --ink-3: #94a3b8;
+        --border: #475569;
+        --accent: #a83b4d;
+        --accent-text: #e8a0ab;
+        --accent-fill-hover: #9a3446;
+        --glow: rgba(168, 59, 77, 0.2);
       }
       * {
         box-sizing: border-box;
@@ -113,7 +119,7 @@
         letter-spacing: -0.02em;
       }
       .wordmark .stack {
-        color: var(--accent-2);
+        color: var(--accent-text);
       }
       form {
         display: flex;
@@ -121,7 +127,7 @@
         gap: 8px;
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: 14px;
+        border-radius: 12px;
         padding: 4px 6px 4px 14px;
         box-shadow: 0 8px 30px -12px var(--glow);
         transition:
@@ -129,7 +135,7 @@
           box-shadow 0.18s ease;
       }
       form:focus-within {
-        border-color: rgba(192, 75, 88, 0.55);
+        border-color: rgba(200, 96, 110, 0.55);
         box-shadow: 0 10px 36px -10px var(--glow);
       }
       .search-icon {
@@ -160,12 +166,12 @@
         font-family: inherit;
         font-size: 14px;
         font-weight: 600;
-        border-radius: 10px;
+        border-radius: 6px;
         padding: 10px 16px;
         transition: background 0.16s ease;
       }
       button:hover {
-        background: var(--accent-2);
+        background: var(--accent-fill-hover);
       }
       .hint {
         margin-top: 18px;
@@ -177,7 +183,7 @@
       .conn {
         margin-top: 26px;
         border: 1px solid var(--border);
-        border-radius: 14px;
+        border-radius: 12px;
         background: var(--surface);
         overflow: hidden;
         text-align: left;
@@ -206,7 +212,7 @@
         background: transparent;
         color: var(--ink-2);
         border: 1px solid var(--border);
-        border-radius: 8px;
+        border-radius: 6px;
         padding: 4px 10px;
         font-size: 11.5px;
         font-weight: 600;
@@ -297,11 +303,11 @@
             height="194"
             rx="34"
             fill="none"
-            stroke="#474a55"
+            stroke="#94a3b8"
             stroke-width="14"
             opacity="0.55"
             transform="rotate(-7 105 127)"></rect>
-          <rect x="86" y="30" width="118" height="194" rx="34" fill="#9b3b46"></rect>
+          <rect x="86" y="30" width="118" height="194" rx="34" fill="#a83b4d"></rect>
           <circle cx="145" cy="192" r="12" fill="#ffffff"></circle>
         </svg>
         <span class="wordmark">DRIFT<span class="stack">STACK</span></span>

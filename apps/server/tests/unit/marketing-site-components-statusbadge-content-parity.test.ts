@@ -10,14 +10,17 @@
 //   • 30-second cache server-side via /v1/status; cf-edge cache likely
 //     extends.
 //   • 2-prop interface: className (default '') + withLabel (default true).
-//   • Default fallback dot: bg-slate-300 (slate-300 = 'checking…' /
-//     'unknown' / fetch-error).
+//   • Default fallback dot: bg-status-idle (the app's idle grey =
+//     'checking…' / 'unknown' / fetch-error).
 //   • https://status.driftstack.io anchor with noopener noreferrer
 //     + target=_blank + honest dynamic dot-only aria-label.
-//   • 4-state applyState: operational (emerald-500 + 'All systems
-//     operational') / degraded (amber-500 + 'Degraded performance') /
-//     major_outage (red-500 + 'Major outage') / unknown-default
-//     (slate-300 + 'Status unavailable').
+//   • 4-state applyState: operational (tk-ready + 'All systems
+//     operational') / degraded (tk-busy + 'Degraded performance') /
+//     major_outage (tk-err + 'Major outage') / unknown-default
+//     (status-idle + 'Status unavailable').
+//   • 2026-09-25 — the dots moved from the raw emerald / amber / red /
+//     slate palette onto the status tokens, so they follow the mode and
+//     match the desktop app's status dots.
 //   • 4-second hard-timeout via AbortController + window.setTimeout.
 //   • apiBaseUrl = https://api.driftstack.dev hardcoded (production).
 
@@ -71,9 +74,9 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
     expect(body).toMatch(/aria-label=\{withLabel \? undefined : 'Platform status: checking'\}/);
   });
 
-  it("Initial-render dot + 'checking…' label framing pinned: 'driftstack-status-dot inline-block h-2 w-2 shrink-0 rounded-full bg-slate-300' + aria-hidden=\"true\" + '<span class=\"driftstack-status-label\">checking…</span>' (withLabel ? render : null) — pinned so the initial slate-300 dot + checking… loading-state label + aria-hidden-on-dot + withLabel-conditional commitment survives", () => {
+  it("Initial-render dot + 'checking…' label framing pinned: 'driftstack-status-dot inline-block h-2 w-2 shrink-0 rounded-full bg-status-idle' + aria-hidden=\"true\" + '<span class=\"driftstack-status-label\">checking…</span>' (withLabel ? render : null) — pinned so the initial idle dot + checking… loading-state label + aria-hidden-on-dot + withLabel-conditional commitment survives", () => {
     expect(body).toMatch(
-      /class="driftstack-status-dot inline-block h-2 w-2 shrink-0 rounded-full bg-slate-300"/,
+      /class="driftstack-status-dot inline-block h-2 w-2 shrink-0 rounded-full bg-status-idle"/,
     );
     expect(body).toMatch(/aria-hidden="true"/);
     expect(body).toMatch(
@@ -81,18 +84,18 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
     );
   });
 
-  it("4-state applyState switch framing pinned: 'operational' → bg-emerald-500 + 'All systems operational' + 'degraded' → bg-amber-500 + 'Degraded performance' + 'major_outage' → bg-red-500 + 'Major outage' + 'unknown' / default → bg-slate-300 + 'Status unavailable' — pinned so the 4-state Tailwind-color + label commitment survives (drift to a different color or label would create UX-state divergence)", () => {
+  it("4-state applyState switch framing pinned: 'operational' → bg-tk-ready + 'All systems operational' + 'degraded' → bg-tk-busy + 'Degraded performance' + 'major_outage' → bg-tk-err + 'Major outage' + 'unknown' / default → bg-status-idle + 'Status unavailable' — pinned so the 4-state status-token + label commitment survives (drift to a different color or label would create UX-state divergence)", () => {
     expect(body).toMatch(/case 'operational':/);
-    expect(body).toMatch(/dot\.classList\.add\('bg-emerald-500'\);/);
+    expect(body).toMatch(/dot\.classList\.add\('bg-tk-ready'\);/);
     expect(body).toMatch(/if \(label\) label\.textContent = 'All systems operational';/);
     expect(body).toMatch(/case 'degraded':/);
-    expect(body).toMatch(/dot\.classList\.add\('bg-amber-500'\);/);
+    expect(body).toMatch(/dot\.classList\.add\('bg-tk-busy'\);/);
     expect(body).toMatch(/if \(label\) label\.textContent = 'Degraded performance';/);
     expect(body).toMatch(/case 'major_outage':/);
-    expect(body).toMatch(/dot\.classList\.add\('bg-red-500'\);/);
+    expect(body).toMatch(/dot\.classList\.add\('bg-tk-err'\);/);
     expect(body).toMatch(/if \(label\) label\.textContent = 'Major outage';/);
     expect(body).toMatch(/case 'unknown':\s*default:/);
-    expect(body).toMatch(/dot\.classList\.add\('bg-slate-300'\);/);
+    expect(body).toMatch(/dot\.classList\.add\('bg-status-idle'\);/);
     expect(body).toMatch(/if \(label\) label\.textContent = 'Status unavailable';/);
     expect(body).toMatch(/let accessibleState = 'Status unavailable';/);
     expect(body).toMatch(/accessibleState = 'All systems operational';/);
@@ -103,10 +106,10 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
     );
   });
 
-  it("Reset-color-classes-before-add framing pinned: 4-classList.remove (bg-slate-300, bg-emerald-500, bg-amber-500, bg-red-500) + '// Reset color classes.' comment — pinned so the reset-before-add pattern (prevents stale color classes from sticking) survives", () => {
+  it("Reset-color-classes-before-add framing pinned: 4-classList.remove (bg-status-idle, bg-tk-ready, bg-tk-busy, bg-tk-err) + '// Reset color classes.' comment — pinned so the reset-before-add pattern (prevents stale color classes from sticking) survives", () => {
     expect(body).toMatch(/\/\/ Reset color classes\./);
     expect(body).toMatch(
-      /dot\.classList\.remove\(\s*'bg-slate-300',\s*'bg-emerald-500',\s*'bg-amber-500',\s*'bg-red-500',\s*\);/,
+      /dot\.classList\.remove\(\s*'bg-status-idle',\s*'bg-tk-ready',\s*'bg-tk-busy',\s*'bg-tk-err',\s*\);/,
     );
   });
 

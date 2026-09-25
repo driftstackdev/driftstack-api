@@ -9,7 +9,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 ---
 
 <BaseLayout title="Crypto payments — how it works — Driftstack" description="Step-by-step walkthrough of paying for Driftstack with crypto: tier pick → NowPayments → confirmations → receipt.">
-  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+  <article class="prose prose-tk mx-auto max-w-3xl px-6 py-12">
     <h1>Crypto payments — how it works</h1>
 
     <p class="lead">
@@ -203,5 +203,5 @@ GET /v1/billing/crypto-orders/:id/receipt.pdf`}</code></pre>
       For payment-status questions, include the order_id we minted at
       checkout — that's what we look up first.
     </p>
-  </main>
+  </article>
 </BaseLayout>

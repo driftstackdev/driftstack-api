@@ -83,7 +83,10 @@ const widths = [...new Set([480, 768, 960, width, src.width].filter((w) => w <= 
   <div
     class:list={[
       'app-screen overflow-hidden rounded-2xl border border-tk-border bg-tk-surface shadow-ambient-lg',
-      accent ? 'ring-1 ring-tk-accent/50 shadow-glow-accent' : '',
+      /* 2026-09-25 — the lit frame is a quieter accent hairline over the
+         float shadow on the light ground (a /50 ring plus the accent glow
+         read as a red outline); the floor pool below still marks it lit. */
+      accent ? 'ring-1 ring-tk-accent/30' : '',
       className,
     ]}
     data-contrast-decorative

@@ -117,10 +117,11 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     expect(body, 'and what it guarantees').toMatch(/a message altered in transit is rejected/);
   });
 
-  it('customer-configurable egress SHIPPED (✓ emerald) per planning 133 Phase 1. 2026-05-22 — flipped from amber ○ "(roadmap)" to emerald ✓ "(per profile)" after the SocksProxyBackend impl + bootstrap wire landed.', () => {
+  it('customer-configurable egress SHIPPED (✓ ready-green) per planning 133 Phase 1. 2026-05-22 — flipped from amber ○ "(roadmap)" to emerald ✓ "(per profile)" after the SocksProxyBackend impl + bootstrap wire landed. 2026-09-25 — the ✓ chip wears the ready status token (the badge recipe\'s /10 wash, /30 border and ready-text), not the raw emerald-100/700.', () => {
     expect(body).toMatch(
-      /<span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100[^>]*>✓<\/span>\s*<div>\s*<p class="font-medium text-tk-ink">Your own proxy or VPN, per profile<\/p>/,
+      /<span class="mt-1 inline-block h-5 w-5 flex-none rounded-full border border-tk-ready\/30 bg-tk-ready\/10[^>]*text-tk-ready-text">✓<\/span>\s*<div>\s*<p class="font-medium text-tk-ink">Your own proxy or VPN, per profile<\/p>/,
     );
+    expect(body).not.toMatch(/emerald-/);
     // 2026-09-15: the old "full UDP/WebRTC/QUIC tunnelling" overpromised
     // against /security ("depends on the proxy's reported UDP capability").
     expect(body).toMatch(

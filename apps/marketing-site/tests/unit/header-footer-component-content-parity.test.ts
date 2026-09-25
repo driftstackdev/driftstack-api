@@ -132,10 +132,12 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     expect(body).toMatch(/\[&::-webkit-details-marker\]:hidden/);
   });
 
-  it('theme toggle exposes the initial dark-mode state and its next action', () => {
-    expect(body).toMatch(/data-theme-toggle[\s\S]*?aria-label="Switch to light theme"/);
-    expect(body).toMatch(/data-theme-toggle[\s\S]*?aria-pressed="false"/);
-    expect(body).toMatch(/data-theme-toggle[\s\S]*?title="Switch to light theme"/);
+  it('theme toggle exposes the initial light-mode state and its next action', () => {
+    // 2026-09-25 — the site opens light, so the server-rendered label offers
+    // dark and the light mode reads as pressed (BaseLayout re-syncs on load).
+    expect(body).toMatch(/data-theme-toggle[\s\S]*?aria-label="Switch to dark theme"/);
+    expect(body).toMatch(/data-theme-toggle[\s\S]*?aria-pressed="true"/);
+    expect(body).toMatch(/data-theme-toggle[\s\S]*?title="Switch to dark theme"/);
   });
 
   it('mobile CTA: "Start free" (shorter mobile label, same canonical pricing target)', () => {
@@ -273,9 +275,10 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
   it('S13 (2026-07-03): footer bottom row carries the "No trackers on this site." statement + a [data-theme-toggle] mode button (header has the primary one; wiring is BaseLayout-delegated)', () => {
     expect(body).toMatch(/No trackers on this site\./);
     expect(body).toMatch(/data-theme-toggle/);
-    expect(body).toMatch(/aria-label="Switch to light theme"/);
-    expect(body).toMatch(/aria-pressed="false"/);
-    expect(body).toMatch(/title="Switch to light theme"/);
+    // 2026-09-25 — initial label for the light default: it offers dark.
+    expect(body).toMatch(/aria-label="Switch to dark theme"/);
+    expect(body).toMatch(/aria-pressed="true"/);
+    expect(body).toMatch(/title="Switch to dark theme"/);
   });
 
   it('dynamic copyright: "© {year} Driftstack. All rights reserved."', () => {

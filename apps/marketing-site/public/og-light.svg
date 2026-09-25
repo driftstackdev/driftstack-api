@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <!-- Social card — LIGHT + oxblood (2026-09-25: the desktop app's white theme
+       on every surface; supersedes the dark og-default card, which stays on
+       disk unreferenced by this site because other pages and caches still
+       point at it). A NEW file name on purpose: public/_headers serves
+       /*.png and /*.svg immutable for a year, so changed art must never reuse
+       a name. Regenerate og-light.png and og/<slug>-light.png with
+       scripts/gen-og-image.mjs after editing.
+       Colours are @driftstack/design-tokens' light mode: ground #ebedf2,
+       ink #1a1d23 (14.4:1), secondary ink #525863 (6.1:1), muted ink #5b6270
+       (5.2:1), accent-text #8f3241 (6.6:1), the accent #a83b4d as a fill.
+       The headline is the homepage hero's h1, word for word. -->
+  <rect width="1200" height="630" fill="#ebedf2"/>
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a1d23" stroke-opacity="0.05" stroke-width="1"/>
+    </pattern>
+    <radialGradient id="gridfade" cx="30%" cy="45%" r="70%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <mask id="gridmask">
+      <rect width="1200" height="630" fill="url(#gridfade)"/>
+    </mask>
+    <radialGradient id="glow" cx="88%" cy="0%" r="60%">
+      <stop offset="0%" stop-color="#a83b4d" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#a83b4d" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#grid)" mask="url(#gridmask)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <rect x="0" y="0" width="1200" height="6" fill="#a83b4d"/>
+  <g transform="translate(60 56) scale(0.55)">
+    <rect x="46" y="30" width="118" height="194" rx="34"
+          fill="none" stroke="#525863" stroke-width="14" opacity="0.55"
+          transform="rotate(-7 105 127)"/>
+    <rect x="86" y="30" width="118" height="194" rx="34" fill="#a83b4d"/>
+    <circle cx="145" cy="192" r="12" fill="#ffffff"/>
+  </g>
+  <text x="210" y="156" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="64" font-weight="900" font-style="italic" letter-spacing="-2">
+    <tspan fill="#1a1d23">DRIFT</tspan><tspan fill="#8f3241">STACK</tspan>
+  </text>
+  <text x="60" y="330" fill="#1a1d23" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="52" font-weight="650">Your own real iPhones, in the cloud.</text>
+  <text x="60" y="404" fill="#525863" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="36" font-weight="450">Real iPhone Safari in the cloud — to every website,</text>
+  <text x="60" y="454" fill="#525863" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="36" font-weight="450">they're just people on phones.</text>
+  <rect x="60" y="514" width="1080" height="1" fill="#cdd3dc"/>
+  <text x="60" y="566" fill="#8f3241" font-family="ui-monospace, 'SF Mono', Consolas, monospace" font-size="26" font-weight="600">driftstack.io</text>
+  <text x="1140" y="566" text-anchor="end" fill="#5b6270" font-family="ui-monospace, 'SF Mono', Consolas, monospace" font-size="22" font-weight="500">App · Code · AI</text>
+</svg>

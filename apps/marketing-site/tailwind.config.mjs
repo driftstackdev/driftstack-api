@@ -2,64 +2,25 @@
 // itself stays synchronous (Tailwind's config loader expects a sync
 // default export).
 import typography from '@tailwindcss/typography';
+// 2026-09-25 — the shared design tokens: the desktop app's palette (both
+// modes), the tk-* colour names the markup uses, the app's radius scale
+// (4 / 6 / 12 / 16 / full; rounded-card is 12px), the Geist + mono stacks and
+// the lift/float shadows (shadow-ambient / shadow-ambient-lg are their
+// aliases). Every colour reads a CSS variable from tokens.css, which
+// styles/base.css imports, so it follows <html data-mode>.
+import tokens from '@driftstack/design-tokens/tailwind-preset';
 
 /** @type {import('tailwindcss').Config} */
 export default {
+  presets: [tokens],
   content: ['./src/**/*.{astro,html,js,jsx,md,mdx,ts,tsx}'],
   // Fleet rework: dark: variants follow the data-mode axis (not a .dark class).
+  // The preset says the same; restated so this file reads on its own.
   darkMode: ['selector', '[data-mode="dark"]'],
   theme: {
     extend: {
-      colors: {
-        // 2026-07-03 — legacy baked palettes RETIRED (Fleet v2 port). The
-        // oxblood ladder ("locked accent per founder direction, #722F37"),
-        // slate ladder, graphite surface/ink sets, and glow reds are gone:
-        // every page consumes the two-axis tk-* tokens below, and the locked
-        // #722F37 accent lives on as --accent-strong in the
-        // [data-accent='oxblood'] axis (styles/base.css) per the 2026-06-15
-        // "Fleet Mission Control — Dark + Red" verdict. The custom slate
-        // ladder was byte-identical to Tailwind 3's built-in slate, so stock
-        // slate-* utilities in legacy markup render unchanged.
-        //
-        // Fleet token namespace (2026-06-12 rework — see the internal
-        // 2026-06-12 design-system spec). Resolves to the
-        // two-axis CSS custom properties in styles/base.css, so tk-* classes
-        // flip with <html data-mode>/<html data-accent>.
-        tk: {
-          bg: 'rgb(var(--bg-rgb) / <alpha-value>)',
-          surface: 'rgb(var(--surface-rgb) / <alpha-value>)',
-          raised: 'rgb(var(--raised-rgb) / <alpha-value>)',
-          hover: 'rgb(var(--hover-rgb) / <alpha-value>)',
-          ink: 'rgb(var(--ink-rgb) / <alpha-value>)',
-          'ink-2': 'rgb(var(--ink-2-rgb) / <alpha-value>)',
-          'ink-3': 'rgb(var(--ink-3-rgb) / <alpha-value>)',
-          border: 'rgb(var(--border-rgb) / <alpha-value>)',
-          accent: 'rgb(var(--accent-rgb) / <alpha-value>)',
-          'accent-2': 'rgb(var(--accent-2-rgb) / <alpha-value>)',
-          'accent-strong': 'rgb(var(--accent-strong-rgb) / <alpha-value>)',
-          'accent-ink': 'var(--accent-ink)',
-          'accent-soft': 'var(--accent-soft)',
-          ready: 'rgb(var(--ready-rgb) / <alpha-value>)',
-          busy: 'rgb(var(--busy-rgb) / <alpha-value>)',
-          err: 'rgb(var(--err-rgb) / <alpha-value>)',
-          // AA-safe accent-toned TEXT (mode × accent pair; see base.css).
-          'accent-text': 'var(--accent-text)',
-          // S24 — AA-safe status-toned TEXT (per data-mode block; the raw
-          // ready/busy/err tokens above are FILL tones and fail AA as
-          // small light-mode text).
-          'ready-text': 'var(--ready-text)',
-          'busy-text': 'var(--busy-text)',
-          'err-text': 'var(--err-text)',
-        },
-      },
-      borderRadius: {
-        // Fleet card radius (spec §3: 12–16px cards; blueprint uses 14px).
-        card: '14px',
-      },
-      fontFamily: {
-        sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        mono: ['Berkeley Mono', 'JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
-      },
+      // Colours, radii (rounded-card included), fonts and the ambient
+      // shadows come from the preset above; what follows is this site's own.
       maxWidth: {
         prose: '65ch',
       },
@@ -69,13 +30,6 @@ export default {
         // v2 kit uses ambient shadows for buttons/cards.
         'glow-accent': '0 0 0 1px var(--accent), 0 0 26px var(--glow)',
         'inset-divider': 'inset 0 1px 0 rgba(255, 255, 255, 0.06)',
-        // Fleet v2 — calm ambient card shadows (replace glow-on-everything).
-        // S20 2026-07-06: mode-aware vars — the original gray shadows are a
-        // measured no-op on the near-black dark bg (composite to 1.0000:1),
-        // so dark mode supplies a lit top rim + true-black drop instead
-        // (values live in styles/base.css per data-mode block).
-        ambient: 'var(--shadow-ambient)',
-        'ambient-lg': 'var(--shadow-ambient-lg)',
       },
       backgroundImage: {
         // Fleet v2 — calmer accent-aware ambient radials (follow the
@@ -87,6 +41,58 @@ export default {
           'radial-gradient(ellipse 55% 38% at 50% 0%, var(--glow), transparent 60%)',
         'glow-radial-accent-soft':
           'radial-gradient(ellipse 60% 40% at 50% 100%, var(--accent-soft), transparent 75%)',
+      },
+      // `prose-tk` — the ONE prose recipe (2026-09-25): every long-form page
+      // (the /docs/* references, /pricing/crypto, the legal pages through
+      // LegalLayout) reads the typography plugin's colours from the tokens,
+      // so it follows data-mode with no `dark:prose-invert` and no second
+      // palette (it replaces prose-slate). Body in ink-2, headings and bold in
+      // ink, links in the AA-safe accent-text (never the rose accent-2),
+      // inline code as a small inset chip without the plugin's backticks, and
+      // code blocks on the dark island (--code-bg / --code-ink, base.css).
+      typography: {
+        tk: {
+          css: {
+            '--tw-prose-body': 'rgb(var(--ink-2-rgb))',
+            '--tw-prose-headings': 'rgb(var(--ink-rgb))',
+            '--tw-prose-lead': 'rgb(var(--ink-2-rgb))',
+            '--tw-prose-links': 'rgb(var(--accent-text-rgb))',
+            '--tw-prose-bold': 'rgb(var(--ink-rgb))',
+            '--tw-prose-counters': 'rgb(var(--ink-3-rgb))',
+            '--tw-prose-bullets': 'rgb(var(--ink-3-rgb))',
+            '--tw-prose-hr': 'rgb(var(--border-rgb))',
+            '--tw-prose-quotes': 'rgb(var(--ink-2-rgb))',
+            '--tw-prose-quote-borders': 'rgb(var(--accent-rgb))',
+            '--tw-prose-captions': 'rgb(var(--ink-3-rgb))',
+            '--tw-prose-kbd': 'rgb(var(--ink-rgb))',
+            '--tw-prose-kbd-shadows': 'var(--ink-rgb)',
+            '--tw-prose-code': 'rgb(var(--ink-rgb))',
+            '--tw-prose-pre-code': 'var(--code-ink)',
+            '--tw-prose-pre-bg': 'var(--code-bg)',
+            '--tw-prose-th-borders': 'rgb(var(--border-rgb))',
+            '--tw-prose-td-borders': 'rgb(var(--border-rgb))',
+            'h1, h2, h3, h4': { fontWeight: '600', letterSpacing: '-0.01em' },
+            a: { textUnderlineOffset: '4px', fontWeight: '500' },
+            'a:hover': { textDecorationThickness: '2px' },
+            code: {
+              backgroundColor: 'rgb(var(--hover-rgb))',
+              borderRadius: '0.25rem',
+              padding: '0.125rem 0.375rem',
+              fontWeight: '500',
+            },
+            'code::before': { content: 'none' },
+            'code::after': { content: 'none' },
+            pre: { borderRadius: '0.75rem' },
+            // Long-form text must fit a phone rather than run past the clipped
+            // page edge: a long URL (the privacy policy's DPF list link) breaks
+            // where it would overflow. A table too wide for the column (its
+            // 4-column sub-processor list) scrolls inside its own box instead
+            // of breaking words mid-way (base.css .prose-tk table; BaseLayout
+            // gives it a tab stop while it scrolls).
+            overflowWrap: 'break-word',
+            'pre code': { backgroundColor: 'transparent', padding: '0', fontWeight: '400' },
+          },
+        },
       },
       animation: {
         'fade-up': 'fade-up 0.6s ease-out',

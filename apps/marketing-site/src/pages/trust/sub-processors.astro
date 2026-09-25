@@ -25,13 +25,13 @@ function changeLogKindLabel(kind: SubProcessorChangeLogEntry['kind']): string {
 function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
   switch (kind) {
     case 'added':
-      return 'bg-emerald-100 text-emerald-800';
+      return 'badge--ready';
     case 'removed':
-      return 'bg-red-100 text-red-800';
+      return 'badge--err';
     case 'material_change':
-      return 'bg-amber-100 text-amber-800';
+      return 'badge--busy';
     case 'register_published':
-      return 'border border-tk-border bg-tk-raised text-tk-ink-2';
+      return 'badge--neutral';
   }
 }
 ---
@@ -141,7 +141,7 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
                 </div>
                 <span
                   class:list={[
-                    'rounded-full px-3 py-1 text-xs font-medium',
+                    'badge',
                     changeLogKindClass(entry.kind),
                   ]}
                 >

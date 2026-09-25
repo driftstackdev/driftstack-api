@@ -1,29 +1,35 @@
 #!/usr/bin/env node
-// Regenerate apps/marketing-site/public/og-default.png from the editable
-// SVG source-of-truth (og-default.svg).
+// Regenerate the marketing site's social cards from the editable SVG
+// source-of-truth, apps/marketing-site/public/og-light.svg:
+//   og-light.png            the site-wide card (BaseLayout's default og:image)
+//   og/<slug>-light.png     the per-page variants below
+//
+// 2026-09-25 — the cards are LIGHT (the desktop app's white theme on every
+// surface) and live under NEW file names. public/_headers serves /*.png and
+// /*.svg immutable for a year, so changed art can never reuse a name: the dark
+// og-default.svg / og-default.png and og/<slug>.png files stay on disk,
+// frozen and no longer written by this script — docs.driftstack.io still
+// names https://driftstack.io/og-default.png, and social platforms that
+// cached a page's old card keep fetching the URL they cached.
 //
 // Why a PNG at all: Twitter/X, Facebook, LinkedIn, Slack, and Discord do
 // NOT render SVG `og:image` assets, so link previews of driftstack.io
 // would show no image if the OG image were an SVG. BaseLayout therefore
-// points `og:image` at /og-default.png; this script rasterizes the SVG
-// design into that 1200x630 PNG. Edit og-default.svg, then re-run:
+// points `og:image` at /og-light.png; this script rasterizes the SVG
+// design into that 1200x630 PNG. Edit og-light.svg, then re-run:
 //
 //   node scripts/gen-og-image.mjs
 //
 // (The founder may instead drop a richer hand-designed 1200x630 PNG at
-// the same path — it is a drop-in replacement. The same applies to any
-// per-page variant under public/og/.)
+// the same path — under a new name, for the cache reason above.)
 //
 // Per-page variants (S16): the VARIANTS table below maps a page slug to
-// a headline + two sublines. Each variant reuses og-default.svg as the
+// a headline + two sublines. Each variant reuses og-light.svg as the
 // layout template verbatim — ONLY the three copy <text> nodes (headline
 // y=330, sublines y=404/454) are swapped — and rasterizes to
-// apps/marketing-site/public/og/<slug>.png. Pages opt in via BaseLayout's
-// `ogImage="/og/<slug>.png"` prop. New paths are immutable-cache safe
-// (public/_headers serves /*.png immutable-1y), so variants need no ?v=
-// query — if a variant's art must change, ship it under a new filename.
-// The default card render path is untouched: running this script with no
-// arguments regenerates og-default.png byte-identically AND all variants.
+// apps/marketing-site/public/og/<slug>-light.png. Pages opt in via
+// BaseLayout's `ogImage="/og/<slug>-light.png"` prop. If a variant's art
+// must change, ship it under a new filename.
 
 import { createRequire } from 'node:module';
 import { readFileSync, mkdirSync } from 'node:fs';
@@ -35,8 +41,8 @@ const REPO_ROOT = resolve(HERE, '..');
 const require = createRequire(resolve(REPO_ROOT, 'package.json'));
 const sharp = require('sharp');
 
-const SVG = resolve(REPO_ROOT, 'apps/marketing-site/public/og-default.svg');
-const PNG = resolve(REPO_ROOT, 'apps/marketing-site/public/og-default.png');
+const SVG = resolve(REPO_ROOT, 'apps/marketing-site/public/og-light.svg');
+const PNG = resolve(REPO_ROOT, 'apps/marketing-site/public/og-light.png');
 const OG_DIR = resolve(REPO_ROOT, 'apps/marketing-site/public/og');
 
 // Per-page social cards. Every headline/subline is an existing on-page
@@ -96,11 +102,12 @@ const VARIANTS = [
 // The copy column starts at x=60 with a matching right margin, leaving
 // ~1080px. We estimate rendered width as chars × 0.55 × font-size —
 // 0.55em is a conservative average glyph advance for this 650-weight
-// system sans (the default headline measures ~0.53em/char). The default
-// card's 32-char headline at 58px ≈ 1020px, which is the proven ceiling,
-// so: headlines LONGER than 32 chars step down 58 → 48px (fits up to
-// ~40 chars). Anything the heuristic says would still overflow throws —
-// future variant copy can't silently clip.
+// system sans (the default headline measures ~0.53em/char). A 32-char
+// headline at 58px ≈ 1020px is the proven ceiling, so: headlines LONGER
+// than 32 chars step down 58 → 48px (fits up to ~40 chars). Anything the
+// heuristic says would still overflow throws — future variant copy can't
+// silently clip. (The default card's own 36-char headline is set at 52px
+// in og-light.svg.)
 const TEXT_COLUMN_PX = 1080;
 const AVG_CHAR_ADVANCE_EM = 0.55;
 const HEADLINE_MAX_CHARS_AT_58 = 32;
@@ -136,14 +143,14 @@ function variantSvg(baseSvgText, variant) {
     const node = new RegExp(`(<text x="60" y="${swap.y}"[^>]*>)[^<]*(</text>)`);
     if (!node.test(out)) {
       throw new Error(
-        `og/${variant.slug}: template text node y="${swap.y}" not found in og-default.svg — did the base card layout change?`,
+        `og/${variant.slug}: template text node y="${swap.y}" not found in og-light.svg — did the base card layout change?`,
       );
     }
     out = out.replace(node, (_m, open, close) => {
       const openTag =
         swap.fontSize === undefined
           ? open
-          : open.replace('font-size="58"', `font-size="${swap.fontSize}"`);
+          : open.replace(/font-size="\d+"/, `font-size="${swap.fontSize}"`);
       return `${openTag}${xmlEscape(swap.text)}${close}`;
     });
   }
@@ -168,14 +175,14 @@ async function rasterize(svgInput, outPath, label) {
 const svg = readFileSync(SVG);
 // Default card first — rendered from the raw SVG buffer through the exact
 // pre-variants pipeline, so its PNG stays byte-identical run to run.
-await rasterize(svg, PNG, 'og-default.png');
+await rasterize(svg, PNG, 'og-light.png');
 
 mkdirSync(OG_DIR, { recursive: true });
 const svgText = svg.toString('utf8');
 for (const variant of VARIANTS) {
   await rasterize(
     Buffer.from(variantSvg(svgText, variant), 'utf8'),
-    resolve(OG_DIR, `${variant.slug}.png`),
-    `og/${variant.slug}.png`,
+    resolve(OG_DIR, `${variant.slug}-light.png`),
+    `og/${variant.slug}-light.png`,
   );
 }

@@ -52,10 +52,14 @@ describe('W503.C apps/marketing-site/src/pages/trust/incidents.astro content par
     expect(body).toMatch(/case 'security':\s*return 'Security';/);
   });
 
-  it('severityClass 3-state color map: major_outage → red / degraded → amber / security → purple — pinned so the at-a-glance severity-color semantic (red=outage, amber=degraded, purple=security) stays consistent (drift would break the customer scan-pattern for severity)', () => {
-    expect(body).toMatch(/case 'major_outage':\s*return 'bg-red-100 text-red-800';/);
-    expect(body).toMatch(/case 'degraded':\s*return 'bg-amber-100 text-amber-800';/);
-    expect(body).toMatch(/case 'security':\s*return 'bg-purple-100 text-purple-800';/);
+  it('severityClass 3-state color map: major_outage → error / degraded → busy / security → error — pinned so the at-a-glance severity-color semantic (red = serious, amber = degraded) stays consistent; the label names the kind (drift would break the customer scan-pattern for severity)', () => {
+    // 2026-09-25 — the site's one badge recipe on the status tokens replaced
+    // the raw -100/-800 chips. Violet (the old security tone) is retired and a
+    // status may not wear the brand accent, so security shares the error hue
+    // with an outage — both serious — and its "Security" label tells them apart.
+    expect(body).toMatch(/case 'major_outage':\s*return 'badge--err';/);
+    expect(body).toMatch(/case 'degraded':\s*return 'badge--busy';/);
+    expect(body).toMatch(/case 'security':\s*return 'badge--err';/);
   });
 
   it("Hero framing pinned: 'Every customer-impacting outage or security event gets a public entry below — including ones short enough that customers might not notice. Root cause and remediation are added within seven days of the incident closing.' — pinned so the 'even-short-incidents-published' + 7-day-post-mortem commitments survive (drift to dropping 'including ones short enough that customers might not notice' would let small outages skip publication; drift to dropping the 7-day window would let post-mortems slip without a tracked window)", () => {

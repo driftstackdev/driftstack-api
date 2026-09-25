@@ -85,7 +85,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'egress',
     term: 'Egress',
-    def: 'Where a session\'s traffic leaves for the open web — its exit. Driftstack sends it out through the exit you attach: a stand-in address (a proxy), or an encrypted tunnel (a VPN). A VPN tunnel carries everything the profile does. That includes video and voice calls (WebRTC) and the newest way browsers talk to websites (HTTP/3). And on a proxy that can\'t carry HTTP/3, it is switched off rather than leaked. The phone\'s clock and time zone follow the exit\'s location, so nothing contradicts the address a website sees. Implementation and security details are documented at <a href="/trust/security-overview/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/trust/security-overview</a>.',
+    def: 'Where a session\'s traffic leaves for the open web — its exit. Driftstack sends it out through the exit you attach: a stand-in address (a proxy), or an encrypted tunnel (a VPN). A VPN tunnel carries everything the profile does. That includes video and voice calls (WebRTC) and the newest way browsers talk to websites (HTTP/3). And on a proxy that can\'t carry HTTP/3, it is switched off rather than leaked. The phone\'s clock and time zone follow the exit\'s location, so nothing contradicts the address a website sees. Implementation and security details are documented at <a href="/trust/security-overview/" class="accent-link">/trust/security-overview</a>.',
   },
   {
     id: 'fingerprint',
@@ -115,7 +115,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'anti-detect',
     term: 'Anti-detect browser',
-    def: 'A browser built so websites can\'t link or block its users by what they can measure about them. Most anti-detect tools disguise a desktop browser as something else. Driftstack takes the other path. It runs a build of Apple\'s own WebKit, the engine family behind iPhone Safari. So there is no disguise to spot. The <a href="/comparison/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">comparison page</a> walks the difference signal by signal.',
+    def: 'A browser built so websites can\'t link or block its users by what they can measure about them. Most anti-detect tools disguise a desktop browser as something else. Driftstack takes the other path. It runs a build of Apple\'s own WebKit, the engine family behind iPhone Safari. So there is no disguise to spot. The <a href="/comparison/" class="accent-link">comparison page</a> walks the difference signal by signal.',
   },
   {
     id: 'headless-browser',
@@ -145,7 +145,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'recording',
     term: 'Recording',
-    def: 'A replay of a session you drove in the desktop app, saved on your own computer. Open it in the app to scrub through it, or export it as a file. Recordings never leave your machine. Sessions driven from code take screenshots, page snapshots or PDFs on request instead. Details on <a href="/docs/recordings/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/docs/recordings</a>.',
+    def: 'A replay of a session you drove in the desktop app, saved on your own computer. Open it in the app to scrub through it, or export it as a file. Recordings never leave your machine. Sessions driven from code take screenshots, page snapshots or PDFs on request instead. Details on <a href="/docs/recordings/" class="accent-link">/docs/recordings</a>.',
   },
   {
     id: 'recycle-bin',
@@ -155,7 +155,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'self-hosted',
     term: 'Self-hosted',
-    def: 'Running the Driftstack software on Mac hardware you own. Session content stays inside your own network. We supply the software, the setup, and hands-on onboarding. The packages are on <a href="/self-hosted/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/self-hosted</a>.',
+    def: 'Running the Driftstack software on Mac hardware you own. Session content stays inside your own network. We supply the software, the setup, and hands-on onboarding. The packages are on <a href="/self-hosted/" class="accent-link">/self-hosted</a>.',
   },
   {
     id: 'warm-up',
@@ -168,7 +168,7 @@ const GLOSSARY: GlossaryEntry[] = [
 <BaseLayout
   title="Glossary"
   description="Every term this site uses — profile, session, concurrent, proxy, fingerprint, and more — explained in plain English, each one on its own."
-  ogImage="/og/glossary.png"
+  ogImage="/og/glossary-light.png"
 >
   <PageHero
     label="Glossary"
@@ -199,9 +199,9 @@ const GLOSSARY: GlossaryEntry[] = [
       </div>
       <p class="mt-10 max-w-prose text-sm leading-6 text-tk-ink-3">
         Missing a word? Email
-        <a href="mailto:support@driftstack.dev" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">support@driftstack.dev</a>
+        <a href="mailto:support@driftstack.dev" class="accent-link">support@driftstack.dev</a>
         and we'll add it. For how the pieces fit together, start at
-        <a href="/how-it-works/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">how it works</a>.
+        <a href="/how-it-works/" class="accent-link">how it works</a>.
       </p>
     </div>
   </section>

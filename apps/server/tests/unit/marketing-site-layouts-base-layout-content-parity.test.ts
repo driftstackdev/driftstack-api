@@ -10,8 +10,8 @@
 //   • fullTitle: any already-branded title stays verbatim;
 //     otherwise '<title> · Driftstack' (middle-dot separator).
 //   • canonical = new URL(pathname, Astro.site).toString().
-//   • ogImageUrl absolute-resolution via new URL(...) + /og-default.png
-//     site-root fallback.
+//   • ogImageUrl absolute-resolution via new URL(...) + /og-light.png
+//     site-root fallback (2026-09-25: the light card under a new name).
 //   • OG/Twitter meta: og:type=website + og:image 1200x630 +
 //     twitter:card=summary_large_image.
 //   • Favicon as data:image/svg+xml URL with oxblood %23722F37 fill +
@@ -44,20 +44,19 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
     );
   });
 
-  it("ogImage per-page-override framing + /og-default.png fallback pinned: 'Optional per-page social-card image (absolute URL or `/`-rooted path). Defaults to the site-wide `/og-default.png` when not supplied. Pages that want a custom card pass it explicitly.' + 'ogImage?: string;' + 'Resolve OG image to an absolute URL so social crawlers can fetch it without the path-resolution headaches some platforms have with relative paths. Defaults to /og-default.png at the site root — Cloudflare Pages serves anything in apps/marketing-site/public/ at the root when build runs.' + 'const ogImageUrl = new URL(ogImage ?? \"/og-default.png\", Astro.site).toString();' — pinned so the per-page-override + /og-default.png-fallback + absolute-resolution + Cloudflare-Pages-public-mount commitment survives", () => {
+  it("ogImage per-page-override framing + /og-light.png fallback pinned: 'Optional per-page social-card image (absolute URL or `/`-rooted path). Defaults to the site-wide `/og-light.png` when not supplied. Pages that want a custom card pass it explicitly.' + 'ogImage?: string;' + 'Resolve OG image to an absolute URL so social crawlers can fetch it without the path-resolution headaches some platforms have with relative paths. Defaults to /og-light.png at the site root — Cloudflare Pages serves anything in apps/marketing-site/public/ at the root when build runs.' + 'const ogImageUrl = new URL(ogImage ?? \"/og-light.png\", Astro.site).toString();' — pinned so the per-page-override + site-card fallback + absolute-resolution + Cloudflare-Pages-public-mount commitment survives (2026-09-25: the light card ships under a NEW name, not a ?v= bump — /*.png is immutable at the edge for a year)", () => {
     expect(body).toMatch(
-      /\* Optional per-page social-card image \(absolute URL or `\/`-rooted\s*\* path\)\. Defaults to the site-wide `\/og-default\.png` when not\s*\* supplied\. Pages that want a custom card pass it explicitly\./,
+      /\* Optional per-page social-card image \(absolute URL or `\/`-rooted\s*\* path\)\. Defaults to the site-wide `\/og-light\.png` when not\s*\* supplied\. Pages that want a custom card pass it explicitly\./,
     );
     expect(body).toMatch(/ogImage\?: string;/);
     expect(body).toMatch(
-      /\/\/ Resolve OG image to an absolute URL so social crawlers can fetch it\s*\/\/ without the path-resolution headaches some platforms have with\s*\/\/ relative paths\. Defaults to \/og-default\.png at the site root —\s*\/\/ Cloudflare Pages serves anything in apps\/marketing-site\/public\/\s*\/\/ at the root when build runs\./,
+      /\/\/ Resolve OG image to an absolute URL so social crawlers can fetch it\s*\/\/ without the path-resolution headaches some platforms have with\s*\/\/ relative paths\. Defaults to \/og-light\.png at the site root —\s*\/\/ Cloudflare Pages serves anything in apps\/marketing-site\/public\/\s*\/\/ at the root when build runs\./,
     );
     expect(body).toMatch(
-      /const ogImageBase = new URL\(ogImage \?\? '\/og-default\.png', Astro\.site\)\.toString\(\);/,
+      /const ogImageUrl = new URL\(ogImage \?\? '\/og-light\.png', Astro\.site\)\.toString\(\);/,
     );
-    // ?v=2 cache-bust on the site-wide default card only (immutable-1y edge
-    // cache; dark+oxblood v2 art 2026-07-03) — per-page overrides untouched.
-    expect(body).toMatch(/const ogImageUrl = ogImage \? ogImageBase : `\$\{ogImageBase\}\?v=2`;/);
+    // No ?v= query any more: a new file name is the cache key.
+    expect(body).not.toMatch(/\?v=2`/);
     // The PNG (not SVG) rationale is pinned so nobody silently reverts the
     // default to the SVG (which social crawlers don't render).
     expect(body).toMatch(/PNG, NOT SVG: Twitter\/X, Facebook,/);
@@ -122,7 +121,12 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
     // wiring: delegated toggle + persistence + theme-color sync
     expect(body).toMatch(/e\.target\.closest\('\[data-theme-toggle\]'\)/);
     expect(body).toMatch(/localStorage\.setItem\('ds_theme_mode', next\);/);
-    expect(body).toMatch(/next === 'light' \? '#f2f3f6' : '#060608'/);
+    // 2026-09-25 — the status-bar tint is each mode's surface-base token:
+    // #ebedf2 light (the default, in the static meta) / #0f172a dark.
+    expect(body).toMatch(/next === 'light' \? '#ebedf2' : '#0f172a'/);
+    expect(body).toMatch(/<meta name="theme-color" content="#ebedf2" \/>/);
+    expect(body).toMatch(/if \(m === 'dark'\) \{[\s\S]*?mt\.setAttribute\('content', '#0f172a'\)/);
+    expect(body).not.toMatch(/#f2f3f6|#060608/);
     // the dead-script wrapper must never appear before either script body
     expect(body).not.toMatch(/<script is:inline>\s*\{`/);
   });
@@ -136,10 +140,10 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
 
   it('doctype + viewport + canonical-link + Header/Footer-slot framing pinned: \'<!doctype html>\' + \'<html lang="en">\' + \'meta name="viewport" content="width=device-width, initial-scale=1"\' + \'link rel="canonical" href={canonical}\' + Header + main flex-1 + slot + Footer — pinned so the doctype + lang=en + viewport + canonical-link + Header/Footer-shell + main-slot commitment survives', () => {
     expect(body).toMatch(/<!doctype html>/);
-    // Fleet token axes: dark+oxblood is the shipped default ("Fleet Mission
-    // Control — Dark + Red", founder-locked 2026-06-15, superseding the
-    // 2026-06-12 spec's light+violet direction).
-    expect(body).toMatch(/<html lang="en" data-mode="dark" data-accent="oxblood">/);
+    // Token axes: light+oxblood is the shipped default since 2026-09-25 (the
+    // desktop app's white theme on every surface), retiring the 2026-06-15
+    // "Fleet Mission Control — Dark + Red" first impression.
+    expect(body).toMatch(/<html lang="en" data-mode="light" data-accent="oxblood">/);
     expect(body).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1" \/>/);
     expect(body).toMatch(/<link rel="canonical" href=\{canonical\} \/>/);
     expect(body).toMatch(/import Header from '\.\.\/components\/Header\.astro';/);

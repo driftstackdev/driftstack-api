@@ -152,12 +152,15 @@ const PROXIES_ALT =
   <section class="relative overflow-hidden">
     <div class="hero-glow" aria-hidden="true"></div>
     <div class="absolute inset-0 grid-bg opacity-40" aria-hidden="true"></div>
-    <div class="relative mx-auto max-w-6xl px-6 py-16 sm:pb-24 sm:pt-24 md:pt-28">
-      <div class="grid gap-10 sm:gap-12 md:grid-cols-2 md:items-center">
-        <div class="animate-fade-up">
+    <div class="relative mx-auto max-w-6xl px-6 py-16 sm:pb-24 sm:pt-20 md:pt-24">
+      {/* 2026-09-25 — the product leads: from lg the capture takes seven of
+          twelve columns (the copy five), so the light app is the largest
+          thing in the first screen rather than the headline. */}
+      <div class="grid gap-10 sm:gap-12 md:grid-cols-2 md:items-center lg:grid-cols-12">
+        <div class="animate-fade-up lg:col-span-5">
           <p class="section-label">iPhone Safari · on demand</p>
           <h1
-            class="mt-4 text-[1.6rem] font-semibold tracking-tight text-tk-ink sm:mt-5 sm:text-4xl md:text-5xl"
+            class="mt-4 text-[1.6rem] font-semibold tracking-tight text-tk-ink sm:mt-5 sm:text-4xl md:text-5xl lg:text-[2.75rem]"
             style="letter-spacing: -0.02em; line-height: 1.12;"
           >
             Your own real iPhones, in the cloud.
@@ -188,13 +191,13 @@ const PROXIES_ALT =
              "What is Driftstack?", together with its own caption strip —
              see `fleetScreen` there. Headline + intro paragraph above are
              unchanged copy; only the image changed. -->
-        <div class="relative animate-fade-up">
+        <div class="relative animate-fade-up lg:col-span-7">
           <AppScreen
             src={heroScreen}
             alt={HERO_ALT}
             priority
             accent
-            sizes="(min-width: 768px) 552px, calc(100vw - 48px)"
+            sizes="(min-width: 1024px) 648px, (min-width: 768px) 552px, calc(100vw - 48px)"
           />
         </div>
       </div>
@@ -296,10 +299,10 @@ const PROXIES_ALT =
         accounts that share one. Give each account its own profile and it looks
         like its own physical phone, every session, every time. What a website
         measures to tell devices apart is called its
-        <a href="/glossary/#fingerprint" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">fingerprint</a>.
+        <a href="/glossary/#fingerprint" class="accent-link">fingerprint</a>.
         <a
           href="/use-cases/multi-account/"
-          class="mt-3 block text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+          class="accent-link mt-3 block"
           >More →</a
         >
       </Card>
@@ -316,7 +319,7 @@ const PROXIES_ALT =
         hit.
         <a
           href="/use-cases/qa-testing/"
-          class="mt-3 block text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+          class="accent-link mt-3 block"
           >More →</a
         >
       </Card>
@@ -334,7 +337,7 @@ const PROXIES_ALT =
         app" page.
         <a
           href="/use-cases/web-scraping/"
-          class="mt-3 block text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+          class="accent-link mt-3 block"
           >More →</a
         >
       </Card>
@@ -491,10 +494,10 @@ const PROXIES_ALT =
           <p class="mt-5 max-w-prose text-base text-tk-ink-2 leading-relaxed">
             Websites read hundreds of small signals. A typical
             stealth browser fakes its one-line introduction (the
-            <a href="/glossary/#user-agent" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">user-agent</a>
+            <a href="/glossary/#user-agent" class="accent-link">user-agent</a>
             string) but gives away its real engine in how it draws, renders
             3D, and processes sound — the
-            <a href="/glossary/#canvas-hash" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">canvas</a>,
+            <a href="/glossary/#canvas-hash" class="accent-link">canvas</a>,
             WebGL, and audio fingerprints. Driftstack's answers come from
             Apple's WebKit, measured against real iPhones check by check.
           </p>
@@ -502,16 +505,16 @@ const PROXIES_ALT =
             Seven of the signals, as a preview. The
             <a
               href="/trust/cumulative-rig/"
-              class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+              class="accent-link"
               >full signal-by-signal table</a
             > shows every check — see the
             <a
               href="/trust/security-overview/"
-              class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+              class="accent-link"
               >security overview</a
             >
             for what's live today, and the
-            <a href="/comparison/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">comparison page</a>
+            <a href="/comparison/" class="accent-link">comparison page</a>
             for the tool-by-tool detail.
           </p>
           <p class="mt-6 max-w-prose text-base text-tk-ink-2 leading-relaxed">
@@ -610,7 +613,7 @@ const PROXIES_ALT =
        former code-demo hero, works-with-your-stack, and egress cards. ═══ -->
   <Section
     id="for-developers"
-    label="// for developers"
+    label="For developers"
     title="Real iPhone Safari. Programmable from any language."
     lead="Run a real iPhone browser in the cloud that every website treats as a genuine iPhone — never a bot, never an emulator. Built for scraping, testing, and automation that has to pass as a real mobile user. Drive it from TypeScript, Python, Go, or the desktop app."
   >
@@ -647,7 +650,7 @@ try {
         <p class="mt-4 text-base leading-7 text-tk-ink-2">
           <strong class="text-tk-ink">Your own internet exit, per profile.</strong>
           Choose where each profile's traffic comes from (its
-          <a href="/glossary/#egress" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">egress</a>)
+          <a href="/glossary/#egress" class="accent-link">egress</a>)
           — connect your own SOCKS5 proxy, OpenVPN, or WireGuard. A VPN
           tunnel carries everything the profile does, including WebRTC and
           HTTP/3 (QUIC); a UDP-capable SOCKS5 proxy carries them too. On a
@@ -754,7 +757,7 @@ try {
     <div class="mt-10 grid gap-8 md:grid-cols-3">
       <div class="panel">
         <h3 class="text-lg font-semibold text-tk-ink">One metric. Concurrent sessions. That's it.</h3>
-        <p class="mt-3 text-sm leading-7 text-tk-ink-2">
+        <p class="mt-3 text-sm leading-6 text-tk-ink-2">
           <strong class="text-tk-ink">Concurrent</strong> means sessions
           running at the same time — think browser tabs. Your plan sets how
           many you can run at once. Inside that, do as much as you like.
@@ -764,23 +767,23 @@ try {
       </div>
       <div class="panel">
         <h3 class="text-lg font-semibold text-tk-ink">EU-hosted by default.</h3>
-        <p class="mt-3 text-sm leading-7 text-tk-ink-2">
+        <p class="mt-3 text-sm leading-6 text-tk-ink-2">
           Your account data lives on EU servers. We don't log what your sessions visit or
           do — only what we need to bill you: how long a session ran, which
           iPhone model, iOS and Safari version it used, and how many sessions
           you had running at once. Where data lives, and every outside
           company that handles it for us, is on the
-          <a href="/trust/sub-processors/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">sub-processor page</a>.
+          <a href="/trust/sub-processors/" class="accent-link">sub-processor page</a>.
         </p>
-        <p class="mt-3 text-sm leading-7 text-tk-ink-2">
+        <p class="mt-3 text-sm leading-6 text-tk-ink-2">
           You can route each profile's traffic through your own SOCKS5
           proxy, OpenVPN, or WireGuard connection today. Details are in the
-          <a href="/trust/security-overview/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">security overview</a>.
+          <a href="/trust/security-overview/" class="accent-link">security overview</a>.
         </p>
       </div>
       <div class="panel">
         <h3 class="text-lg font-semibold text-tk-ink">Answered by the people who build it.</h3>
-        <p class="mt-3 text-sm leading-7 text-tk-ink-2">
+        <p class="mt-3 text-sm leading-6 text-tk-ink-2">
           Early customers get a Slack channel shared with the engineers who
           build Driftstack. Fixes ship in the same week, not the same
           quarter — and there's no ticket queue between you and the person
@@ -826,7 +829,7 @@ try {
           visit or anything that happens inside a session. Every outside
           company that handles data for us (our sub-processors) is listed on
           the
-          <a href="/trust/sub-processors/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">sub-processor page</a>.
+          <a href="/trust/sub-processors/" class="accent-link">sub-processor page</a>.
         </Card>
       </div>
     </div>

@@ -60,9 +60,12 @@ describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', 
     );
   });
 
-  it('CATEGORY_COLOR 6-entry styling map: launch accent / sdk raised-ink / docs raised-ink / security red-100/900 / pricing amber-100/900 / self-hosted emerald-100/900 — pinned so every category resolves to a real badge color. S20 2026-07-06: the pricing chip completed the -900 correction its siblings got — it still used text-tk-accent-soft (the 13%-alpha WASH token misused as a text color; rendered 1.21:1, effectively invisible).', () => {
+  it("CATEGORY_COLOR 6-entry styling map: launch solid brand fill / sdk + docs neutral / security error / pricing busy / self-hosted ready — every category resolves to a real badge. 2026-09-25: all six are the site's one badge recipe (base.css .badge + a tone, rendered as `badge … ${CATEGORY_COLOR[…]}`), replacing the raw -100/-900 chips that ignored the mode (S20 2026-07-06 history: the pricing chip once used text-tk-accent-soft, a 13%-alpha WASH as text, 1.21:1).", () => {
     expect(body).toMatch(
-      /const CATEGORY_COLOR: Record<ChangelogEntry\['category'\], string> = \{\s*launch: 'bg-tk-accent text-white',\s*(?:\s*\/\/[^\n]*)*\s*sdk: 'border border-tk-border bg-tk-raised text-tk-ink',\s*docs: 'border border-tk-border bg-tk-raised text-tk-ink',\s*security: 'bg-red-100 text-red-900',\s*(?:\s*\/\/[^\n]*)*\s*pricing: 'bg-amber-100 text-amber-900',\s*'self-hosted': 'bg-emerald-100 text-emerald-900',\s*\};/,
+      /const CATEGORY_COLOR: Record<ChangelogEntry\['category'\], string> = \{\s*(?:\s*\/\/[^\n]*)*\s*launch: 'badge--brand',\s*sdk: 'badge--neutral',\s*docs: 'badge--neutral',\s*security: 'badge--err',\s*pricing: 'badge--busy',\s*'self-hosted': 'badge--ready',\s*\};/,
+    );
+    expect(body).toMatch(
+      /class=\{`badge font-mono text-\[10px\] uppercase tracking-widest \$\{CATEGORY_COLOR\[entry\.category\]\}`\}/,
     );
   });
 

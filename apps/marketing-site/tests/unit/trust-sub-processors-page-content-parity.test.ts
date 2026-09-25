@@ -53,13 +53,16 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
     expect(body).toMatch(/case 'register_published':\s*return 'Register published';/);
   });
 
-  it('change-log color map pinned (emerald / red / amber / neutral token). Fleet v2 (S10): register_published moved from the legacy bg-slate-200 to the tokened neutral bg-tk-raised (same neutral visual intent, mode-aware)', () => {
-    expect(body).toMatch(/case 'added':\s*return 'bg-emerald-100 text-emerald-800';/);
-    expect(body).toMatch(/case 'removed':\s*return 'bg-red-100 text-red-800';/);
-    expect(body).toMatch(/case 'material_change':\s*return 'bg-amber-100 text-amber-800';/);
-    expect(body).toMatch(
-      /case 'register_published':\s*return 'border border-tk-border bg-tk-raised text-tk-ink-2';/,
-    );
+  it('change-log color map pinned (the badge recipe: ready / error / busy / neutral). Fleet v2 (S10): register_published moved from the legacy bg-slate-200 to the tokened neutral bg-tk-raised (same neutral visual intent, mode-aware)', () => {
+    // 2026-09-25 — the site's one badge recipe (base.css .badge + a tone) on
+    // the status tokens, replacing the raw -100/-800 chips that ignored the
+    // mode. Same semantic: green added, red removed, amber changed, neutral
+    // published (the neutral is the app's inset chip).
+    expect(body).toMatch(/case 'added':\s*return 'badge--ready';/);
+    expect(body).toMatch(/case 'removed':\s*return 'badge--err';/);
+    expect(body).toMatch(/case 'material_change':\s*return 'badge--busy';/);
+    expect(body).toMatch(/case 'register_published':\s*return 'badge--neutral';/);
+    expect(body).toMatch(/'badge',\s*changeLogKindClass\(entry\.kind\)/);
   });
 
   it('"region preference vs region routing" honesty framing pinned (S43 2026-07-07: scoped to database-resident data; R2 file objects replicate EU + US)', () => {

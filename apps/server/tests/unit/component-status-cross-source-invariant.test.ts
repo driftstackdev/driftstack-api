@@ -115,10 +115,12 @@ describe('W866 V-474 ComponentStatus cross-source invariant', () => {
 
   it('CRITICAL StatusBadge visual and accessible mappings stay aligned for labeled and dot-only variants.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/marketing-site/src/components/StatusBadge.astro'));
+    // 2026-09-25 — the dots wear the status tokens (they follow the site's
+    // light/dark mode like the desktop app's), no longer the raw palette.
     const mappings = [
-      ['operational', 'All systems operational', 'bg-emerald-500'],
-      ['degraded', 'Degraded performance', 'bg-amber-500'],
-      ['major_outage', 'Major outage', 'bg-red-500'],
+      ['operational', 'All systems operational', 'bg-tk-ready'],
+      ['degraded', 'Degraded performance', 'bg-tk-busy'],
+      ['major_outage', 'Major outage', 'bg-tk-err'],
     ] as const;
     for (const [state, label, color] of mappings) {
       expect(p).toMatch(
@@ -128,7 +130,7 @@ describe('W866 V-474 ComponentStatus cross-source invariant', () => {
       );
     }
     expect(p).toMatch(
-      /case 'unknown':\s*\n\s*default:\s*\n\s*dot\.classList\.add\('bg-slate-300'\)/,
+      /case 'unknown':\s*\n\s*default:\s*\n\s*dot\.classList\.add\('bg-status-idle'\)/,
     );
     expect(p).toMatch(
       /if \(!label\) badge\.setAttribute\('aria-label', 'Platform status: ' \+ accessibleState\);/,

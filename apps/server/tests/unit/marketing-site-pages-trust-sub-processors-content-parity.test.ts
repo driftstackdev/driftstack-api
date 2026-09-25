@@ -49,13 +49,16 @@ describe('W502.C apps/marketing-site/src/pages/trust/sub-processors.astro conten
     expect(body).toMatch(/case 'register_published':\s*return 'Register published';/);
   });
 
-  it("changeLogKindClass 4-state color map: added → emerald / removed → red / material_change → amber / register_published → neutral token — pinned so the change-log visual semantic (green=added, red=removed, amber=changed, neutral=published) stays consistent (drift would break the at-a-glance scan customers use to spot 'is this change I need to act on'). Fleet v2 (S10): register_published moved from the legacy bg-slate-200 to the tokened neutral bg-tk-raised (same neutral intent, mode-aware)", () => {
-    expect(body).toMatch(/case 'added':\s*return 'bg-emerald-100 text-emerald-800';/);
-    expect(body).toMatch(/case 'removed':\s*return 'bg-red-100 text-red-800';/);
-    expect(body).toMatch(/case 'material_change':\s*return 'bg-amber-100 text-amber-800';/);
-    expect(body).toMatch(
-      /case 'register_published':\s*return 'border border-tk-border bg-tk-raised text-tk-ink-2';/,
-    );
+  it("changeLogKindClass 4-state color map: added → ready / removed → error / material_change → busy / register_published → neutral badge — pinned so the change-log visual semantic (green=added, red=removed, amber=changed, neutral=published) stays consistent (drift would break the at-a-glance scan customers use to spot 'is this change I need to act on'). Fleet v2 (S10): register_published moved from the legacy bg-slate-200 to the tokened neutral bg-tk-raised (same neutral intent, mode-aware)", () => {
+    // 2026-09-25 — the site's one badge recipe (base.css .badge + a tone) on
+    // the status tokens, replacing the raw -100/-800 chips that ignored the
+    // mode. Same semantic: green added, red removed, amber changed, neutral
+    // published (the neutral is the app's inset chip).
+    expect(body).toMatch(/case 'added':\s*return 'badge--ready';/);
+    expect(body).toMatch(/case 'removed':\s*return 'badge--err';/);
+    expect(body).toMatch(/case 'material_change':\s*return 'badge--busy';/);
+    expect(body).toMatch(/case 'register_published':\s*return 'badge--neutral';/);
+    expect(body).toMatch(/'badge',\s*changeLogKindClass\(entry\.kind\)/);
   });
 
   it("Article 28(2) GDPR + 30-day-notice + /legal/dpa Annex 3 cross-reference framing pinned: 'This page is the customer-facing source of truth for sub-processor changes. Adding or removing an entry triggers a 30-day notice to all customers per Article 28(2) of the GDPR; the same content also lives in Annex 3 of the Data Processing Agreement' — pinned so the source-of-truth + Article 28(2) + 30-day-notice + DPA-Annex-3 4-state framing survives (drift to dropping Article 28(2) would lose the GDPR-anchored legal basis; drift to dropping the Annex 3 cross-reference would let the customer view drift from the contractual register)", () => {

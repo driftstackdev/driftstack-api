@@ -1,6 +1,9 @@
 // W302.B — drift guard for the default OG image asset. The
-// BaseLayout references `/og-default.<ext>` for social-card preview
+// BaseLayout references the site-wide card for social-card preview
 // renders. The file must exist under public/ so crawlers don't 404.
+// 2026-09-25 — the card is the LIGHT `/og-light.<ext>`, a new name (the
+// dark /og-default.png stays on disk for docs and cached previews, but
+// BaseLayout no longer cites it), so the guard follows the new name.
 
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -17,12 +20,12 @@ function read(p: string): string {
 }
 
 describe('W302.B BaseLayout og-default asset presence', () => {
-  it('BaseLayout cites a real /og-default.<ext> file under public/', () => {
+  it('BaseLayout cites a real /og-light.<ext> file under public/', () => {
     const body = read(LAYOUT);
-    const m = body.match(/\?\?\s*['"]\/og-default\.(png|jpg|jpeg|svg)['"]/);
+    const m = body.match(/\?\?\s*['"]\/og-light\.(png|jpg|jpeg|svg)['"]/);
     expect(m).not.toBeNull();
     const ext = m![1]!;
-    const path = resolve(PUBLIC, `og-default.${ext}`);
+    const path = resolve(PUBLIC, `og-light.${ext}`);
     expect(existsSync(path)).toBe(true);
   });
 });

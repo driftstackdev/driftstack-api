@@ -336,7 +336,7 @@ const ARCHETYPES_REFERENCE_URL = 'https://docs.driftstack.io/api/archetypes/';
       </p>
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         <pre
-          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
+          class="code-block"><code><span class="code-label"># cURL</span>{`
 : "\${DRIFTSTACK_API_KEY:?Set DRIFTSTACK_API_KEY}"
 curl --fail-with-body -X POST https://api.driftstack.dev/v1/sessions \\
   -H "authorization: Bearer $DRIFTSTACK_API_KEY" \\
@@ -344,7 +344,7 @@ curl --fail-with-body -X POST https://api.driftstack.dev/v1/sessions \\
   -d '{"archetype":"iphone17_ios18_7_safari26_4"}'
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
+          class="code-block"><code><span class="code-label">// TypeScript</span>{`
 import { Driftstack } from "@driftstack/sdk";
 const apiKey = process.env.DRIFTSTACK_API_KEY;
 if (!apiKey) throw new Error("DRIFTSTACK_API_KEY is required");
@@ -355,7 +355,7 @@ const session = await client.sessions.create({
 console.log(session.id);
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
+          class="code-block"><code><span class="code-label"># Python</span>{`
 import os
 
 from driftstack import Driftstack
@@ -365,7 +365,7 @@ session = client.sessions.create({"archetype": "iphone17_ios18_7_safari26_4"})
 print(session.id)
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
+          class="code-block"><code><span class="code-label">// Go</span>{`
 package main
 
 import (
@@ -406,7 +406,7 @@ func main() {
       </p>
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         <pre
-          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
+          class="code-block"><code><span class="code-label"># cURL</span>{`
 : "\${DRIFTSTACK_API_KEY:?Set DRIFTSTACK_API_KEY}"
 : "\${DRIFTSTACK_SESSION_ID:?Set DRIFTSTACK_SESSION_ID}"
 SESSION_URL="https://api.driftstack.dev/v1/sessions/$DRIFTSTACK_SESSION_ID"
@@ -423,7 +423,7 @@ curl --fail-with-body -X POST "$SESSION_URL/wait" \\
   -d '{"condition":{"kind":"selector","selector":"main"},"timeout_ms":5000}'
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
+          class="code-block"><code><span class="code-label">// TypeScript</span>{`
 import { Driftstack } from "@driftstack/sdk";
 
 const apiKey = process.env.DRIFTSTACK_API_KEY;
@@ -441,7 +441,7 @@ await client.sessions.wait(sessionId, {
 });
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
+          class="code-block"><code><span class="code-label"># Python</span>{`
 import os
 
 from driftstack import Driftstack
@@ -458,7 +458,7 @@ client.sessions.wait(session_id, {
 })
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
+          class="code-block"><code><span class="code-label">// Go</span>{`
 package main
 
 import (
@@ -498,7 +498,7 @@ func main() {
       </p>
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         <pre
-          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
+          class="code-block"><code><span class="code-label"># cURL</span>{`
 : "\${DRIFTSTACK_API_KEY:?Set DRIFTSTACK_API_KEY}"
 : "\${DRIFTSTACK_SESSION_ID:?Set DRIFTSTACK_SESSION_ID}"
 curl --fail-with-body -X POST "https://api.driftstack.dev/v1/sessions/$DRIFTSTACK_SESSION_ID/capture" \\
@@ -508,7 +508,7 @@ curl --fail-with-body -X POST "https://api.driftstack.dev/v1/sessions/$DRIFTSTAC
   | jq -r .data | openssl base64 -d -A > out.png
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
+          class="code-block"><code><span class="code-label">// TypeScript</span>{`
 import { writeFileSync } from "node:fs";
 import { Driftstack } from "@driftstack/sdk";
 
@@ -522,7 +522,7 @@ const shot = await client.sessions.capture(sessionId, {
 writeFileSync("out.png", Buffer.from(shot.data, "base64"));
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
+          class="code-block"><code><span class="code-label"># Python</span>{`
 import base64
 import os
 from pathlib import Path
@@ -534,7 +534,7 @@ shot = client.sessions.capture(os.environ["DRIFTSTACK_SESSION_ID"], {"kind": "sc
 Path("out.png").write_bytes(base64.b64decode(shot.data))
 `}</code></pre>
         <pre
-          class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
+          class="code-block"><code><span class="code-label">// Go</span>{`
 package main
 
 import (

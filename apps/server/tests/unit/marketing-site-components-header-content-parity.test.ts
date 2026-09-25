@@ -137,9 +137,11 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
 
   it('S13 mode toggle: desktop button exposes its current action and pressed state with sun/moon icons; BaseLayout owns delegated wiring.', () => {
     expect(body).toMatch(/data-theme-toggle/);
-    expect(body).toMatch(/aria-label="Switch to light theme"/);
-    expect(body).toMatch(/aria-pressed="false"/);
-    expect(body).toMatch(/title="Switch to light theme"/);
+    // 2026-09-25 — the site opens light: the initial label offers dark and
+    // the light mode reads as pressed.
+    expect(body).toMatch(/aria-label="Switch to dark theme"/);
+    expect(body).toMatch(/aria-pressed="true"/);
+    expect(body).toMatch(/title="Switch to dark theme"/);
     expect(body).toMatch(/class="hidden dark:block"/);
     expect(body).toMatch(/class="block dark:hidden"/);
   });

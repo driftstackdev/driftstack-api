@@ -269,8 +269,20 @@ describe('the alias layer covers the web’s vocabulary as it stands', () => {
     '--tk-ease',
   ];
   /** Surface-specific on purpose (the plan keeps them per site): the hero glow,
-   *  the sync blue and the code-block ground. */
-  const WEB_EXTENSIONS = ['--glow', '--sync', '--sync-rgb', '--code-bg', '--code-bg-rgb'];
+   *  the sync blue and the code-block ground. 2026-09-25: marketing, the first
+   *  surface on the package, adds the ink and label tones of that code block
+   *  (--code-ink / --code-label — text on the dark island, the same in both
+   *  modes because the island is dark in both), so the package does not take
+   *  those names over either. */
+  const WEB_EXTENSIONS = [
+    '--glow',
+    '--sync',
+    '--sync-rgb',
+    '--code-bg',
+    '--code-bg-rgb',
+    '--code-ink',
+    '--code-label',
+  ];
   /** The tk-* Tailwind colours the four v3/v4 web configs define today. */
   const WEB_TK = [
     'bg',
@@ -342,7 +354,12 @@ describe('the alias layer covers the web’s vocabulary as it stands', () => {
     const tkUnknown: string[] = [];
     for (const site of ['marketing-site', 'customer-dashboard', 'admin-panel']) {
       const cfg = readFileSync(join(REPO, `apps/${site}/tailwind.config.mjs`), 'utf8');
-      const tk = /\btk: \{([^}]*)\}/.exec(cfg)?.[1] ?? '';
+      // The tk colour namespace lives under `colors:`. Read it from there: a
+      // site on the preset declares no colours at all, and marketing's
+      // typography theme is also keyed `tk` (it makes the `prose-tk` class),
+      // which is not a colour and must not be read as one.
+      const colorsAt = cfg.indexOf('colors: {');
+      const tk = colorsAt < 0 ? '' : (/\btk: \{([^}]*)\}/.exec(cfg.slice(colorsAt))?.[1] ?? '');
       for (const m of tk.matchAll(/^\s+'?([a-z0-9-]+)'?:/gm)) {
         const k = m[1] ?? '';
         if (![...WEB_TK, ...TK_EXTENSIONS].includes(k)) tkUnknown.push(`${site}: tk-${k}`);

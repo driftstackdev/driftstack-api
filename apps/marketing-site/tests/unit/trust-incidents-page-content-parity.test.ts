@@ -52,10 +52,15 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
     expect(body).toMatch(/case 'security':\s*return 'Security';/);
   });
 
-  it('severityClass color map pinned (red / amber / purple)', () => {
-    expect(body).toMatch(/case 'major_outage':\s*return 'bg-red-100 text-red-800';/);
-    expect(body).toMatch(/case 'degraded':\s*return 'bg-amber-100 text-amber-800';/);
-    expect(body).toMatch(/case 'security':\s*return 'bg-purple-100 text-purple-800';/);
+  it('severityClass color map pinned (the badge recipe: error / busy / error)', () => {
+    // 2026-09-25 — the site's one badge recipe on the status tokens. Violet is
+    // retired, and no status may wear the brand accent, so a security event
+    // takes the error hue with a major outage (both serious) and the label
+    // names which; degraded stays the busy amber.
+    expect(body).toMatch(/case 'major_outage':\s*return 'badge--err';/);
+    expect(body).toMatch(/case 'degraded':\s*return 'badge--busy';/);
+    expect(body).toMatch(/case 'security':\s*return 'badge--err';/);
+    expect(body).toMatch(/'badge',\s*severityClass\(incident\.severity\)/);
   });
 
   it('4 "What we publish" bar entries pinned (downtime / security / sub-processor / maintenance)', () => {

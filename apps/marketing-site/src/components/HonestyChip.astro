@@ -14,20 +14,20 @@ const LABELS: Record<ChipState, string> = {
   roadmap: 'Roadmap',
 };
 const TONES: Record<ChipState, string> = {
-  // S24: chip LABELS are text → the AA-safe status-text tones (raw
-  // ready/busy are fill tones, 2.7–3.3:1 as light-mode text); the 30%
-  // borders keep the raw status tint.
-  live: 'text-tk-ready-text border-tk-ready/30',
-  'rolling-out': 'text-tk-busy-text border-tk-busy/30',
-  // S20: roadmap chips floated as bare words on dark (no fill, 1.16:1
-  // border) — a raised fill makes the chip read as a chip.
-  roadmap: 'bg-tk-raised text-tk-ink-3 border-tk-border',
+  // 2026-09-25 — the site's one badge recipe (base.css .badge + a tone): the
+  // status hue as a /10 wash and /30 border, with the AA-safe status-text
+  // tone for the label (S24: raw ready/busy are fill tones). Roadmap is the
+  // neutral inset chip in secondary ink — the old raised fill with muted ink
+  // measured 4.04:1 on the slate dark theme's elevated surface.
+  live: 'badge--ready',
+  'rolling-out': 'badge--busy',
+  roadmap: 'badge--neutral',
 };
 ---
 
 <span
   class:list={[
-    'inline-flex items-center rounded-full border px-2.5 py-0.5 font-mono text-[11px]',
+    'badge font-mono text-[11px]',
     TONES[state],
   ]}
 >

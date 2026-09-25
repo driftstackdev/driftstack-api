@@ -10,6 +10,11 @@
 //
 // Cached server-side for 30s by /v1/status itself; cf-edge cache
 // likely extends that.
+//
+// 2026-09-25 — the dot wears the status tokens (tk-ready / tk-busy / tk-err,
+// and the app's status-idle grey while checking or unknown) instead of the raw
+// emerald / amber / red / slate palette, so it follows the mode and matches
+// the desktop app's status dots.
 
 interface Props {
   /** Optional className override. Defaults to inline pill. */
@@ -37,7 +42,7 @@ const apiBaseUrl = 'https://api.driftstack.dev';
   aria-label={withLabel ? undefined : 'Platform status: checking'}
 >
   <span
-    class="driftstack-status-dot inline-block h-2 w-2 shrink-0 rounded-full bg-slate-300"
+    class="driftstack-status-dot inline-block h-2 w-2 shrink-0 rounded-full bg-status-idle"
     aria-hidden="true"
   ></span>
   {withLabel ? <span class="driftstack-status-label" aria-live="polite">checking…</span> : null}
@@ -56,30 +61,30 @@ const apiBaseUrl = 'https://api.driftstack.dev';
         let accessibleState = 'Status unavailable';
         // Reset color classes.
         dot.classList.remove(
-          'bg-slate-300',
-          'bg-emerald-500',
-          'bg-amber-500',
-          'bg-red-500',
+          'bg-status-idle',
+          'bg-tk-ready',
+          'bg-tk-busy',
+          'bg-tk-err',
         );
         switch (state) {
           case 'operational':
             accessibleState = 'All systems operational';
-            dot.classList.add('bg-emerald-500');
+            dot.classList.add('bg-tk-ready');
             if (label) label.textContent = 'All systems operational';
             break;
           case 'degraded':
             accessibleState = 'Degraded performance';
-            dot.classList.add('bg-amber-500');
+            dot.classList.add('bg-tk-busy');
             if (label) label.textContent = 'Degraded performance';
             break;
           case 'major_outage':
             accessibleState = 'Major outage';
-            dot.classList.add('bg-red-500');
+            dot.classList.add('bg-tk-err');
             if (label) label.textContent = 'Major outage';
             break;
           case 'unknown':
           default:
-            dot.classList.add('bg-slate-300');
+            dot.classList.add('bg-status-idle');
             if (label) label.textContent = 'Status unavailable';
             break;
         }

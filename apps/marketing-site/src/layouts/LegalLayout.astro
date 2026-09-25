@@ -1,9 +1,11 @@
 ---
-// Wraps a legal markdown page in BaseLayout with prose styling
-// matching the rest of the site (oxblood links, mono code, slate
-// palette). The header surfaces version + effective-date pulled from
-// the markdown frontmatter so customers can see at a glance which
-// version of a document they're viewing.
+// Wraps a legal markdown page in BaseLayout with the site's one prose
+// recipe (`prose-tk`, tailwind.config.mjs — token inks, accent-text links,
+// inset code chips, dark-island code blocks; 2026-09-25, replacing the
+// per-layout colour list and the slate code blocks). The header surfaces
+// version + effective-date pulled from the markdown frontmatter so
+// customers can see at a glance which version of a document they're
+// viewing.
 import BaseLayout from './BaseLayout.astro';
 
 interface Props {
@@ -48,7 +50,7 @@ const legalLinks = [
 
   <section class="mx-auto max-w-3xl px-6 py-12">
     <article
-      class="prose max-w-none prose-headings:scroll-mt-20 prose-headings:font-semibold prose-headings:text-tk-ink prose-h2:mt-12 prose-h2:text-2xl prose-h3:text-xl prose-p:leading-relaxed prose-p:text-tk-ink-2 prose-li:my-1 prose-li:text-tk-ink-2 prose-a:text-tk-accent-text prose-a:no-underline hover:prose-a:underline hover:prose-a:text-tk-accent-2 prose-strong:text-tk-ink prose-code:rounded prose-code:bg-tk-bg prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-sm prose-code:text-tk-ink prose-code:before:content-none prose-code:after:content-none prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-table:text-sm prose-td:text-tk-ink-2 prose-th:bg-tk-surface prose-th:text-tk-ink prose-th:text-left prose-blockquote:border-l-tk-accent prose-blockquote:not-italic prose-blockquote:text-tk-ink-2"
+      class="prose prose-tk max-w-none prose-headings:scroll-mt-20 prose-h2:mt-12 prose-h2:text-2xl prose-h3:text-xl prose-p:leading-relaxed prose-li:my-1 prose-table:text-sm prose-th:bg-tk-surface prose-th:text-left prose-blockquote:not-italic"
     >
       <slot />
     </article>

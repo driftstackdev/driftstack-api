@@ -149,7 +149,7 @@ const pricingStructuredData = {
 <BaseLayout
   title="Pricing"
   description="Driftstack pricing — start free, then pay only for the sessions you run at the same time. Pick Manual (drive sessions yourself in our desktop app) or API (automate with code). Or self-host and run it all yourself."
-  ogImage="/og/pricing.png"
+  ogImage="/og/pricing-light.png"
 >
   <!-- Hero — Fleet v2 PageHero (label + h1 + lead over hero-glow + grid). -->
   <PageHero label="Pricing" title="Two plan families. One free tier to start.">
@@ -165,7 +165,7 @@ const pricingStructuredData = {
   <!-- Free tier hero card -->
   <section id="free" class="bg-tk-bg">
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <div class="card grid gap-8 border-tk-accent/40 p-8 md:grid-cols-3 md:items-center">
+      <div class="card grid gap-8 border-tk-accent/40 p-8 md:grid-cols-3 md:items-start">
         <div class="md:col-span-2">
           <div class="flex items-start gap-3">
             <IconTile class="mt-1">
@@ -215,7 +215,7 @@ const pricingStructuredData = {
               href="https://github.com/driftstackdev/driftstack-api/releases/latest"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+              class="accent-link"
               >Download the desktop app</a
             >.
           </p>
@@ -228,7 +228,7 @@ const pricingStructuredData = {
                   `gap`, which rendered as "Apple'sWebKit". The sibling bullets are
                   safe only because they contain no inline link. */}
               <span>
-                A build of Apple's own <a href="/glossary/#webkit" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">WebKit</a> — the engine family behind iPhone Safari. Not an emulator, and no add-on scripts to disguise it.
+                A build of Apple's own <a href="/glossary/#webkit" class="accent-link">WebKit</a> — the engine family behind iPhone Safari. Not an emulator, and no add-on scripts to disguise it.
               </span>
             </li>
             {/* S26 2026-07-06 (#132) — accuracy fix (audit M2): this
@@ -265,11 +265,14 @@ const pricingStructuredData = {
             </li>
           </ul>
         </div>
-        <div class="flex flex-col gap-3 md:items-end">
-          <a href="https://app.driftstack.io/signup/" class="btn-primary w-full md:w-auto"
+        {/* 2026-09-25 — the two actions sit at the top of the card, level
+            with its title and the same width, instead of floating at the
+            card's vertical middle. */}
+        <div class="flex flex-col gap-3 md:ml-auto md:w-48">
+          <a href="https://app.driftstack.io/signup/" class="btn-primary w-full"
             >Get started free</a
           >
-          <a href="https://docs.driftstack.io" class="btn-secondary w-full md:w-auto"
+          <a href="https://docs.driftstack.io" class="btn-secondary w-full"
             >Read the docs</a
           >
         </div>
@@ -409,7 +412,7 @@ const pricingStructuredData = {
         Need every dimension side-by-side?
         <a
           href="/pricing/comparison/"
-          class="font-medium text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+          class="accent-link font-medium"
           >See the per-tier comparison →</a
         >
       </p>
@@ -522,7 +525,7 @@ const pricingStructuredData = {
         with no internet connection, or a custom device type?
         <a
           href="#self-hosted"
-          class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+          class="accent-link"
           >See self-hosted plans</a
         >. They are priced as a software license, not like the monthly tiers
         above. That license includes source escrow: a copy of the code, held
@@ -532,7 +535,7 @@ const pricingStructuredData = {
         Still deciding whether a real iPhone browser fits what you're doing?
         <a
           href="/faq/#architecture-sessions"
-          class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+          class="accent-link"
           >Read the FAQ on how sessions work</a
         >.
       </p>
@@ -953,7 +956,7 @@ const pricingStructuredData = {
                 shut down. Hardware guidance at{' '}
                 <a
                   href="/self-hosted/"
-                  class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+                  class="accent-link"
                 >
                   /self-hosted
                 </a>
@@ -985,7 +988,7 @@ const pricingStructuredData = {
       BYOK means you bring your <strong>Anthropic API key</strong> from
       <a
         href="https://console.anthropic.com"
-        class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+        class="accent-link"
         target="_blank"
         rel="noopener noreferrer">console.anthropic.com</a
       > and pay Anthropic directly.

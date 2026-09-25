@@ -42,8 +42,13 @@ describe('Fleet v2 component kit content parity (marketing mirror)', () => {
     expect(body).toMatch(/live: 'Live',/);
     expect(body).toMatch(/'rolling-out': 'Rolling out',/);
     expect(body).toMatch(/roadmap: 'Roadmap',/);
-    expect(body).toMatch(/text-tk-ready/);
-    expect(body).toMatch(/text-tk-busy/);
+    // 2026-09-25 — the tones are the site's one badge recipe (base.css), whose
+    // ready / busy variants carry the AA-safe status-text tones.
+    expect(body).toMatch(/live: 'badge--ready',/);
+    expect(body).toMatch(/'rolling-out': 'badge--busy',/);
+    const css = readFileSync(resolve(HERE, '..', '..', 'src', 'styles', 'base.css'), 'utf8');
+    expect(css).toMatch(/\.badge--ready \{\s*\n\s*@apply [^;]*text-tk-ready-text;/);
+    expect(css).toMatch(/\.badge--busy \{\s*\n\s*@apply [^;]*text-tk-busy-text;/);
   });
 
   it('PriceCard never carries figures or imports pricing data (the caller binds from src/data/pricing.ts)', () => {

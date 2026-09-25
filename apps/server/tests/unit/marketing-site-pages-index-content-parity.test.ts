@@ -255,8 +255,10 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     // the capture, wired through AppScreen as the LCP element
     expect(body).toMatch(/import AppScreen from '\.\.\/components\/AppScreen\.astro'/);
     expect(body).toMatch(/import heroScreen from '\.\.\/assets\/screens\/ai-running-hero\.png'/);
+    // 2026-09-25 — the product leads: from lg the capture takes 7 of 12
+    // columns (648px), so `sizes` names that width first.
     expect(body).toMatch(
-      /<AppScreen\s+src=\{heroScreen\}\s+alt=\{HERO_ALT\}\s+priority\s+accent\s+sizes="\(min-width: 768px\) 552px, calc\(100vw - 48px\)"\s*\/>/,
+      /<AppScreen\s+src=\{heroScreen\}\s+alt=\{HERO_ALT\}\s+priority\s+accent\s+sizes="\(min-width: 1024px\) 648px, \(min-width: 768px\) 552px, calc\(100vw - 48px\)"\s*\/>/,
     );
     // a real alt: WHAT the screen shows (Band A / WHAT-not-HOW) — the AI
     // mid-task, a real iPhone, the plan beside it; never infrastructure
@@ -276,7 +278,7 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     // the old hero's own caption strip must not be reachable from this slot
     // any more — it moved to §2 with the picture it describes (own arm below).
     const heroDiv = body.match(
-      /<div class="relative animate-fade-up">\s*<AppScreen[\s\S]*?<\/div>/,
+      /<div class="relative animate-fade-up lg:col-span-7">\s*<AppScreen[\s\S]*?<\/div>/,
     )?.[0];
     expect(heroDiv, 'the hero AppScreen wrapper div').toBeDefined();
     expect(heroDiv).not.toMatch(/8 iPhone profiles/);

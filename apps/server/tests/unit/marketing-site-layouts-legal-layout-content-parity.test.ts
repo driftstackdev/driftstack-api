@@ -9,8 +9,10 @@
 //   • frontmatter-description fallback chain: ... ?? 'Driftstack legal documents.'.
 //   • 5-item canonical legalLinks: /legal/terms/ + /legal/privacy/ + /legal/dpa/ +
 //     /legal/aup/ + /trust/sub-processors/.
-//   • prose styling: tokenized headings + prose-a:text-tk-accent +
-//     prose-blockquote:border-l-tk-accent.
+//   • prose styling: the site's one prose recipe, `prose prose-tk`
+//     (2026-09-25 — token inks, accent-text links, dark-island code
+//     blocks; the recipe lives in tailwind.config.mjs), plus the layout's
+//     own heading rhythm.
 //   • aria-label="Other legal documents" navigation label.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -29,9 +31,12 @@ function read(p: string): string {
 describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parity', () => {
   const body = read(LIB);
 
-  it("LegalLayout framing pinned: 'Wraps a legal markdown page in BaseLayout with prose styling matching the rest of the site (oxblood links, mono code, slate palette). The header surfaces version + effective-date pulled from the markdown frontmatter so customers can see at a glance which version of a document they're viewing.' — pinned so the BaseLayout-wrap + prose-styling + version/effective-date-from-frontmatter commitment survives", () => {
+  it("LegalLayout framing pinned: 'Wraps a legal markdown page in BaseLayout with the site's one prose recipe (prose-tk …). The header surfaces version + effective-date pulled from the markdown frontmatter so customers can see at a glance which version of a document they're viewing.' — pinned so the BaseLayout-wrap + prose-styling + version/effective-date-from-frontmatter commitment survives (2026-09-25: the comment names the shared prose-tk recipe that replaced the slate palette)", () => {
     expect(body).toMatch(
-      /\/\/ Wraps a legal markdown page in BaseLayout with prose styling\s*\/\/ matching the rest of the site \(oxblood links, mono code, slate\s*\/\/ palette\)\. The header surfaces version \+ effective-date pulled from\s*\/\/ the markdown frontmatter so customers can see at a glance which\s*\/\/ version of a document they're viewing\./,
+      /\/\/ Wraps a legal markdown page in BaseLayout with the site's one prose\s*\/\/ recipe \(`prose-tk`, tailwind\.config\.mjs/,
+    );
+    expect(body).toMatch(
+      /The header surfaces\s*\/\/ version \+ effective-date pulled from the markdown frontmatter so\s*\/\/ customers can see at a glance which version of a document they're\s*\/\/ viewing\./,
     );
     expect(body).toMatch(/import BaseLayout from '\.\/BaseLayout\.astro';/);
   });
@@ -73,20 +78,22 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
     );
   });
 
-  it('Prose styling pins tokenized headings, AA-safe links and blockquotes while the layout hero owns the page h1.', () => {
-    expect(body).toMatch(/prose max-w-none/);
-    expect(body).toMatch(
-      /prose-headings:scroll-mt-20 prose-headings:font-semibold prose-headings:text-tk-ink/,
-    );
+  it('Prose styling pins the shared prose-tk recipe (tokenized headings, AA-safe links, accent quote rule) while the layout hero owns the page h1.', () => {
+    // 2026-09-25 — the colours moved into the ONE prose recipe (`prose-tk`,
+    // tailwind.config.mjs) that every long-form page shares; this layout keeps
+    // its heading rhythm. The link hover no longer turns the rose accent-2
+    // (3.4–3.7:1 as text): it stays accent-text with a heavier underline.
+    expect(body).toMatch(/prose prose-tk max-w-none/);
+    expect(body).toMatch(/prose-headings:scroll-mt-20/);
     expect(body).toMatch(/prose-h2:mt-12 prose-h2:text-2xl prose-h3:text-xl/);
-    expect(body).toMatch(/prose-a:text-tk-accent-text prose-a:no-underline/);
-    expect(body).toMatch(/prose-a:text-tk-accent-2/);
-    expect(body).toMatch(/prose-a:no-underline/);
-    expect(body).toMatch(/hover:prose-a:underline/);
-    expect(body).toMatch(/hover:prose-a:text-tk-accent-2/);
-    expect(body).toMatch(/prose-blockquote:border-l-tk-accent/);
     expect(body).toMatch(/prose-blockquote:not-italic/);
-    expect(body).toMatch(/prose-blockquote:text-tk-ink-2/);
+    expect(body).not.toMatch(/tk-accent-2/);
+    const tw = read(resolve(REPO_ROOT, 'apps/marketing-site/tailwind.config.mjs'));
+    expect(tw).toMatch(/'--tw-prose-headings': 'rgb\(var\(--ink-rgb\)\)'/);
+    expect(tw).toMatch(/'--tw-prose-links': 'rgb\(var\(--accent-text-rgb\)\)'/);
+    expect(tw).toMatch(/'--tw-prose-quote-borders': 'rgb\(var\(--accent-rgb\)\)'/);
+    expect(tw).toMatch(/'--tw-prose-quotes': 'rgb\(var\(--ink-2-rgb\)\)'/);
+    expect(tw).toMatch(/'h1, h2, h3, h4': \{ fontWeight: '600'/);
   });
 
   it("Other-legal-documents nav framing pinned: 'aria-label=\"Other legal documents\"' + 'Other legal documents' eyebrow paragraph + 'mt-3 grid gap-1 sm:grid-cols-2' ul + 'text-sm text-tk-accent-text hover:underline' link styling (S24 2026-07-06: links are TEXT → the AA-safe accent-text tone) — pinned so the cross-doc-nav + aria-label + 2-col-on-sm-and-up grid + accent-link-styling commitment survives", () => {

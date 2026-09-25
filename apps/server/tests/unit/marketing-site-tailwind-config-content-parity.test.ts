@@ -14,11 +14,16 @@
 // per the 2026-06-15 "Fleet Mission Control — Dark + Red" verdict.
 // Negative pins below keep them from silently returning.
 //
-//   • tk token namespace → two-axis CSS custom properties (+ accent-text).
-//   • fontFamily: sans=Geist + system fallback, mono=Berkeley Mono +
-//     JetBrains Mono (vendored) + system fallback.
-//   • maxWidth: prose 65ch; borderRadius.card 14px.
-//   • boxShadow: glow-accent (hot elements) + ambient/ambient-lg (v2 kit).
+// 2026-09-25 — the colours, radii, fonts and ambient shadows moved to the
+// shared preset (@driftstack/design-tokens/tailwind-preset, the desktop app's
+// theme); this file keeps only what is the site's own.
+//
+//   • presets: [the design-tokens preset] — tk-* colours (+ accent-text),
+//     fontFamily (Geist / Berkeley Mono + JetBrains Mono), the app's radius
+//     scale (rounded-card 12px), ambient/ambient-lg shadows.
+//   • maxWidth: prose 65ch.
+//   • boxShadow: glow-accent (hot elements); the radial washes; fade-up.
+//   • typography theme `tk` — the site's one prose recipe (prose-tk).
 //   • @tailwindcss/typography plugin.
 //   • content glob: ./src/**/*.{astro,html,js,jsx,md,mdx,ts,tsx}.
 
@@ -45,11 +50,8 @@ describe('W525.B apps/marketing-site/tailwind.config.mjs content parity', () => 
     expect(body).toMatch(/plugins: \[typography\],/);
   });
 
-  it("Legacy palette retirement pinned (2026-07-03 supersession): the oxblood ladder, custom slate ladder, graphite surface/ink sets, glow reds, gradient-accent, and glow-radial-red variants are GONE and must stay gone — the locked #722F37 accent lives on as --accent-strong in the [data-accent='oxblood'] axis (styles/base.css), and stock Tailwind slate-* utilities in legacy markup render unchanged (the removed custom ladder was byte-identical to the built-in)", () => {
-    // supersession note must stay in the config so the retirement is
-    // self-documenting at the source
-    expect(body).toMatch(/legacy baked palettes RETIRED \(Fleet v2 port\)/);
-    expect(body).toMatch(/#722F37 accent lives on as --accent-strong/);
+  it("Legacy palette retirement pinned (2026-07-03 supersession; 2026-09-25 the config declares no colours at all): the oxblood ladder, custom slate ladder, graphite surface/ink sets, glow reds, gradient-accent, and glow-radial-red variants are GONE and must stay gone — every colour now comes from the @driftstack/design-tokens preset (the desktop app's palette, one accent #a83b4d)", () => {
+    expect(body).not.toMatch(/colors: \{/);
     // negative pins — none of the retired blocks may silently return
     expect(body).not.toMatch(/oxblood: \{/);
     expect(body).not.toMatch(/slate: \{/);
@@ -59,36 +61,36 @@ describe('W525.B apps/marketing-site/tailwind.config.mjs content parity', () => 
     expect(body).not.toMatch(/'gradient-accent'/);
     expect(body).not.toMatch(/'glow-radial-red'/);
     expect(body).not.toMatch(/'glow-red'/);
+    expect(body).not.toMatch(/#722F37|#9b3b46/i);
   });
 
-  it('fontFamily + maxWidth framing pinned: \'sans: ["Geist", "ui-sans-serif", "system-ui", "sans-serif"]\' + \'mono: ["Berkeley Mono", "JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"]\' (Fleet v2 2026-07-03: vendored JetBrains Mono ships; Berkeley Mono stays first-family for licensed local installs, never vendored) + \'maxWidth: { prose: "65ch" }\' — pinned so the Geist+system-fallback sans-stack + the shipped-mono-stack + 65ch-prose-max-width commitment survives', () => {
-    expect(body).toMatch(/sans: \['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'\],/);
-    expect(body).toMatch(
+  it("the shared token preset is the first layer (2026-09-25): fonts (Geist + the shipped mono stack), radii (the app's 4 / 6 / 12 / 16 / full; rounded-card 12px, was 14px), the tk-* colours and the ambient shadows come from @driftstack/design-tokens/tailwind-preset; this file keeps maxWidth.prose 65ch and the site's own atmosphere", () => {
+    expect(body).toMatch(/import tokens from '@driftstack\/design-tokens\/tailwind-preset';/);
+    expect(body).toMatch(/presets: \[tokens\],/);
+    expect(body).toMatch(/maxWidth: \{\s*prose: '65ch',\s*\},/);
+    expect(body).not.toMatch(/fontFamily: \{/);
+    expect(body).not.toMatch(/borderRadius: \{/);
+    expect(body).not.toMatch(/card: '14px'/);
+    const preset = readFileSync(
+      resolve(REPO_ROOT, 'packages/design-tokens/dist/tailwind-preset.mjs'),
+      'utf8',
+    );
+    expect(preset).toMatch(/sans: \['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'\],/);
+    expect(preset).toMatch(
       /mono: \['Berkeley Mono', 'JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'\],/,
     );
-    expect(body).toMatch(/maxWidth: \{\s*prose: '65ch',\s*\},/);
+    expect(preset).toMatch(/card: '0\.75rem',/);
+    expect(preset).toMatch(/'accent-text': 'rgb\(var\(--accent-text-rgb\) \/ <alpha-value>\)',/);
+    expect(preset).toMatch(/ambient: 'var\(--shadow-lift\)',/);
   });
 
-  it("Fleet tk token namespace + shadows pinned (v2 2026-07-03): tk.* resolves to the two-axis CSS custom properties (styles/base.css) so tk-* classes flip with <html data-mode>/<html data-accent>; tk-accent-text = the AA-safe accent TEXT tone; 'glow-accent' shadow survives for hot elements while ambient/ambient-lg are the v2 kit's calm card shadows; borderRadius.card = 14px (spec §3)", () => {
-    // rgb-triplet + <alpha-value> form so Tailwind alpha modifiers
-    // (bg-tk-accent\/10, ring-tk-accent\/30) work on token colors.
-    expect(body).toMatch(/tk: \{\s*\n\s*bg: 'rgb\(var\(--bg-rgb\) \/ <alpha-value>\)',/);
-    expect(body).toMatch(/accent: 'rgb\(var\(--accent-rgb\) \/ <alpha-value>\)',/);
-    expect(body).toMatch(/'accent-strong': 'rgb\(var\(--accent-strong-rgb\) \/ <alpha-value>\)',/);
-    expect(body).toMatch(/'accent-text': 'var\(--accent-text\)',/);
-    // S24 2026-07-06 — AA-safe status-toned TEXT trio (raw ready/busy/err
-    // are FILL tones, 2.7–4.3:1 as small light-mode text; base.css carries
-    // the per-mode values + computed ratios).
-    expect(body).toMatch(/'ready-text': 'var\(--ready-text\)',/);
-    expect(body).toMatch(/'busy-text': 'var\(--busy-text\)',/);
-    expect(body).toMatch(/'err-text': 'var\(--err-text\)',/);
+  it("the site's own theme extensions survive the preset: the 'glow-accent' shadow for hot elements, the accent radial washes, the fade-up animation, and the ONE prose recipe (`prose-tk`, 2026-09-25) whose colours read the tokens so long-form pages follow data-mode without prose-invert", () => {
     expect(body).toMatch(/'glow-accent': '0 0 0 1px var\(--accent\), 0 0 26px var\(--glow\)',/);
-    // S20 2026-07-06 — ambient shadows became mode-aware vars: the original
-    // gray shadows composite to a measured 1.0000:1 on the near-black dark
-    // bg (zero elevation cue); the per-mode values live in base.css.
-    expect(body).toMatch(/ambient: 'var\(--shadow-ambient\)',/);
-    expect(body).toMatch(/'ambient-lg': 'var\(--shadow-ambient-lg\)',/);
-    expect(body).toMatch(/card: '14px',/);
+    expect(body).toMatch(/'glow-radial-accent':/);
+    expect(body).toMatch(/'fade-up': 'fade-up 0\.6s ease-out',/);
+    expect(body).toMatch(/typography: \{\s*\n\s*tk: \{/);
+    expect(body).toMatch(/'--tw-prose-links': 'rgb\(var\(--accent-text-rgb\)\)',/);
+    expect(body).toMatch(/'--tw-prose-pre-bg': 'var\(--code-bg\)',/);
   });
 
   it('file exists at canonical path', () => {

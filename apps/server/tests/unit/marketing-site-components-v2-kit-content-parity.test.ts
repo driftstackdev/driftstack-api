@@ -96,8 +96,12 @@ describe('W529 marketing-site Fleet v2 component kit content parity', () => {
     expect(body).toMatch(/live: 'Live',/);
     expect(body).toMatch(/'rolling-out': 'Rolling out',/);
     expect(body).toMatch(/roadmap: 'Roadmap',/);
-    expect(body).toMatch(/live: 'text-tk-ready-text border-tk-ready\/30',/);
-    expect(body).toMatch(/'rolling-out': 'text-tk-busy-text border-tk-busy\/30',/);
+    // 2026-09-25 — the tones are the site's one badge recipe (base.css .badge
+    // + a variant: the status /10 wash, /30 border and AA-safe text tone).
+    expect(body).toMatch(/live: 'badge--ready',/);
+    expect(body).toMatch(/'rolling-out': 'badge--busy',/);
+    expect(body).toMatch(/roadmap: 'badge--neutral',/);
+    expect(body).toMatch(/'badge font-mono text-\[11px\]'/);
   });
 
   it('FeatureRow: copy + media two-column grid with optional HonestyChip and reverse ordering', () => {

@@ -10,14 +10,17 @@
 //   • 4-second AbortController hard timeout (slow status endpoint
 //     doesn't keep the badge spinning forever).
 //   • Failure-mode honesty: fetch failure → "Status unavailable"
-//     label + slate-300 dot; explicit "nothing is implied about
+//     label + status-idle dot; explicit "nothing is implied about
 //     uptime from a fetch error alone" framing.
 //   • Anchor href=https://status.driftstack.io + target="_blank"
 //     + rel="noopener noreferrer".
 //   • Dot-only accessible names track the resolved live state.
 //   • Props: className (override) + withLabel (default true,
 //     dot-only when false for header strips).
-//   • Initial render: slate-300 dot + "checking…" label.
+//   • Initial render: status-idle dot + "checking…" label.
+//   • 2026-09-25 — the dots wear the status tokens (tk-ready / tk-busy /
+//     tk-err, and the app's status-idle grey) instead of the raw emerald /
+//     amber / red / slate palette, so they follow the mode like the app's.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -64,16 +67,17 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
     expect(body).toMatch(/label\.textContent = 'Status unavailable';/);
   });
 
-  it('4 dot colors pinned (emerald-500 / amber-500 / red-500 / slate-300 fallback)', () => {
-    expect(body).toMatch(/dot\.classList\.add\('bg-emerald-500'\);/);
-    expect(body).toMatch(/dot\.classList\.add\('bg-amber-500'\);/);
-    expect(body).toMatch(/dot\.classList\.add\('bg-red-500'\);/);
-    expect(body).toMatch(/dot\.classList\.add\('bg-slate-300'\);/);
+  it('4 dot colors pinned (status tokens: ready / busy / err / status-idle fallback)', () => {
+    expect(body).toMatch(/dot\.classList\.add\('bg-tk-ready'\);/);
+    expect(body).toMatch(/dot\.classList\.add\('bg-tk-busy'\);/);
+    expect(body).toMatch(/dot\.classList\.add\('bg-tk-err'\);/);
+    expect(body).toMatch(/dot\.classList\.add\('bg-status-idle'\);/);
+    expect(body).not.toMatch(/bg-(?:emerald|amber|red|slate)-\d/);
   });
 
   it('color-reset list before applying new state (no stale color carry-over)', () => {
     expect(body).toMatch(
-      /dot\.classList\.remove\(\s*'bg-slate-300',\s*'bg-emerald-500',\s*'bg-amber-500',\s*'bg-red-500',\s*\);/,
+      /dot\.classList\.remove\(\s*'bg-status-idle',\s*'bg-tk-ready',\s*'bg-tk-busy',\s*'bg-tk-err',\s*\);/,
     );
   });
 
@@ -128,8 +132,8 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
     expect(body).toMatch(/aria-live="polite"/);
   });
 
-  it('initial render: slate-300 dot + "checking…" label (no flicker before fetch settles)', () => {
-    expect(body).toMatch(/inline-block h-2 w-2 shrink-0 rounded-full bg-slate-300/);
+  it('initial render: status-idle dot + "checking…" label (no flicker before fetch settles)', () => {
+    expect(body).toMatch(/inline-block h-2 w-2 shrink-0 rounded-full bg-status-idle/);
     expect(body).toMatch(/aria-hidden="true"/);
     expect(body).toMatch(/>\s*checking…\s*</);
   });
@@ -170,7 +174,7 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
     const dotOnly = dom.window.document.createElement('a');
     dotOnly.className = 'driftstack-status-badge';
     dotOnly.setAttribute('aria-label', 'Platform status: checking');
-    dotOnly.innerHTML = '<span class="driftstack-status-dot bg-slate-300"></span>';
+    dotOnly.innerHTML = '<span class="driftstack-status-dot bg-status-idle"></span>';
     dom.window.document.body.append(dotOnly);
 
     let fetchCount = 0;

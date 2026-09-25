@@ -7,6 +7,10 @@
 // og:image:width/height 1200/630 unconditionally). The PNGs are
 // generated from og-default.svg by scripts/gen-og-image.mjs (VARIANTS
 // table) — re-run it after editing the base SVG or the variant copy.
+// 2026-09-25 — the variants are redrawn LIGHT from og-light.svg and ship as
+// `/og/<slug>-light.png`: new names, because /*.png is immutable at the edge
+// for a year and changed art must never reuse one. The dark `/og/<slug>.png`
+// files stay on disk for already-cached previews, unreferenced by any page.
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -58,10 +62,10 @@ function walkAstroFiles(dir: string): string[] {
 
 describe('S16 per-page OG social-card variants — wiring + asset presence', () => {
   for (const [page, slug] of Object.entries(WIRED)) {
-    it(`${page} passes ogImage="/og/${slug}.png" and the PNG exists at 1200x630`, () => {
+    it(`${page} passes ogImage="/og/${slug}-light.png" and the PNG exists at 1200x630`, () => {
       const body = read(resolve(PAGES, page));
-      expect(body).toContain(`ogImage="/og/${slug}.png"`);
-      const png = resolve(PUBLIC, 'og', `${slug}.png`);
+      expect(body).toContain(`ogImage="/og/${slug}-light.png"`);
+      const png = resolve(PUBLIC, 'og', `${slug}-light.png`);
       expect(existsSync(png)).toBe(true);
       expect(pngSize(png)).toEqual({ width: 1200, height: 630 });
     });

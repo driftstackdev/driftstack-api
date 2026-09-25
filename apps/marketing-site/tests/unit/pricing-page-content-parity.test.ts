@@ -435,9 +435,10 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     // Astro source splits attributes + the closing `>` across lines;
     // tolerate WS. v2: accent-colored TEXT uses the AA-safe
     // text-tk-accent-text token (raw text-tk-accent fails WCAG AA on
-    // the dark bg).
+    // the dark bg). 2026-09-25: the site's accent-link recipe (base.css)
+    // carries that tone — accent-text at rest and on hover.
     expect(body).toMatch(
-      /<a\s*href="\/pricing\/comparison\/"\s*class="font-medium text-tk-accent-text underline[^"]*"\s*>/,
+      /<a\s*href="\/pricing\/comparison\/"\s*class="accent-link font-medium"\s*>/,
     );
     expect(
       existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing/comparison.astro')),
@@ -450,9 +451,8 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     );
     expect(body).toMatch(/Source escrow means a neutral third party/);
     expect(body).toMatch(/Hardware guidance at\{' '\}/);
-    // v2: accent-colored TEXT uses the AA-safe text-tk-accent-text token.
-    expect(body).toMatch(
-      /<a\s*href="\/self-hosted\/"\s*class="text-tk-accent-text underline[^"]*"\s*>/,
-    );
+    // v2: accent-colored TEXT uses the AA-safe text-tk-accent-text token —
+    // through the accent-link recipe since 2026-09-25.
+    expect(body).toMatch(/<a\s*href="\/self-hosted\/"\s*class="accent-link"\s*>/);
   });
 });

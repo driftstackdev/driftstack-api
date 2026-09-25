@@ -1,17 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 200" width="720" height="200" aria-label="Driftstack">
   <!-- Horizontal Driftstack lockup — the L2 Drift Layers mark + the W2
        DRIFTSTACK black-italic two-tone wordmark (founder-picked
-       2026-06-12). Violet #6d5efc accent; ink #15161a for the leading
-       word so the lockup sits on light surfaces (the primary theme). -->
+       2026-06-12). 2026-09-25: re-coloured from the retired violet to the
+       one oxblood accent #a83b4d and the desktop app's light-theme inks, so
+       the lockup sits on the light surfaces every site now opens in: ink
+       #1a1d23 for DRIFT, accent-text #8f3241 for STACK (7.4:1 on the light
+       card), secondary ink #525863 for the back layer's outline. -->
   <g transform="translate(16 16) scale(0.65625)">
     <rect x="46" y="30" width="118" height="194" rx="34"
-          fill="none" stroke="#474a55" stroke-width="14" opacity="0.55"
+          fill="none" stroke="#525863" stroke-width="14" opacity="0.55"
           transform="rotate(-7 105 127)"/>
-    <rect x="86" y="30" width="118" height="194" rx="34" fill="#6d5efc"/>
+    <rect x="86" y="30" width="118" height="194" rx="34" fill="#a83b4d"/>
     <circle cx="145" cy="192" r="12" fill="#ffffff"/>
   </g>
   <text x="208" y="134" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif"
         font-size="86" font-weight="900" font-style="italic" letter-spacing="-2">
-    <tspan fill="#15161a">DRIFT</tspan><tspan fill="#6d5efc">STACK</tspan>
+    <tspan fill="#1a1d23">DRIFT</tspan><tspan fill="#8f3241">STACK</tspan>
   </text>
 </svg>

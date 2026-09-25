@@ -9,7 +9,7 @@ interface Props {
   pathname?: string;
   /**
    * Optional per-page social-card image (absolute URL or `/`-rooted
-   * path). Defaults to the site-wide `/og-default.png` when not
+   * path). Defaults to the site-wide `/og-light.png` when not
    * supplied. Pages that want a custom card pass it explicitly.
    */
   ogImage?: string;
@@ -36,18 +36,20 @@ const fullTitle = title.includes('Driftstack') ? title : `${title} · Driftstack
 const canonical = new URL(pathname, Astro.site).toString();
 // Resolve OG image to an absolute URL so social crawlers can fetch it
 // without the path-resolution headaches some platforms have with
-// relative paths. Defaults to /og-default.png at the site root —
+// relative paths. Defaults to /og-light.png at the site root —
 // Cloudflare Pages serves anything in apps/marketing-site/public/
 // at the root when build runs. PNG, NOT SVG: Twitter/X, Facebook,
 // LinkedIn, Slack, and Discord don't render SVG og:images, so a raster
 // card is required for link previews to show an image at all. The PNG
-// is generated from og-default.svg via scripts/gen-og-image.mjs (the
+// is generated from og-light.svg via scripts/gen-og-image.mjs (the
 // SVG stays the editable design source-of-truth).
-const ogImageBase = new URL(ogImage ?? '/og-default.png', Astro.site).toString();
-// ?v=2 busts the immutable-1y edge cache for the site-wide card (dark+oxblood
-// v2 art, 2026-07-03 — supersedes the light+violet card); per-page ogImage
-// overrides manage their own versioning.
-const ogImageUrl = ogImage ? ogImageBase : `${ogImageBase}?v=2`;
+// 2026-09-25 — the light card ships under a NEW file name instead of a ?v=
+// bump of the dark /og-default.png: public/_headers serves /*.png immutable
+// for a year, and a new name is the one cache key every crawler and CDN
+// honours. The dark og-default.png stays on disk (docs.driftstack.io and
+// already-cached previews still point at it). Per-page ogImage overrides
+// (/og/<slug>-light.png) follow the same rule.
+const ogImageUrl = new URL(ogImage ?? '/og-light.png', Astro.site).toString();
 
 // W464 — JSON-LD structured data (schema.org) for rich-result eligibility +
 // knowledge-graph understanding. Site-wide Organization + WebSite + the
@@ -94,36 +96,38 @@ const structuredData = {
 };
 ---
 
-<!-- Fleet token axes (2026-06-12 rework): data-mode/data-accent drive the
-     tk-* token classes + token-aware components (styles/base.css).
-     dark+oxblood = the founder-locked default (2026-06-15: "Fleet Mission
-     Control" brand — Dark + Red, matching the GUI standard). dark: variants
-     key off [data-mode="dark"] (tailwind darkMode selector).
+<!-- Token axes: data-mode/data-accent drive the tk-* token classes +
+     token-aware components (styles/base.css, @driftstack/design-tokens).
+     light+oxblood = the default since 2026-09-25 (owner: the desktop app's
+     white theme everywhere) — it retires the 2026-06-15 dark first
+     impression; the toggle keeps dark one click away, and nothing follows the
+     system theme. dark: variants key off [data-mode="dark"] (tailwind
+     darkMode selector).
      NOTE: nothing may sit between doctype and <html> — a JSX comment there
      makes the Astro compiler DROP the <html> element (and the axes). -->
 <!doctype html>
-<html lang="en" data-mode="dark" data-accent="oxblood">
+<html lang="en" data-mode="light" data-accent="oxblood">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- Dark to match the dark-mode-default page (data-mode="dark", --bg #060608).
-         Was #f2f3f6 (the light-mode bg) → on the dark site iOS Safari tinted the
-         status-bar area near-white = a white strip above the dark page (founder
-         2026-06-22, seen in the simulator on driftstack.io). -->
-    <meta name="theme-color" content="#060608" />
+    <!-- The status-bar tint is the page ground of the mode being shown:
+         #ebedf2 (surface-base, light — the default) or #0f172a (surface-base,
+         dark). It must follow the mode, or iOS Safari paints a strip of the
+         other theme above the page (founder 2026-06-22, seen in the simulator
+         on driftstack.io while the tint was pinned to the other mode). -->
+    <meta name="theme-color" content="#ebedf2" />
     <script is:inline>
       {
         /*
          * Fleet v2 (2026-07-03) — theme persistence, pre-paint. Applies the
          * visitor's saved MODE before first paint so there is no flash of
-         * the default theme. Marketing exposes the mode axis only (dark ↔
-         * light; oxblood is the brand's face, the accent axis stays
-         * machinery) and the value is WHITELISTED — never write raw
-         * localStorage into a DOM attribute. Default (dark + oxblood,
-         * founder-locked 2026-06-15) lives on the <html> attrs; the
+         * the default theme. Marketing exposes the mode axis only (light ↔
+         * dark; oxblood is the brand's face) and the value is WHITELISTED —
+         * never write raw localStorage into a DOM attribute. Default (light
+         * + oxblood since 2026-09-25) lives on the <html> attrs; the
          * [data-theme-toggle] buttons (wired at body end) write
          * ds_theme_mode. Deliberately does NOT honor prefers-color-scheme —
-         * the dark first impression is the brand.
+         * the mode is the visitor's explicit choice, as in the desktop app.
          *
          * NOTE: plain code in a brace-comment block — never a template
          * literal inside an expression container: Astro emits that wrapper
@@ -136,9 +140,9 @@ const structuredData = {
           var m = localStorage.getItem('ds_theme_mode');
           if (m === 'light' || m === 'dark') {
             document.documentElement.setAttribute('data-mode', m);
-            if (m === 'light') {
+            if (m === 'dark') {
               var mt = document.querySelector('meta[name="theme-color"]');
-              if (mt) mt.setAttribute('content', '#f2f3f6');
+              if (mt) mt.setAttribute('content', '#0f172a');
             }
           }
         } catch (_) {
@@ -194,15 +198,18 @@ const structuredData = {
     {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR users skip the nav. */}
     <a
       href="#main-content"
-      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-tk-accent focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-tk-accent focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-tk-accent-ink"
     >
       Skip to main content
     </a>
-    <!-- Ambient background layer: radial glow + faint grid pattern. -->
-    <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">
-      <div class="absolute inset-0 grid-bg opacity-60"></div>
+    <!-- Ambient background layer: radial glow + faint grid pattern, over the
+         top of the page (2026-09-25: at lower alpha, and anchored to the page
+         rather than fixed to the window, so it frames the first screen and
+         then gives the reading room back; body's own wash in base.css adds
+         the faint pool under the footer). -->
+    <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[900px]">
+      <div class="absolute inset-0 grid-bg opacity-40"></div>
       <div class="absolute inset-x-0 top-0 h-[600px] bg-glow-radial-accent"></div>
-      <div class="absolute inset-x-0 bottom-0 h-[400px] bg-glow-radial-accent-soft"></div>
     </div>
 
     <Header />
@@ -241,7 +248,7 @@ const structuredData = {
           document.documentElement.setAttribute('data-mode', next);
           syncThemeControls(next);
           var mt = document.querySelector('meta[name="theme-color"]');
-          if (mt) mt.setAttribute('content', next === 'light' ? '#f2f3f6' : '#060608');
+          if (mt) mt.setAttribute('content', next === 'light' ? '#ebedf2' : '#0f172a');
           try {
             localStorage.setItem('ds_theme_mode', next);
           } catch (_) {
@@ -297,11 +304,13 @@ const structuredData = {
          * reachable without a pointing device. Only add a tab stop while the
          * <pre> is genuinely scrollable at the current responsive width; the
          * marker makes the enhancement reversible and preserves any tabindex
-         * a page author supplied deliberately.
+         * a page author supplied deliberately. 2026-09-25: a long-form prose
+         * table scrolls the same way on a phone (base.css .prose-tk table),
+         * so it gets the same treatment.
          */
       }
       (function () {
-        var blocks = Array.prototype.slice.call(document.querySelectorAll('pre'));
+        var blocks = Array.prototype.slice.call(document.querySelectorAll('pre, .prose-tk table'));
         if (blocks.length === 0) return;
 
         function sync(block) {

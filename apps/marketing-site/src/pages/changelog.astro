@@ -293,17 +293,19 @@ const ENTRIES: readonly ChangelogEntry[] = [
 ];
 
 const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
-  launch: 'bg-tk-accent text-white',
-  // (bg-tk-raised on the card's bg-tk-surface was a near-invisible
-  // dark-on-dark pill on the dark theme; border gives the chip a shape.)
-  sdk: 'border border-tk-border bg-tk-raised text-tk-ink',
-  docs: 'border border-tk-border bg-tk-raised text-tk-ink',
-  security: 'bg-red-100 text-red-900',
-  // (was text-tk-accent-soft — the 13%-alpha WASH token misused as a text
-  // color; rendered 1.21:1, effectively invisible. amber-900 matches the
-  // light-chip + dark-900-text pattern of the security/self-hosted rows.)
-  pricing: 'bg-amber-100 text-amber-900',
-  'self-hosted': 'bg-emerald-100 text-emerald-900',
+  // 2026-09-25 — every category is the site's one badge recipe (base.css
+  // .badge — the status hue as a /10 wash + /30 border + its AA-safe text
+  // tone), replacing the raw red/amber/emerald -100 chips, which ignored the
+  // mode and read as a second palette. launch wears the brand accent as a
+  // solid fill (a wash would sit a few degrees of hue from security's error
+  // wash); security, pricing and self-hosted the error, busy and ready hues;
+  // sdk and docs the neutral inset chip.
+  launch: 'badge--brand',
+  sdk: 'badge--neutral',
+  docs: 'badge--neutral',
+  security: 'badge--err',
+  pricing: 'badge--busy',
+  'self-hosted': 'badge--ready',
 };
 ---
 
@@ -328,17 +330,22 @@ const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
       <ol class="space-y-6">
         {
           ENTRIES.map((entry) => (
-            <li class="card p-6 md:p-8">
-              <div class="flex items-center gap-3">
+            <li class="card p-6 md:grid md:grid-cols-[9rem_minmax(0,1fr)] md:gap-8 md:p-8">
+              {/* 2026-09-25 — the date and kind sit in their own column from md
+                  up (a release-notes layout), so the text column keeps its
+                  reading width without a blank half beside it. */}
+              <div class="flex items-center gap-3 md:flex-col md:items-start md:gap-2">
                 <time class="font-mono text-xs text-tk-ink-3" datetime={entry.date}>
                   {entry.date}
                 </time>
-                <span class={`inline-flex rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest ${CATEGORY_COLOR[entry.category]}`}>
+                <span class={`badge font-mono text-[10px] uppercase tracking-widest ${CATEGORY_COLOR[entry.category]}`}>
                   {entry.category}
                 </span>
               </div>
-              <h2 class="mt-3 text-xl font-semibold tracking-tight text-tk-ink md:text-2xl">{entry.title}</h2>
-              <p class="mt-3 max-w-prose text-tk-ink-2">{entry.body}</p>
+              <div>
+                <h2 class="mt-3 text-xl font-semibold tracking-tight text-tk-ink md:mt-0 md:text-2xl">{entry.title}</h2>
+                <p class="mt-3 max-w-prose leading-7 text-tk-ink-2">{entry.body}</p>
+              </div>
             </li>
           ))
         }
