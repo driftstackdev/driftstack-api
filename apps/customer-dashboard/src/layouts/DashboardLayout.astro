@@ -763,7 +763,7 @@ const navSections: NavSection[] = [
                 <select
                   id="act-as-picker"
                   data-act-as-picker
-                  class="mt-1 w-full rounded border border-tk-border bg-tk-inset px-2 py-1.5 text-sm text-tk-ink focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/40"
+                  class="form-input mt-1 px-2 py-1.5"
                 ></select>
               </div>
               <nav aria-label="Dashboard" class="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-1">
@@ -984,10 +984,14 @@ const navSections: NavSection[] = [
             class="pointer-events-none fixed bottom-6 left-1/2 z-[70] hidden max-w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-tk-border bg-tk-raised px-4 py-2.5 text-center text-sm text-tk-ink shadow-float"
           ></p>
         )}
+        {/* On the pages without a sidebar, <main> is the host of the page's
+            .hero-glow: it fills the row down to the footer, so the glow does
+            too instead of stopping in a straight line where the page's own
+            content ends. */}
         <main
           id="main-content"
           tabindex="-1"
-          class="min-w-0 flex-1"
+          class:list={['min-w-0 flex-1', !withSidebar && 'relative']}
           data-hydrate="pending"
           style="opacity: 0; transition: opacity 0.18s ease-out"
         >
@@ -1154,6 +1158,11 @@ const navSections: NavSection[] = [
                 if (msg) msg.textContent = message;
                 if (ok) ok.textContent = (opts && opts.confirmLabel) || 'Confirm';
                 var destructive = !!(opts && opts.destructive);
+                // The app's ConfirmProvider draws a destructive confirm as the
+                // danger button, so revoke / delete / remove never look like
+                // the page's primary action. Set on every open: one dialog
+                // serves both kinds.
+                if (ok) ok.className = destructive ? 'btn-danger' : 'btn-primary';
                 // Remember what was focused (the trigger) so we can return
                 // focus there on close — keyboard users keep their place.
                 var prevFocus = document.activeElement;

@@ -171,3 +171,159 @@ describe('customer dashboard design-token baseline', () => {
     expect(layout).not.toMatch(/getItem\('ds_theme_accent'\)/);
   });
 });
+
+// ── The atmosphere and the focus ring (theme review, 2026-09-25) ─────────────
+
+type Rgb = [number, number, number];
+const hexRgb = (hex: string): Rgb => {
+  const h = hex.replace('#', '');
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as Rgb;
+};
+const luminance = (rgb: Rgb): number => {
+  const [r, g, b] = rgb.map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  }) as Rgb;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a: string, b: string): number => {
+  const [hi, lo] = [luminance(hexRgb(a)), luminance(hexRgb(b))].sort((x, y) => y - x) as [
+    number,
+    number,
+  ];
+  return (hi + 0.05) / (lo + 0.05);
+};
+
+type ModeTokens = Record<string, string | number>;
+const TOKENS = requireFromDashboard('@driftstack/design-tokens/tokens.json') as {
+  accent: Record<string, string | number>;
+  modes: { light: ModeTokens; dark: ModeTokens };
+};
+
+/** The geometry of `radial-gradient(ellipse RX% RY% at CX% CY%, …, transparent S%)`. */
+function radial(css: string): { rx: number; ry: number; cx: number; cy: number; stop: number } {
+  const m =
+    /radial-gradient\(\s*ellipse (\d+)% (\d+)% at (\d+)% (\d+)%,[\s\S]*?transparent (\d+)%\s*\)/.exec(
+      css,
+    );
+  if (!m) throw new Error(`not an ellipse radial with a transparent stop: ${css}`);
+  const [rx, ry, cx, cy, stop] = m.slice(1).map(Number) as [number, number, number, number, number];
+  return { rx, ry, cx, cy, stop };
+}
+/** How far past each edge of its own box the visible part of the radial reaches (≤ 0 = inside). */
+function overshoot(g: ReturnType<typeof radial>) {
+  const x = (g.rx * g.stop) / 100;
+  const y = (g.ry * g.stop) / 100;
+  return { left: x - g.cx, right: g.cx + x - 100, top: y - g.cy, bottom: g.cy + y - 100 };
+}
+
+describe('customer dashboard atmosphere and focus ring', () => {
+  const baseCss = readFileSync(new URL('../../src/styles/base.css', import.meta.url), 'utf8');
+  const layout = readFileSync(
+    new URL('../../src/layouts/DashboardLayout.astro', import.meta.url),
+    'utf8',
+  );
+  const HALF_SOFT = 'rgb(var(--accent-rgb) / calc(var(--accent-subtle-alpha) / 2))';
+
+  it('the keyboard focus ring reaches 3:1 in both modes on every ground a control sits on', () => {
+    const grounds = ['surface-base', 'surface-raised', 'surface-elevated'];
+    const { light, dark } = TOKENS.modes;
+    const accent = String(TOKENS.accent.accent);
+    // Light: the accent ring.
+    for (const g of grounds) expect(contrast(accent, String(light[g]))).toBeGreaterThanOrEqual(3);
+    // Dark: the accent is 2.9:1 on the slate ground (2.4:1 on a card), which is
+    // why dark draws the ring in its accent-text tone.
+    expect(contrast(accent, String(dark['surface-base']))).toBeLessThan(3);
+    for (const g of grounds)
+      expect(contrast(String(dark['accent-text']), String(dark[g]))).toBeGreaterThanOrEqual(3);
+
+    expect(baseCss).toMatch(/:focus-visible \{\s*outline: 2px solid var\(--accent\);/);
+    expect(baseCss).toMatch(
+      /\[data-mode='dark'\] :focus-visible \{\s*outline-color: var\(--accent-text\);\s*\}/,
+    );
+    // No button recipe paints its own accent ring over the one above (a class
+    // outline colour would win over the dark override).
+    expect(baseCss).not.toMatch(/outline-tk-accent\b/);
+  });
+
+  it("an input's focus edge reaches 3:1 in dark too, and every input takes it from the recipe", () => {
+    const { dark } = TOKENS.modes;
+    const accent = String(TOKENS.accent.accent);
+    // The accent edge is 2.4:1 against a dark card, so dark draws it in accent-text.
+    expect(contrast(accent, String(dark['surface-raised']))).toBeLessThan(3);
+    for (const g of ['surface-raised', 'surface-inset', 'surface-base'])
+      expect(contrast(String(dark['accent-text']), String(dark[g]))).toBeGreaterThanOrEqual(3);
+    expect(baseCss).toMatch(
+      /\[data-mode='dark'\] \.form-input:focus,\s*\[data-mode='dark'\] \.form-input-group:focus-within \{\s*@apply border-tk-accent-text ring-tk-accent-text\/40;/,
+    );
+    // An input that draws its own accent focus edge would miss the dark tone.
+    const own = sourceFiles(SRC)
+      .filter((f) => f.path.endsWith('.astro'))
+      .flatMap((f) =>
+        [...f.text.matchAll(/focus(?:-within)?:border-tk-accent\b/g)].map(() => f.path),
+      );
+    expect(own).toEqual([]);
+  });
+
+  it('the soft glows are half the app’s soft-accent alpha, never the nav-row wash itself', () => {
+    // 0.06 light and 0.125 dark: the old web glow was 0.13 in both modes; the
+    // full --accent-soft (0.25 in dark) is the active nav row's wash.
+    for (const mode of ['light', 'dark'] as const)
+      expect(Number(TOKENS.modes[mode]['accent-subtle-alpha']) / 2).toBeLessThanOrEqual(0.13);
+    const tailwind = readFileSync(new URL('../../tailwind.config.mjs', import.meta.url), 'utf8');
+    const index = readFileSync(new URL('../../src/pages/index.astro', import.meta.url), 'utf8');
+    // The .hero-glow::after rule that paints (the shared ::before/::after rule
+    // and the reduced-motion one carry no background).
+    const heroAfter =
+      [...baseCss.matchAll(/\.hero-glow::after \{[^}]*\}/g)]
+        .map((m) => m[0])
+        .find((block) => block.includes('background')) ?? '';
+    const lower = /'glow-radial-accent-soft':\s*'([^']+)'/.exec(tailwind)?.[1] ?? '';
+    const room = /class="tk-room[^"]*"\s*style="background: ([^"]+)"/.exec(index)?.[1] ?? '';
+    for (const css of [heroAfter, lower, room]) {
+      expect(css).toContain(HALF_SOFT);
+      expect(css).not.toContain('var(--accent-soft)');
+    }
+  });
+
+  it('every soft radial fades out inside its own box, so none ends in a straight line', () => {
+    const tailwind = readFileSync(new URL('../../tailwind.config.mjs', import.meta.url), 'utf8');
+    const index = readFileSync(new URL('../../src/pages/index.astro', import.meta.url), 'utf8');
+    // The layout's lower wash on the auth pages: inside on all four edges.
+    const lower = overshoot(radial(/'glow-radial-accent-soft':\s*'([^']+)'/.exec(tailwind)![1]!));
+    expect(Math.max(lower.left, lower.right, lower.top, lower.bottom)).toBeLessThanOrEqual(0);
+    // The overview header wash: inside on the left (beside the sidebar), right
+    // and bottom. Its top is the top of the page, under the header.
+    const room = overshoot(
+      radial(/class="tk-room[^"]*"\s*style="background: ([^"]+)"/.exec(index)![1]!),
+    );
+    expect(Math.max(room.left, room.right, room.bottom)).toBeLessThanOrEqual(0);
+    // Positive control: the shape both had before, centred on an edge, is caught.
+    expect(
+      overshoot(radial('radial-gradient(ellipse 60% 80% at 0% 0%, red, transparent 70%)')).left,
+    ).toBeGreaterThan(0);
+    expect(
+      overshoot(radial('radial-gradient(ellipse 45% 30% at 50% 100%, red, transparent 65%)'))
+        .bottom,
+    ).toBeGreaterThan(0);
+  });
+
+  it('on the pages without a sidebar, <main> hosts the hero glow, so it runs down to the footer', () => {
+    expect(layout).toMatch(
+      /<main[^>]*class:list=\{\['min-w-0 flex-1', !withSidebar && 'relative'\]\}/,
+    );
+    const pages = sourceFiles(SRC).filter((f) => f.text.includes('class="hero-glow"'));
+    expect(pages.length).toBeGreaterThanOrEqual(7);
+    for (const page of pages) {
+      // A positioned wrapper would become the glow's box again and cut it off
+      // where the page's own content ends.
+      expect(page.text, page.path).not.toMatch(
+        /<div class="[^"]*\brelative\b[^"]*">\s*<div class="hero-glow"/,
+      );
+      expect(page.text, page.path).toMatch(
+        /<div>\s*<div class="hero-glow" aria-hidden="true"><\/div>/,
+      );
+      expect(page.text, page.path).toMatch(/withSidebar=\{false\}/);
+    }
+  });
+});

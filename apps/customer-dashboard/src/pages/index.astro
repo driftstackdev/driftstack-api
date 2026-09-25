@@ -47,10 +47,15 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           the dashboard's own re-derivation of the AI view's "state is
           drawn as light" idea (design brief §1.1), scoped to this app's
           own tokens. transform/opacity only; reduced-motion gets a static
-          still, not a frozen mid-pulse frame. */}
+          still, not a frozen mid-pulse frame.
+          2026-09-25 — centred inside the box (it was on its left edge, which
+          drew a hard vertical line beside the sidebar) and fading out before
+          any edge, at half the app's soft-accent alpha (0.06 light, 0.125
+          dark; the full --accent-soft is the nav-row wash, twice as strong in
+          dark as the old web glow). */}
       <div
         class="tk-room absolute inset-0 -z-10"
-        style="background: radial-gradient(ellipse 60% 80% at 0% 0%, var(--accent-soft), transparent 70%);"
+        style="background: radial-gradient(ellipse 30% 90% at 24% 0%, rgb(var(--accent-rgb) / calc(var(--accent-subtle-alpha) / 2)), transparent 70%);"
       ></div>
       <header class="relative flex flex-wrap items-center justify-between gap-4">
         <div class="min-w-0">

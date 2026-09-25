@@ -93,11 +93,16 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
     );
   });
 
-  it("Pending invite badge: bg-tk-accent/10 text-tk-accent-text (S23 2026-07-06 AA text tone) + uppercase 'pending' — pinned so pending invites have visual urgency (glow-red = needs action, distinct from member emerald/slate) so admins can see at a glance who hasn't accepted yet", () => {
+  it("Pending invite badge: the busy status badge (AA busy-text tone) + uppercase 'pending', kept a pill when the row stacks — pinned so pending invites have visual urgency, distinct from the admin and member role badges, so admins can see at a glance who hasn't accepted yet", () => {
     // 2026-09-25 — the desktop app's badge recipe adds a /30 edge (and centres
     // the label); the wash and the AA text tone are unchanged.
+    // 2026-09-25 (review) — moved off the brand-accent wash onto the busy
+    // badge (.badge .badge-busy: /30 edge, /15 wash, busy-text; 5.1:1 light,
+    // 6.3:1 dark on the card): pending is a status and the accent is for
+    // actions. self-start keeps it a pill when the row stacks into a column
+    // on a phone; without it the pill stretched across the whole card.
     expect(body).toMatch(
-      /<span class="inline-flex shrink-0 items-center rounded-full border border-tk-accent\/30 bg-tk-accent\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-accent-text">pending<\/span>/,
+      /<span class="badge badge-busy self-start uppercase tracking-wide">pending<\/span>/,
     );
   });
 

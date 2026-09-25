@@ -85,9 +85,9 @@ function aiLabel(tier: AccountTier): string {
 
 <DashboardLayout title="Select tier" withSidebar={false}>
   {/* 2026-05-22 — atmospheric glow behind the tier-select hero (same
-      family as the marketing pages + dashboard overview). Sits on a
-      relative wrapper so it doesn't overflow the page bounds. */}
-  <div class="relative overflow-hidden">
+      family as the marketing pages + dashboard overview). Its host is the
+      layout's <main>, which clips it and runs down to the footer. */}
+  <div>
     <div class="hero-glow" aria-hidden="true"></div>
     <div class="relative mx-auto max-w-4xl px-6 py-16" data-page="select-tier">
       <p class="section-label text-tk-accent-text">Choose your plan</p>

@@ -143,4 +143,13 @@ describe('W365.B customer-dashboard /team page content parity', () => {
     expect(body).toMatch(/\/v1\/team\/members\/'\s*\+\s*encodeURIComponent\(id\)/);
     expect(body).toMatch(/method: 'DELETE'/);
   });
+
+  it("the Members and Pending invites headings are the app's section label with a neutral icon, like every other page (the accent is for actions)", () => {
+    const headings = [...body.matchAll(/<h2 class="([^"]*)">\s*<svg[^>]*class="([^"]*)"[^>]*>/g)];
+    expect(headings.map((m) => m[1])).toEqual([
+      'section-label mb-3 flex gap-2',
+      'section-label mb-3 mt-10 flex gap-2',
+    ]);
+    expect(headings.map((m) => m[2])).toEqual(['text-tk-ink-3', 'text-tk-ink-3']);
+  });
 });

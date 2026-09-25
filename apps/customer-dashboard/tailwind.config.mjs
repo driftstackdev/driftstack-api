@@ -30,11 +30,16 @@ export default {
       },
       backgroundImage: {
         // Calm ambient radials for the auth/onboarding surfaces, drawn from the
-        // accent at a low alpha (--glow, --accent-soft).
+        // accent at a low alpha. The top one reads --glow. The lower one is
+        // half the app's soft-accent alpha (0.06 light, 0.125 dark): the full
+        // --accent-soft is a nav-row wash, twice as strong in dark as the old
+        // web glow. It is centred inside its own box and fades out before any
+        // edge, so it never ends in a straight line (the box is fixed to the
+        // first viewport, which a full-page capture shows mid-page).
         'glow-radial-accent':
           'radial-gradient(ellipse 55% 38% at 50% 0%, var(--glow), transparent 60%)',
         'glow-radial-accent-soft':
-          'radial-gradient(ellipse 45% 30% at 50% 100%, var(--accent-soft), transparent 65%)',
+          'radial-gradient(ellipse 45% 38% at 50% 70%, rgb(var(--accent-rgb) / calc(var(--accent-subtle-alpha) / 2)), transparent 65%)',
       },
       animation: {
         'fade-up': 'fade-up 0.6s ease-out',

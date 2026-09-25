@@ -158,14 +158,18 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     );
   });
 
-  it('CRITICAL pending badge uses bg-tk-accent-wash/text-tk-accent-text color contrast (S23 2026-07-06 AA text tone). The brand-color pending state is visually distinct from the gray empty state.', () => {
+  it('CRITICAL pending badge uses the busy status badge (AA busy-text tone on its wash). The pending state is visually distinct from the gray empty state and from the role badges.', () => {
     const p = read(PAGE);
 
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     // 2026-09-25 — the desktop app's badge recipe adds a /30 edge (and centres
     // the label); the wash and the AA text tone are unchanged.
+    // 2026-09-25 (review) — pending is a status, so it moved off the brand
+    // accent onto .badge .badge-busy (busy-text on the /15 busy wash: 5.1:1
+    // light, 6.3:1 dark on the card); self-start stops it stretching across
+    // the card when the row stacks on a phone.
     expect(p).toMatch(
-      /'<span class="inline-flex shrink-0 items-center rounded-full border border-tk-accent\/30 bg-tk-accent\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-accent-text">pending<\/span>'/,
+      /'<span class="badge badge-busy self-start uppercase tracking-wide">pending<\/span>'/,
     );
   });
 
