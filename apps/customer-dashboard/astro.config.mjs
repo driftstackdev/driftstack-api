@@ -1,6 +1,9 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import sentry from '@sentry/astro';
+// DEV-ONLY: `DASHBOARD_DEV_FIXTURES=1 astro dev` renders every signed-in page
+// against sample data. Inert on `astro build` (see dev-fixtures/integration.mjs).
+import { devFixtures } from './dev-fixtures/integration.mjs';
 
 // Customer dashboard for app.driftstack.io. Static-build per the
 // dashboard-stack proposal in docs/architecture/customer-dashboard-stack.md
@@ -53,6 +56,7 @@ export default defineConfig({
   // Preserve Astro 5/6's HTML-aware whitespace semantics under Astro 7.
   compressHTML: true,
   integrations: [
+    devFixtures(),
     sentry({
       enabled: SENTRY_DSN.length > 0,
       project: 'driftstack-dashboard',

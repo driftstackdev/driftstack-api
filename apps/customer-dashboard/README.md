@@ -23,6 +23,17 @@ npm run dev --workspace @driftstack/customer-dashboard
 
 The local Astro server uses the same static page modules and client-side API wiring as production. Set `PUBLIC_API_BASE_URL` only when intentionally targeting a non-default control plane.
 
+### Preview with sample data (development only)
+
+To look at every signed-in page without an API:
+
+```bash
+cd apps/customer-dashboard
+DASHBOARD_DEV_FIXTURES=1 npx astro dev --port 4410 --host 127.0.0.1
+```
+
+Open `http://127.0.0.1:4410/__dev-fixture-sign-in` once: it signs this browser in to an invented sample account and opens the Overview. The dev server answers every API read from `dev-fixtures/fixtures.mjs` and accepts, then discards, every write. The flag works only with `astro dev`; a build ignores it, and `tests/unit/the-dashboard-sample-data-never-reaches-a-production-build.test.ts` checks that the built site contains none of the sample data.
+
 ## Authentication
 
 The dashboard uses the web-session flow under `/v1/auth/*`. Browser code reads the current `ds_web_session_token`, sends it as a bearer credential to the control plane, and includes cookies where the endpoint contract requires them. API keys remain a separate SDK credential surface.
