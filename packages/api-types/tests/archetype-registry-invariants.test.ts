@@ -106,6 +106,9 @@ describe('the archetype registry keeps its shape', () => {
     // 2026-09-25: available 88 -> 91 and planned 16 -> 13. The iPhone 14, 14 Pro
     // and 15 Safari 26.2 profiles are available again: the fork now renders their
     // canvas band against the device. The A19-class 26.2 profiles stay held.
+    // 2026-09-25 (later): available 91 -> 94 and planned 13 -> 10. The A19-class
+    // Safari 26.2 profiles (iPhone 17 Pro, 17 Pro Max, 15 Pro Max) are available:
+    // each held device-exact at production resolution on the accepted fork.
     const byStatus = ARCHETYPE_REGISTRY.reduce<Record<string, number>>((acc, a) => {
       acc[a.status] = (acc[a.status] ?? 0) + 1;
       return acc;
@@ -113,8 +116,8 @@ describe('the archetype registry keeps its shape', () => {
     expect(ARCHETYPE_REGISTRY.length, 'registry size changed').toBe(106);
     expect(byStatus, 'the status mix changed').toEqual({
       launch: 1,
-      available: 91,
-      planned: 13,
+      available: 94,
+      planned: 10,
       reference: 1,
     });
   });
