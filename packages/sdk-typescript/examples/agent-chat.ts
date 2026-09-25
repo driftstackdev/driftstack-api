@@ -101,7 +101,9 @@ function printOutcome(resp: AgentMessageResponse): void {
     case 'plan-executed':
       for (const r of resp.results) {
         if (r.kind === 'success') {
-          console.log(`  ✓ ${r.summary}`);
+          // A `warning` means the step worked and there is something worth
+          // knowing, such as the site answering a navigation with 404 or 403.
+          console.log(`  ${r.warning === undefined ? '✓' : '⚠'} ${r.summary}`);
         } else if (r.kind === 'failure') {
           // Treat a category you do not recognise as 'unknown'. Never replay a
           // step whose `retryable` is false without checking the page first.

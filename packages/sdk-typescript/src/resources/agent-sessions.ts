@@ -383,8 +383,37 @@ export interface AgentFailureDiagnosis {
   retryable: boolean;
 }
 
+/** Something worth knowing about a step that SUCCEEDED. Absent means there is
+ *  nothing to report.
+ *
+ *  `'http_error_status'` — a navigation reached the site and the site answered
+ *  with an HTTP status of 400 or above (`status`). The page that loaded may be
+ *  the site's error page, a page asking to sign in or to complete a
+ *  verification step first, or the whole page served under that status; the
+ *  step's `summary` says the same in words. The step still succeeded: decide
+ *  from the page what to do next.
+ *
+ *  The kinds listed are the ones this SDK version knows. New kinds are added
+ *  over time, so the type also admits any other string: treat one you do not
+ *  recognise as a note, and read `summary`. */
+export interface AgentStepWarning {
+  kind:
+    | 'http_error_status'
+    // `string & {}` rather than `string`: a bare `string` would absorb the
+    // literal above and editors would stop suggesting it.
+    | (string & {});
+  /** For `'http_error_status'`: the HTTP status the site answered with. */
+  status?: number;
+}
+
 export type AgentIntentResult =
-  | { kind: 'success'; intent: AgentIntent; summary: string; captureId?: string }
+  | {
+      kind: 'success';
+      intent: AgentIntent;
+      summary: string;
+      captureId?: string;
+      warning?: AgentStepWarning;
+    }
   | { kind: 'failure'; intent: AgentIntent; reason: string; diagnosis?: AgentFailureDiagnosis }
   // The agent stopped BEFORE a consequential action (a purchase, a payment, an
   // account deletion) and is waiting for your approval; the step did not run.

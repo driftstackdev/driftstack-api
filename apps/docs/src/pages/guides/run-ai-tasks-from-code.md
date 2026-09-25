@@ -311,6 +311,13 @@ do not recognise as `unknown` and decide on `diagnosis.retryable`.
 `retryable: false` means never repeat that step automatically — it may already
 have happened; look at the page first.
 
+A `success` can carry a `warning` when there is something worth knowing about
+the step. Today that is `http_error_status`: the site answered a navigation with
+an HTTP status of 400 or above (`warning.status`), and the `summary` says so.
+The step still worked — the page may ask to sign in or to complete a
+verification step, or be the whole page served under that status — so decide
+from the page. The list of kinds is open, like `diagnosis.category`.
+
 ## Get a screenshot or a downloaded file
 
 Both need `read:sessions`, which broad `read` covers, and both work only

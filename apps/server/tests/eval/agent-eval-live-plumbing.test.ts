@@ -234,19 +234,37 @@ describe('live tier — the path runs end to end through the real planner class'
     });
   });
 
-  it('a task that needs the page gets there on a RE-PLAN, inside one customer message', async () => {
-    const { report } = await runLiveSuite(suiteArgs([task('L-404')], referenceModel('L-404')).args);
+  it('a task that needs the page gets there on a second, SIGHTED plan, inside one customer message', async () => {
+    const { args, provider } = suiteArgs([task('L-404')], referenceModel('L-404'));
+    const { report } = await runLiveSuite(args);
     const rep = report.tasks[0]?.reps[0];
     expect(rep).toMatchObject({ outcome: 'pass', passedOnTurn: 1 });
     const plans = rep?.turns[0]?.plans ?? [];
-    // Blind first, then sighted after the honest 404 — the product's own loop.
+    // Blind first, then sighted — the product's own loop. ⚠️ CHANGED 2026-09-24:
+    // the second plan used to come AFTER A FAILURE, because a 404 was turned
+    // into a failed navigation. A status is a fact about the page, not a failed
+    // step (a 403/503 may be a verification page the customer can complete, a
+    // 404 may be a whole app served under it), so the navigation is a success
+    // that says what the site answered, and the loop comes back on `continue`.
     expect(plans.map((p) => [p.sawPage, p.afterFailure])).toEqual([
       [false, false],
-      [true, true],
+      [true, false],
     ]);
     expect(rep?.device.events.find((e) => e.kind === 'navigated')).toMatchObject({
       httpStatus: 404,
     });
+    // ⛔ And the sighted plan is TOLD what the site answered, on the step line
+    // it reads — the fact the failure used to carry, now carried by the step.
+    const planning = provider.log.requests.filter((r) => r.purpose === 'plan');
+    expect(planning.length).toBeGreaterThanOrEqual(2);
+    const shown = (planning[1]?.messages ?? []).map((m) => m.text).join('\n');
+    expect(shown).toContain(
+      '✓ navigated to https://boards.test/threads/battery-recall — the site answered 404 (this address may not exist)',
+    );
+    // …and the blind first plan was not: nothing had run yet.
+    expect((planning[0]?.messages ?? []).map((m) => m.text).join('\n')).not.toContain(
+      'the site answered',
+    );
   });
 });
 

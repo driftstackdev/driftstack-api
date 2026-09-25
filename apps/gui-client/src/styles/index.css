@@ -1287,6 +1287,10 @@
 .ai-segs > i.is-hold {
   background: rgb(var(--status-busy-rgb));
 }
+/* a step that succeeded with something worth knowing (`warning`) */
+.ai-segs > i.is-warn {
+  background: rgb(var(--status-busy-rgb) / 0.85);
+}
 .ai-segs > i.is-run {
   background: rgb(var(--accent-rgb) / 0.35);
 }
@@ -1386,6 +1390,21 @@
 .ai-step.is-fail .ai-node svg,
 .ai-step.is-hold .ai-node svg {
   stroke-width: 2.2;
+}
+/* A step that SUCCEEDED with something worth knowing (`warning` — the site
+   answered a navigation with 400 or above): the warning colour, never the
+   ready green and never the error red. The row's words say what the site
+   answered; the colour is not the only signal. */
+.ai-step.is-warn::before {
+  background: rgb(var(--status-busy-rgb) / 0.5);
+}
+.ai-step.is-warn .ai-node {
+  color: rgb(var(--status-busy-rgb));
+  background: rgb(var(--status-busy-rgb) / 0.16);
+  box-shadow: inset 0 0 0 1px rgb(var(--status-busy-rgb) / 0.55);
+}
+.ai-step.is-warn .ai-node svg {
+  stroke-width: 2;
 }
 .ai-step-label {
   font-size: 12.5px;

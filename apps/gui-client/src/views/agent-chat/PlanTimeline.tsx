@@ -30,6 +30,7 @@ import { CaptureThumbnail, captureIdOf } from '../../components/CaptureThumbnail
 import { diagnosisCopy } from '../../lib/agent-diagnosis-copy';
 import { categoryLabel } from './ApprovalDock';
 import { formatStepDuration } from './durations';
+import { IconWarn, stepMark } from './step-mark';
 import {
   IconCamera,
   IconCheck,
@@ -235,12 +236,13 @@ export function spokenOutcome(
 }
 
 /** How a settled row is drawn, and therefore what its node says happened. */
-type StepTone = 'is-done' | 'is-fail' | 'is-hold' | 'is-skip' | 'is-next';
+type StepTone = 'is-done' | 'is-warn' | 'is-fail' | 'is-hold' | 'is-skip' | 'is-next';
 
 function toneOf(result: AgentIntentResult, denied: boolean, approved: boolean): StepTone {
   switch (result.kind) {
     case 'success':
-      return 'is-done';
+      // A success the server flagged (`warning`) is drawn as a warning, not a tick.
+      return stepMark(result).tone === 'warn' ? 'is-warn' : 'is-done';
     case 'failure':
       return 'is-fail';
     case 'confirmation_required':
@@ -258,6 +260,8 @@ function NodeIcon({ tone }: { tone: StepTone }): JSX.Element {
   switch (tone) {
     case 'is-done':
       return <IconCheck />;
+    case 'is-warn':
+      return <IconWarn />;
     case 'is-fail':
       return <IconX />;
     case 'is-hold':
@@ -798,8 +802,14 @@ export function describeResult(
   approved: boolean,
 ): { glyph: string; cls: string; text: string } {
   switch (result.kind) {
-    case 'success':
-      return { glyph: '✓', cls: 'text-status-ready', text: result.summary };
+    case 'success': {
+      const mark = stepMark(result);
+      return {
+        glyph: mark.glyph,
+        cls: mark.tone === 'warn' ? 'text-status-busy' : 'text-status-ready',
+        text: result.summary,
+      };
+    }
     case 'failure':
       return {
         glyph: '✗',

@@ -6,6 +6,18 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`warning` on a successful step result** — present on a `results` entry of
+  kind `"success"` when there is something worth knowing about the step, and
+  absent otherwise. Its one kind today is `"http_error_status"`: a navigation
+  reached the site and the site answered with an HTTP status of 400 or above,
+  carried in `status`. The step still succeeded — the page that loaded may be
+  an error page, a page asking to sign in or to complete a verification step,
+  or the whole page served under that status — and its `summary` says what the
+  site answered. The generated models list the known kind and accept any other
+  string: treat a kind you do not recognise as a note and read `summary`.
+
 ## [0.3.0] - 2026-09-22
 
 **Nothing was removed.** Every name 0.2.0 exported, every method, every

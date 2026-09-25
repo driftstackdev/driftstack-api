@@ -336,10 +336,24 @@ type AgentFailureDiagnosis struct {
 	Retryable bool   `json:"retryable"`
 }
 
+// AgentStepWarning is something worth knowing about a step that SUCCEEDED;
+// a nil Warning means there is nothing to report. Kind is an open set — treat
+// a value you do not recognise as a note and read the step's Summary. Today's
+// kind is "http_error_status": a navigation reached the site and the site
+// answered with an HTTP status of 400 or above, carried in Status. The step
+// still succeeded: the page that loaded may be an error page, a page asking to
+// sign in or to complete a verification step, or the whole page served under
+// that status, and Summary says what the site answered.
+type AgentStepWarning struct {
+	Kind   string `json:"kind"`
+	Status *int   `json:"status,omitempty"`
+}
+
 // AgentIntentResult is the outcome of one step. Kind is "success" (Summary,
-// and CaptureID for a capture), "failure" (Reason, and Diagnosis on current
-// servers) or "confirmation_required": the agent stopped BEFORE a purchase, a
-// payment or an account deletion and is waiting for your approval (Category,
+// CaptureID for a capture, and Warning when there is something worth knowing),
+// "failure" (Reason, and Diagnosis on current servers) or
+// "confirmation_required": the agent stopped BEFORE a purchase, a payment or
+// an account deletion and is waiting for your approval (Category,
 // MatchedText). Approve it by sending the next message with
 // ApproveConsequentialActions: []ConsequentialActionApproval{ApprovalFor(r)}.
 // Kind and Category are open sets.
@@ -348,6 +362,7 @@ type AgentIntentResult struct {
 	Intent      AgentIntent            `json:"intent"`
 	Summary     string                 `json:"summary,omitempty"`
 	CaptureID   string                 `json:"captureId,omitempty"`
+	Warning     *AgentStepWarning      `json:"warning,omitempty"`
 	Reason      string                 `json:"reason,omitempty"`
 	Diagnosis   *AgentFailureDiagnosis `json:"diagnosis,omitempty"`
 	Category    string                 `json:"category,omitempty"`

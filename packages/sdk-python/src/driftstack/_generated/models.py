@@ -385,11 +385,30 @@ class Intent5(BaseModel):
     reading_word_count: conint(ge=0) | None = None
 
 
+class Warning(BaseModel):
+    """
+    Something worth knowing about a step that succeeded. Absent means there is nothing to report.
+    """
+
+    kind: Literal["http_error_status"] | str
+    """
+    What there is to know about this step. `http_error_status`: the site answered the navigation with an HTTP status of 400 or above — the page that loaded may be an error page, a page asking to sign in or to complete a verification step, or the whole page served under that status. New kinds are added over time; treat one you do not recognise as a note, and read `summary` for what it says.
+    """
+    status: int | None = None
+    """
+    For `http_error_status`: the HTTP status the site answered with.
+    """
+
+
 class IntentResult1(BaseModel):
     kind: Literal["success"]
     intent: Intent | Intent1 | Intent2 | Intent3 | Intent4 | Intent5
     summary: str
     captureId: str | None = None
+    warning: Warning | None = None
+    """
+    Something worth knowing about a step that succeeded. Absent means there is nothing to report.
+    """
 
 
 class Intent6(BaseModel):
@@ -1955,6 +1974,10 @@ class Results(BaseModel):
     intent: Intent18 | Intent19 | Intent20 | Intent21 | Intent22 | Intent23
     summary: str
     captureId: str | None = None
+    warning: Warning | None = None
+    """
+    Something worth knowing about a step that succeeded. Absent means there is nothing to report.
+    """
 
 
 class Intent24(BaseModel):
@@ -2279,6 +2302,10 @@ class Results3(BaseModel):
     intent: Intent36 | Intent37 | Intent38 | Intent39 | Intent40 | Intent41
     summary: str
     captureId: str | None = None
+    warning: Warning | None = None
+    """
+    Something worth knowing about a step that succeeded. Absent means there is nothing to report.
+    """
 
 
 class Intent42(BaseModel):
@@ -2486,6 +2513,10 @@ class PartialResults(BaseModel):
     intent: Intent54 | Intent55 | Intent56 | Intent57 | Intent58 | Intent59
     summary: str
     captureId: str | None = None
+    warning: Warning | None = None
+    """
+    Something worth knowing about a step that succeeded. Absent means there is nothing to report.
+    """
 
 
 class Intent60(BaseModel):

@@ -6,6 +6,21 @@
 // never going to exist on an error page — pointing the customer (and anyone
 // debugging) at the wrong step entirely.
 //
+// ⚠️ CHANGED DELIBERATELY 2026-09-24: an error page is not a PLAIN successful
+// navigation — and it is not a failure either. This file first pinned a status
+// of 400 or above as a non-retryable `page_load_failed` FAILURE. That was wrong
+// for two kinds of page the device reaches every day: a verification page (a
+// "check you are a person" interstitial, a press-and-hold) is served as 403 or
+// 503 and the customer can complete it, and a single-page app served through a
+// 404/403 error document renders in full. Failing the step killed tasks a pause
+// and a resume would have carried. The status is a fact about the document;
+// whether it is fatal is not knowable when the navigate returns. So the step is
+// a SUCCESS whose summary names the status and whose `warning` carries it — the
+// same thing this file exists to stop (a green step saying nothing) is still
+// refused, and the planner reads the status on the step line. The full
+// acceptance set is
+// a-navigation-the-site-answered-with-an-error-status-is-a-success-with-a-warning.test.ts.
+//
 // ⛔ THE HARD CONSTRAINT IS "ADDITIVE ONLY": a device that has never heard of
 // `http_status` must behave EXACTLY as it does today. That is not a nice-to-have
 // — the field lands in the server before it lands in any device, so for a while
@@ -36,37 +51,45 @@ function navigateResult(outputData: Record<string, unknown>): ParsedIntentResult
   );
 }
 
-describe('P4 — an error page is not a successful navigation', () => {
-  it('a 404 is a FAILURE on the navigate step, not a green step and a mystery later', () => {
+describe('P4 — an error page is not a PLAIN successful navigation', () => {
+  it('a 404 is not a silent green step: it is a success that SAYS the site answered 404, and carries the status', () => {
     const result = intentResultToCustomer(
       NAV,
       navigateResult({ url: 'https://example.test/missing', http_status: 404 }),
     );
-    expect(result.kind).toBe('failure');
-    expect(result).toMatchObject({ diagnosis: { category: 'page_load_failed', retryable: false } });
+    expect(result).toEqual({
+      kind: 'success',
+      intent: NAV,
+      summary:
+        'navigated to https://example.test/missing — the site answered 404 (this address may not exist)',
+      warning: { kind: 'http_error_status', status: 404 },
+    });
   });
 
-  it('the failure is NOT retryable — the same URL returns the same status', () => {
+  it('a 500 is not a failure the executor would replay: it carries no diagnosis at all, only the status', () => {
     const result = intentResultToCustomer(NAV, navigateResult({ url: 'x', http_status: 500 }));
-    // Retrying a 500 three times is three round trips to be told the same thing.
-    // The page has to change, not the request.
-    expect(result).toMatchObject({ diagnosis: { retryable: false } });
+    // A success is never retried, and a status is not a reason to navigate
+    // again — the same URL answers the same thing. What changes the outcome is
+    // the page, and the planner reads the status off the step line.
+    expect(result.kind).toBe('success');
+    expect(result).not.toHaveProperty('diagnosis');
+    expect(result).toMatchObject({ warning: { kind: 'http_error_status', status: 500 } });
   });
 
   it.each([
-    [404, /does not exist/i],
-    [410, /does not exist/i],
-    [403, /refused to show/i],
-    [401, /signing in/i],
-    [429, /slow down/i],
-    [503, /on their side/i],
-    [418, /returned 418/i],
-  ])('a %s says what the SITE did, in words a customer can act on', (status, expected) => {
+    [404, /this address may not exist/i],
+    [410, /this address may not exist/i],
+    [403, /a sign-in or a verification step/i],
+    [401, /sign in/i],
+    [429, /fewer requests/i],
+    [503, /busy, or showing a verification step/i],
+    [418, /the site answered 418$/i],
+  ])('a %s says what the SITE answered, in words a customer can act on', (status, expected) => {
     const result = intentResultToCustomer(NAV, navigateResult({ url: 'x', http_status: status }));
-    if (result.kind !== 'failure') throw new Error('type narrow');
-    expect(result.reason).toMatch(expected);
+    if (result.kind !== 'success') throw new Error('type narrow');
+    expect(result.summary).toMatch(expected);
     // Customer-facing copy names nothing internal.
-    expect(result.reason).not.toMatch(/fleet|node|control plane|harness|observer|vantage/i);
+    expect(result.summary).not.toMatch(/fleet|node|control plane|harness|observer|vantage/i);
   });
 
   it('⛔ ADDITIVE: a device that sends NO status behaves exactly as before — success', () => {

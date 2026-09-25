@@ -533,9 +533,21 @@ const APPROVAL_STEPS: ReadonlyArray<AgentIntentResult> = [
   },
 ];
 
+/** A navigation the site answered with 403 — a SUCCESS that carries a
+ *  `warning`, drawn in the warning state rather than with a tick. The summary
+ *  is the server's own sentence, so the gates measure the length and the words
+ *  a customer is really shown. */
+const WARNED_SUMMARY =
+  'navigated to https://shop.example.com/p/ridgeline-trail-2 — the site answered 403 (it may want a sign-in or a verification step first)';
+
 const TROUBLE_STEPS: ReadonlyArray<AgentIntentResult> = [
   went('https://shop.example.com/', 'Opened the store'),
-  ok('Opened Ridgeline Trail 2 in US size 10'),
+  {
+    kind: 'success',
+    intent: { kind: 'navigate', url: 'https://shop.example.com/p/ridgeline-trail-2' },
+    summary: WARNED_SUMMARY,
+    warning: { kind: 'http_error_status', status: 403 },
+  },
   {
     kind: 'failure',
     intent: { kind: 'interact', action: 'tap', selector: '#add-to-cart' },
@@ -811,6 +823,7 @@ export function agentChatSceneFixture(
         },
         markers: [
           CHECKOUT_TASK,
+          WARNED_SUMMARY,
           'A newsletter pop-up was covering the Add to cart button.',
           'worth retrying',
           INTERRUPTED_REASON,

@@ -20,6 +20,7 @@ import type {
   AgentIntent,
   FailureDiagnosis,
   FailureDiagnosisCategory,
+  IntentResultWarning,
 } from '@driftstack/api-types';
 // The executor's IntentResult, NOT the api-types one. The published api-types
 // IntentResult admits ANY category string, because a reader must accept one
@@ -125,37 +126,35 @@ export function intentResultToCustomer(
   parsed: ParsedIntentResult,
 ): IntentResult {
   if (parsed.success) {
-    // P4 — AN ERROR PAGE IS NOT A SUCCESSFUL NAVIGATION. The device reports a
-    // navigate that reached an HTTP error as a SUCCESS carrying the status, so
-    // without this branch the step is green, the plan continues, and the task
-    // dies several steps later at a selector that was never going to exist on a
-    // 404. Surfacing it HERE puts the failure on the step that actually went
-    // wrong, which is the only place a customer (or a re-plan) can act on it.
-    const errorPage = navigateErrorStatus(intent, parsed.outputData);
-    if (errorPage !== null) {
-      return {
-        kind: 'failure',
-        intent,
-        reason: errorPage.reason,
-        // Not retryable: the same URL returns the same status, so replaying it
-        // spends the budget to be told the same thing. The page needs to
-        // change, not the request.
-        diagnosis: { category: 'page_load_failed', retryable: false },
-      };
-    }
+    // P4 — AN ERROR STATUS IS A FACT ABOUT THE PAGE, NOT A VERDICT ON THE STEP.
+    // The device reports a navigate the site answered with 400 or above as a
+    // SUCCESS carrying the status, and it stays one. Whether that status is
+    // fatal is not knowable here: a verification page (a "check you are a
+    // person" interstitial, a press-and-hold) is served as 403 or 503 and is
+    // something the customer can complete, and a single-page app served through
+    // a 404/403 error document renders in full. Failing the step ended tasks a
+    // pause and a resume would have carried. So the summary SAYS what the site
+    // answered and `warning` carries the number, for a program and for the
+    // planner, which reads the step line and decides whether to go on, re-plan
+    // or ask.
+    const warning = navigateWarning(intent, parsed.outputData);
     // Sanitise at the BOUNDARY, not in each producer. `summarize` interpolates
     // `intent.selector` / `intent.value` — customer- and decomposer-supplied, and
     // bounded only by the dispatch schema's HARNESS_SCRIPT_MAX_CHARS (262_144),
     // which is 512x the RESULT_SUMMARY_MAX_LENGTH this file declares. Only the
     // navigate path passed through safeResultText, so a selector reached the
     // message response and the encrypted transcript unbounded and unredacted.
-    // Applying it here covers every branch, including ones added later, and is
-    // idempotent for the navigate path that already sanitises internally.
-    return {
-      kind: 'success',
-      intent,
-      summary: safeResultText(summarize(intent, parsed.outputData), RESULT_SUMMARY_MAX_LENGTH),
-    };
+    // Applying it here covers every branch, including ones added later.
+    //
+    // ⚠️ The NOTE is reserved OUT of the budget rather than cut with the rest:
+    // a long URL must lose its own tail, never the words that say the page did
+    // not finish or what the site answered. It is fixed copy written here, so it
+    // is appended after the page-influenced part is bounded and redacted.
+    const { text, note } = summarize(intent, parsed.outputData);
+    const summary = safeResultText(text, RESULT_SUMMARY_MAX_LENGTH - note.length) + note;
+    return warning === null
+      ? { kind: 'success', intent, summary }
+      : { kind: 'success', intent, summary, warning };
   }
   // Read BEFORE the per-code table: the legacy form of this refusal arrives as
   // `intent_webdriver_failed`, which on an interact is otherwise the
@@ -172,79 +171,96 @@ export function intentResultToCustomer(
   };
 }
 
-// ── P4 navigate error pages ───────────────────────────────────────────
+// ── P4 navigate status ────────────────────────────────────────────────
 
 /**
  * The lowest status the site itself is reporting as a problem. 4xx and 5xx are
- * the two bands where the document that loaded is the site's error page rather
- * than the page that was asked for. 3xx never reaches here as a final status —
- * the browser has already followed it — and a 2xx is the ordinary case.
+ * the two bands where the document that loaded may be the site's error page,
+ * a sign-in or verification page, or the page itself served under an error
+ * status. 3xx never reaches here as a final status — the browser has already
+ * followed it — and a 2xx is the ordinary case.
  */
 const HTTP_ERROR_STATUS_FLOOR = 400;
 
 /**
- * Customer-safe copy per status band. Says what the SITE did and what it means
- * for the task; never names any internal component, and never speculates about
- * a cause we did not observe.
+ * What the site answered, per status band, as a neutral statement of fact.
+ *
+ * ⛔ CUSTOMER COPY. It says what the SITE did and what that may mean — never
+ * that the page is unusable, because a 403 or a 503 may be a verification step
+ * the customer can complete, and a 404 may be an app that rendered in full. It
+ * never names how the status was learned, and never speculates past "may".
  */
-function navigateErrorCopy(status: number): string {
-  if (status === 404 || status === 410) {
-    return `that address does not exist on the site (it returned ${String(status)}) — the page may have moved, or the link may be wrong`;
-  }
-  if (status === 401 || status === 403) {
-    return `the site refused to show that page (${String(status)}) — it may require signing in first`;
-  }
-  if (status === 429) {
-    return 'the site asked us to slow down (429) — it is rate-limiting requests right now';
-  }
-  if (status >= 500) {
-    return `the site reported an error for that page (${String(status)}) — this is a problem on their side`;
-  }
-  return `the site returned ${String(status)} for that address instead of the page`;
+function navigateStatusNote(status: number): string {
+  const answered = `the site answered ${String(status)}`;
+  if (status === 404 || status === 410) return `${answered} (this address may not exist)`;
+  if (status === 401) return `${answered} (it may ask to sign in first)`;
+  if (status === 403) return `${answered} (it may want a sign-in or a verification step first)`;
+  if (status === 429) return `${answered} (it is asking for fewer requests right now)`;
+  if (status === 503) return `${answered} (it may be busy, or showing a verification step)`;
+  if (status >= 500) return `${answered} (it reported a problem on its side)`;
+  return answered;
 }
 
 /**
- * P4 — an ADDITIVE read of the optional navigate `http_status`.
- *
- * Returns null — meaning "behave exactly as before" — for every non-navigate
- * intent, for a device that sends no status at all, and for any status the site
- * is not reporting as a problem. An absent field is NO OPINION, never an
- * implied failure: that is what keeps an older device's behaviour unchanged.
+ * P4 — an ADDITIVE read of the optional navigate `http_status`: the status when
+ * the site answered with one at or above the floor, and null — "nothing to
+ * report" — for a device that sends no status and for any status below it. An
+ * absent field is NO OPINION, never an implied success or failure: that is what
+ * keeps an older device's behaviour unchanged.
  */
-function navigateErrorStatus(
-  intent: AgentIntent,
-  outputData: unknown,
-): { status: number; reason: string } | null {
-  if (intent.kind !== 'navigate') return null;
+function navigateErrorStatus(outputData: unknown): number | null {
   const status = readNumber(outputData, 'http_status');
-  if (status === null || status < HTTP_ERROR_STATUS_FLOOR) return null;
-  return { status, reason: navigateErrorCopy(status) };
+  return status === null || status < HTTP_ERROR_STATUS_FLOOR ? null : status;
+}
+
+/** The machine-readable half of the same fact, for a navigate only. */
+function navigateWarning(intent: AgentIntent, outputData: unknown): IntentResultWarning | null {
+  if (intent.kind !== 'navigate') return null;
+  const status = navigateErrorStatus(outputData);
+  return status === null ? null : { kind: 'http_error_status', status };
 }
 
 // ── success summary ───────────────────────────────────────────────────
-function summarize(intent: AgentIntent, outputData: unknown): string {
+
+/** A success summary in two parts: `text`, which may carry page-influenced
+ *  content and is bounded and redacted at the boundary, and `note`, fixed copy
+ *  written here that must survive whole (see intentResultToCustomer). */
+interface SummaryParts {
+  text: string;
+  note: string;
+}
+
+function summarize(intent: AgentIntent, outputData: unknown): SummaryParts {
+  if (intent.kind === 'navigate') {
+    // Owner: "the AI says it worked when the page failed to load." The harness
+    // resolves a navigate that never finished loading as a SUCCESS carrying
+    // `loadedAtTimeout: true` (harness-control-protocol.ts:484), and this
+    // summary used to read a bare "navigated to <url>" — a green check
+    // asserting a completed load that nobody measured. Surface the flag, the
+    // way `distance_capped` is surfaced for scroll.
+    //
+    // P4 — and what the site answered, when it answered 400 or above. Both
+    // notes can apply at once, in this order, and both are the load-bearing
+    // half of the line: they go in `note`, which the URL can never push out.
+    const url = readString(outputData, 'url');
+    const unfinished = readBool(outputData, 'loadedAtTimeout')
+      ? ' (page never finished loading)'
+      : '';
+    const status = navigateErrorStatus(outputData);
+    const answered = status === null ? '' : ` — ${navigateStatusNote(status)}`;
+    return {
+      text: url === null ? 'navigated' : `navigated to ${url}`,
+      note: `${unfinished}${answered}`,
+    };
+  }
+  return { text: summarizeOther(intent, outputData), note: '' };
+}
+
+function summarizeOther(
+  intent: Exclude<AgentIntent, { kind: 'navigate' }>,
+  outputData: unknown,
+): string {
   switch (intent.kind) {
-    case 'navigate': {
-      // Owner: "the AI says it worked when the page failed to load." The harness
-      // resolves a navigate that never finished loading as a SUCCESS carrying
-      // `loadedAtTimeout: true` (harness-control-protocol.ts:484), and this
-      // summary used to read a bare "navigated to <url>" — a green check
-      // asserting a completed load that nobody measured. Surface the flag, the
-      // way `distance_capped` is surfaced for scroll.
-      //
-      // ⚠️ The suffix is the load-bearing half, so it is reserved OUT of the
-      // truncation budget rather than appended after it: a long URL must lose
-      // its own tail, never the words that say the page did not finish.
-      const url = readString(outputData, 'url');
-      const unfinished = readBool(outputData, 'loadedAtTimeout')
-        ? ' (page never finished loading)'
-        : '';
-      if (url === null) return `navigated${unfinished}`;
-      return (
-        safeResultText(`navigated to ${url}`, RESULT_SUMMARY_MAX_LENGTH - unfinished.length) +
-        unfinished
-      );
-    }
     case 'interact':
       return summarizeInteract(intent);
     case 'wait':

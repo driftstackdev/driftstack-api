@@ -513,8 +513,9 @@ export interface NotFoundBehaviour {
    *
    * ⚠️ THE TWO ARE DIFFERENT PRODUCTS. Without a status a 404 LOADS — a green
    * navigate onto a page with nothing on it, so the plan dies later than the
-   * mistake. With one, the product turns it into an honest navigation failure a
-   * re-plan can follow. The scripted corpus pins the first (its F4 task is the
+   * mistake. With one, the navigate is still a success, but it SAYS the site
+   * answered 404 and carries the status as a warning, so the planner that looks
+   * next is told. The scripted corpus pins the first (its F4 task is the
    * measurement of exactly that cost); the live corpus declares the second.
    */
   httpStatus?: number;

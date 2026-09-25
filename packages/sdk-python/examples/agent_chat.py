@@ -73,7 +73,10 @@ def print_outcome(resp: dict[str, Any]) -> None:
     if kind == "plan-executed":
         for r in resp["results"]:
             if r["kind"] == "success":
-                print(f"  ✓ {r['summary']}")
+                # A `warning` means the step worked and there is something worth
+                # knowing, such as the site answering a navigation with 404 or 403.
+                mark = "⚠" if r.get("warning") else "✓"
+                print(f"  {mark} {r['summary']}")
             elif r["kind"] == "failure":
                 # Treat a category you do not recognise as "unknown". Never
                 # replay a step whose `retryable` is false without checking first.

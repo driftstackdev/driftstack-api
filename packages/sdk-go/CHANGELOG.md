@@ -6,6 +6,18 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`AgentIntentResult.Warning`** — `*AgentStepWarning`, something worth
+  knowing about a step that succeeded; `nil` means there is nothing to report.
+  Its one kind today is `"http_error_status"`: a navigation reached the site
+  and the site answered with an HTTP status of 400 or above, carried in
+  `Status`. The step still succeeded — the page that loaded may be an error
+  page, a page asking to sign in or to complete a verification step, or the
+  whole page served under that status — and its `Summary` says what the site
+  answered. `Kind` is an open set: treat a value you do not recognise as a
+  note and read `Summary`.
+
 ## [0.4.0] - 2026-09-22
 
 **Nothing was removed.** Every method, field and error type v0.3.0 published

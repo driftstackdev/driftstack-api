@@ -50,6 +50,7 @@ import type { AccountContext } from './auth.js';
 import type {
   CaptureKind,
   FailureDiagnosis,
+  IntentResultWarning,
   InteractAction,
   WaitCondition,
 } from '@driftstack/api-types';
@@ -117,6 +118,11 @@ export type IntentResult =
       summary: string;
       /** Optional capture id (sets when intent.kind === 'capture'). */
       captureId?: string;
+      /** P4 — something worth knowing about a step that SUCCEEDED (mirrors the
+       *  api-types success variant). Absent means nothing to report. Closed
+       *  here, like `diagnosis`: this server only ever builds a listed kind,
+       *  and the published type admits kinds newer than the reader. */
+      warning?: IntentResultWarning;
     }
   | {
       kind: 'failure';

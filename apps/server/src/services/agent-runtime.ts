@@ -40,6 +40,7 @@ import type {
 import {
   runResultToTranscriptEntry,
   sanitizeTranscriptText,
+  sliceWithoutSplittingSurrogate,
   STOPPED_OUTCOME_UNKNOWN_REASON,
   stopRequested,
 } from './agent-executor.js';
@@ -1600,13 +1601,49 @@ export function samePlan(a: ReadonlyArray<AgentIntent>, b: ReadonlyArray<AgentIn
   );
 }
 
+/** The longest step line the planner is shown. */
+const STEP_LINE_MAX = 240;
+
+/**
+ * How much of a long SUCCESS line's END is kept when it is cut.
+ *
+ * A success summary's qualifiers sit at its end — "(page never finished
+ * loading)", "— the site answered 404 (this address may not exist)",
+ * "(capped)" — and the result mapper reserves them out of its own budget for
+ * exactly this reason: a long URL loses its own tail, never the words that say
+ * how the step went. A plain head-cut here threw them away one hop later, so a
+ * planner deciding whether to go on, re-plan or ask was shown "✓ navigated to
+ * https://…" for a page the site had answered 404.
+ *
+ * Sized to hold the longest note the mapper writes (both navigate notes
+ * together are under 110 characters); the P4 acceptance file checks it for
+ * every status the site can answer. A failure line keeps its head: its reason
+ * leads, and the device's own message trails.
+ */
+const STEP_LINE_SUCCESS_TAIL = 120;
+
+/** The last `max` UTF-16 code units of `value`, never starting on the low half
+ *  of a surrogate pair. */
+function tailWithoutSplittingSurrogate(value: string, max: number): string {
+  const tail = value.slice(-max);
+  const first = tail.charCodeAt(0);
+  return first >= 0xdc00 && first <= 0xdfff ? tail.slice(1) : tail;
+}
+
+function boundStepLine(line: string): string {
+  if (line.length <= STEP_LINE_MAX) return line;
+  if (!line.startsWith('✓ ')) return `${sliceWithoutSplittingSurrogate(line, STEP_LINE_MAX)}…`;
+  const head = sliceWithoutSplittingSurrogate(line, STEP_LINE_MAX - STEP_LINE_SUCCESS_TAIL - 1);
+  return `${head}…${tailWithoutSplittingSurrogate(line, STEP_LINE_SUCCESS_TAIL)}`;
+}
+
 /** The steps a turn has run so far, as the planner is told them — the same
  *  bounded, credential-scrubbed `✓ / ✗` lines the transcript will carry. */
 export function describeStepsSoFar(run: ExecutorRunResult): string[] {
   return runResultToTranscriptEntry(run, '')
     .body.split('\n')
     .filter((line) => line.length > 0)
-    .map((line) => (line.length > 240 ? `${line.slice(0, 240)}…` : line));
+    .map(boundStepLine);
 }
 
 /**

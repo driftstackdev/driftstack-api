@@ -37,6 +37,7 @@ import { AnswerCard, LiveAnswer } from './AnswerCard';
 import { elapsedSince, formatElapsed } from './durations';
 import { IconCheck, IconPause, IconX } from './icons';
 import { LaterStepsRow, LivePlanList, PlanStepList, ReplanRow, answerHost } from './PlanTimeline';
+import { stepMark } from './step-mark';
 
 /** #31 — map a usage model id (e.g. `claude-opus-4-8`) to its human label
  *  ("Opus 4.8") for the per-turn usage badge; falls back to the raw id for a
@@ -216,7 +217,7 @@ function Segments({ states }: { states: ReadonlyArray<SegState> }): JSX.Element 
   );
 }
 
-type SegState = 'ok' | 'bad' | 'hold' | 'run' | 'pending';
+type SegState = 'ok' | 'warn' | 'bad' | 'hold' | 'run' | 'pending';
 
 /** What each bar says, derived from the results that landed and how many steps
  *  were planned. A denied step is neutral, not red: the customer chose it. */
@@ -237,7 +238,7 @@ function segmentsFor(
     if (r.kind === 'failure') out.push('bad');
     else if (r.kind === 'confirmation_required')
       out.push(denied ? 'pending' : approved ? 'ok' : 'hold');
-    else if (r.kind === 'success') out.push('ok');
+    else if (r.kind === 'success') out.push(stepMark(r).tone === 'warn' ? 'warn' : 'ok');
     else out.push('pending');
   }
   return out;

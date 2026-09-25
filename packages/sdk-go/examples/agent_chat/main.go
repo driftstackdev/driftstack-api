@@ -177,7 +177,13 @@ func printOutcome(resp *driftstack.AgentMessageResponse, results []driftstack.Ag
 		for _, r := range results {
 			switch r.Kind {
 			case "success":
-				fmt.Printf("  ✓ %s\n", r.Summary)
+				// A Warning means the step worked and there is something worth
+				// knowing, such as the site answering a navigation with 404 or 403.
+				mark := "✓"
+				if r.Warning != nil {
+					mark = "⚠"
+				}
+				fmt.Printf("  %s %s\n", mark, r.Summary)
 			case "failure":
 				// Treat a category you do not recognise as "unknown". Never
 				// replay a step whose Retryable is false without checking first.

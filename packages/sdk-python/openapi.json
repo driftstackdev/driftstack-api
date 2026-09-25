@@ -921,6 +921,29 @@
               },
               "captureId": {
                 "type": "string"
+              },
+              "warning": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["http_error_status"]
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "description": "What there is to know about this step. `http_error_status`: the site answered the navigation with an HTTP status of 400 or above — the page that loaded may be an error page, a page asking to sign in or to complete a verification step, or the whole page served under that status. New kinds are added over time; treat one you do not recognise as a note, and read `summary` for what it says."
+                  },
+                  "status": {
+                    "type": "integer",
+                    "description": "For `http_error_status`: the HTTP status the site answered with."
+                  }
+                },
+                "required": ["kind"],
+                "description": "Something worth knowing about a step that succeeded. Absent means there is nothing to report."
               }
             },
             "required": ["kind", "intent", "summary"]
@@ -4724,6 +4747,29 @@
                         },
                         "captureId": {
                           "type": "string"
+                        },
+                        "warning": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": ["http_error_status"]
+                                },
+                                {
+                                  "type": "string"
+                                }
+                              ],
+                              "description": "What there is to know about this step. `http_error_status`: the site answered the navigation with an HTTP status of 400 or above — the page that loaded may be an error page, a page asking to sign in or to complete a verification step, or the whole page served under that status. New kinds are added over time; treat one you do not recognise as a note, and read `summary` for what it says."
+                            },
+                            "status": {
+                              "type": "integer",
+                              "description": "For `http_error_status`: the HTTP status the site answered with."
+                            }
+                          },
+                          "required": ["kind"],
+                          "description": "Something worth knowing about a step that succeeded. Absent means there is nothing to report."
                         }
                       },
                       "required": ["kind", "intent", "summary"]
@@ -6197,6 +6243,29 @@
                         },
                         "captureId": {
                           "type": "string"
+                        },
+                        "warning": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": ["http_error_status"]
+                                },
+                                {
+                                  "type": "string"
+                                }
+                              ],
+                              "description": "What there is to know about this step. `http_error_status`: the site answered the navigation with an HTTP status of 400 or above — the page that loaded may be an error page, a page asking to sign in or to complete a verification step, or the whole page served under that status. New kinds are added over time; treat one you do not recognise as a note, and read `summary` for what it says."
+                            },
+                            "status": {
+                              "type": "integer",
+                              "description": "For `http_error_status`: the HTTP status the site answered with."
+                            }
+                          },
+                          "required": ["kind"],
+                          "description": "Something worth knowing about a step that succeeded. Absent means there is nothing to report."
                         }
                       },
                       "required": ["kind", "intent", "summary"]
@@ -6986,6 +7055,29 @@
                     },
                     "captureId": {
                       "type": "string"
+                    },
+                    "warning": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["http_error_status"]
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "What there is to know about this step. `http_error_status`: the site answered the navigation with an HTTP status of 400 or above — the page that loaded may be an error page, a page asking to sign in or to complete a verification step, or the whole page served under that status. New kinds are added over time; treat one you do not recognise as a note, and read `summary` for what it says."
+                        },
+                        "status": {
+                          "type": "integer",
+                          "description": "For `http_error_status`: the HTTP status the site answered with."
+                        }
+                      },
+                      "required": ["kind"],
+                      "description": "Something worth knowing about a step that succeeded. Absent means there is nothing to report."
                     }
                   },
                   "required": ["kind", "intent", "summary"]

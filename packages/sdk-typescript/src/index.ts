@@ -53,6 +53,7 @@ export type {
   AgentIntent,
   AgentIntentResult,
   AgentFailureDiagnosis,
+  AgentStepWarning,
   ConsequentialActionCategory,
   AgentUsage,
   AgentMessageResponse,

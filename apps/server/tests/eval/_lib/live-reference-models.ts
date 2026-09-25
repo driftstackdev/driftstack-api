@@ -355,8 +355,13 @@ export const REFERENCE: Readonly<Record<string, Reference>> = {
     },
   },
   'L-404': {
-    // The customer's address is stale. The first plan can only try it.
-    first: [nav('https://boards.test/threads/battery-recall'), SETTLE, CAPTURE],
+    // The customer's address is stale. The first plan can only try it — and,
+    // blind, it stops there and asks to be shown the page. The navigation is a
+    // SUCCESS that says the site answered 404 (a status is a fact about the
+    // page, not a failed step), so what brings the planner back is `continue`,
+    // and the step line it is shown says what the site answered.
+    first: [nav('https://boards.test/threads/battery-recall'), SETTLE],
+    firstStatus: 'continue',
     recover: (observation) =>
       observation.includes('#back-home')
         ? [

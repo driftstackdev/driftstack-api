@@ -538,10 +538,33 @@ judged the task out of scope; the `refuse_reason` then asks you to retry. The
 session stays active and you can send the message again (with a new
 `Idempotency-Key`).
 
-Step results come in three kinds: `success` (with `summary`, and `captureId`
-for a screenshot — see [Fetch a captured screenshot](#fetch-a-captured-screenshot)),
-`failure` (with `reason` and `diagnosis`, above), and `confirmation_required`
-(below).
+Step results come in three kinds: `success` (with `summary`, `captureId`
+for a screenshot — see [Fetch a captured screenshot](#fetch-a-captured-screenshot) —
+and `warning` when there is something worth knowing, below), `failure` (with
+`reason` and `diagnosis`, above), and `confirmation_required` (below).
+
+A successful step carries a `warning` when there is something worth knowing
+about it; when there is nothing to report, the field is absent. Its one kind
+today is `http_error_status`: a navigation reached the site and the site
+answered with an HTTP status of 400 or above, carried in `status`, and the
+`summary` says the same in words:
+
+```json
+{
+  "kind": "success",
+  "intent": { "kind": "navigate", "url": "https://example.com/old-page" },
+  "summary": "navigated to https://example.com/old-page — the site answered 404 (this address may not exist)",
+  "warning": { "kind": "http_error_status", "status": 404 }
+}
+```
+
+The step still succeeded, because the status alone does not say whether the
+page can be used: a 403 or a 503 may be a page asking to sign in or to
+complete a verification step, and some sites serve their whole page under
+a 404. The agent is shown the same status when it plans what to do next. New
+warning kinds are added over time, so treat one you do not recognise as a note
+and read `summary`. A navigation that could not load at all is still a
+`failure`, with `diagnosis.category` `page_load_failed`.
 
 Closed sessions return `409 Conflict`; start a new one (optionally with
 `continue_from_agent_session_id`). When a turn ends the session, the 409

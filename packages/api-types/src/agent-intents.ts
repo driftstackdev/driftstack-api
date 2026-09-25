@@ -169,12 +169,63 @@ export const PublishedFailureDiagnosisSchema = FailureDiagnosisSchema.extend({
 });
 export type PublishedFailureDiagnosis = z.infer<typeof PublishedFailureDiagnosisSchema>;
 
+/**
+ * Something worth knowing about a step that SUCCEEDED. Absent means there is
+ * nothing to report.
+ *
+ * `http_error_status` — a navigation reached the site and the site answered
+ * with an HTTP status of 400 or above; `status` is that number. What loaded may
+ * be the site's own error page, a page asking the visitor to sign in or to
+ * complete a verification step first, or — on some sites — the whole page,
+ * served under an error status. The step's `summary` says the same in words.
+ *
+ * Like the failure category, the warning KIND this server emits is a closed
+ * list, and the kind a reader may receive is not: see
+ * `PublishedIntentResultWarningSchema`.
+ */
+export const IntentResultWarningKindSchema = z.enum(['http_error_status']);
+export type IntentResultWarningKind = z.infer<typeof IntentResultWarningKindSchema>;
+
+export const IntentResultWarningSchema = z.object({
+  kind: z.literal('http_error_status'),
+  status: z.number().int(),
+});
+export type IntentResultWarning = z.infer<typeof IntentResultWarningSchema>;
+
+/** A warning kind as a reader receives it: a known one, or one newer than the reader. */
+export type PublishedIntentResultWarningKind = IntentResultWarningKind | (string & {});
+
+/** The kind set is OPEN, for the reason the failure category is: a generated
+ *  SDK that listed the kinds as a closed set would reject the whole turn
+ *  response the day a new one is added. The enum arm keeps the known kinds in
+ *  the published spec, so the SDKs still list them. */
+export const PublishedIntentResultWarningKindSchema: z.ZodType<PublishedIntentResultWarningKind> = z
+  .union([IntentResultWarningKindSchema, z.string()])
+  .describe(
+    'What there is to know about this step. `http_error_status`: the site answered the navigation with an HTTP status of 400 or above — the page that loaded may be an error page, a page asking to sign in or to complete a verification step, or the whole page served under that status. New kinds are added over time; treat one you do not recognise as a note, and read `summary` for what it says.',
+  );
+
+export const PublishedIntentResultWarningSchema = z
+  .object({
+    kind: PublishedIntentResultWarningKindSchema,
+    status: z
+      .number()
+      .int()
+      .optional()
+      .describe('For `http_error_status`: the HTTP status the site answered with.'),
+  })
+  .describe(
+    'Something worth knowing about a step that succeeded. Absent means there is nothing to report.',
+  );
+export type PublishedIntentResultWarning = z.infer<typeof PublishedIntentResultWarningSchema>;
+
 export const IntentResultSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('success'),
     intent: AgentIntentSchema,
     summary: z.string(),
     captureId: z.string().optional(),
+    warning: PublishedIntentResultWarningSchema.optional(),
   }),
   z.object({
     kind: z.literal('failure'),

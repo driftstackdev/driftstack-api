@@ -350,8 +350,11 @@ class AgentSessionsResource:
           when you asked for information, and ``answer_unavailable`` says why
           there is none when one could not be produced (never both); ``intents``
           is every step the turn attempted, across every plan it made;
-          ``results`` has each step's outcome (``success``, ``failure`` with a
-          ``diagnosis``, or ``confirmation_required``); ``notice``, when
+          ``results`` has each step's outcome (``success``, with a ``warning``
+          when there is something worth knowing — ``{"kind":
+          "http_error_status", "status": 404}`` when the site answered a
+          navigation with 400 or above; ``failure`` with a ``diagnosis``; or
+          ``confirmation_required``); ``notice``, when
           present, says why the task is not finished yet (send ``"continue"``
           when it asks for that), and ``notice_reason`` says the same in one
           word your code can branch on — see :data:`AgentNoticeReason`. ``ok``
