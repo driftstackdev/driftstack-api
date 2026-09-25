@@ -146,16 +146,21 @@ describe('W790 status-site src content parity bundle', () => {
   // Severity keeps its ladder, now amber (busy) / incident-red wash / SOLID
   // incident red; the lifecycle phases before resolved are neutral and resolved
   // is the ready green. status-site-theme-content-parity measures every pair.
-  it('CRITICAL index 3-severity badge map pinned — minor (busy amber) / major (incident-red wash) / outage (solid incident red). Drift to a different color taxonomy would mismatch the incident-severity convention.', () => {
+  // P4 fix-up — the wash, rim and solid fill moved to the brighter incident
+  // FILL (#c2410c): in the darker text red (#983d16) they read as rust-brown
+  // beside the amber minor pill. The major pill's text stays the text red.
+  it('CRITICAL index 3-severity badge map pinned — minor (busy amber) / major (incident-fill wash, incident-red text) / outage (solid incident fill). Drift to a different color taxonomy would mismatch the incident-severity convention.', () => {
     const p = read(PAGE_INDEX);
 
     expect(p).toMatch(
       /minor: \['border-status-busy\/30', 'bg-status-busy\/15', 'text-status-busy'\]/,
     );
     expect(p).toMatch(
-      /major: \['border-incident-red\/30', 'bg-incident-red\/15', 'text-incident-red'\]/,
+      /major: \['border-incident-fill\/30', 'bg-incident-fill\/15', 'text-incident-red'\]/,
     );
-    expect(p).toMatch(/outage: \['border-incident-red', 'bg-incident-red', 'text-ink-inverted'\]/);
+    expect(p).toMatch(
+      /outage: \['border-incident-fill', 'bg-incident-fill', 'text-ink-inverted'\]/,
+    );
   });
 
   it('CRITICAL index 4-status badge map pinned — investigating/identified/monitoring/resolved. Matches W789 admin-panel mocks 4-status enum + incident lifecycle.', () => {

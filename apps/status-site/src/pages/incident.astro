@@ -31,7 +31,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
 
   <section id="error" class="mb-12 hidden">
     <div
-      class="rounded-xl border border-incident-red/40 border-l-4 border-l-incident-red bg-surface-raised p-5 text-sm text-ink-primary"
+      class="rounded-xl border border-incident-fill/40 border-l-4 border-l-incident-fill bg-surface-raised p-5 text-sm text-ink-primary"
       role="alert"
     >
       <p id="error-message">Incident not found.</p>
@@ -87,8 +87,8 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   // before "resolved" are neutral).
   const SEVERITY_BADGE = {
     minor: ['border-status-busy/30', 'bg-status-busy/15', 'text-status-busy'],
-    major: ['border-incident-red/30', 'bg-incident-red/15', 'text-incident-red'],
-    outage: ['border-incident-red', 'bg-incident-red', 'text-ink-inverted'],
+    major: ['border-incident-fill/30', 'bg-incident-fill/15', 'text-incident-red'],
+    outage: ['border-incident-fill', 'bg-incident-fill', 'text-ink-inverted'],
   };
   const STATUS_BADGE = {
     investigating: ['border-ink-muted/30', 'bg-ink-muted/15', 'text-ink-secondary'],

@@ -32,19 +32,28 @@
      #983d16 — hue 18.0°, 27.9° from the accent; 6.61:1 on a card, 5.95:1
                on the page ground, 5.24:1 on its own /15 wash over a card;
                the white label on the solid fill 6.97:1
-   It stays 21.1° of hue from the amber busy colour, and every badge still
-   says its word (OUTAGE, MAJOR, MINOR), so no state is told apart by hue
-   alone. (If the site ever gains a dark mode, #fb8e60 was measured for it:
-   17.8° hue, 6.37:1 on the dark card, 4.92:1 on its wash, 7.77:1 for the
-   dark label on the fill.)
+   That red is for TEXT. As a fill, a rim or a dot it read as a dark
+   rust-brown, next to the amber of a minor incident, so the outage stood
+   out by being solid rather than by being red. Fills, washes, rims and dots
+   take a brighter vermilion of nearly the same hue:
+     #c2410c — hue 17.5°, 27.4° from the accent; the white label on the
+               solid OUTAGE fill 5.18:1; the #983d16 text on its /15 wash
+               over a card 5.33:1
+   Both stay over 20° of hue from the amber busy colour, and every badge
+   still says its word (OUTAGE, MAJOR, MINOR), so no state is told apart by
+   hue alone. (If the site ever gains a dark mode, #fb8e60 was measured for
+   it: 17.8° hue, 6.37:1 on the dark card, 4.92:1 on its wash, 7.77:1 for
+   the dark label on the fill.)
    apps/server/tests/unit/status-site-theme-content-parity.test.ts
    re-measures all of this from the values below. */
 :root {
   --incident-red-rgb: 152 61 22;
+  --incident-fill-rgb: 194 65 12;
 }
 
 @theme inline {
   --color-incident-red: rgb(var(--incident-red-rgb));
+  --color-incident-fill: rgb(var(--incident-fill-rgb));
 }
 
 /*
@@ -114,7 +123,7 @@
   border-left-color: rgb(var(--status-busy-rgb));
 }
 .status-banner[data-state='outage'] {
-  border-left-color: rgb(var(--incident-red-rgb));
+  border-left-color: rgb(var(--incident-fill-rgb));
 }
 
 /* Global reduced-motion baseline — matches the other customer-facing

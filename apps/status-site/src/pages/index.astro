@@ -102,14 +102,15 @@ const R2_FALLBACK_URL =
   // P4 (2026-09-25) — badges are the desktop app's status pill (a /15 wash
   // of the hue, its hue as text, a /30 rim, a dot) in the app's status
   // tokens. Colour carries SEVERITY only: amber for minor, the status site's
-  // incident red for major, and the same red as a SOLID fill for an outage,
-  // so the worst state is the loudest. The lifecycle phases before
+  // incident red for major (its text red on a wash of the brighter incident
+  // fill), and the incident fill SOLID for an outage, so the worst state is
+  // the loudest. The lifecycle phases before
   // "resolved" are neutral chips; resolved is the ready green. Every pair
   // clears WCAG AA on the card it sits on.
   const SEVERITY_BADGE = {
     minor: ['border-status-busy/30', 'bg-status-busy/15', 'text-status-busy'],
-    major: ['border-incident-red/30', 'bg-incident-red/15', 'text-incident-red'],
-    outage: ['border-incident-red', 'bg-incident-red', 'text-ink-inverted'],
+    major: ['border-incident-fill/30', 'bg-incident-fill/15', 'text-incident-red'],
+    outage: ['border-incident-fill', 'bg-incident-fill', 'text-ink-inverted'],
   };
   const STATUS_BADGE = {
     investigating: ['border-ink-muted/30', 'bg-ink-muted/15', 'text-ink-secondary'],
@@ -120,13 +121,13 @@ const R2_FALLBACK_URL =
   // The open incident card's leading rim, in its severity's hue.
   const SEVERITY_RIM = {
     minor: 'border-l-status-busy',
-    major: 'border-l-incident-red',
-    outage: 'border-l-incident-red',
+    major: 'border-l-incident-fill',
+    outage: 'border-l-incident-fill',
   };
   const DOT_BG = {
     operational: 'bg-status-ready ring-4 ring-status-ready/20',
     degraded: 'bg-status-busy ring-4 ring-status-busy/20',
-    outage: 'bg-incident-red ring-4 ring-incident-red/20',
+    outage: 'bg-incident-fill ring-4 ring-incident-fill/20',
     unknown: 'bg-status-idle ring-4 ring-status-idle/20',
   };
   const STATE_TITLE = {

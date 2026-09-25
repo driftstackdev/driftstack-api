@@ -13,9 +13,11 @@
 // says this page never does — and the markup's raw Tailwind palette (amber,
 // orange, red, blue, indigo, emerald) is gone. What is pinned here instead:
 //   - the package imports, and that no token value is re-declared locally;
-//   - the one colour the status site adds: its incident red, MEASURED — at
+//   - the two colours the status site adds: its incident red (text) and the
+//     brighter incident fill (fills, washes, rims, dots), MEASURED — each at
 //     least 25° of hue from the brand accent (the app's own rule for status
-//     hues), AA on every ground it sits on, and its label AA on the solid fill;
+//     hues), the red AA on every ground and wash it sits on, and the white
+//     label AA on the solid fill;
 //   - every incident badge's text/ground pair, MEASURED from the maps the
 //     pages actually render;
 //   - no raw palette class anywhere in the site's source (with a control).
@@ -82,6 +84,12 @@ function incidentRed(css: string): Rgb {
   expect(m, '--incident-red-rgb').not.toBeNull();
   return [Number(m?.[1]), Number(m?.[2]), Number(m?.[3])];
 }
+/** The incident FILL (solid pill, washes, rims, dots) as global.css declares it. */
+function incidentFill(css: string): Rgb {
+  const m = css.match(/\n\s*--incident-fill-rgb: (\d+) (\d+) (\d+);/);
+  expect(m, '--incident-fill-rgb').not.toBeNull();
+  return [Number(m?.[1]), Number(m?.[2]), Number(m?.[3])];
+}
 
 describe('W794 status-site theme content parity', () => {
   it('theme file exists at canonical path', () => {
@@ -136,13 +144,36 @@ describe('W794 status-site theme content parity', () => {
     const accentHue = hue(rgb(TOKENS.accent.accent as string));
     const red = incidentRed(p);
     expect(hueGap(accentHue, hue(red)), 'incident red').toBeGreaterThanOrEqual(25);
+    expect(hueGap(accentHue, hue(incidentFill(p))), 'incident fill').toBeGreaterThanOrEqual(25);
     const appError = rgb(TOKENS.modes.light['status-error'] as string);
     expect(hueGap(accentHue, hue(appError)), 'app error red').toBeLessThan(25);
     expect(p).toMatch(/:root \{\s*\n\s*--incident-red-rgb: 152 61 22;/);
+    expect(p).toMatch(/\n\s*--incident-fill-rgb: 194 65 12;/);
     expect(p).toMatch(/--color-incident-red: rgb\(var\(--incident-red-rgb\)\);/);
+    expect(p).toMatch(/--color-incident-fill: rgb\(var\(--incident-fill-rgb\)\);/);
   });
 
-  it('CRITICAL the incident red clears AA (4.5:1) as text on a card, on the page ground and on its own /15 wash over a card, and the solid fill carries its label (ink-inverted) at AA — measured', () => {
+  // P4 fix-up (2026-09-25) — as a fill, rim and dot the text red read as a
+  // dark rust-brown next to the amber minor pill, so an outage stood out by
+  // being solid rather than by being red. The fill is a brighter vermilion
+  // of nearly the same hue.
+  it('CRITICAL the incident fill is the brighter of the two reds (it reads red, not brown), carries the white OUTAGE label at AA, and the major pill’s text red clears AA on the fill’s /15 wash over a card — measured', () => {
+    const p = read(GLOBAL_CSS);
+    const t = TOKENS.modes.light;
+    const red = incidentRed(p);
+    const fill = incidentFill(p);
+    expect(luminance(fill)).toBeGreaterThan(luminance(red));
+    expect(
+      contrast(rgb(t['ink-inverted'] as string), fill),
+      'label on fill',
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrast(red, wash(fill, 0.15, rgb(t['surface-raised'] as string))),
+      'red text on the fill /15 wash',
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('CRITICAL the incident red clears AA (4.5:1) as text on a card, on the page ground and on its own /15 wash over a card, and would carry a white label at AA if used as a fill — measured', () => {
     const p = read(GLOBAL_CSS);
     const t = TOKENS.modes.light;
     const red = incidentRed(p);
@@ -161,6 +192,7 @@ describe('W794 status-site theme content parity', () => {
   // card; `bg-X` alone is a solid fill.
   function colourOf(name: string): Rgb {
     if (name === 'incident-red') return incidentRed(read(GLOBAL_CSS));
+    if (name === 'incident-fill') return incidentFill(read(GLOBAL_CSS));
     const hex = TOKENS.modes.light[name];
     expect(hex, `token ${name}`).toBeDefined();
     return rgb(hex as string);
@@ -206,10 +238,10 @@ describe('W794 status-site theme content parity', () => {
       wash(colourOf('status-busy'), 0.2, rgb(TOKENS.modes.light['surface-base'] as string)),
     );
     expect(nearMiss).toBeLessThan(4.5);
-    // The outage is the loudest: a SOLID incident-red fill.
+    // The outage is the loudest: a SOLID incident fill.
     const index = read(join(SRC, 'pages', 'index.astro'));
     expect(index).toMatch(
-      /outage: \['border-incident-red', 'bg-incident-red', 'text-ink-inverted'\],/,
+      /outage: \['border-incident-fill', 'bg-incident-fill', 'text-ink-inverted'\],/,
     );
   });
 
@@ -269,7 +301,7 @@ describe('W794 status-site theme content parity', () => {
     expect(p).toMatch(/@layer base \{/);
   });
 
-  it('P4 the overall status card carries a 4px rim in its state’s hue (ready / busy / incident red, idle while loading or unknown), keyed off the data-state renderOverall sets', () => {
+  it('P4 the overall status card carries a 4px rim in its state’s hue (ready / busy / incident fill, idle while loading or unknown), keyed off the data-state renderOverall sets', () => {
     const p = read(GLOBAL_CSS);
     expect(p).toMatch(/\.status-banner \{\s*\n\s*border-left-width: 4px;/);
     expect(p).toMatch(
@@ -279,7 +311,7 @@ describe('W794 status-site theme content parity', () => {
       /\.status-banner\[data-state='degraded'\] \{\s*\n\s*border-left-color: rgb\(var\(--status-busy-rgb\)\);/,
     );
     expect(p).toMatch(
-      /\.status-banner\[data-state='outage'\] \{\s*\n\s*border-left-color: rgb\(var\(--incident-red-rgb\)\);/,
+      /\.status-banner\[data-state='outage'\] \{\s*\n\s*border-left-color: rgb\(var\(--incident-fill-rgb\)\);/,
     );
     const index = read(join(SRC, 'pages', 'index.astro'));
     expect(index).toMatch(/class="status-banner /);
