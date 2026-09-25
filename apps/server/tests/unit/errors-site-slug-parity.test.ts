@@ -134,6 +134,26 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
     }
   });
 
+  // P4 fix-up (2026-09-25) — the page header's DRIFTSTACK wordmark sits
+  // directly above the card, so the index and the 404 no longer open the card
+  // with a "Driftstack" eyebrow as well (the brand read twice). An error page
+  // keeps its "API error type" eyebrow, which says something the header does
+  // not.
+  it('P4 the brand reads once: every page carries the DRIFTSTACK wordmark, and no card repeats it as an eyebrow', () => {
+    const pages = ['index.html', '404.html', ...[...pageSlugs].map((slug) => `${slug}/index.html`)];
+    for (const file of pages) {
+      const html = readFileSync(resolve(DIST, file), 'utf8');
+      expect(html, file).toContain('<a class="brand" href="/">DRIFT<span>STACK</span></a>');
+      expect(html, file).not.toMatch(/<p class="label">Driftstack<\/p>/i);
+    }
+    const index = readFileSync(resolve(DIST, 'index.html'), 'utf8');
+    expect(index).toContain('<main><h1>API error reference</h1>');
+    const limited = readFileSync(resolve(DIST, 'rate-limited', 'index.html'), 'utf8');
+    expect(limited).toContain(
+      '<main><p class="label">API error type</p><h1>Too Many Requests</h1>',
+    );
+  });
+
   it('every real error page is indexable with a description and exact final-URL canonical', () => {
     const index = readFileSync(resolve(DIST, 'index.html'), 'utf8');
     expect(index.match(themeColor)).toHaveLength(1);

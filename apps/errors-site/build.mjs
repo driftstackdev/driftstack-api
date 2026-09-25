@@ -329,6 +329,7 @@ a:hover{text-decoration-thickness:2px}
 a:focus-visible{outline:2px solid ${accent.accent};outline-offset:2px;border-radius:2px}
 .label{font-family:${MONO};font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:${light.accentText}}
 h1{font-size:30px;line-height:1.2;letter-spacing:-.02em;margin:10px 0 10px;color:${light.inkPrimary}}
+main>h1:first-child{margin-top:0}
 .status{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-family:${MONO};font-size:13px;color:${light.inkMuted};margin-bottom:8px}
 .status code{font-size:12px}
 .pill{display:inline-block;font-weight:600;color:${light.inkPrimary};background:${light.surfaceInset};border:1px solid ${light.surfaceDivider};border-radius:${radius.full};padding:0 10px}
@@ -410,11 +411,15 @@ const groupsHtml = STATUS_GROUPS.map((g) => {
     .join('\n');
   return rows.length > 0 ? `<h2>${g.label}</h2><ul>${rows}</ul>` : '';
 }).join('\n');
+// P4 (2026-09-25) — the index and the 404 no longer open their card with a
+// "Driftstack" eyebrow: the page header's DRIFTSTACK wordmark now says it
+// directly above, and the word read twice. (An error page's eyebrow, "API
+// error type", says something the header does not, and stays.)
 writeFileSync(
   join(DIST, 'index.html'),
   page(
     'Error reference',
-    `<p class="label">Driftstack</p><h1>API error reference</h1><p class="status">${slugs.length} problem types</p>
+    `<h1>API error reference</h1><p class="status">${slugs.length} problem types</p>
 <p>Every Driftstack API error is an <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a> <code>application/problem+json</code> body whose <code>type</code> URI points at one of these pages.</p>
 ${groupsHtml}`,
     {
@@ -429,7 +434,7 @@ writeFileSync(
   join(DIST, '404.html'),
   page(
     'Unknown error type',
-    `<p class="label">Driftstack</p><h1>Unknown error type</h1><p>No page for that error slug. See the <a href="/">full error reference</a>.</p>`,
+    `<h1>Unknown error type</h1><p>No page for that error slug. See the <a href="/">full error reference</a>.</p>`,
     {
       description: 'The requested Driftstack API error type does not exist.',
       canonicalPath: undefined,
