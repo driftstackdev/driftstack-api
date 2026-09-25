@@ -15,6 +15,12 @@ import DashboardLayout from '../../layouts/DashboardLayout.astro';
 //   7. When the link was the address's first confirmation and removed the
 //      account's password (`password_removed: true`), the page says so and offers
 //      "Set a password" (the reset flow) instead of redirecting straight away.
+//   8. Security sweep #21 — when this browser is ALREADY signed in, the link is
+//      not used on load. A link is not bound to the browser that asked for it, so
+//      one sent by someone else would otherwise swap this browser into their
+//      account with no click, and whatever was typed next would land there. The
+//      page names the current account and asks first; continuing signs the
+//      previous session out rather than leaving it live.
 //
 // The form is rendered as a fallback for the rare case where a mail
 // client mangles the link (drops the query string), so the user can
@@ -46,6 +52,26 @@ const apiBaseUrl = resolveApiBaseUrl();
       >
         <a href="/login/" class="btn-primary flex w-full items-center justify-center"
           >Request a fresh sign-in link</a
+        >
+      </div>
+
+      <div data-switch-account class="hidden space-y-5" role="status">
+        <div>
+          <h2 class="text-base font-semibold text-tk-ink">You're already signed in</h2>
+          <p class="mt-2 text-sm text-tk-ink-2">
+            This browser is signed in<span data-current-account></span>. This link signs
+            you in to the account it was sent to instead, and signs this browser out of the
+            current one. Only continue if you asked for this link.
+          </p>
+        </div>
+        <button type="button" data-button="use-link" class="btn-primary w-full"
+          >Continue with this link</button
+        >
+        <a
+          href="/"
+          data-link="stay-signed-in"
+          class="block text-center text-sm text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+          >Stay signed in</a
         >
       </div>
 
@@ -163,6 +189,17 @@ const apiBaseUrl = resolveApiBaseUrl();
       const mfaExpiry = root.querySelector('[data-mfa-expiry]');
       const passwordRemovedPanel = root.querySelector('[data-password-removed]');
       const continueLink = root.querySelector('[data-link="continue"]');
+      const switchPanel = root.querySelector('[data-switch-account]');
+      const currentAccount = root.querySelector('[data-current-account]');
+      const useLinkButton = root.querySelector('[data-button="use-link"]');
+
+      // The session this browser already holds, read once before anything else runs.
+      let previousSessionToken = null;
+      try {
+        previousSessionToken = localStorage.getItem('ds_web_session_token');
+      } catch {
+        previousSessionToken = null;
+      }
 
       const safeNextPath = (next, origin) => {
         if (typeof next !== 'string' || next.length === 0) return '/';
@@ -193,6 +230,63 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (localStorage.getItem('ds_web_session_token') !== session.token) {
           throw new Error('Session token could not be persisted.');
         }
+        // Security sweep #21 — the session this link replaced is signed out, not
+        // left live and forgotten. Best-effort and survives the navigation below.
+        if (previousSessionToken && previousSessionToken !== session.token) {
+          fetch(apiBaseUrl + '/v1/auth/logout', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ token: previousSessionToken }),
+            credentials: 'include',
+            keepalive: true,
+          }).catch(() => {});
+          previousSessionToken = null;
+        }
+      }
+
+      // Security sweep #21 — this browser is already signed in: name the current
+      // account and let the person choose before the link is used.
+      // A stored session the server no longer accepts (401) is not a signed-in
+      // account to protect: the dead token is cleared and the link is used as for
+      // a browser with no session.
+      function confirmAccountSwitch(token) {
+        let decided = false;
+        const useLink = () => {
+          if (decided) return;
+          decided = true;
+          if (switchPanel) switchPanel.classList.add('hidden');
+          submitToken(token);
+        };
+        if (intro) intro.textContent = 'Choose which account to use.';
+        if (switchPanel) switchPanel.classList.remove('hidden');
+        if (useLinkButton) useLinkButton.addEventListener('click', useLink);
+        const storedToken = previousSessionToken;
+        fetch(apiBaseUrl + '/v1/account/me', {
+          headers: { authorization: 'Bearer ' + storedToken },
+          credentials: 'include',
+        })
+          .then((response) => {
+            if (response.status === 401) {
+              if (decided) return null;
+              try {
+                if (localStorage.getItem('ds_web_session_token') === storedToken) {
+                  localStorage.removeItem('ds_web_session_token');
+                }
+              } catch {
+                /* storage unavailable: submitToken reports it */
+              }
+              previousSessionToken = null;
+              useLink();
+              return null;
+            }
+            return response.ok ? response.json() : null;
+          })
+          .then((me) => {
+            if (me && typeof me.email === 'string' && currentAccount) {
+              currentAccount.textContent = ' as ' + me.email;
+            }
+          })
+          .catch(() => {});
       }
 
       function completeSession(session) {
@@ -521,7 +615,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       if (linkToken && linkToken.length > 0) {
-        submitToken(linkToken);
+        if (previousSessionToken) confirmAccountSwitch(linkToken);
+        else submitToken(linkToken);
       } else {
         showFallbackForm(null);
       }

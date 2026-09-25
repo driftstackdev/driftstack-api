@@ -130,12 +130,19 @@ describe('three copies of the app version must agree', () => {
   it('CRITICAL that step runs BEFORE the expensive build, not after. A tag/version mismatch is knowable in a second; discovering it after a ten-minute cross-platform compile wastes the run and tempts whoever is waiting to just publish it anyway.', () => {
     const workflow = read(RELEASE);
     const assertAt = workflow.indexOf('Tag must match the app version');
-    const buildAt = workflow.indexOf('Build + sign Tauri bundles');
+    // The build step's name since security sweep E-10 split signing out of it.
+    const buildAt = workflow.indexOf('Build Tauri bundles (no signing key)');
     expect(assertAt, 'the tag assertion step is missing').toBeGreaterThan(-1);
     expect(buildAt, 'the build step is missing').toBeGreaterThan(-1);
     expect(
       assertAt,
       'the tag/version assertion runs after the build rather than before it',
     ).toBeLessThan(buildAt);
+    // And the build WAITS for it: the step lives in preflight, which build needs.
+    expect(workflow, 'the build job no longer waits for preflight').toMatch(
+      /^ {2}build:\n {4}needs: preflight$/m,
+    );
+    const owningJob = [...workflow.slice(0, assertAt).matchAll(/^ {2}([a-z-]+):$/gm)].pop()?.[1];
+    expect(owningJob, 'the tag/version step is not in the preflight job').toBe('preflight');
   });
 });

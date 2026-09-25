@@ -59,6 +59,11 @@ const ADMIN_ONLY_READS: readonly string[] = [
   // transcripts, so a member reading the owner's profile gets the rest of the feed
   // without them. The route still answers members; only those fields are admin-only.
   '/v1/profiles/:id/activity',
+  // Security sweep #15 (2026-09-24) — recipes now act in the workspace the header
+  // names, and a recipe is a saved copy of a session's steps, so the owner's
+  // recipes are read by admins only, as the owner's agent sessions are.
+  '/v1/recipes',
+  '/v1/recipes/:id',
 ];
 
 interface Check {

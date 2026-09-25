@@ -105,7 +105,12 @@ describe('routes/account-oauth-links content parity', () => {
       /\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \}/,
     );
     expect(body).toMatch(
-      /const ctx = request\.account;\s*if \(!ctx\) throw new Error\('account context missing after requireAuth'\);\s*const rows = await opts\.links\.listForAccount\(ctx\.account\.id\);/,
+      /const ctx = request\.account;\s*if \(!ctx\) throw new Error\('account context missing after requireAuth'\);[\s\S]*?const rows = await opts\.links\.listForAccount\(ctx\.account\.id\);/,
+    );
+    // Security sweep #12 — a key a team member minted on the owner's account is
+    // refused before the read: the linked sign-ins are the owner's.
+    expect(body).toMatch(
+      /if \(isKeyHeldByTeamMember\(ctx\)\) \{\s*throw new ForbiddenError\([\s\S]*?\);\s*\}\s*const rows = await opts\.links\.listForAccount/,
     );
   });
 });

@@ -65,20 +65,27 @@ describe('routes/recipes content parity', () => {
   // V-736 — the 404-not-403 contract is unchanged and still pinned; what changed
   // is WHO passes. Raw `!== ctx.account.id` locked a team admin out of a session
   // they had launched on the owner and could already read, stream and delete.
-  // These were the last two raw-equality sites in routes/; the canonical
-  // predicate is header-independent (it reads ctx.teams, resolved server-side),
-  // so nothing here can be forged by a caller.
-  it("Cross-account 404 framing pinned: the caller must be able to ACCESS the session (owner, or admin member of the owner's team) — 404 not 403 so a session id on another account is not leaked", () => {
+  // The canonical predicate is header-independent (it reads ctx.teams, resolved
+  // server-side), so nothing here can be forged by a caller.
+  //
+  // Security sweep #15 — the SAVE no longer uses that predicate. It admitted an
+  // admin to the owner's session but filed the copy under the admin's own account,
+  // out of the owner's sight. A save now takes a session of the WORKSPACE it saves
+  // into (the header's, admin-gated), so the source must belong to exactly that
+  // account; anything else is still a 404. The read-only suggestion route keeps
+  // the predicate: it stores nothing.
+  it('Cross-account 404 framing pinned: the saved session must belong to the workspace the recipe is saved in — 404 not 403 so a session id on another account is not leaked', () => {
     expect(body).toMatch(
-      /\/\/ Load the source agent session to snapshot its intent_log \+\s*\/\/ transcript\. The caller must be able to ACCESS the session — its owner,\s*\/\/ or an admin member of the owner's team \(V-736; cross-account 404 instead\s*\/\/ of 403 — don't leak existence\)\./,
+      /\/\/ Load the source agent session to snapshot its intent_log \+\s*\/\/ transcript\. It must belong to the workspace the recipe is saved in —/,
     );
+    expect(body).toMatch(/cross-account copy neither owner authorized: 404, not 403, so existence/);
     // The create handler names its validated payload `body` (not `parsed.data`)
     // since it now goes through parseRequestBodyReportingUnknown — same values.
     expect(body).toMatch(
-      /if \(source === null \|\| !callerCanAccessAgentSession\(ctx, source\.accountId\)\) \{\s*throw new NotFoundError\(`AgentSession \$\{body\.agent_session_id\} not found\.`\);/,
+      /if \(source === null \|\| source\.accountId !== workspace\.accountId\) \{\s*throw new NotFoundError\(`AgentSession \$\{body\.agent_session_id\} not found\.`\);/,
     );
-    // Both sites, not just the create one — the suggestion route had it too.
-    expect(body.match(/!callerCanAccessAgentSession\(ctx, source\.accountId\)/g)).toHaveLength(2);
+    // The suggestion route keeps the access predicate.
+    expect(body.match(/!callerCanAccessAgentSession\(ctx, source\.accountId\)/g)).toHaveLength(1);
     expect(body).not.toMatch(/source\.accountId !== ctx\.account\.id/);
   });
 

@@ -73,6 +73,14 @@ function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['accoun
 const PORTAL_SELF_WORKSPACE_ONLY_DETAIL =
   'The Stripe billing portal is available only in the Self workspace. Remove X-Driftstack-Account and retry.';
 
+/**
+ * Security sweep #13 — card checkout is a Self-workspace action too. It never read the
+ * header, so an SDK client acting for the team owner started a checkout for the CALLER's
+ * own account while GET /v1/billing, under the same header, showed the owner's plan.
+ */
+const CHECKOUT_SELF_WORKSPACE_ONLY_DETAIL =
+  'Card checkout is available only in the Self workspace. Remove X-Driftstack-Account and retry.';
+
 function publicSubscription(s: SubscriptionMirror): Record<string, unknown> {
   return {
     tier: s.tier,
@@ -98,6 +106,11 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
     { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
+      // Resolved only to REFUSE another workspace, before anything is created (see
+      // CHECKOUT_SELF_WORKSPACE_ONLY_DETAIL). A header naming an account the caller
+      // does not belong to is refused by the resolver itself (403).
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
+      if (effective.kind !== 'self') throw new BadRequestError(CHECKOUT_SELF_WORKSPACE_ONLY_DETAIL);
       const idempotency = readIdempotencyKey(req);
       if (idempotency.kind === 'invalid') {
         throw new BadRequestError('Invalid Idempotency-Key header.');

@@ -70,10 +70,16 @@ describe('sdk-typescript resources/recipes content parity', () => {
     expect(body).toMatch(/description\?: string;/);
   });
 
-  it("V-1120 ACCESS-scoped 404 framing pinned: the source session must be one you can ACCESS — your own account's, or a team's you hold admin on — and anything else 404s rather than 403s. The old text said the session must belong to the caller's account, which is the rule V-812 retracted: the route gates on callerCanAccessAgentSession, so a team admin snapshotting the owner's session gets a 201.", () => {
+  it("V-1120 workspace-scoped 404 framing pinned: the source session must belong to the workspace the recipe is saved in — your own, or a team owner's you hold admin for — and anything else 404s rather than 403s. Security sweep #15 retired the older rule, under which an admin could snapshot the owner's session into the admin's own account.", () => {
     const body = read(LIB);
+    // Security sweep #15 — the session must belong to the workspace the recipe is
+    // saved in, and the recipe is filed there.
     expect(body).toMatch(
-      /Must be a session you can\s*\*\s+ACCESS: one your own account owns, or one owned by a team you hold/,
+      /Must be a session of the\s*\*\s+workspace you save into: your own account's, or/,
+    );
+    expect(body).toMatch(/The recipe is filed under that same account\./);
+    expect(body, "the caller's-own-account filing must not return").not.toMatch(
+      /still filed under YOUR account/,
     );
     expect(body, 'the anti-enumeration reason must stay').toMatch(
       /doesn't distinguish missing from forbidden/,

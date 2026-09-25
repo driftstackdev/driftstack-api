@@ -17,6 +17,18 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
   whole page served under that status — and its `Summary` says what the site
   answered. `Kind` is an open set: treat a value you do not recognise as a
   note and read `Summary`.
+- **Desktop browser sign-in: code verifier (PKCE).**
+  `CliAuthorizeInitiateRequest.CodeChallenge` + `.CodeChallengeMethod`
+  (`"S256"`) and `CliAuthorizeExchangeRequest.CodeVerifier`. A flow started
+  with a challenge cannot be collected without the verifier, so the code and
+  state in `BrowserURL` are no longer enough on their own. All three are
+  `omitempty`: leaving them unset sends exactly the previous request.
+
+### Deprecated
+
+- Calling `Auth.CliAuthorizeInitiate` without `CodeChallenge`. It works as
+  before until **31 January 2027**; responses carry `Deprecation` and
+  `Sunset` headers, and from that date the server answers `400`.
 
 ## [0.4.0] - 2026-09-22
 

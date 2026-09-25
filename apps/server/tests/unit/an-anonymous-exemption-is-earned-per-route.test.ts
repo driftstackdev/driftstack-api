@@ -183,8 +183,21 @@ const CANNOT_DROP: ReadonlyArray<{
     typo: { token: 'x'.repeat(40), new_passwrd: 'a-sufficiently-long-passphrase-1' },
   },
   {
+    // GUI audit #9 — `code_verifier` is optional because a flow started without a
+    // code challenge (an app installed before PKCE) has none to give; on a flow
+    // that started WITH one, an exchange without it is refused 400
+    // `code_verifier_required`, which is what a mistyped key produces. A verifier
+    // on a flow without a challenge changes nothing, so dropping it there is not a
+    // silent difference either.
     route: 'POST /v1/auth/cli-authorize/exchange',
     schema: CliAuthorizeExchangeRequestSchema,
+    serviceRequires: [
+      {
+        field: 'code_verifier',
+        provedBy:
+          'apps/server/tests/unit/a-desktop-sign-in-without-a-challenge-ends-on-the-stated-date.test.ts',
+      },
+    ],
     valid: { code: 'x'.repeat(40), state: 'y'.repeat(40) },
     typo: { code: 'x'.repeat(40), stat: 'y'.repeat(40) },
   },

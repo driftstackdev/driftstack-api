@@ -17,6 +17,18 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
   whole page served under that status — and its `summary` says what the site
   answered. The kind is an open set: treat one you do not recognise as a note
   and read `summary`.
+- **Desktop browser sign-in: code verifier (PKCE).**
+  `auth.cliAuthorizeInitiate` accepts `code_challenge` (unpadded base64url
+  SHA-256 of a `code_verifier` you keep) with `code_challenge_method: 'S256'`,
+  and `auth.cliAuthorizeExchange` accepts `code_verifier`. A flow started with
+  a challenge cannot be collected without the verifier, so the `code` and
+  `state` in `browser_url` are no longer enough on their own.
+
+### Deprecated
+
+- Calling `auth.cliAuthorizeInitiate` without `code_challenge`. It works as
+  before until **31 January 2027**; responses carry `Deprecation` and
+  `Sunset` headers, and from that date the server answers `400`.
 
 ## [0.3.0] - 2026-09-22
 

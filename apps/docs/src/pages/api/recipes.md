@@ -17,6 +17,14 @@ The current surface covers create, list, read, and delete:
 `DELETE /v1/recipes/{id}`. There is no recipe-execution endpoint;
 start a new agent-session to run another task.
 
+**Team workspaces.** Every recipe route acts in the workspace you work
+in: your own account, or the team owner's that `X-Driftstack-Account`
+names. In a team owner's workspace every recipe route, reads included,
+needs the **admin** role (`403` otherwise), because a recipe is a saved
+copy of an agent-session's steps and the owner's agent-sessions are read
+by admins only. A recipe saved there belongs to the owner and counts
+against the owner's plan.
+
 ## Resource shape
 
 ```json
@@ -56,10 +64,10 @@ Request body:
 }
 ```
 
-- `agent_session_id` — required. Must be a session you can ACCESS: one
-  your own account owns, or one owned by a team you hold the **admin**
-  role on — a team admin snapshotting the owner's session gets a `201`,
-  not a refusal. Anything else references return 404.
+- `agent_session_id` — required. Must be a session of the workspace you
+  save into: your own account's, or, in a team owner's workspace, the
+  owner's. The recipe is filed under that same account. A session of any
+  other account returns 404.
 - `label` — required. 1-120 characters after trim.
 - `description` — optional. Up to 2000 characters.
 
@@ -95,7 +103,7 @@ recipe to save a new one."), carrying `limit`, `current`, `resource:
 
 `GET /v1/recipes`
 
-Lists the calling account's recipes, newest first. Cursor-paginated:
+Lists the recipes of the workspace you act in, newest first. Cursor-paginated:
 
 - `limit` — optional. 1-100, defaults to 50.
 - `cursor` — optional. Opaque cursor from a prior page's `next_cursor`.
@@ -184,11 +192,12 @@ transcript-only snapshot.
 
 ## Errors
 
-| Status | Type                | When                                                                                                                                                   |
-| -----: | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-|    400 | validation-failed   | body fails schema (missing label, label > 120 chars, description > 2000)                                                                               |
-|    404 | not-found           | `agent_session_id` doesn't exist, or belongs to an account you cannot access — 404 rather than 403 so the response does not confirm the session exists |
-|    409 | conflict            | the session is already saved as the recipe in `recipe_id`, under another label or description                                                          |
-|    429 | tier-limit          | the account already keeps as many recipes as its plan allows                                                                                           |
-|    401 | unauthorized        | missing or invalid bearer token                                                                                                                        |
-|    503 | feature-unavailable | recipe storage is not enabled for this deployment                                                                                                      |
+| Status | Type                | When                                                                                                                                                                        |
+| -----: | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|    400 | validation-failed   | body fails schema (missing label, label > 120 chars, description > 2000)                                                                                                    |
+|    403 | forbidden           | in a team owner's workspace without the admin role, or `X-Driftstack-Account` names an account you are not a member of                                                      |
+|    404 | not-found           | `agent_session_id` doesn't exist, or belongs to an account other than the workspace you save into — 404 rather than 403 so the response does not confirm the session exists |
+|    409 | conflict            | the session is already saved as the recipe in `recipe_id`, under another label or description                                                                               |
+|    429 | tier-limit          | the account already keeps as many recipes as its plan allows                                                                                                                |
+|    401 | unauthorized        | missing or invalid bearer token                                                                                                                                             |
+|    503 | feature-unavailable | recipe storage is not enabled for this deployment                                                                                                                           |

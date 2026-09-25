@@ -13,9 +13,21 @@
 // Public-facing browser URL: built from the configured
 // `dashboardOrigin` (e.g. `https://app.driftstack.io`) so dev /
 // staging / production all wire correctly.
+//
+// GUI audit #9 — PKCE (RFC 7636, S256 only). `code` and `state` travel in
+// the browser URL and in the dashboard's `driftstack://auth/callback`
+// hand-off, so anyone who reads either URL knows them. A flow that starts
+// with a `code_challenge` stores it, and `exchange` then refuses to answer —
+// not even `pending` — without the `code_verifier` that hashes to it. The
+// challenge is also sealed into the encrypted key's authenticated context, so
+// removing or swapping it in the store after approval yields `expired`, never
+// the key. A flow without a challenge ("legacy": apps installed before this)
+// works exactly as before until LEGACY_CLI_AUTHORIZE_FLOW_ENDS_AT and is
+// refused at initiate from that instant.
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Redis } from 'ioredis';
+import { verifyS256Challenge } from '../lib/oauth-pkce.js';
 import { decryptPlatformSecret, encryptPlatformSecret } from '../lib/platform-secret-encryption.js';
 
 const REDIS_KEY_PREFIX = 'cli-auth:code:';
@@ -34,20 +46,43 @@ const USER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const USER_CODE_HASH_DOMAIN = 'driftstack:cli-authorize:user-code:v1\0';
 const CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX = 'driftstack:cli-authorize-secret:v2:';
 const CLI_AUTHORIZE_SECRET_PURPOSE = 'driftstack.cli-authorize.api-key.v2';
+const CODE_CHALLENGE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+/**
+ * GUI audit #9 — the instant a flow WITHOUT a `code_challenge` stops being
+ * accepted at initiate. Until then, apps installed before PKCE sign in exactly
+ * as they always have; initiate answers them with `Deprecation` + `Sunset`
+ * headers naming this date. Published in apps/docs/src/pages/api/auth.md (a
+ * test pins the two together). 129 days after LEGACY_CLI_AUTHORIZE_FLOW_DEPRECATED_AT,
+ * above the 90-day minimum in the API versioning policy.
+ */
+export const LEGACY_CLI_AUTHORIZE_FLOW_ENDS_AT = new Date('2027-01-31T00:00:00.000Z');
+
+/** When a flow without a challenge became deprecated (the RFC 9745 `Deprecation` date). */
+export const LEGACY_CLI_AUTHORIZE_FLOW_DEPRECATED_AT = new Date('2026-09-24T00:00:00.000Z');
+
+/** Which kind of sign-in a flow is: bound to a code verifier, or not. */
+export type CliAuthorizeFlow = 'pkce' | 'legacy';
 
 function cliAuthorizeSecretContext(input: {
   code: string;
   state: string;
   userCodeHash: string;
   accountId: string;
+  codeChallenge: string | null;
 }): string {
-  return JSON.stringify([
+  const bound = [
     CLI_AUTHORIZE_SECRET_PURPOSE,
     input.code,
     input.state,
     input.userCodeHash,
     input.accountId,
-  ]);
+  ];
+  // A legacy flow keeps the exact context an older server sealed with, so a
+  // key bound before a deploy is still collected after it. A PKCE flow seals
+  // the challenge in too: a record whose challenge was stripped or swapped
+  // after approval no longer decrypts.
+  return JSON.stringify(input.codeChallenge === null ? bound : [...bound, input.codeChallenge]);
 }
 
 export function cliAuthorizeRedisKey(code: string): string {
@@ -181,6 +216,12 @@ interface StoredCodeBase {
   user_code_hash: string;
   client_label: string | null;
   created_at: number;
+  /**
+   * GUI audit #9 — the S256 `code_challenge` sent at initiate, or null for a
+   * legacy flow. A record written before this field existed has no key at all
+   * and reads as null (legacy), which is what it was.
+   */
+  code_challenge: string | null;
 }
 
 interface StoredPendingCode extends StoredCodeBase {
@@ -235,12 +276,23 @@ function parseStoredCode(raw: string): StoredCode | null {
   ) {
     return null;
   }
+  // Absent → a record from before PKCE (legacy). Present → null or a
+  // well-formed challenge; anything else is not a record this code wrote.
+  const challenge = record.code_challenge;
+  if (
+    challenge !== undefined &&
+    challenge !== null &&
+    (typeof challenge !== 'string' || !CODE_CHALLENGE_PATTERN.test(challenge))
+  ) {
+    return null;
+  }
 
   const common: StoredCodeBase = {
     state: record.state,
     user_code_hash: record.user_code_hash,
     client_label: record.client_label,
     created_at: record.created_at,
+    code_challenge: challenge ?? null,
   };
   if (
     record.status === 'pending' &&
@@ -286,11 +338,20 @@ export interface CliAuthorizeServiceOptions {
    * in plaintext. Deployments without the key omit CLI authorization.
    */
   secretEncryptionKeyBase64: string;
+  /** Last instant (exclusive) a flow without a challenge may start. Tests only. */
+  legacyFlowEndsAt?: Date;
+  /** Clock. Tests only. */
+  now?: () => Date;
 }
 
 export interface InitiateInput {
   state: string;
   client_label?: string | null;
+  /**
+   * S256 `code_challenge` (BASE64URL(SHA-256(code_verifier))). Omitted only by
+   * apps installed before PKCE; see LEGACY_CLI_AUTHORIZE_FLOW_ENDS_AT.
+   */
+  code_challenge?: string | null;
 }
 
 export interface InitiateResult {
@@ -298,6 +359,8 @@ export interface InitiateResult {
   user_code: string;
   browser_url: string;
   expires_at: Date;
+  /** Which kind of flow was started. Not part of the HTTP response. */
+  flow: CliAuthorizeFlow;
 }
 
 export interface BindInput {
@@ -312,17 +375,27 @@ export interface BindInput {
 export interface BindResult {
   account_id: string;
   expires_at: Date;
+  /** Which kind of flow was approved. Not part of the HTTP response. */
+  flow: CliAuthorizeFlow;
 }
 
 export interface ExchangeInput {
   code: string;
   state: string;
+  /** Required when the flow started with a `code_challenge`. */
+  code_verifier?: string;
 }
 
 export type ExchangeResult =
   | { status: 'pending' }
   | { status: 'bound'; api_key: string; account_id: string }
   | { status: 'expired' };
+
+export interface ExchangeWithFlowResult {
+  result: ExchangeResult;
+  /** The flow of the record that answered; null when there was no record. */
+  flow: CliAuthorizeFlow | null;
+}
 
 export class CliAuthorizeError extends Error {
   constructor(
@@ -332,7 +405,11 @@ export class CliAuthorizeError extends Error {
       | 'user_code_mismatch'
       | 'already_bound'
       | 'not_found'
-      | 'expired',
+      | 'expired'
+      | 'invalid_code_challenge'
+      | 'code_challenge_required'
+      | 'code_verifier_required'
+      | 'code_verifier_mismatch',
     message: string,
   ) {
     super(message);
@@ -345,6 +422,8 @@ export class CliAuthorizeService {
   private readonly dashboardOrigin: string;
   private readonly dashboardPath: string;
   private readonly secretEncryptionKey: string;
+  private readonly legacyFlowEndsAt: Date;
+  private readonly now: () => Date;
 
   constructor(opts: CliAuthorizeServiceOptions) {
     if (opts.store !== undefined) {
@@ -357,9 +436,24 @@ export class CliAuthorizeService {
     this.dashboardOrigin = opts.dashboardOrigin.replace(/\/+$/, '');
     this.dashboardPath = opts.dashboardPath ?? '/cli/authorize';
     this.secretEncryptionKey = opts.secretEncryptionKeyBase64;
+    this.legacyFlowEndsAt = opts.legacyFlowEndsAt ?? LEGACY_CLI_AUTHORIZE_FLOW_ENDS_AT;
+    this.now = opts.now ?? (() => new Date());
   }
 
   async initiate(input: InitiateInput): Promise<InitiateResult> {
+    const codeChallenge = input.code_challenge ?? null;
+    if (codeChallenge !== null && !CODE_CHALLENGE_PATTERN.test(codeChallenge)) {
+      throw new CliAuthorizeError(
+        'invalid_code_challenge',
+        'code_challenge must be the unpadded base64url SHA-256 of the code verifier.',
+      );
+    }
+    if (codeChallenge === null && this.now().getTime() >= this.legacyFlowEndsAt.getTime()) {
+      throw new CliAuthorizeError(
+        'code_challenge_required',
+        'This sign-in needs a code_challenge. Update the app and sign in again.',
+      );
+    }
     // 32 bytes → 43 url-safe chars (base64url, no padding). Plenty of
     // entropy for a 5-minute one-shot code.
     const code = randomBytes(32).toString('base64url');
@@ -373,6 +467,7 @@ export class CliAuthorizeService {
       encrypted: false,
       account_id: null,
       created_at: Date.now(),
+      code_challenge: codeChallenge,
     };
     await this.store.setEx(this.key(code), JSON.stringify(stored), TTL_SECONDS);
 
@@ -385,6 +480,7 @@ export class CliAuthorizeService {
       user_code: userCode,
       browser_url: browserUrl.toString(),
       expires_at: new Date(stored.created_at + TTL_SECONDS * 1000),
+      flow: flowOf(stored),
     };
   }
 
@@ -422,6 +518,7 @@ export class CliAuthorizeService {
       state: stored.state,
       userCodeHash: stored.user_code_hash,
       accountId: input.account_id,
+      codeChallenge: stored.code_challenge,
     });
     const secretBlob = `${CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX}${encryptPlatformSecret(
       input.api_key_plaintext,
@@ -471,29 +568,56 @@ export class CliAuthorizeService {
     return {
       account_id: input.account_id,
       expires_at: new Date(Date.now() + BIND_TTL_SECONDS * 1000),
+      flow: flowOf(stored),
     };
   }
 
   async exchange(input: ExchangeInput): Promise<ExchangeResult> {
+    return (await this.exchangeWithFlow(input)).result;
+  }
+
+  /** `exchange`, plus which kind of flow answered — for the route to record. */
+  async exchangeWithFlow(input: ExchangeInput): Promise<ExchangeWithFlowResult> {
     const key = this.key(input.code);
     const raw = await this.store.get(key);
     if (raw === null) {
       // Either never existed OR Redis evicted on TTL — treat both as
       // expired from the CLI / GUI's perspective.
-      return { status: 'expired' };
+      return { result: { status: 'expired' }, flow: null };
     }
     const stored = parseStoredCode(raw);
     if (stored === null) {
       await this.store.del(key);
       throw new CliAuthorizeError('invalid_code', 'Authorization code state is invalid.');
     }
+    const flow = flowOf(stored);
 
     if (!constantTimeStringEqual(stored.state, input.state)) {
       throw new CliAuthorizeError('state_mismatch', 'State parameter does not match.');
     }
 
+    // GUI audit #9 — `code` and `state` are in the browser URL and the
+    // hand-off, so a PKCE flow answers nothing, not even `pending`, without
+    // the verifier. A refusal consumes nothing: the app that holds the
+    // verifier still collects the key the user approved. A verifier sent
+    // for a legacy record is ignored — the record, not the request, decides
+    // the flow, so a request cannot downgrade a PKCE flow.
+    if (stored.code_challenge !== null) {
+      if (input.code_verifier === undefined) {
+        throw new CliAuthorizeError(
+          'code_verifier_required',
+          'This sign-in needs the code_verifier to collect the key.',
+        );
+      }
+      if (
+        !verifyS256Challenge({ verifier: input.code_verifier, challenge: stored.code_challenge })
+      ) {
+        throw new CliAuthorizeError('code_verifier_mismatch', 'Code verifier does not match.');
+      }
+    }
+
     if (stored.status === 'pending') {
-      return { status: 'pending' };
+      return { result: { status: 'pending' }, flow };
     }
 
     if (stored.status === 'bound') {
@@ -504,7 +628,7 @@ export class CliAuthorizeService {
       // means a later exception can't leak a re-deliverable secret.
       const claimedRaw = await this.store.getDel(key);
       if (claimedRaw === null) {
-        return { status: 'expired' };
+        return { result: { status: 'expired' }, flow };
       }
       const claimed = parseStoredCode(claimedRaw);
       // A correctly-bound record is immutable until this getDel. If the
@@ -517,10 +641,10 @@ export class CliAuthorizeService {
       // as expired rather than dual-read without identity binding; pending
       // records from an older process can still bind directly into v2.
       if (!claimed.secret_blob.startsWith(CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX)) {
-        return { status: 'expired' };
+        return { result: { status: 'expired' }, flow };
       }
       const encodedSecret = claimed.secret_blob.slice(CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX.length);
-      if (encodedSecret.length === 0) return { status: 'expired' };
+      if (encodedSecret.length === 0) return { result: { status: 'expired' }, flow };
       // D1 — recover the plaintext from the at-rest blob only at the
       // moment of delivery. A decrypt failure (e.g. the key rotated out
       // from under a bound code) surfaces as expired rather than a 500,
@@ -535,24 +659,32 @@ export class CliAuthorizeService {
             state: claimed.state,
             userCodeHash: claimed.user_code_hash,
             accountId: claimed.account_id,
+            codeChallenge: claimed.code_challenge,
           }),
         );
       } catch {
-        return { status: 'expired' };
+        return { result: { status: 'expired' }, flow };
       }
       return {
-        status: 'bound',
-        api_key: apiKey,
-        account_id: claimed.account_id,
+        result: {
+          status: 'bound',
+          api_key: apiKey,
+          account_id: claimed.account_id,
+        },
+        flow,
       };
     }
 
-    return { status: 'expired' };
+    return { result: { status: 'expired' }, flow };
   }
 
   private key(code: string): string {
     return cliAuthorizeRedisKey(code);
   }
+}
+
+function flowOf(stored: StoredCodeBase): CliAuthorizeFlow {
+  return stored.code_challenge === null ? 'legacy' : 'pkce';
 }
 
 function constantTimeStringEqual(a: string, b: string): boolean {

@@ -154,7 +154,11 @@ const ROSTER: Readonly<Record<string, readonly string[]>> = {
   'POST /v1/profiles/:id/transfer': ['effectiveAccountIdForWrite'],
   'POST /v1/profiles/:id/trim': ['effectiveAccountIdForWrite'],
   'POST /v1/profiles/import': ['effectiveAccountIdForWrite'],
-  'POST /v1/recipes': ['callerCanAccessAgentSession'],
+  // Security sweep #15 — recipes act in the workspace the header names (they were
+  // filed under the caller whatever it said), so the save and the delete gate a
+  // teammate's workspace on the admin role.
+  'POST /v1/recipes': ['effectiveAccountIdForWrite'],
+  'DELETE /v1/recipes/:id': ['effectiveAccountIdForWrite'],
   'POST /v1/sessions': ['inline role check'],
   'POST /v1/sessions/:id/capture': ['effectiveAccountIdForLiveOperation'],
   'POST /v1/sessions/:id/extract': ['effectiveAccountIdForLiveOperation'],
@@ -181,6 +185,10 @@ const ROSTER: Readonly<Record<string, readonly string[]>> = {
   // refusal crypto checkout makes. (Its GET twin, /v1/account/me/billing-portal,
   // refuses the same way and is not a write.)
   'POST /v1/billing/portal-session': ['self-only refusal'],
+  // Security sweep #13 — card checkout starts a Stripe Checkout for the caller's
+  // own account, so it refuses a header naming another workspace the same way (400,
+  // before any Stripe customer or session is created).
+  'POST /v1/billing/checkout-session': ['self-only refusal'],
 };
 
 /**

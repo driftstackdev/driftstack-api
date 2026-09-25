@@ -13,6 +13,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const DOCS_PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/metrics.md');
 const ROUTE_FILE = resolve(REPO_ROOT, 'apps/server/src/routes/metrics.ts');
+const PURGE_SWEEPER = resolve(
+  REPO_ROOT,
+  'apps/server/src/services/account-deletion-purge-sweeper.ts',
+);
 
 /**
  * Counters that are registered but deliberately NOT on the public catalogue
@@ -94,6 +98,25 @@ describe('Arc 6 docs.metrics — apps/docs/src/pages/reference/metrics.md parity
         `${metricName} is withheld (${why}) and yet appears on the public metrics page`,
       ).toBe(false);
     }
+  });
+
+  it('CRITICAL the retention-purge row lists exactly the `arm` values the purge emits. Derived from every count(<arm>, …) in the sweeper, not retyped: the row named fewer arms than the sweeper emitted, and an operator alerting on the list would never see the missing ones.', () => {
+    const sweeper = readFileSync(PURGE_SWEEPER, 'utf8');
+    const emitted = [...new Set([...sweeper.matchAll(/\bcount\('([a-z_]+)',/g)].map((m) => m[1]))];
+    expect(
+      emitted.length,
+      'no arm found in the sweeper — the count() helper moved',
+    ).toBeGreaterThan(3);
+
+    const row = body
+      .split('\n')
+      .find((line) => line.startsWith(`| \`${METRIC_NAMES.retentionPurgeTotal}\``));
+    expect(row, 'the retention-purge row is missing').toBeDefined();
+    const list = /by `arm` \(([^)]*)\)/.exec(row ?? '')?.[1];
+    expect(list, 'the row no longer lists its arms in "by `arm` (…)"').toBeDefined();
+    const documented = (list ?? '').split('/').map((a) => a.trim());
+
+    expect([...documented].sort()).toEqual([...emitted].sort());
   });
 
   it('mentions the bounded-cardinality invariant (no account-id labels)', () => {

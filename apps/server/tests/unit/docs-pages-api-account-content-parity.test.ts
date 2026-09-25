@@ -203,14 +203,20 @@ describe('W770 docs /api/account content parity', () => {
     expect(p).not.toMatch(/EU-jurisdiction/);
   });
 
-  it("CRITICAL DELETE avatar framing, corrected by V-797. The old wording called a sweeper collecting orphaned keys the load-bearing async-GC contract; there is no such sweeper anywhere in src, and the route's own comment says a FUTURE one. The page now says the object persists and a shared URL keeps resolving, so a customer does not read the delete as an erasure.", () => {
+  it('CRITICAL DELETE avatar framing, corrected by security sweep E-23. V-797 made the page say the image file is not deleted and a shared link keeps working, because the route only cleared the pointer. The route now deletes every stored copy before it clears the pointer, and answers 503 with the avatar still set when storage refuses. A page still promising the opposite would be the stale half of the fix.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /clears the avatar pointer on your\s*\n?account, so the image stops being served from `\/v1\/account\/me`\./,
+      /`DELETE \/v1\/account\/me\/avatar` removes your uploaded image and\s*\n?deletes it, so a link to it stops working, including one you shared\s*\n?earlier\./,
     );
     expect(p).toMatch(
-      /The\s*\n?image file itself is not deleted, so a previously shared link keeps\s*\n?working\. Do not treat the delete as an erasure of the image\./,
+      /If image storage is unavailable, the request fails with `503` and your\s*\n?avatar stays set; retry it\./,
+    );
+    expect(p).toMatch(
+      /Uploading a new image replaces the previous one, which is\s*\n?deleted; a link to the old image stops working\./,
+    );
+    expect(p, 'the retired "not deleted" claim must not return').not.toMatch(
+      /image file itself is not deleted/,
     );
     expect(p, 'the phantom garbage collector must not return').not.toMatch(
       /a sweeper job collects orphaned keys/,

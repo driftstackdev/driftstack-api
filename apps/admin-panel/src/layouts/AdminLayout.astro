@@ -49,20 +49,58 @@ const navItems = [
       // false null token for the whole visit.
       (function () {
         try {
+        // Security sweep #20 — a handoff is accepted only when THIS tab asked for
+        // it. The bounce below leaves a one-time state in this tab's
+        // sessionStorage and the dashboard hands it back beside the token; a
+        // `#token=` this tab never asked for — a crafted link planting another
+        // session over a staff member's own — is dropped. The state is spent on
+        // first read, whatever the outcome.
+        var expectedState = sessionStorage.getItem('ds_admin_handoff_state');
+        sessionStorage.removeItem('ds_admin_handoff_state');
         if (location.hash && location.hash.indexOf('#token=') === 0) {
-          var t = decodeURIComponent(location.hash.slice('#token='.length));
-          if (t.length > 0) localStorage.setItem('ds_web_session_token', t);
+          var handoff = new URLSearchParams(location.hash.slice(1));
+          var t = handoff.get('token') || '';
+          var state = handoff.get('state') || '';
+          if (t.length > 0 && expectedState && state === expectedState) {
+            localStorage.setItem('ds_web_session_token', t);
+          }
           history.replaceState(null, '', location.pathname + location.search);
+        }
+        // `?handoff=1` asks for a FRESH handoff: the dashboard's "Open admin
+        // panel" link sends it, so a copy this panel still holds from before a
+        // dashboard sign-out (which revokes it) is replaced, not kept. The copy is
+        // dropped, and handoff=1 is left out of the path the dashboard sends back
+        // to, so the return trip does not ask again. A crafted link can only make
+        // this panel re-sync with the visitor's own dashboard session.
+        var query = new URLSearchParams(location.search);
+        var freshHandoff = query.get('handoff') === '1';
+        var here = location.pathname + location.search;
+        if (freshHandoff) {
+          localStorage.removeItem('ds_web_session_token');
+          query.delete('handoff');
+          var rest = query.toString();
+          here = location.pathname + (rest.length > 0 ? '?' + rest : '');
         }
         // Direct visits without a staff token bounce through the customer
         // dashboard. bounced=1 prevents an auth-failure redirect loop.
         if (
-          !localStorage.getItem('ds_web_session_token') &&
-          location.search.indexOf('bounced=1') === -1
+          freshHandoff ||
+          (!localStorage.getItem('ds_web_session_token') &&
+            location.search.indexOf('bounced=1') === -1)
         ) {
+          var bytes = new Uint8Array(16);
+          crypto.getRandomValues(bytes);
+          var newState = Array.prototype.map
+            .call(bytes, function (b) {
+              return ('0' + b.toString(16)).slice(-2);
+            })
+            .join('');
+          sessionStorage.setItem('ds_admin_handoff_state', newState);
           location.replace(
             'https://app.driftstack.io/?next-admin=' +
-              encodeURIComponent(location.pathname + location.search),
+              encodeURIComponent(here) +
+              '&admin-state=' +
+              newState,
           );
           return;
         }

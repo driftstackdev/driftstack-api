@@ -148,7 +148,8 @@ describe('W980 auth middleware V-353e MFA step-up cross-source invariant', () =>
     expect(p).toMatch(/opts\.authCache,/);
     expect(p).toMatch(/new Date\(\),/);
     expect(p).toMatch(/opts\.authCoalescer,/);
-    expect(p).toMatch(/request\.account = ctx;/);
+    // Security sweep #12 — the key holder's context (contextForKeyHolder).
+    expect(p).toMatch(/request\.account = contextForKeyHolder\(ctx\);/);
   });
 
   // ─── requireScope decorator wires ────────────────────────────

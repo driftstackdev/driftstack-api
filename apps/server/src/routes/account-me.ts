@@ -69,7 +69,7 @@ import {
   unresolvableOpenvpnFileReferenceDetail,
 } from '../lib/webhook-target-guard.js';
 import { defaultTcpProbe } from '../services/proxy-backends/socks5.js';
-import { avatarKey, type R2 } from '../lib/r2.js';
+import { avatarKey, avatarKeysForAccount, deleteAvatarObjects, type R2 } from '../lib/r2.js';
 import {
   BadRequestError,
   ConflictError,
@@ -2849,6 +2849,20 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         }
       }
 
+      // Security sweep E-23 (2026-09-24) — the key carries the extension, so a
+      // replacement in another format left the previous image publicly readable
+      // at its own key. Delete every other key this account's avatar can occupy.
+      // The upload itself has succeeded, so a failure here is logged rather than
+      // returned; removal and account purge delete every key again.
+      for (const stale of avatarKeysForAccount(ctx.account.id)) {
+        if (stale === key) continue;
+        try {
+          await r2Public.deleteObject(stale);
+        } catch (err) {
+          app.log.error({ err, key: stale }, 'replaced avatar left on the public bucket');
+        }
+      }
+
       const url = await presignAvatar(updated.avatarR2Key);
       reply.code(200);
       return {
@@ -2859,17 +2873,29 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
     },
   );
 
-  // V-352b — clear the avatar pointer on the account row. The R2
-  // object is intentionally left in place: a future sweeper job
-  // collects orphaned avatar keys (off the hot path; avatars are
-  // already public-readable so leaving stale objects is no worse
-  // than the public bucket already is). Returns 204.
+  // V-352b — remove the avatar. Returns 204.
+  //
+  // Security sweep E-23 (2026-09-24): this used to clear only the pointer and
+  // leave the object "in place" for a sweeper that never existed, so an image the
+  // customer removed stayed publicly readable at a key derived from their account
+  // id. Every key the avatar can occupy is deleted FIRST; if the bucket refuses,
+  // the request fails with the pointer intact, so the customer's retry finishes
+  // the job instead of a 204 that leaves the image public.
   app.delete(
     '/v1/account/me/avatar',
     { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
     async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
+
+      if (r2Public) {
+        try {
+          await deleteAvatarObjects(r2Public, ctx.account.id);
+        } catch (err) {
+          app.log.error({ err, accountId: ctx.account.id }, 'avatar delete from R2 failed');
+          throw new FeatureUnavailableError('Avatar storage is temporarily unavailable.');
+        }
+      }
 
       const updated = await authRepo.updateAccountBasics(ctx.account.id, {
         avatarR2Key: null,

@@ -152,6 +152,9 @@ layer. They overlap in some places + diverge in others.
 > to read-only members. The same exception reaches `GET /v1/profiles/:id/activity`:
 > the pages and session ids it lists come out of those transcripts, so a member
 > gets the rest of that feed with the pages withheld (security sweep #3,
+> 2026-09-24). And it reaches `GET /v1/recipes` and `GET /v1/recipes/:id` in
+> the owner's workspace: a recipe is a saved copy of a session's steps, so the
+> owner's recipes are listed and read by admins only (security sweep #15,
 > 2026-09-24). (V-831 corrected this paragraph — V-822 wrote
 > "reads are role-agnostic" flat, generalised from one module.)
 > Thirteen route modules do this today: account-audit,

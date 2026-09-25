@@ -210,7 +210,13 @@ import {
   enqueueNextAccountDeletionPurge,
   registerAccountDeletionPurgeJob,
 } from '../services/account-deletion-purge-sweeper.js';
-import { DrizzleAccountDeletionPurgeRepo } from '../db/account-deletion-purge-repo.js';
+import {
+  DrizzleAccountDeletionPurgeRepo,
+  DrizzleAvatarPointerRepo,
+  DrizzleTerminatedAccountAvatarPurgeRepo,
+} from '../db/account-deletion-purge-repo.js';
+import { TerminatedAccountAvatarPurge } from '../services/terminated-account-avatar-purge.js';
+import { AvatarOrphanReaper } from '../services/avatar-orphan-reaper.js';
 import {
   AgentSessionOrphanSweeperService,
   enqueueNextAgentSessionOrphanReap,
@@ -774,6 +780,12 @@ export async function createProductionDeps(
       METRIC_NAMES.oauthTokenTotal,
       'OAuth /token exchange outcomes (ok + OAuthError codes + error).',
       ['outcome'],
+    );
+    // GUI audit #9 — desktop browser sign-in by kind of flow.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.cliAuthorizeFlowTotal,
+      'Desktop browser sign-in flows by step (initiate | exchange), flow (pkce | legacy) and outcome (ok | refused).',
+      ['step', 'flow', 'outcome'],
     );
     // Arc 7 obs.8 — Stripe webhook receiver outcome counter.
     metricsRegistry.registerCounter(
@@ -2618,6 +2630,23 @@ export async function createProductionDeps(
   // "an unset MFA_ENCRYPTION_KEY switches off three retention promises, two of
   // them unrelated to it". The BYOK arm now no-ops on its own when unwired,
   // which is the narrow, correct scope for that flag.
+  // Security sweep E-23 (2026-09-24) — the avatar arm, bound to the PUBLIC bucket
+  // the avatars live on. Built here so the sweeper below never receives a second
+  // R2 client next to its private one.
+  const terminatedAccountAvatarPurge =
+    r2Public === null
+      ? undefined
+      : new TerminatedAccountAvatarPurge(
+          r2Public,
+          new DrizzleTerminatedAccountAvatarPurgeRepo(dbHandle),
+        );
+  // And the avatar images nothing points at any more, including every one removed
+  // or replaced before those deletes existed. Same bucket, same reason to build
+  // it here.
+  const avatarOrphanReaper =
+    r2Public === null
+      ? undefined
+      : new AvatarOrphanReaper(r2Public, new DrizzleAvatarPointerRepo(dbHandle));
   const accountDeletionPurgeSweeper = new AccountDeletionPurgeSweeperService({
     repo: new DrizzleAccountDeletionPurgeRepo(dbHandle),
     ...(byokAnthropicService ? { byok: byokAnthropicService } : {}),
@@ -2676,6 +2705,12 @@ export async function createProductionDeps(
     // Drops each purged profile's sealed blob; a blob outliving its row is
     // the customer's data outliving the erasure we committed to.
     r2,
+    // Security sweep E-23 — a terminated account's avatar sat on the PUBLIC
+    // bucket for good. Bound to that bucket above, so this sweeper's own r2
+    // stays the private one; absent (no public bucket, so no avatars) the arm
+    // reports skipped.
+    ...(terminatedAccountAvatarPurge ? { avatars: terminatedAccountAvatarPurge } : {}),
+    ...(avatarOrphanReaper ? { avatarOrphans: avatarOrphanReaper } : {}),
     logger,
     // Four §9 commitments ride on this sweep and it emitted nothing until now.
     // The `skipped` label is what makes an unwired arm visible: a promise that

@@ -65,12 +65,18 @@ describe('docs api/account content parity', () => {
     expect(body).toMatch(/route body limit is 3\.5 MiB to allow the base64 envelope/);
   });
 
-  it('avatar DELETE retention framing, corrected by V-797. This pinned "a sweeper job collects orphaned keys off the hot path" as a load-bearing async-GC contract. No such sweeper exists: routes/account-me.ts itself says a FUTURE sweeper, and no service, scheduled job or chain touches avatar keys. The page now tells customers the object persists and a previously-shared URL keeps resolving.', () => {
+  it('avatar DELETE erasure framing, corrected by security sweep E-23. V-797 had the page say the image file is not deleted and a shared link keeps working, which was true then. The delete now removes the image itself, and a replacement removes the old one, so the page must say that; the 503 the route now returns when storage refuses is the other half a client has to handle.', () => {
     expect(body).toMatch(
-      /The\s*\n?image file itself is not deleted, so a previously shared link keeps\s*\n?working/,
+      /`DELETE \/v1\/account\/me\/avatar` removes your uploaded image and\s*\n?deletes it, so a link to it stops working/,
     );
-    expect(body, 'and the consequence is stated, not just the mechanism').toMatch(
-      /a previously shared link keeps\s*\n?working\. Do not treat the delete as an erasure of the image\./,
+    expect(body, 'the failure a client must handle is stated').toMatch(
+      /fails with `503` and your\s*\n?avatar stays set/,
+    );
+    expect(body, 'a replacement deletes the previous image').toMatch(
+      /Uploading a new image replaces the previous one, which is\s*\n?deleted/,
+    );
+    expect(body, 'the retired "not deleted" claim must not return').not.toMatch(
+      /image file itself is not deleted|keeps\s*\n?working|Do not treat the delete as an erasure/,
     );
     expect(body, 'the phantom garbage collector must not return').not.toMatch(
       /a sweeper job collects orphaned keys/,

@@ -149,7 +149,8 @@ Endpoints that honor the header:
 | Audit log         | GET + `/export`                                                                                                                                                                                                                             |
 | Email preferences | GET / PUT (PUT = admin)                                                                                                                                                                                                                     |
 | Usage             | GET, `/series`                                                                                                                                                                                                                              |
-| Billing           | `GET /v1/billing` only — checkout and portal sessions are per-caller                                                                                                                                                                        |
+| Recipes           | every `/v1/recipes` route — the recipe is saved from, and filed under, the owner's workspace. Every one needs `admin`, reads included: a recipe is a saved copy of an agent session's steps                                                 |
+| Billing           | `GET /v1/billing` only — card checkout, crypto checkout and the billing portal work in your own workspace only and refuse the header                                                                                                        |
 
 If you are unsure about a route not listed here, the safe assumption is
 that it operates on your own account.
@@ -162,12 +163,6 @@ own account regardless):
   team list. Its nested `/v1/account/me/organization` profile
   taxonomy is listed above and does honor the header.
 - `/v1/auth/*` — authentication is per-caller.
-- `/v1/recipes/*` — the header is IGNORED here, not rejected. A recipe is
-  always created under your own account. What team membership does give
-  you is reach into the SOURCE: `POST /v1/recipes` accepts an
-  `agent_session_id` owned by a team you hold `admin` on, and snapshots it
-  into a recipe that belongs to you. Sending `X-Driftstack-Account` does
-  not place the recipe under the owner.
 
 ## Step 5 — Audit the team's actions (owner)
 

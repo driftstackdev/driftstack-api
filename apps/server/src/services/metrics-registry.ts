@@ -345,6 +345,15 @@ export const METRIC_NAMES = {
   // PKCE mismatches + expired-code retries; spike in 'invalid_client'
   // tracks attempted brute-force against the client_secret hash.
   oauthTokenTotal: 'driftstack_oauth_token_total',
+  // GUI audit #9 — desktop browser sign-in, counted by kind of flow. Labels:
+  // step (initiate | exchange) × flow (pkce | legacy) × outcome (ok | refused).
+  // `exchange` counts only terminal answers (key delivered, or refused for a
+  // missing / wrong code verifier), never the `pending` polls. The legacy
+  // (no code_challenge) flow ends on a stated date, and `flow="legacy"` is how
+  // that date is checked against real use before it arrives. A rise in
+  // `step="exchange",flow="pkce",outcome="refused"` is someone holding a
+  // sign-in link or hand-off without the app's verifier.
+  cliAuthorizeFlowTotal: 'driftstack_cli_authorize_flow_total',
   // Arc 7 obs.8 — Stripe webhook outcome counter. Bounded outcome
   // labels: handled / duplicate / ignored / error (route-side dispatch
   // outcomes) + signature_invalid / signature_missing / empty_body /

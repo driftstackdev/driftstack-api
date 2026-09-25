@@ -4,8 +4,8 @@
 //
 // Pins the Option B deploy pipeline shape:
 //
-//   • Two-environment flow: staging auto on main merge, production
-//     manual-approval via GitHub environment.
+//   • Two-environment flow: after CI passes on main, staging then
+//     production on the same commit; no approval gate (2026-09-24).
 //   • V-051 anchor (REVISED 2026-05-17): Hetzner CCX13 + systemd +
 //     bare-node at /opt/driftstack/api + scripts/deploy-bridge.sh as
 //     the source-of-truth deploy invocation.
@@ -38,10 +38,19 @@ describe('W542.A /.github/workflows/deploy.yml content parity (Option B)', () =>
     expect(body).toMatch(/# Driftstack API — deploy pipeline \(Option B verdict 2026-05-17:/);
     expect(body).toMatch(/drop Docker, match prod systemd\+node reality/);
     expect(body).toMatch(/scripts\/deploy-bridge\.sh/);
-    expect(body).toMatch(/# Two-environment flow:/);
-    expect(body).toMatch(/#\s+- Staging deploy auto-fires on main merge\. No approval gate\./);
-    expect(body).toMatch(/#\s+- Production deploy is a manual job that requires the/);
-    expect(body).toMatch(/#\s+"production" GitHub environment's approver list to ack\./);
+    // REPINNED 2026-09-24 (security sweep E-9). The flow used to read "Staging
+    // deploy auto-fires on main merge" and "Production deploy is a manual job
+    // that requires the production environment's approver list" — the second was
+    // never configured (see the approval-claim arm below), and the first stopped
+    // being the trigger when the deploy was gated on CI.
+    expect(body).toMatch(
+      /# Two-environment flow \(gated on CI since 2026-09-24, security sweep E-9\):/,
+    );
+    expect(body).toMatch(/#\s+- Runs when the CI workflow COMPLETES on a push to main/);
+    expect(body).toMatch(/#\s+- Staging deploys first\. Production follows only after staging/);
+    expect(body).toMatch(/#\s+deployed the same commit in the same run\. No approval gate\./);
+    expect(body).toMatch(/#\s+- Neither environment is ever moved to a commit older than the one/);
+    expect(body).not.toMatch(/Production deploy is a manual job that requires the/);
     expect(body).toMatch(/# Per Workstream A spec \(V-051 — REVISED 2026-05-17\):/);
     expect(body).toMatch(/#\s+- Hetzner Cloud VMs \(CCX13 default — 4 vCPU, 16GB RAM, €25\/mo\)\./);
     expect(body).toMatch(/#\s+- systemd at \/opt\/driftstack\/api on the host\./);
@@ -65,9 +74,14 @@ describe('W542.A /.github/workflows/deploy.yml content parity (Option B)', () =>
 
   it('Trigger + concurrency framing pinned', () => {
     expect(body).toMatch(/^name: Deploy$/m);
-    expect(body).toMatch(/on:\s*\n\s*push:\s*\n\s*branches: \[main\]\s*\n\s*workflow_dispatch:/);
+    // 2026-09-24: CI completing on main, not the push; a named concurrency group
+    // that only a run able to deploy joins, queued rather than replaced.
     expect(body).toMatch(
-      /concurrency:\s*\n\s*group: deploy-\$\{\{ github\.ref \}\}\s*\n\s*cancel-in-progress: false/,
+      /workflow_run:\s*\n\s*workflows: \[CI\]\s*\n\s*types: \[completed\]\s*\n\s*branches: \[main\]/,
+    );
+    expect(body).toMatch(/^ {2}workflow_dispatch:/m);
+    expect(body).toMatch(
+      /concurrency:\s*\n(?:\s*#[^\n]*\n)*\s*group: >-\n[^\n]*\$\{\{[\s\S]*?&& 'deploy-api' \|\| format\('deploy-nothing-\{0\}', github\.run_id\) \}\}\n\s*cancel-in-progress: false\n\s*queue: max\n/,
     );
   });
 
@@ -98,7 +112,7 @@ describe('W542.A /.github/workflows/deploy.yml content parity (Option B)', () =>
   it('deploy-staging + deploy-production jobs both invoke deploy-bridge.sh', () => {
     expect(body).toMatch(/deploy-staging:/);
     expect(body).toMatch(/name: Deploy to staging \(via deploy-bridge\.sh\)/);
-    expect(body).toMatch(/needs: source-map-upload/);
+    expect(body).toMatch(/needs: \[ci-gate, source-map-upload\]/);
     expect(body).toMatch(/url: https:\/\/staging\.driftstack\.dev/);
     expect(body).toMatch(/bash scripts\/deploy-bridge\.sh staging/);
 
@@ -106,7 +120,7 @@ describe('W542.A /.github/workflows/deploy.yml content parity (Option B)', () =>
     expect(body).toMatch(
       /name: Deploy to production \(CONTINUOUS — no approval gate; via deploy-bridge\.sh\)/,
     );
-    expect(body).toMatch(/needs: \[source-map-upload, deploy-staging\]/);
+    expect(body).toMatch(/needs: \[ci-gate, source-map-upload, deploy-staging\]/);
     expect(body).toMatch(/url: https:\/\/api\.driftstack\.dev/);
     expect(body).toMatch(/bash scripts\/deploy-bridge\.sh prod/);
   });

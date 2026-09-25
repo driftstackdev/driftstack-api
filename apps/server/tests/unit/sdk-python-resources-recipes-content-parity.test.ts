@@ -72,10 +72,16 @@ describe('sdk-python resources/recipes content parity', () => {
     );
   });
 
-  it("V-1120 ACCESS-scoped 404 framing pinned: agent_session_id must be a session you can ACCESS, and anything else 404s rather than 403s. The old docstring read as though any cross-account id 404s, which is the rule V-812 retracted — a team admin snapshotting the owner's session gets a 201, filed under the admin's own account.", () => {
+  it("V-1120 workspace-scoped 404 framing pinned: agent_session_id must be a session of the workspace the recipe is saved in, and anything else 404s rather than 403s. Security sweep #15 retired the older rule, under which an admin could snapshot the owner's session into the admin's own account.", () => {
     const body = read(LIB);
+    // Security sweep #15 — the session must belong to the workspace the recipe is
+    // saved in, and the recipe is filed there.
     expect(body).toMatch(
-      /``agent_session_id`` must be a session you can\s*ACCESS — one your own account owns, or one owned by a team you/,
+      /``agent_session_id`` must be a session of the\s*workspace you save into — your own account's, or/,
+    );
+    expect(body).toMatch(/is filed under that same account\./);
+    expect(body, "the caller's-own-account filing must not return").not.toMatch(
+      /still filed under\s*YOUR account/,
     );
     expect(body, 'the 404-not-403 reason must stay').toMatch(/returns 404 \(not 403\) by\s*design/);
     expect(body, 'the any-cross-account-404s claim must not return').not.toMatch(

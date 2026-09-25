@@ -138,52 +138,108 @@ jobs:
             | jq -e '.openapi | startswith("3.1")' > /dev/null
           echo "Pre-deploy smoke OK; proceeding with deploy."
 
+      # Security sweep E-26 (2026-09-24). This step used to hand the production SSH
+      # key and the WHOLE production .env to appleboy/ssh-action@v1, a third-party
+      # action on a mutable tag, and wrote the env with the secret spliced into the
+      # script under the default umask (0644) — and only then ran `docker compose
+      # pull`, which fails on a host without docker and left that world-readable
+      # copy behind. Now: plain ssh from the runner, so no third-party code sees a
+      # secret; the host must prove it can run this deploy before anything is
+      # written to it; the env travels on stdin into a 0600 temp file renamed into
+      # place; and the image tag is validated before it reaches a remote command.
       - name: Deploy via SSH with auto-rollback (V-549.B)
         if: steps.gate.outputs.ready == 'true'
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
-          script: |
-            set -euo pipefail
+        env:
+          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+          HETZNER_USER: ${{ secrets.HETZNER_USER }}
+          HETZNER_SSH_KEY: ${{ secrets.HETZNER_SSH_KEY }}
+          DEPLOY_DOTENV_BASE64: ${{ secrets.DEPLOY_DOTENV_BASE64 }}
+          IMAGE_TAG: ${{ needs.build-image.outputs.image-tag }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$IMAGE_TAG" =~ ^[A-Za-z0-9._/:-]+$ ]]; then
+            echo "::error::refusing an image tag with unexpected characters"
+            exit 1
+          fi
+
+          install -d -m 700 ~/.ssh
+          (umask 077 && printf '%s\n' "$HETZNER_SSH_KEY" > ~/.ssh/deploy_key)
+          for attempt in 1 2 3 4 5; do
+            ssh-keyscan -t ed25519 "$HETZNER_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+            if grep -qF "$HETZNER_HOST" ~/.ssh/known_hosts; then break; fi
+            echo "ssh-keyscan attempt $attempt returned no key; retrying in 3s..."
+            sleep 3
+          done
+          if ! grep -qF "$HETZNER_HOST" ~/.ssh/known_hosts; then
+            echo "::error::could not obtain the production SSH host key after 5 attempts"
+            exit 1
+          fi
+          remote() {
+            ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=8 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+              "$HETZNER_USER@$HETZNER_HOST" "$@"
+          }
+
+          # 1. Preflight BEFORE anything is written: this path deploys docker
+          #    images, so a host without docker compose must refuse here.
+          if ! remote 'command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1'; then
+            echo "::error::the production host cannot run a docker compose deploy; nothing was written to it"
+            exit 1
+          fi
+
+          # 2. The env: on stdin (never a command line or script text), decoded into
+          #    a 0600 temp file beside .env, renamed into place only when complete.
+          printf '%s' "$DEPLOY_DOTENV_BASE64" | remote 'set -euo pipefail
             cd /opt/driftstack
-            echo "${{ secrets.DEPLOY_DOTENV_BASE64 }}" | base64 -d > .env
+            umask 077
+            tmp=$(mktemp .env.XXXXXXXX)
+            trap '"'"'rm -f "$tmp"'"'"' EXIT
+            base64 -d > "$tmp"
+            chmod 600 "$tmp"
+            mv -f "$tmp" .env
+            trap - EXIT'
 
-            # V-549.B — capture the currently-running image tag so we can
-            # roll back to it if the post-deploy health-check fails.
-            PREV_TAG=$(docker compose images --quiet driftstack-api 2>/dev/null \
-              | xargs -r docker inspect --format '{{(index .RepoTags 0)}}' 2>/dev/null \
-              | head -n1 || true)
+          # 3. The deploy itself, with the validated image tag as its argument.
+          remote bash -s -- "$IMAGE_TAG" <<'REMOTE'
+          set -euo pipefail
+          IMAGE_TAG="$1"
+          cd /opt/driftstack
+
+          # V-549.B — capture the currently-running image tag so we can
+          # roll back to it if the post-deploy health-check fails.
+          PREV_TAG=$(docker compose images --quiet driftstack-api 2>/dev/null \
+            | xargs -r docker inspect --format '{{(index .RepoTags 0)}}' 2>/dev/null \
+            | head -n1 || true)
+          if [ -n "$PREV_TAG" ]; then
+            echo "Previous image tag (for rollback): $PREV_TAG"
+          else
+            echo "No previous image tag detected — first deploy or scratch state."
+          fi
+
+          export IMAGE_TAG
+          docker compose pull
+          docker compose up -d --remove-orphans
+
+          HEALTHY=0
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS http://127.0.0.1:7780/health > /dev/null; then
+              echo "production (tag) healthy"
+              HEALTHY=1
+              break
+            fi
+            echo "attempt $i: not ready yet, sleeping"
+            sleep 3
+          done
+
+          if [ "$HEALTHY" -ne 1 ]; then
+            echo "Post-deploy /health failed. Initiating V-549.B rollback."
             if [ -n "$PREV_TAG" ]; then
-              echo "Previous image tag (for rollback): $PREV_TAG"
+              export IMAGE_TAG="$PREV_TAG"
+              docker compose up -d --remove-orphans
+              echo "Rolled back to $PREV_TAG. Manual verification required."
             else
-              echo "No previous image tag detected — first deploy or scratch state."
+              echo "No previous tag to roll back to. Manual intervention required."
             fi
-
-            export IMAGE_TAG='${{ needs.build-image.outputs.image-tag }}'
-            docker compose pull
-            docker compose up -d --remove-orphans
-
-            HEALTHY=0
-            for i in 1 2 3 4 5 6 7 8 9 10; do
-              if curl -fsS http://127.0.0.1:7780/health > /dev/null; then
-                echo "production (tag) healthy"
-                HEALTHY=1
-                break
-              fi
-              echo "attempt $i: not ready yet, sleeping"
-              sleep 3
-            done
-
-            if [ "$HEALTHY" -ne 1 ]; then
-              echo "Post-deploy /health failed. Initiating V-549.B rollback."
-              if [ -n "$PREV_TAG" ]; then
-                export IMAGE_TAG="$PREV_TAG"
-                docker compose up -d --remove-orphans
-                echo "Rolled back to $PREV_TAG. Manual verification required."
-              else
-                echo "No previous tag to roll back to. Manual intervention required."
-              fi
-              exit 1
-            fi
+            exit 1
+          fi
+          REMOTE

@@ -46,6 +46,10 @@ const WIRING = new Set(['lib/r2.ts', 'lib/app.ts', 'lib/config.ts', 'lib/bootstr
 const DECLARED: Readonly<Record<string, string>> = {
   'routes/account-me.ts': 'customer-uploaded avatars, keyed avatars/<account_id>.<ext> (V-352b)',
   'services/status-snapshot.ts': 'operational incident JSON for the status page (V-295c2)',
+  'services/terminated-account-avatar-purge.ts':
+    'DELETES the avatars of terminated accounts past the retention window (security sweep E-23)',
+  'services/avatar-orphan-reaper.ts':
+    'LISTS avatars/ and DELETES each avatar image no account points at, older than an hour (security sweep E-23)',
 };
 
 function walk(dir: string, out: string[]): string[] {

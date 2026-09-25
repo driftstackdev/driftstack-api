@@ -62,6 +62,15 @@ else
   fi
 fi
 
+# Security sweep E-22 (2026-09-24): the target is passed to deploy-bridge.sh and
+# lands in a ROOT shell on the host (`git checkout`), and .last-good-sha is read
+# back from that host, so anything that is not a commit id is refused here.
+if ! [[ "$LAST_GOOD" =~ ^[0-9a-f]{7,40}$ ]]; then
+  echo "[revert] refusing revert target: not a 7-40 character lowercase hex commit id" >&2
+  echo "[revert]   (inspect /opt/driftstack/api/.last-good-sha on $HOST, or pass --to-sha <sha>)" >&2
+  exit 1
+fi
+
 CURRENT=$(curl -fsS "https://$([ "$ENV" = "prod" ] && echo "api" || echo "staging").driftstack.dev/version" 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin).get("git_sha",""))' 2>/dev/null || echo "?")
 
 echo "[revert] $ENV current /version git_sha = $CURRENT" >&2

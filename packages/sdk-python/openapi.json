@@ -19212,6 +19212,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Avatar storage is unavailable; the avatar was not removed. Retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -51322,6 +51332,7 @@
     "/v1/auth/cli-authorize/initiate": {
       "post": {
         "summary": "Start CLI/GUI activation; returns a device user code + browser URL",
+        "description": "Send `code_challenge` (unpadded base64url SHA-256 of a `code_verifier` the device keeps) with `code_challenge_method: S256`; the exchange then requires that verifier, so the `code` and `state` in the browser URL cannot collect the key on their own. Omitting both is accepted until 31 January 2027 (the response then carries `Deprecation` and `Sunset` headers) and refused with 400 from that date.",
         "tags": ["auth"],
         "requestBody": {
           "required": true,
@@ -51339,6 +51350,14 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 120
+                  },
+                  "code_challenge": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
+                  },
+                  "code_challenge_method": {
+                    "type": "string",
+                    "enum": ["S256"]
                   }
                 },
                 "required": ["state"]
@@ -51349,6 +51368,20 @@
         "responses": {
           "200": {
             "description": "Opaque activation code, separate device-displayed user code, and browser URL. Codes expire after ~5min.",
+            "headers": {
+              "Deprecation": {
+                "description": "RFC 9745. Sent only when the request had no `code_challenge`: that way of starting is deprecated.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Sunset": {
+                "description": "RFC 8594. Sent only when the request had no `code_challenge`: the date from which such a request is refused.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -51782,6 +51815,7 @@
     "/v1/auth/cli-authorize/exchange": {
       "post": {
         "summary": "Poll for the bound API key plaintext (one-shot delivery)",
+        "description": "Send the `code_verifier` whose S256 hash was the `code_challenge` at initiate. A flow started with a challenge answers 400 — before and after approval, without saying which — to a request whose verifier is missing or wrong, and the refusal does not use up the code.",
         "tags": ["auth"],
         "requestBody": {
           "required": true,
@@ -51799,6 +51833,10 @@
                     "type": "string",
                     "minLength": 16,
                     "maxLength": 128
+                  },
+                  "code_verifier": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._~-]{43,128}$"
                   }
                 },
                 "required": ["code", "state"]

@@ -173,7 +173,10 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(
       /useradd --system --home-dir \/opt\/driftstack --shell \/usr\/sbin\/nologin driftstack/,
     );
-    expect(body).toMatch(/^chown -R driftstack:driftstack \/opt\/driftstack$/m);
+    // Security sweep E-22 (2026-09-24): the deploy tree is root-owned, because the
+    // deploy acts inside it as root. Only the unrelated web dir is handed over.
+    expect(body).not.toMatch(/^chown -R driftstack:driftstack \/opt\/driftstack$/m);
+    expect(body).toMatch(/^chown driftstack:driftstack \/opt\/driftstack\/web$/m);
     expect(body).toMatch(/^rm -f \/etc\/nginx\/sites-enabled\/default$/m);
     expect(body).toMatch(/^systemctl enable --now nginx$/m);
     expect(body).toMatch(/^systemctl daemon-reload$/m);

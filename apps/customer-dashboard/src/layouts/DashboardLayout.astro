@@ -245,6 +245,14 @@ const navSections: NavSection[] = [
                 // block re-runs and forwards on to admin.
                 var qs = new URLSearchParams(location.search);
                 var nextAdmin = qs.get('next-admin');
+                // Security sweep #20 — the one-time state the admin tab left for
+                // itself before bouncing here. The token is handed over ONLY
+                // beside it, so the admin panel can tell a handoff it asked for
+                // from one it did not; without it this browser is sent to the
+                // admin panel with no token and `handoff=1`, and the panel starts
+                // a fresh handoff of its own (replacing any copy it still holds).
+                var adminState = qs.get('admin-state');
+                if (adminState !== null && !/^[0-9a-f]{32}$/.test(adminState)) adminState = null;
                 if (nextAdmin && t && t.length > 0) {
                   // 2026-05-21 — preserve any query string already on the
                   // admin path. URL parses + reassembles so a nextAdmin
@@ -265,15 +273,22 @@ const navSections: NavSection[] = [
                   if (u.origin !== 'https://admin.driftstack.io') {
                     u = new URL('https://admin.driftstack.io/');
                   }
-                  u.searchParams.set('bounced', '1');
-                  u.hash = '#token=' + encodeURIComponent(t);
+                  if (adminState) {
+                    u.searchParams.set('bounced', '1');
+                    u.hash = '#token=' + encodeURIComponent(t) + '&state=' + adminState;
+                  } else {
+                    u.searchParams.set('handoff', '1');
+                  }
                   location.replace(u.toString());
                   return;
                 }
                 if (nextAdmin && (!t || t.length === 0)) {
-                  // Carry the next-admin intent through /login as a
-                  // doubly-encoded ?next= round-trip.
-                  var loginNext = '/?next-admin=' + encodeURIComponent(nextAdmin);
+                  // Carry the next-admin intent (and the admin tab's state)
+                  // through /login as a doubly-encoded ?next= round-trip.
+                  var loginNext =
+                    '/?next-admin=' +
+                    encodeURIComponent(nextAdmin) +
+                    (adminState ? '&admin-state=' + adminState : '');
                   location.replace('/login/?next=' + encodeURIComponent(loginNext));
                   return;
                 }
@@ -845,10 +860,11 @@ const navSections: NavSection[] = [
                 default; the inline `/account/me` hydration script reveals
                 it when the cached `ds_is_staff_user` flag is set OR
                 when /account/me confirms `email` matches the staff
-                allowlist (signalled by /admin/* returning 200). Avoids
-                the localStorage-copy detour by passing the current
-                ds_web_session_token in the URL hash; admin's pre-paint
-                bridge consumes the hash + strips it from history.
+                allowlist (signalled by /admin/* returning 200). The link
+                opens the admin panel with no token and asks it for a fresh
+                handoff; the panel asks this dashboard for one beside a
+                one-time state of its own (security sweep #20) and consumes
+                the hash pre-paint.
               */}
               <div
                 data-admin-shortcut
@@ -1638,24 +1654,15 @@ const navSections: NavSection[] = [
                 } catch (_) {
                   /* swallow */
                 }
-                // 2026-05-21 — build the bounce URL at CLICK time, not at
-                // probe time. If the customer signs out between the
-                // probe + click, the link no longer carries a stale
-                // token that the admin layout would treat as authentic.
-                // Falls through to admin layout's direct-visit bounce
-                // when there's no token left to ship.
+                // Security sweep #20 — the link carries no token. It asks the
+                // admin panel for a fresh handoff (handoff=1): the panel drops any
+                // copy it holds — sign-out revokes it, so an old copy may be dead —
+                // and bounces back here with a one-time state of its own. The token
+                // travels only beside that state, so the panel accepts only a
+                // handoff it asked for, and every click refreshes its copy.
                 link.addEventListener('click', function (e) {
                   e.preventDefault();
-                  let t = '';
-                  try {
-                    t = localStorage.getItem('ds_web_session_token') || '';
-                  } catch (_) {
-                    /* swallow */
-                  }
-                  const target =
-                    'https://admin.driftstack.io/' +
-                    (t.length > 0 ? '#token=' + encodeURIComponent(t) : '');
-                  window.location.href = target;
+                  window.location.href = 'https://admin.driftstack.io/?handoff=1';
                 });
                 if (cached === '1') {
                   shortcut.classList.remove('hidden');

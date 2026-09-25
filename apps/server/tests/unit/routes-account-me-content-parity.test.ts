@@ -217,12 +217,10 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     );
   });
 
-  it('Avatar DELETE: clear avatarR2Key pointer; 204; R2 object left for sweeper rationale ("public bucket already public-readable; stale objects no worse")', () => {
+  it('Avatar DELETE: the public objects are deleted FIRST (503 and the pointer kept if storage refuses), then the pointer cleared; 204. REPINNED 2026-09-24 (security sweep E-23): this arm used to pin the rationale for LEAVING the object in place for a sweeper that never existed, which kept a removed avatar publicly readable.', () => {
+    expect(body).not.toMatch(/object is intentionally left in place/);
     expect(body).toMatch(
-      /\/\/ V-352b — clear the avatar pointer on the account row\. The R2\s*\/\/ object is intentionally left in place: a future sweeper job\s*\/\/ collects orphaned avatar keys \(off the hot path; avatars are\s*\/\/ already public-readable so leaving stale objects is no worse\s*\/\/ than the public bucket already is\)\. Returns 204\./,
-    );
-    expect(body).toMatch(
-      /const updated = await authRepo\.updateAccountBasics\(ctx\.account\.id, \{\s*avatarR2Key: null,\s*\}\);[\s\S]+?reply\.code\(204\);\s*return null;/,
+      /await deleteAvatarObjects\(r2Public, ctx\.account\.id\);\s*\} catch \(err\) \{[\s\S]+?throw new FeatureUnavailableError\([\s\S]+?const updated = await authRepo\.updateAccountBasics\(ctx\.account\.id, \{\s*avatarR2Key: null,\s*\}\);[\s\S]+?reply\.code\(204\);\s*return null;/,
     );
   });
 
@@ -264,7 +262,9 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     expect(body).toMatch(/import type \{ SessionRepo \} from '\.\.\/services\/sessions\.js';/);
     expect(body).toMatch(/import type \{ ProfilesRepo \} from '\.\.\/services\/profiles\.js';/);
     expect(body).toMatch(/import type \{ MfaService \} from '\.\.\/services\/mfa\.js';/);
-    expect(body).toMatch(/import \{ avatarKey, type R2 \} from '\.\.\/lib\/r2\.js';/);
+    expect(body).toMatch(
+      /import \{ avatarKey, avatarKeysForAccount, deleteAvatarObjects, type R2 \} from '\.\.\/lib\/r2\.js';/,
+    );
     expect(body).toMatch(
       /import \{\s*BadRequestError,\s*ConflictError,\s*FeatureUnavailableError,\s*ForbiddenError,\s*NotFoundError,\s*\} from '\.\.\/lib\/errors\.js';/,
     );

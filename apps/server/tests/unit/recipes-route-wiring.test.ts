@@ -89,7 +89,9 @@ async function harness(sessionSource: unknown = null): Promise<{
   });
   app.decorate('requireScope', (_scope: string) => () => Promise.resolve());
   app.decorate('rateLimit', (_bucket: string) => () => Promise.resolve());
-  registerRecipesRoutes(app, { recipes, agentSessions });
+  // No header is sent here, so the team owner's plan is never read.
+  const authRepo = { getAccount: () => Promise.resolve(null) };
+  registerRecipesRoutes(app, { recipes, agentSessions, authRepo });
   await app.ready();
   return { app, getByIdAccounts, deleteAccounts, listAccounts };
 }

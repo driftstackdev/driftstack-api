@@ -53,10 +53,17 @@ describe('sdk-go recipes content parity', () => {
     );
   });
 
-  it("V-1120 Create() ACCESS-scoped 404 framing pinned. The old comment read 'Cross-account access on AgentSessionID returns 404', the rule V-812 retracted. The Get/Delete comments below are NOT changed: those are about recipeID, which really is strictly own-account, so the same words are correct there and wrong here.", () => {
+  it('V-1120 Create() workspace-scoped 404 framing pinned. The session must belong to the workspace the recipe is saved in (security sweep #15). The Get/Delete comments below are about recipeID, whose cross-account 404 is unchanged.', () => {
     const body = read(LIB);
+    // Security sweep #15 — the session must belong to the workspace the recipe is
+    // saved in, and the recipe is filed there (an admin's copy of the owner's
+    // session used to land in the admin's own account).
     expect(body).toMatch(
-      /\/\/ AgentSessionID must be a session the caller can ACCESS: one their own\s*\/\/ account owns, or one owned by a team they hold admin on\./,
+      /\/\/ AgentSessionID must be a session of the workspace the recipe is saved\s*\/\/ in:/,
+    );
+    expect(body).toMatch(/\/\/ under that same account\./);
+    expect(body, "the admin's-own-account filing must not return").not.toMatch(
+      /filed under the ADMIN's account/,
     );
     expect(body, 'the anti-enumeration reason must stay').toMatch(
       /doesn't distinguish\s*\n?\/\/ missing from forbidden/,

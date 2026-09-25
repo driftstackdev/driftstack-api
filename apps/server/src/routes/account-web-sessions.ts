@@ -20,7 +20,8 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AuthFlowsService, WebSessionRow } from '../services/auth-flows.js';
 import type { AccountAuditService } from '../services/account-audit.js';
 import { z } from 'zod';
-import { BadRequestError, NotFoundError, ValidationError } from '../lib/errors.js';
+import { BadRequestError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
+import { isKeyHeldByTeamMember } from '../services/auth.js';
 
 // V-1368 — validate the querystring rather than trusting the `Querystring` generic.
 //
@@ -166,6 +167,13 @@ export function registerAccountWebSessionsRoutes(
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
+      // Security sweep #12 — the owner's signed-in devices are the owner's; a key
+      // a team member minted on the owner's account is held by the member.
+      if (isKeyHeldByTeamMember(ctx)) {
+        throw new ForbiddenError(
+          "Signed-in devices are visible only to the account's owner, and this key was created by a team member.",
+        );
+      }
       const currentId = currentWebSessionIdFromRequest(request);
       const rows = await service.listActiveWebSessions(ctx.account.id);
       return { data: rows.map((r) => publicSession(r, currentId)) };

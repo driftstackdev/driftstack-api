@@ -17,6 +17,19 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
   or the whole page served under that status — and its `summary` says what the
   site answered. The generated models list the known kind and accept any other
   string: treat a kind you do not recognise as a note and read `summary`.
+- **Desktop browser sign-in: code verifier (PKCE).** `auth.cli_authorize_initiate`
+  forwards `code_challenge` (unpadded base64url SHA-256 of a `code_verifier`
+  you keep) with `code_challenge_method: "S256"`, and
+  `auth.cli_authorize_exchange` forwards `code_verifier`. A flow started with
+  a challenge cannot be collected without the verifier, so the `code` and
+  `state` in `browser_url` are no longer enough on their own. On both
+  `Driftstack` and `AsyncDriftstack`.
+
+### Deprecated
+
+- Calling `auth.cli_authorize_initiate` without `code_challenge`. It works as
+  before until **31 January 2027**; responses carry `Deprecation` and
+  `Sunset` headers, and from that date the server answers `400`.
 
 ## [0.3.0] - 2026-09-22
 

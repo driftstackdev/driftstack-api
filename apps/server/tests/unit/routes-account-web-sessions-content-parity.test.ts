@@ -168,13 +168,13 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
     );
   });
 
-  it('imports: FastifyInstance/FastifyRequest + AuthFlowsService/WebSessionRow + BadRequestError/NotFoundError', () => {
+  it('imports: FastifyInstance/FastifyRequest + AuthFlowsService/WebSessionRow + BadRequestError/ForbiddenError/NotFoundError', () => {
     expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
     expect(body).toMatch(
       /import type \{ AuthFlowsService, WebSessionRow \} from '\.\.\/services\/auth-flows\.js';/,
     );
     expect(body).toMatch(
-      /import \{ BadRequestError, NotFoundError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*BadRequestError,\s*ForbiddenError,\s*NotFoundError,\s*ValidationError,?\s*\} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

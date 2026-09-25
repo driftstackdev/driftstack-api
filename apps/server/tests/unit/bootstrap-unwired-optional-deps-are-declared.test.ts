@@ -73,6 +73,24 @@ const DECLARED: Record<string, string> = {
   'NowPaymentsApiClient.baseUrl': 'Test seam; the default is the real NowPayments API base.',
   'NowPaymentsApiClient.fetchImpl': 'Test seam; defaults to the platform fetch.',
   'CryptoOrdersService.nowFn': 'Clock injection seam; the default is the real clock.',
+  // CliAuthorizeService became visible on 2026-09-24 (GUI audit #9), and not
+  // because of a new gap: the deps-object pattern below matched from
+  // `export class CliAuthorizeError` across into the NEXT class's constructor,
+  // so it filed CliAuthorizeServiceOptions under CliAuthorizeError and never
+  // checked CliAuthorizeService at all. Lengthening the error union moved that
+  // constructor out of the 600-character window, and the service was read for
+  // the first time. store and dashboardPath were unwired before that.
+  'CliAuthorizeService.store':
+    'Test seam: tests pass an in-memory store. Production passes `redis`, and the ' +
+    'constructor refuses to build with neither, so the Redis store IS the production store.',
+  'CliAuthorizeService.dashboardPath':
+    "The default '/cli/authorize' is the dashboard's confirmation page; no deployment " +
+    'serves it anywhere else.',
+  'CliAuthorizeService.legacyFlowEndsAt':
+    'Test seam. The default LEGACY_CLI_AUTHORIZE_FLOW_ENDS_AT IS the production removal ' +
+    'date for a sign-in without a code challenge, and the date published in the auth API ' +
+    'reference is pinned to it by a test.',
+  'CliAuthorizeService.now': 'Clock injection seam; the default is the real clock.',
   'CryptoOrdersService.paidEmailNotifier':
     'NOT a seam — a real gap. V-666.R added a "paid receipt email" intent ' +
     'emitter and its doc comment claims production routes it through the ' +

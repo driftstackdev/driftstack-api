@@ -24,8 +24,10 @@
 //   • exchange: null-raw → expired; state mismatch throws; pending
 //     short-circuit; bound deletes BEFORE returning (no leak on
 //     JSON.stringify failure downstream).
-//   • CliAuthorizeError 6-code union (invalid_code / state_mismatch /
-//     user_code_mismatch / already_bound / not_found / expired).
+//   • CliAuthorizeError 10-code union (invalid_code / state_mismatch /
+//     user_code_mismatch / already_bound / not_found / expired, plus the
+//     GUI audit #9 PKCE codes invalid_code_challenge / code_challenge_required /
+//     code_verifier_required / code_verifier_mismatch).
 //   • constantTimeStringEqual: byte-length check + timingSafeEqual buffer
 //     comparison (mitigates state-parameter timing attack).
 
@@ -136,10 +138,10 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     );
   });
 
-  it('CliAuthorizeError: 6-code union includes the device verification mismatch', () => {
+  it('CliAuthorizeError: 10-code union includes the device verification mismatch and the PKCE refusals', () => {
     expect(body).toMatch(/export class CliAuthorizeError extends Error \{/);
     expect(body).toMatch(
-      /public readonly code:\s*\| 'invalid_code'\s*\| 'state_mismatch'\s*\| 'user_code_mismatch'\s*\| 'already_bound'\s*\| 'not_found'\s*\| 'expired',/,
+      /public readonly code:\s*\| 'invalid_code'\s*\| 'state_mismatch'\s*\| 'user_code_mismatch'\s*\| 'already_bound'\s*\| 'not_found'\s*\| 'expired'\s*\| 'invalid_code_challenge'\s*\| 'code_challenge_required'\s*\| 'code_verifier_required'\s*\| 'code_verifier_mismatch',/,
     );
     expect(body).toMatch(/this\.name = 'CliAuthorizeError';/);
   });
@@ -215,15 +217,19 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
 
   it('exchange: raw=null → expired; pending short-circuit; bound uses atomic getDel claim + D1 decrypt (no leak, no double-deliver)', () => {
     expect(body).toMatch(
-      /if \(raw === null\) \{\s*\/\/ Either never existed OR Redis evicted on TTL — treat both as\s*\/\/ expired from the CLI \/ GUI's perspective\.\s*return \{ status: 'expired' \};/,
+      /if \(raw === null\) \{\s*\/\/ Either never existed OR Redis evicted on TTL — treat both as\s*\/\/ expired from the CLI \/ GUI's perspective\.\s*return \{ result: \{ status: 'expired' \}, flow: null \};/,
     );
+    // GUI audit #9 — a challenged flow answers nothing, not even pending,
+    // without the verifier; the check sits BEFORE the pending short-circuit.
     expect(body).toMatch(
-      /if \(stored\.status === 'pending'\) \{\s*return \{ status: 'pending' \};\s*\}/,
+      /if \(stored\.code_challenge !== null\) \{[\s\S]*?'code_verifier_required'[\s\S]*?verifyS256Challenge\(\{ verifier: input\.code_verifier, challenge: stored\.code_challenge \}\)[\s\S]*?'code_verifier_mismatch'[\s\S]*?\}\s*\}\s*if \(stored\.status === 'pending'\) \{\s*return \{ result: \{ status: 'pending' \}, flow \};\s*\}/,
     );
     // C2 — atomic getDel claim replaced the non-atomic store.del: exactly
     // one concurrent bound poll wins; the loser sees null → expired.
     expect(body).toMatch(/const claimedRaw = await this\.store\.getDel\(key\);/);
-    expect(body).toMatch(/if \(claimedRaw === null\) \{\s*return \{ status: 'expired' \};/);
+    expect(body).toMatch(
+      /if \(claimedRaw === null\) \{\s*return \{ result: \{ status: 'expired' \}, flow \};/,
+    );
     // Claimed bytes are immutable and must still parse as encrypted bound state;
     // decrypt the at-rest blob only at delivery; decrypt failure → expired.
     expect(body).toMatch(/const claimed = parseStoredCode\(claimedRaw\);/);
@@ -232,7 +238,7 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
     );
     expect(body).toMatch(/apiKey = decryptPlatformSecret\(/);
     expect(body).toMatch(
-      /return \{\s*status: 'bound',\s*api_key: apiKey,\s*account_id: claimed\.account_id,\s*\};/,
+      /return \{\s*result: \{\s*status: 'bound',\s*api_key: apiKey,\s*account_id: claimed\.account_id,\s*\},\s*flow,\s*\};/,
     );
   });
 

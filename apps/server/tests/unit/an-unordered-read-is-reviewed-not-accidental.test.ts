@@ -42,6 +42,10 @@ const DB_DIR = resolve(REPO_ROOT, 'apps/server/src/db');
 const REVIEWED: Record<string, string> = {
   'account-deletion-purge-repo.ts::findDeletedAccountIdsWithByokKeyBefore':
     'string[] handed to the purge sweeper, which processes every id it is given',
+  'account-deletion-purge-repo.ts::findTerminatedAccountIdsWithAvatarBefore':
+    'string[] handed to the purge sweeper, which processes every id it is given; bounded per ' +
+    'tick and self-limiting (clearing the pointer drops the account out), so which ids a tick ' +
+    'takes first is unobservable',
   'agent-sessions-repo.ts::listActivePairModeSessionIds':
     'id list iterated in full by the bootstrap unpark loop',
   'auth-repo.ts::findActiveRateLimitOverrides':

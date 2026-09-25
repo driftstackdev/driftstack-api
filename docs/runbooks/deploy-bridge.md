@@ -174,6 +174,34 @@ status, then `bash scripts/deploy-bridge.sh prod`.
   inserting the matching row into `drizzle.__drizzle_migrations` with
   the same hash. Re-run the deploy once the on-disk journal and the
   DB row count agree.
+- **`refusing deploy target` / `refusing revert target`**: the SHA
+  argument, or the `.last-good-sha` read back from the host, is not
+  7-40 lowercase hex characters. Both land in a root shell on the host,
+  so nothing else is accepted (security sweep E-22). Pass a real commit
+  id, or inspect the file on the host.
+- **`... is a symlink; refusing` / `is not a plain directory`**: the
+  deploy runs as root and will not act through a link inside the deploy
+  tree. `/opt/driftstack` and `/opt/driftstack/api` are made root-owned
+  on every run; `.env` stays `driftstack:driftstack` 0600 and must be a
+  regular file. Remove the link by hand after working out who made it.
+- **The Deploy workflow skipped or refused a commit**
+  (`.github/workflows/deploy.yml`, `scripts/deploy-is-forward.mjs`):
+  it deploys a commit only after CI passes on it, staging first, and
+  never to an environment that already runs a newer commit (a skip
+  with a notice, not a failure). A revert therefore waits for its CI
+  run. CI on main cancels a run when a newer push lands, and a
+  cancelled run deploys nothing and raises nothing, so during a burst
+  of pushes production stays where it is until a CI run finishes.
+  When an environment's `/version` is down or reports `unknown`,
+  only the current tip of main deploys automatically; any other
+  commit is refused and goes out by hand, staging first:
+  `DEPLOY_VIA_BUNDLE=1 bash scripts/deploy-bridge.sh prod <sha>`.
+  `bash scripts/revert-bridge.sh prod` rolls back to the last
+  known-good build without waiting for anything.
+- **Where the build logs are**: a failed deploy leaves its work
+  directory, `/tmp/driftstack-deploy.XXXXXXXXXX/`, with the install,
+  build, pre-gate and migrate logs under `logs/` (root-only). A
+  successful deploy removes it.
 
 ## Migration drift
 

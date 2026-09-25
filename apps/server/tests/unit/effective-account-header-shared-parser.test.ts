@@ -57,6 +57,8 @@ const CONSUMER_ROUTES = [
   // resolves the header only to refuse any account but the caller's own, the
   // way PATCH /v1/account/me/ai-settings does.
   'apps/server/src/routes/account-bundled-llm.ts',
+  // Security sweep #15 — every recipe route acts in the workspace the header names.
+  'apps/server/src/routes/recipes.ts',
 ];
 
 /**

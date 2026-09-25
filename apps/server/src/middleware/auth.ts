@@ -5,7 +5,12 @@
 import fp from 'fastify-plugin';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { AccountAuthRepo, AccountContext } from '../services/auth.js';
-import { authenticate, extractBearerToken, requireScope } from '../services/auth.js';
+import {
+  authenticate,
+  contextForKeyHolder,
+  extractBearerToken,
+  requireScope,
+} from '../services/auth.js';
 import type { AuthCache } from '../services/auth-cache.js';
 import type { AuthCoalescer } from '../services/auth-coalescer.js';
 import type { NegativeAuthCache } from '../services/negative-auth-cache.js';
@@ -165,7 +170,9 @@ function authPlugin(
         opts.oauthStore ?? null,
       );
       requireProgrammaticApiAccess(ctx, request);
-      request.account = ctx;
+      // Security sweep #12 — a key a team member holds on the owner's account
+      // acts for none of the owner's teams (see contextForKeyHolder).
+      request.account = contextForKeyHolder(ctx);
       try {
         opts.metrics?.inc(METRIC_NAMES.authTotal, { outcome: 'ok' });
       } catch {
@@ -216,7 +223,9 @@ function authPlugin(
         opts.oauthStore ?? null,
       );
       requireProgrammaticApiAccess(ctx, request);
-      request.account = ctx;
+      // Security sweep #12 — a key a team member holds on the owner's account
+      // acts for none of the owner's teams (see contextForKeyHolder).
+      request.account = contextForKeyHolder(ctx);
       try {
         opts.metrics?.inc(METRIC_NAMES.authTotal, { outcome: 'ok' });
       } catch {

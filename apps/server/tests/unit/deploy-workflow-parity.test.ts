@@ -14,9 +14,9 @@
 //      to inline-SSH-script would split the two execution paths
 //      (operator-manual vs CI-triggered) and cause silent
 //      divergence.
-//   2. deploy-staging is automatic on main merge (no approval gate);
-//      deploy-production requires the GitHub-environment "production"
-//      approver-list ack.
+//   2. Both deploys are automatic once CI passes on main (since
+//      2026-09-24, security sweep E-9): staging first, then production
+//      on the same commit. No approval gate — see the approval-claim arm.
 //   3. Single Hetzner secret HETZNER_DEPLOY_SSH_KEY — narrower than
 //      the old 4-secret docker-compose surface (no DOTENV_BASE64
 //      shipped through GH; env stays SSH-write on the host).
@@ -58,27 +58,36 @@ describe('W724 GitHub Actions deploy.yml workflow parity (Option B verdict)', ()
     expect(d).toMatch(/systemd at \/opt\/driftstack\/api on the host/);
   });
 
-  it('CRITICAL trigger surface pinned — push:[main] + workflow_dispatch. The dispatch trigger lets a deploy re-fire manually after secrets are populated.', () => {
+  it('CRITICAL trigger surface pinned — CI completing on main (workflow_run) + workflow_dispatch. REPINNED 2026-09-24 (security sweep E-9): a bare push:[main] trigger deployed commits whose CI was red or still running; the deploy now follows a CI run. The dispatch trigger still lets a deploy re-fire manually.', () => {
     const d = read(DEPLOY);
-    expect(d).toMatch(/on:\s*\n\s*push:\s*\n\s*branches: \[main\]\s*\n\s*workflow_dispatch:/);
+    expect(d).toMatch(
+      /workflow_run:\s*\n\s*workflows: \[CI\]\s*\n\s*types: \[completed\]\s*\n\s*branches: \[main\]/,
+    );
+    expect(d).toMatch(/^ {2}workflow_dispatch:/m);
+    expect(d).not.toMatch(/^on:\s*\n\s*push:/m);
   });
 
   it('CRITICAL deploy concurrency `cancel-in-progress: false` pinned. Unlike CI, deploy jobs MUST complete — drift to true would let a new commit kill an in-flight deploy mid-rollout (partial state).', () => {
     const d = read(DEPLOY);
+    // 2026-09-24: a named group rather than the ref (every workflow_run event
+    // carries the default branch as its ref), joined only by a run that can
+    // deploy, and queued rather than replaced (the evaluated arms live in
+    // production-deploys-only-a-commit-ci-passed.test.ts).
     expect(d).toMatch(
-      /concurrency:\s*\n\s*group: deploy-\$\{\{ github\.ref \}\}\s*\n\s*cancel-in-progress: false/,
+      /concurrency:\s*\n(?:\s*#[^\n]*\n)*\s*group: >-\n[^\n]*\$\{\{[\s\S]*?&& 'deploy-api' \|\| format\('deploy-nothing-\{0\}', github\.run_id\) \}\}\n\s*cancel-in-progress: false\n\s*queue: max\n/,
     );
   });
 
-  it('CRITICAL 3-job sequence pinned — source-map-upload → deploy-staging → deploy-production. Drift to running in parallel or skipping the staging gate would let production deploys bypass the staging-health validation.', () => {
+  it('CRITICAL job sequence pinned — ci-gate → source-map-upload → deploy-staging → deploy-production. Drift to running in parallel or skipping the staging gate would let production deploys bypass the staging-health validation; dropping ci-gate would let a commit with red CI ship (security sweep E-9).', () => {
     const d = read(DEPLOY);
 
-    expect(d).toMatch(/^\s{2}source-map-upload:/m);
+    expect(d).toMatch(/^\s{2}ci-gate:/m);
+    expect(d).toMatch(/^\s{2}source-map-upload:\s*\n\s*name: [^\n]*\n\s*needs: ci-gate/m);
     expect(d).toMatch(
-      /^\s{2}deploy-staging:\s*\n\s*name: Deploy to staging \(via deploy-bridge\.sh\)\s*\n\s*needs: source-map-upload/m,
+      /^\s{2}deploy-staging:\s*\n\s*name: Deploy to staging \(via deploy-bridge\.sh\)\s*\n\s*needs: \[ci-gate, source-map-upload\]/m,
     );
     expect(d).toMatch(
-      /^\s{2}deploy-production:\s*\n\s*name: Deploy to production \(CONTINUOUS — no approval gate; via deploy-bridge\.sh\)\s*\n\s*needs: \[source-map-upload, deploy-staging\]/m,
+      /^\s{2}deploy-production:\s*\n\s*name: Deploy to production \(CONTINUOUS — no approval gate; via deploy-bridge\.sh\)\s*\n\s*needs: \[ci-gate, source-map-upload, deploy-staging\]/m,
     );
   });
 
@@ -123,9 +132,10 @@ describe('W724 GitHub Actions deploy.yml workflow parity (Option B verdict)', ()
     );
   });
 
-  it('CRITICAL SENTRY_RELEASE = github.sha pinned. The full SHA (not short-SHA) is what Sentry uses to correlate source-maps with this exact release.', () => {
+  it('CRITICAL SENTRY_RELEASE = the full SHA of the deployed commit. The full SHA (not short-SHA) is what Sentry uses to correlate source-maps with this exact release. REPINNED 2026-09-24: under the workflow_run trigger github.sha is the default branch tip, not the commit CI tested, so the release is the ci-gate sha.', () => {
     const d = read(DEPLOY);
-    expect(d).toMatch(/SENTRY_RELEASE: \$\{\{ github\.sha \}\}/);
+    expect(d).toMatch(/SENTRY_RELEASE: \$\{\{ needs\.ci-gate\.outputs\.sha \}\}/);
+    expect(d).not.toMatch(/SENTRY_RELEASE: \$\{\{ github\.sha \}\}/);
   });
 
   it("CRITICAL Hetzner SSH-key secret-gate fail-hard framing pinned (workflow shifted from soft-skip to hard-error post-V-278.A — operator intent is 'deploy must run', not 'silently skip if misconfigured'). Drift back to soft-skip would silently mask a misconfigured secret + leave prod un-updated.", () => {
@@ -218,7 +228,11 @@ describe('W724 GitHub Actions deploy.yml workflow parity (Option B verdict)', ()
     expect(d).not.toMatch(/require approval from the founder[\s#]+before this job runs/);
     expect(d).toMatch(/CONTINUOUS — no approval gate/);
     expect(d).toMatch(/ships to production unreviewed/i);
-    expect(d).toMatch(/ALSO NOT GATED ON CI/);
+    // 2026-09-24 (security sweep E-9): the CI gate now exists, and the comment
+    // says so — the same honesty rule as the approval claim above, the other way
+    // round.
+    expect(d).not.toMatch(/ALSO NOT GATED ON CI/);
+    expect(d).toMatch(/GATED ON CI since 2026-09-24/);
   });
 
   it('CRITICAL docker / docker-compose / ghcr.io / buildx ACTIVE workflow steps MUST NOT return — Option B verdict explicitly removed them. (Comments may still name them as removed-context.)', () => {

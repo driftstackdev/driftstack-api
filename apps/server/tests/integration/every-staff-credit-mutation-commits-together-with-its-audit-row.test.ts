@@ -35,6 +35,7 @@ import {
   type AdminCreditsHarness,
 } from './_helpers/admin-credits-route-fixtures.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { signInTheFixtureAccount } from './_helpers/sign-in-the-fixture-account.js';
 
 const ISOLATED_DB_NAME = 'driftstack_iso_s15s16_fixes_audit';
 const RUN_DB_TESTS = Boolean(process.env.CI || process.env.DATABASE_URL);
@@ -146,15 +147,18 @@ async function count(query: postgres.PendingQuery<Array<{ n: number }>>): Promis
   return row?.n ?? -1;
 }
 
+/** `bearer` defaults to the fixture's staff API key; the rate-card tools take a
+ *  signed-in session instead (security sweep #17). */
 function post(
   f: TestAppFixture,
   url: string,
   payload?: Record<string, unknown>,
+  bearer: string = f.plaintext,
 ): Promise<LightMyRequestResponse> {
   return f.app.inject({
     method: 'POST',
     url,
-    headers: { authorization: `Bearer ${f.plaintext}` },
+    headers: { authorization: `Bearer ${bearer}` },
     ...(payload === undefined ? {} : { payload }),
   });
 }
@@ -404,25 +408,36 @@ describe.skipIf(!RUN_DB_TESTS)(
     describe('rate cards', () => {
       it('CRITICAL a publish whose audit write fails publishes no card', async () => {
         const f = await failingAuditApp({ owner: true });
+        const session = await signInTheFixtureAccount(f);
         const before = await count(sql()`SELECT count(*)::int AS n FROM credit_rate_cards`);
-        const res = await post(f, '/v1/admin/credit-rate-cards', {
-          markup_bp: 20000,
-          effective_at: new Date(
-            Date.now() + (40 * 24 + Math.random() * 24) * 3600 * 1000,
-          ).toISOString(),
-        });
+        const res = await post(
+          f,
+          '/v1/admin/credit-rate-cards',
+          {
+            markup_bp: 20000,
+            effective_at: new Date(
+              Date.now() + (40 * 24 + Math.random() * 24) * 3600 * 1000,
+            ).toISOString(),
+          },
+          session,
+        );
         expect(res.statusCode).toBe(500);
         expect(await count(sql()`SELECT count(*)::int AS n FROM credit_rate_cards`)).toBe(before);
       });
 
       it('CRITICAL a withdrawal whose audit write fails leaves the card announced', async () => {
         const good = await staffApp({ owner: true });
-        const published = await post(good, '/v1/admin/credit-rate-cards', {
-          markup_bp: 20000,
-          effective_at: new Date(
-            Date.now() + (50 * 24 + Math.random() * 24) * 3600 * 1000,
-          ).toISOString(),
-        });
+        const published = await post(
+          good,
+          '/v1/admin/credit-rate-cards',
+          {
+            markup_bp: 20000,
+            effective_at: new Date(
+              Date.now() + (50 * 24 + Math.random() * 24) * 3600 * 1000,
+            ).toISOString(),
+          },
+          await signInTheFixtureAccount(good),
+        );
         expect(published.statusCode, published.body).toBe(200);
         const version = published.json<{ version: number }>().version;
         expect(
@@ -432,7 +447,12 @@ describe.skipIf(!RUN_DB_TESTS)(
         ).toEqual(['rate_card.published']);
 
         const bad = await failingAuditApp({ owner: true });
-        const res = await post(bad, `/v1/admin/credit-rate-cards/${String(version)}/withdraw`);
+        const res = await post(
+          bad,
+          `/v1/admin/credit-rate-cards/${String(version)}/withdraw`,
+          undefined,
+          await signInTheFixtureAccount(bad),
+        );
         expect(res.statusCode).toBe(500);
         const [row] = await sql()<Array<{ w: Date | null }>>`
         SELECT withdrawn_at AS w FROM credit_rate_cards WHERE version = ${version}`;

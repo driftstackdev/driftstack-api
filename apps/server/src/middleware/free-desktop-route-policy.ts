@@ -99,10 +99,13 @@ export const FREE_DESKTOP_ALLOWED_ROUTES: ReadonlySet<string> = new Set<string>(
   'POST:/v1/agent-sessions/:id/input-event',
   'POST:/v1/agent-sessions/:id/handback',
 
-  // Saved tasks used by AgentChat.
+  // Saved tasks used by AgentChat. Delete is here because create is: a Free
+  // user who can save a recipe must be able to remove it, or the plan's recipe
+  // limit becomes a wall only a dashboard session can take down.
   'GET:/v1/recipes',
   'GET:/v1/recipes/:id',
   'POST:/v1/recipes',
+  'DELETE:/v1/recipes/:id',
 
   // Team reads. Device credentials may not invite or remove members.
   'GET:/v1/team/members',

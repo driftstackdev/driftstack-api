@@ -400,8 +400,10 @@ below.
 
 `POST /v1/auth/cli-authorize/initiate`
 
-Step 1 — **Initiate** — the desktop app generates a CSRF nonce + optional
-client label, calls `POST /v1/auth/cli-authorize/initiate`, and
+Step 1 — **Initiate** — the desktop app generates a CSRF nonce, a
+`code_verifier` it keeps to itself, and an optional client label. It calls
+`POST /v1/auth/cli-authorize/initiate` with the nonce, the label and the
+verifier's `code_challenge` (see [Code verifier](#code-verifier-pkce)), and
 gets back a one-shot `code`, a separate device-displayed `user_code`,
 and a `browser_url` that opens the dashboard's Authorize page.
 
@@ -421,7 +423,8 @@ account, stored encrypted; the desktop app must collect it within 2 minutes.
 `POST /v1/auth/cli-authorize/exchange`
 
 Step 3 — **Exchange** — the desktop app polls
-`POST /v1/auth/cli-authorize/exchange` until the response
+`POST /v1/auth/cli-authorize/exchange`, sending `code`, `state` and its
+`code_verifier`, until the response
 transitions from `{ status: "pending" }` to
 `{ status: "bound", api_key, account_id }`. Bound is one-shot: the
 server deletes the code as it hands back the key, so a subsequent
@@ -436,18 +439,55 @@ nonce. The dashboard echoes it back; the server verifies it matches
 on `bind` — defends against the dashboard being tricked into binding
 a code that wasn't issued in the same session.
 
+## Code verifier (PKCE)
+
+`code` and `state` both appear in `browser_url` and in the link the
+dashboard uses to return to the desktop app, so anyone who reads either
+URL knows them. They are not enough to collect the credential: the flow is
+bound to a secret that never leaves the device (RFC 7636, `S256` only).
+
+1. Generate a `code_verifier`: 43-128 characters from `A-Z a-z 0-9 - . _ ~`
+   (32 random bytes, base64url-encoded, gives 43).
+2. Send `code_challenge` = unpadded base64url of the SHA-256 of the
+   verifier, with `code_challenge_method: "S256"`, on `initiate`. Send both
+   or neither; `plain` is refused.
+3. Send the `code_verifier` in the body of every `exchange` call. Never put
+   it in a URL.
+
+When the flow started with a `code_challenge`, `exchange` answers `400` to
+a request without the matching `code_verifier` — before and after the user
+approves, and without revealing whether they have. The refusal does not use
+up the code: the device holding the verifier still collects the credential.
+
+**Flows without a code challenge end on 31 January 2027.** Until then, an
+`initiate` without `code_challenge` works exactly as before, and its
+response carries a `Deprecation` header and
+`Sunset: Sun, 31 Jan 2027 00:00:00 GMT`. From that date, `initiate`
+without a `code_challenge` returns `400`. Update the desktop app before
+that date to keep signing in with the browser.
+
 ## SDK example
 
 ```ts
+import { createHash, randomBytes } from 'node:crypto';
+
+const state = crypto.randomUUID();
+const codeVerifier = randomBytes(32).toString('base64url'); // stays on this device
 const { code, user_code, browser_url } = await client.auth.cliAuthorizeInitiate({
-  state: crypto.randomUUID(),
+  state,
   client_label: 'Driftstack Desktop on darwin-arm64',
+  code_challenge: createHash('sha256').update(codeVerifier).digest('base64url'),
+  code_challenge_method: 'S256',
 });
 console.log(`Enter ${user_code} in the browser to approve this device.`);
 open(browser_url); // open in system browser
 
 for (;;) {
-  const out = await client.auth.cliAuthorizeExchange({ code, state });
+  const out = await client.auth.cliAuthorizeExchange({
+    code,
+    state,
+    code_verifier: codeVerifier,
+  });
   if (out.status === 'bound') {
     saveApiKey(out.api_key);
     break;
@@ -458,9 +498,18 @@ for (;;) {
 ```
 
 ```python
+state = secrets.token_urlsafe(24)
+code_verifier = secrets.token_urlsafe(32)  # stays on this device
+code_challenge = (
+    base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
+    .rstrip(b"=")
+    .decode()
+)
 out = client.auth.cli_authorize_initiate({
-    "state": secrets.token_urlsafe(24),
+    "state": state,
     "client_label": "Driftstack Desktop",
+    "code_challenge": code_challenge,
+    "code_challenge_method": "S256",
 })
 print(f'Enter {out["user_code"]} in the browser to approve this device.')
 webbrowser.open(out["browser_url"])
@@ -469,6 +518,7 @@ while True:
     poll = client.auth.cli_authorize_exchange({
         "code": out["code"],
         "state": state,
+        "code_verifier": code_verifier,
     })
     if poll["status"] == "bound":
         save_api_key(poll["api_key"])
@@ -479,17 +529,25 @@ while True:
 ```
 
 ```go
+verifierBytes := make([]byte, 32)
+rand.Read(verifierBytes)
+codeVerifier := base64.RawURLEncoding.EncodeToString(verifierBytes) // stays on this device
+sum := sha256.Sum256([]byte(codeVerifier))
+
 init, _ := client.Auth.CliAuthorizeInitiate(ctx, &driftstack.CliAuthorizeInitiateRequest{
-    State:       state,
-    ClientLabel: "Driftstack Desktop",
+    State:               state,
+    ClientLabel:         "Driftstack Desktop",
+    CodeChallenge:       base64.RawURLEncoding.EncodeToString(sum[:]),
+    CodeChallengeMethod: "S256",
 })
 fmt.Printf("Enter %s in the browser to approve this device.\n", init.UserCode)
 exec.Command("open", init.BrowserURL).Run()
 
 for {
     poll, _ := client.Auth.CliAuthorizeExchange(ctx, &driftstack.CliAuthorizeExchangeRequest{
-        Code:  init.Code,
-        State: state,
+        Code:         init.Code,
+        State:        state,
+        CodeVerifier: codeVerifier,
     })
     if poll.Status == "bound" {
         saveAPIKey(poll.APIKey)

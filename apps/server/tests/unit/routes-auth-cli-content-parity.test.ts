@@ -74,7 +74,7 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
 
   it('Initiate returns the separate device-displayed user_code', () => {
     expect(body).toMatch(
-      /app\.post\('\/v1\/auth\/cli-authorize\/initiate', \{ preHandler: \[initiateGate\] \}, async \(req\) => \{\s*const parsed = CliAuthorizeInitiateRequestSchema\.safeParse\(req\.body\);\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);/,
+      /app\.post\(\s*'\/v1\/auth\/cli-authorize\/initiate',\s*\{ preHandler: \[initiateGate\] \},\s*async \(req, reply\) => \{\s*const parsed = CliAuthorizeInitiateRequestSchema\.safeParse\(req\.body\);\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);/,
     );
     // The IP gates are built from the shared store + the AUTH_IP_LIMITS buckets.
     expect(body).toMatch(
@@ -82,7 +82,24 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
     );
     expect(body).toMatch(/AUTH_IP_LIMITS\.cliAuthorizeInitiate\.capacity/);
     expect(body).toMatch(
-      /const result = await cliAuthorizeService\.initiate\([\s\S]*?return \{\s*code: result\.code,\s*user_code: result\.user_code,\s*browser_url: result\.browser_url,\s*expires_at: result\.expires_at\.toISOString\(\),\s*\};/,
+      /const result = await cliAuthorizeService\s*\.initiate\([\s\S]*?return \{\s*code: result\.code,\s*user_code: result\.user_code,\s*browser_url: result\.browser_url,\s*expires_at: result\.expires_at\.toISOString\(\),\s*\};/,
+    );
+  });
+
+  it('GUI audit #9 — initiate forwards the S256 code_challenge, takes it only with its method, and names the removal date on a flow without one', () => {
+    expect(body).toMatch(/code_challenge: parsed\.data\.code_challenge \?\? null,/);
+    expect(body).toMatch(
+      /\(parsed\.data\.code_challenge === undefined\) !==\s*\(parsed\.data\.code_challenge_method === undefined\)/,
+    );
+    expect(body).toMatch(
+      /if \(result\.flow === 'legacy'\) \{\s*void reply\.header\('Deprecation', LEGACY_FLOW_DEPRECATION\);\s*void reply\.header\('Sunset', LEGACY_FLOW_SUNSET\);\s*\}/,
+    );
+    expect(body).toMatch(
+      /const LEGACY_FLOW_SUNSET = LEGACY_CLI_AUTHORIZE_FLOW_ENDS_AT\.toUTCString\(\);/,
+    );
+    expect(body).toMatch(/case 'code_verifier_required':\s*return new BadRequestError\(/);
+    expect(body).toMatch(
+      /case 'code_verifier_mismatch':\s*return new BadRequestError\('Code verifier does not match\.'\);/,
     );
   });
 
@@ -121,7 +138,7 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
 
   it('Exchange: public but IP-gated (exchangeGate preHandler, generous 60/min poll bucket); cliAuthorizeService.exchange dispatch; pass-through result; CliAuthorizeError → HTTP map', () => {
     expect(body).toMatch(
-      /app\.post\('\/v1\/auth\/cli-authorize\/exchange', \{ preHandler: \[exchangeGate\] \}, async \(req\) => \{[\s\S]+?const result = await cliAuthorizeService\.exchange\(\{\s*code: parsed\.data\.code,\s*state: parsed\.data\.state,\s*\}\);\s*return result;[\s\S]+?if \(err instanceof CliAuthorizeError\) throw mapCliAuthorizeError\(err\);/,
+      /app\.post\('\/v1\/auth\/cli-authorize\/exchange', \{ preHandler: \[exchangeGate\] \}, async \(req\) => \{[\s\S]+?const \{ result, flow \} = await cliAuthorizeService\.exchangeWithFlow\(\{\s*code: parsed\.data\.code,\s*state: parsed\.data\.state,\s*\.\.\.\(parsed\.data\.code_verifier !== undefined\s*\?\s*\{ code_verifier: parsed\.data\.code_verifier \}\s*:\s*\{\}\),\s*\}\);[\s\S]+?return result;[\s\S]+?if \(err instanceof CliAuthorizeError\) \{[\s\S]+?throw mapCliAuthorizeError\(err\);/,
     );
     expect(body).toMatch(
       /const exchangeGate = ipRateLimit\(rateLimitStore, \{\s*bucketPrefix: 'auth-ip:cli-authorize-exchange',/,
@@ -158,7 +175,7 @@ describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
     expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
     expect(body).toMatch(/import type \{ ApiKeysService \} from '\.\.\/services\/api-keys\.js';/);
     expect(body).toMatch(
-      /import \{ CliAuthorizeError, type CliAuthorizeService \} from '\.\.\/services\/cli-authorize\.js';/,
+      /import \{\s*CliAuthorizeError,\s*LEGACY_CLI_AUTHORIZE_FLOW_DEPRECATED_AT,\s*LEGACY_CLI_AUTHORIZE_FLOW_ENDS_AT,\s*type CliAuthorizeFlow,\s*type CliAuthorizeService,\s*\} from '\.\.\/services\/cli-authorize\.js';/,
     );
     expect(body).toMatch(
       /import \{\s*BadRequestError,\s*FeatureUnavailableError,\s*ForbiddenError,\s*NotFoundError,\s*ValidationError,\s*\} from '\.\.\/lib\/errors\.js';/,

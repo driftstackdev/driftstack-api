@@ -73,6 +73,10 @@ describe('the retention purge reports what it did, and what it never ran', () =>
     // whole file exists for, so the list must fail on additions too.
     expect(samples(metrics)).toEqual([
       'agent_sessions/skipped=1',
+      // Security sweep E-23 (2026-09-24): avatar images no account points at.
+      'avatar_orphans/skipped=1',
+      // Security sweep E-23 (2026-09-24): a terminated account's public avatar.
+      'avatars/skipped=1',
       'byok/skipped=1',
       'profiles/skipped=1',
       'proxy_secrets/skipped=1',

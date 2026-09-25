@@ -137,6 +137,7 @@ fetched from the host rather than reconstructed.
 | Lookup     | `127.0.0.1:7792`, loopback only, never the public interface                              |
 | Records    | last SYN per **(address, port)**, bounded LRU, 15-minute TTL                             |
 | Capability | `CAP_NET_RAW` only; `NoNewPrivileges=true`                                               |
+| User       | `DynamicUser=yes` — a transient unprivileged uid, never root (security sweep E-24)       |
 
 ### Why two ports
 
@@ -164,8 +165,17 @@ the two can be **compared** rather than overwrite each other.
 
 ```sh
 scp infra/os-observer/observer.py root@<host>:/opt/driftstack/os-observer/observer.py
+ssh root@<host> 'chmod 0644 /opt/driftstack/os-observer/observer.py'   # the service user is not root
 ssh root@<host> 'systemctl restart driftstack-os-observer'
 ssh root@<host> 'curl -s http://127.0.0.1:7792/healthz'     # {"ok":true,...,"ports":[443,7791]}
+```
+
+A change to the **unit** is installed the same way, plus a reload:
+
+```sh
+scp infra/systemd/driftstack-os-observer.service root@<host>:/etc/systemd/system/
+ssh root@<host> 'systemctl daemon-reload && systemctl restart driftstack-os-observer'
+ssh root@<host> 'ps -o user=,cmd= -C python3 | grep observer'   # a dynamic user, never root
 ```
 
 ⚠️ Back the live file up first, and afterwards confirm the **legacy** path still

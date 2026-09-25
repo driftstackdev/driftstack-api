@@ -91,7 +91,22 @@ If the private key is suspected compromised:
    tauri.conf.json updated to the NEW public key. (Customers running
    the previous version verify the update with the OLD pub-key
    embedded in their install, then trust the NEW pub-key going forward.)
+   In `.github/workflows/gui-release.yml` terms, that release needs:
+   - secret `TAURI_UPDATER_PUBKEY` = the NEW public key (it is compiled in);
+   - secrets `TAURI_UPDATER_PRIVKEY` + `TAURI_UPDATER_PRIVKEY_PASSWORD` =
+     still the OLD key;
+   - repository variable `TAURI_UPDATER_TRUSTED_PUBKEY` = the OLD public
+     key (`gh variable set TAURI_UPDATER_TRUSTED_PUBKEY < <old>.pub`).
+     The sign job verifies signatures against the key installed clients
+     trust. Without this variable it checks them against the compiled
+     (NEW) key and refuses the rotation release.
+   - a dry run before the tag (`gh workflow run gui-release.yml`): its
+     sign job must print a `KEY ROTATION` warning and `verified` for
+     every artifact. See docs/runbooks/gui-release.md, "Key rotation".
 3. After ~30 days (most customers updated), retire the old key.
+   In the workflow: move the two private-key secrets to the NEW key and
+   `gh variable delete TAURI_UPDATER_TRUSTED_PUBKEY`, in the same change.
+   A variable left set fails the next release, and the error names it.
 4. Document the rotation date in `docs/decisions.md` as a follow-up
    to D-2026-05-06-03.
 

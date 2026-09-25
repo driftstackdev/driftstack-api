@@ -28,6 +28,7 @@ import {
   type AdminCreditsHarness,
 } from './_helpers/admin-credits-route-fixtures.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { signInTheFixtureAccount } from './_helpers/sign-in-the-fixture-account.js';
 
 const ISOLATED_DB_NAME = 'driftstack_iso_s15s16_fixes_inputs';
 const RUN_DB_TESTS = Boolean(process.env.CI || process.env.DATABASE_URL);
@@ -255,6 +256,8 @@ describe.skipIf(!RUN_DB_TESTS)(
     describe('rate cards', () => {
       it('CRITICAL a second card on an effective_at a live card already has is a 409, and only the first card exists', async () => {
         const f = await app({ owner: true });
+        // The rate-card tools need a signed-in session (security sweep #17).
+        const session = await signInTheFixtureAccount(f);
         // Whole seconds, so the value the database stores equals the one sent.
         const effectiveAt = new Date(
           Math.floor((Date.now() + (60 + Math.random() * 30) * DAY_MS) / 1000) * 1000,
@@ -263,7 +266,7 @@ describe.skipIf(!RUN_DB_TESTS)(
           f.app.inject({
             method: 'POST',
             url: '/v1/admin/credit-rate-cards',
-            headers: { authorization: `Bearer ${f.plaintext}` },
+            headers: { authorization: `Bearer ${session}` },
             payload: { markup_bp: 20000, effective_at: effectiveAt },
           });
         const first = await publish();

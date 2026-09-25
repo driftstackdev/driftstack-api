@@ -141,7 +141,11 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
     expect(p).toMatch(/\| 'user_code_mismatch'/);
     expect(p).toMatch(/\| 'already_bound'/);
     expect(p).toMatch(/\| 'not_found'/);
-    expect(p).toMatch(/\| 'expired',/);
+    expect(p).toMatch(/\| 'expired'/);
+    // GUI audit #9 — the PKCE refusals are their own codes, not a reused one.
+    expect(p).toMatch(/\| 'code_challenge_required'/);
+    expect(p).toMatch(/\| 'code_verifier_required'/);
+    expect(p).toMatch(/\| 'code_verifier_mismatch',/);
   });
 
   // ─── StoredCode runtime-validated discriminated shape ────────
@@ -178,10 +182,15 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
     expect(p).toContain('input.state,');
     expect(p).toContain('input.userCodeHash,');
     expect(p).toContain('input.accountId,');
+    // GUI audit #9 — a PKCE flow also seals its challenge; a legacy flow keeps
+    // the exact context an older server sealed with.
+    expect(p).toContain(
+      'return JSON.stringify(input.codeChallenge === null ? bound : [...bound, input.codeChallenge]);',
+    );
     expect(p).toContain(
       'if (!claimed.secret_blob.startsWith(CLI_AUTHORIZE_SECRET_ENVELOPE_PREFIX))',
     );
-    expect(p).toContain("return { status: 'expired' };");
+    expect(p).toContain("return { result: { status: 'expired' }, flow };");
   });
 
   // ─── CliAuthorizeStore interface ────────────────────────

@@ -1198,9 +1198,17 @@ type MfaStepUpResponse struct {
 // CliAuthorizeInitiateRequest — the CLI/GUI starts the flow with a
 // CSRF nonce + optional human-friendly client label that appears on
 // the dashboard's confirmation screen.
+//
+// CodeChallenge binds the flow to a code verifier the device keeps
+// (RFC 7636 PKCE): the unpadded base64url SHA-256 of the verifier, with
+// CodeChallengeMethod "S256". Exchange then needs that verifier, so the
+// code and state in the browser URL cannot collect the key on their own.
+// A request without a challenge is refused from 31 January 2027.
 type CliAuthorizeInitiateRequest struct {
-	State       string `json:"state"`
-	ClientLabel string `json:"client_label,omitempty"`
+	State               string `json:"state"`
+	ClientLabel         string `json:"client_label,omitempty"`
+	CodeChallenge       string `json:"code_challenge,omitempty"`
+	CodeChallengeMethod string `json:"code_challenge_method,omitempty"`
 }
 
 // CliAuthorizeInitiateResponse — one-shot device code, a separate
@@ -1231,10 +1239,12 @@ type CliAuthorizeBindResponse struct {
 }
 
 // CliAuthorizeExchangeRequest — polled by the CLI/GUI after opening
-// the browser_url returned by /initiate.
+// the browser_url returned by /initiate. CodeVerifier is required when
+// the flow started with a CodeChallenge; never put it in a URL.
 type CliAuthorizeExchangeRequest struct {
-	Code  string `json:"code"`
-	State string `json:"state"`
+	Code         string `json:"code"`
+	State        string `json:"state"`
+	CodeVerifier string `json:"code_verifier,omitempty"`
 }
 
 // CliAuthorizeExchangeResponse — discriminated on Status:

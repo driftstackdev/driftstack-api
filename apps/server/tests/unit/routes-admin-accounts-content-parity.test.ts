@@ -106,13 +106,13 @@ describe('W438.A apps/server/src/routes/admin-accounts.ts content parity', () =>
       /app\.post<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/admin\/accounts\/:id\/tier',\s*\{\s*preHandler: \[app\.requireScope\('driftstack_internal_admin'\), app\.rateLimit\('global'\)\],\s*\},/,
     );
     expect(body).toMatch(
-      /const updated = await withAudit\(\s*request,\s*'account\.tier_changed',\s*accountId,\s*\{\s*tier: body\.tier,\s*\.\.\.\(body\.reason \? \{ reason: body\.reason \} : \{\}\),\s*\.\.\.\(body\.monthly_credits !== undefined\s*\? \{ monthly_credits: body\.monthly_credits \}\s*: \{\}\),\s*\},\s*\(\) =>\s*accountsAdmin\.changeTier\(ctx, accountId, body\.tier, \{\s*\.\.\.\(body\.monthly_credits !== undefined\s*\? \{ monthlyCredits: body\.monthly_credits \}\s*: \{\}\),\s*setByKeyId: ctx\.apiKey\.id,\s*\}\),\s*\);/,
+      /const updated = await withAudit\(\s*request,\s*'account\.tier_changed',\s*accountId,\s*\{\s*tier: body\.tier,\s*\.\.\.\(body\.reason \? \{ reason: body\.reason \} : \{\}\),\s*\.\.\.\(body\.monthly_credits !== undefined\s*\? \{ monthly_credits: body\.monthly_credits \}\s*: \{\}\),\s*\},\s*async \(\) => \{\s*await refuseIfTheOwner\(ctx, accountId, 'change the plan of'\);\s*return accountsAdmin\.changeTier\(ctx, accountId, body\.tier, \{\s*\.\.\.\(body\.monthly_credits !== undefined\s*\? \{ monthlyCredits: body\.monthly_credits \}\s*: \{\}\),\s*setByKeyId: ctx\.apiKey\.id,\s*\}\);\s*\},\s*\);/,
     );
   });
 
   it('POST /:id/suspend + unsuspend: SuspendAccountRequest/UnsuspendAccountRequest parse; withAudit "account.suspended" / "account.unsuspended" with optional reason; returns publicAccount', () => {
     expect(body).toMatch(
-      /'account\.suspended',\s*accountId,\s*\{ \.\.\.\(body\.reason \? \{ reason: body\.reason \} : \{\}\) \},\s*\(\) => accountsAdmin\.suspend\(ctx, accountId\),/,
+      /'account\.suspended',\s*accountId,\s*\{ \.\.\.\(body\.reason \? \{ reason: body\.reason \} : \{\}\) \},\s*async \(\) => \{\s*await refuseIfTheOwner\(ctx, accountId, 'suspend'\);\s*return accountsAdmin\.suspend\(ctx, accountId\);\s*\},/,
     );
     expect(body).toMatch(
       /'account\.unsuspended',\s*accountId,\s*\{ \.\.\.\(body\.reason \? \{ reason: body\.reason \} : \{\}\) \},\s*\(\) => accountsAdmin\.unsuspend\(ctx, accountId\),/,

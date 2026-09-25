@@ -52,24 +52,29 @@ describe('docs/api/recipes content parity', () => {
     expect(body).toMatch(/never exposed to an ordinary\s*`read`-scope caller\./);
   });
 
-  it('Create body 3-field validation framing pinned: agent_session_id required + ACCESS-scoped 404 (V-812: owner OR team admin, not calling-account-only) + label 1-120 chars after trim + description optional up to 2000 chars + 201 Created response. Drift to dropping the cross-account-404 anti-enumeration would leak agent-session-id existence to attackers', () => {
-    // V-812 — "must belong to the calling account" was false. The route gates on
-    // callerCanAccessAgentSession(ctx, ownerAccountId), which returns true for the
-    // owner OR an admin member of the owner's team (V-736), so a team admin
-    // snapshotting the owner's session gets a 201. The 404-not-403 anti-enumeration
+  it('Create body 3-field validation framing pinned: agent_session_id required + workspace-scoped 404 (the session must belong to the workspace the recipe is saved in) + label 1-120 chars after trim + description optional up to 2000 chars + 201 Created response. Drift to dropping the cross-account-404 anti-enumeration would leak agent-session-id existence to attackers', () => {
+    // V-812 — "must belong to the calling account" was false once team admins could
+    // reach the owner's session. Security sweep #15 then found the other half wrong:
+    // the admin's copy was filed under the ADMIN's account, out of the owner's sight.
+    // A save now acts in the workspace the header names — the session must belong to
+    // that account and the recipe is filed there. The 404-not-403 anti-enumeration
     // posture is real and stays pinned.
     // V-1085 — the sentence carried `(V-736)` and a `V-812 —` retraction into
     // customer-rendered HTML, which `check:rendered-product-status` forbids and
-    // which failed that CI stage. The CONTENT was right; only the bookkeeping was
-    // leaking, so the access rule stays pinned and the markers must not come back.
+    // which failed that CI stage. The markers must not come back.
     expect(body).toMatch(
-      /- `agent_session_id` — required\. Must be a session you can ACCESS: one\s*your own account owns, or one owned by a team you hold the \*\*admin\*\*\s*role on/,
+      /- `agent_session_id` — required\. Must be a session of the workspace you\s*save into: your own account's, or, in a team owner's workspace, the\s*owner's\. The recipe is filed under that same account\./,
     );
     expect(
       body,
       'an internal V-marker is back in customer-rendered prose; check:rendered-product-status fails on it',
     ).not.toMatch(/\bV-\d{3,}/);
-    expect(body).toMatch(/a team admin snapshotting the owner's session gets/);
+    expect(body, 'the team-workspace rule is gone').toMatch(
+      /In a team owner's workspace every recipe route, reads included,\s*needs the \*\*admin\*\* role/,
+    );
+    expect(body, "the admin's-own-account filing must not return").not.toMatch(
+      /a team admin snapshotting the owner's session gets/,
+    );
     expect(body, 'the calling-account-only claim must not return').not.toMatch(
       /Must belong to the calling/,
     );

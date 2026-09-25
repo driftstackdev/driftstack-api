@@ -70,6 +70,7 @@ const EXPECTED_GUI_ROUTES = [
   'GET:/v1/recipes',
   'GET:/v1/recipes/:id',
   'POST:/v1/recipes',
+  'DELETE:/v1/recipes/:id',
   'GET:/v1/team/members',
   'GET:/v1/team/invites',
   'POST:/v1/billing/crypto-checkout/quote',
@@ -97,11 +98,12 @@ function registeredRouteCalls(): ReadonlySet<string> {
 
 describe('Free desktop route policy', () => {
   // ⚠️ The title said 59 while the assertion said 60 — the number in the title had
-  // drifted, which is how a count pin stops being readable. Both say 66 now: 61
+  // drifted, which is how a count pin stops being readable. Both say 67 now: 61
   // after P-17's `POST /v1/agent-sessions/:id/egress`, +5 from the GUI audit —
-  // #2 resume, #3 stop + captures, #11 the proxy list + PATCH /v1/account/me.
-  it('pins exactly the 66 current non-denied GUI route templates', () => {
-    expect(FREE_DESKTOP_ALLOWED_ROUTES.size).toBe(66);
+  // #2 resume, #3 stop + captures, #11 the proxy list + PATCH /v1/account/me —
+  // and +1 for `DELETE /v1/recipes/:id`, so a recipe a Free user saves can be removed.
+  it('pins exactly the 67 current non-denied GUI route templates', () => {
+    expect(FREE_DESKTOP_ALLOWED_ROUTES.size).toBe(67);
     expect([...FREE_DESKTOP_ALLOWED_ROUTES].sort()).toEqual([...EXPECTED_GUI_ROUTES].sort());
   });
 

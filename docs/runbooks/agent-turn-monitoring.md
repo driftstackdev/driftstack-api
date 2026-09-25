@@ -332,21 +332,19 @@ anything other than a real touch sequence.
   `not_found`, `outside_viewport`, `unverified`, `fallback`.
 
 **From `/metrics`, on the box.** The token is in `/opt/driftstack/api/.env`;
-read it from the environment and never print or paste it.
+read it from the environment and never print or paste it. Read the file as
+the `driftstack` user it belongs to, not in the root shell: sourcing it runs
+whatever is written in it.
 
 ```sh
 # every path, all four series, in one scrape
-set -a; . /opt/driftstack/api/.env; set +a
-curl -sS -H "Authorization: Bearer $METRICS_SCRAPE_TOKEN" \
-  http://127.0.0.1:7780/metrics \
+sudo -u driftstack bash -c '. /opt/driftstack/api/.env; exec curl -sS -H "Authorization: Bearer $METRICS_SCRAPE_TOKEN" http://127.0.0.1:7780/metrics' \
   | grep -E '^driftstack_agent_(action_profile_attached_total|scroll_path_total|pre_tap_look_total|look_to_tap_seconds)'
 ```
 
 ```sh
 # only the actions whose session had no behaviour profile attached
-set -a; . /opt/driftstack/api/.env; set +a
-curl -sS -H "Authorization: Bearer $METRICS_SCRAPE_TOKEN" \
-  http://127.0.0.1:7780/metrics \
+sudo -u driftstack bash -c '. /opt/driftstack/api/.env; exec curl -sS -H "Authorization: Bearer $METRICS_SCRAPE_TOKEN" http://127.0.0.1:7780/metrics' \
   | grep 'profile_attached="false"'
 ```
 

@@ -293,6 +293,12 @@ describe('no purge arm can be disabled by another arm being unavailable', () => 
       // (`agent_session_id` ON DELETE SET NULL), so purging sessions does NOT
       // reach them and they need their own arm and their own count.
       recipesPurged: 0,
+      // Security sweep E-23 (2026-09-24) — avatars sit on the PUBLIC bucket, which
+      // no other arm touches, so they need their own arm and their own count.
+      avatarsPurged: 0,
+      // And the avatar images nothing points at, which no pointer-driven arm can
+      // find; a count of their own for the same reason.
+      avatarOrphansReaped: 0,
     });
   });
 

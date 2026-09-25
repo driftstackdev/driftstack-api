@@ -13,10 +13,11 @@
 import { parseRequestBodyReportingUnknown } from '../lib/unknown-request-fields.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { PaginationQuerySchema } from '@driftstack/api-types';
+import { PaginationQuerySchema, type AccountTier } from '@driftstack/api-types';
 import {
   ConflictError,
   FeatureUnavailableError,
+  ForbiddenError,
   NotFoundError,
   TierLimitError,
   ValidationError,
@@ -29,6 +30,8 @@ import {
 } from '../services/recipes.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { AccountAuditService } from '../services/account-audit.js';
+import { resolveEffectiveAccount, type AccountAuthRepo } from '../services/auth.js';
+import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { readClientIp } from '../lib/client-ip.js';
 import { callerCanAccessAgentSession } from './agent-sessions.js';
 import type { AgentIntent } from '../services/agent-decomposer.js';
@@ -37,6 +40,32 @@ import { publicAgentIntent } from '../services/agent-public-redaction.js';
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
   if (!request.account) throw new Error('account context missing after requireAuth');
   return request.account;
+}
+
+const RECIPES_TEAM_ROLE_DETAIL = "Recipes in a team owner's workspace require the admin role.";
+
+/**
+ * Security sweep #15 — the workspace a recipe write acts in: the caller's own, or
+ * the team owner's that `X-Driftstack-Account` names. Recipes were filed under the
+ * caller whatever the header said, so a recipe saved from the owner's session in the
+ * owner's workspace landed in the member's personal account, out of the owner's
+ * sight, and outlived the member's removal. A write in a teammate's workspace needs
+ * the admin role. Returns undefined for the caller's own workspace.
+ *
+ * The two reads resolve the header in their own handlers and require the admin role
+ * there too: a recipe is a saved copy of a session's steps, and the owner's agent
+ * sessions are read by admins only.
+ */
+function effectiveAccountIdForWrite(
+  request: FastifyRequest,
+  ctx: NonNullable<FastifyRequest['account']>,
+): string | undefined {
+  const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+  if (effective.kind !== 'team') return undefined;
+  if (effective.role !== 'admin') {
+    throw new ForbiddenError(RECIPES_TEAM_ROLE_DETAIL);
+  }
+  return effective.accountId;
 }
 
 const CreateRecipeRequestSchema = z.object({
@@ -110,12 +139,28 @@ function publicRecipeDetail(rec: RecipeRecord): PublicRecipeDetail {
 export interface RecipesRoutesDeps {
   recipes: RecipesRepo;
   agentSessions: AgentSessionsRepo;
+  /** Reads a team owner's plan, which bounds the recipes saved in their workspace. */
+  authRepo: Pick<AccountAuthRepo, 'getAccount'>;
   /** Optional, matching every other audit-emitting route: absent simply omits the row. */
   accountAudit?: AccountAuditService;
 }
 
 export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesDeps): void {
-  const { recipes, agentSessions, accountAudit } = deps;
+  const { recipes, agentSessions, accountAudit, authRepo } = deps;
+
+  /**
+   * The workspace's account and plan: the caller's own when `eff` is undefined, or
+   * the team owner's that `effectiveAccountIdForWrite` resolved.
+   */
+  async function workspaceOf(
+    eff: string | undefined,
+    ctx: NonNullable<FastifyRequest['account']>,
+  ): Promise<{ accountId: string; tier: AccountTier }> {
+    if (eff === undefined) return { accountId: ctx.account.id, tier: ctx.account.tier };
+    const owner = await authRepo.getAccount(eff);
+    if (!owner) throw new ForbiddenError('Owner account no longer exists.');
+    return { accountId: owner.id, tier: owner.tier };
+  }
 
   /**
    * Best-effort audit of a recipe lifecycle event. Mirrors the shape
@@ -123,14 +168,16 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
    * fail the operation the customer asked for — an audit hiccup must not turn a
    * successful delete into an error.
    *
-   * `actorKeyId` is the point of the row. The surface is account-scoped, so both
+   * `actorKeyId` is the point of the row. In the caller's own workspace both
    * `accountId` and `actorAccountId` are the caller's own account and neither
    * distinguishes one human from another on an account whose keys are shared. The
-   * key id does.
+   * key id does. In a team owner's workspace the row lands on the owner's log (the
+   * account the recipe belongs to), with the member as the actor.
    */
   async function emitRecipeAudit(
     req: FastifyRequest,
     ctx: NonNullable<FastifyRequest['account']>,
+    workspaceAccountId: string,
     action: 'recipe.created' | 'recipe.deleted',
     recipeId: string,
     payload: Record<string, unknown>,
@@ -138,7 +185,7 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
     if (!accountAudit) return;
     try {
       await accountAudit.record({
-        accountId: ctx.account.id,
+        accountId: workspaceAccountId,
         actorType: 'customer',
         actorAccountId: ctx.account.id,
         actorKeyId: ctx.apiKey.id,
@@ -173,8 +220,9 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
       // being fixed across the rest of the surface (audit wxzlp9yiz #4).
       //
       // Not a header defect: the predicate reads ctx.teams, resolved server-side
-      // by requireAuth, so no header can forge membership and recipes.ts stays
-      // out of the effective-account registry.
+      // by requireAuth, so no header can forge membership. The suggestion stores
+      // nothing; the recipe routes below, which do, act in the workspace the
+      // header names (security sweep #15).
       if (source === null || !callerCanAccessAgentSession(ctx, source.accountId)) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
@@ -203,11 +251,14 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
       });
 
       // Load the source agent session to snapshot its intent_log +
-      // transcript. The caller must be able to ACCESS the session — its owner,
-      // or an admin member of the owner's team (V-736; cross-account 404 instead
-      // of 403 — don't leak existence).
+      // transcript. It must belong to the workspace the recipe is saved in —
+      // the caller's own, or the team owner's the header names, which needs the
+      // admin role (security sweep #15). A session of any other account is a
+      // cross-account copy neither owner authorized: 404, not 403, so existence
+      // is not disclosed.
+      const workspace = await workspaceOf(effectiveAccountIdForWrite(req, ctx), ctx);
       const source = await agentSessions.get(body.agent_session_id);
-      if (source === null || !callerCanAccessAgentSession(ctx, source.accountId)) {
+      if (source === null || source.accountId !== workspace.accountId) {
         throw new NotFoundError(`AgentSession ${body.agent_session_id} not found.`);
       }
 
@@ -224,9 +275,9 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
       // no dedupe: one session saved 60 times was 60 copies. Now a session is saved
       // once (an exact repeat answers with that recipe) and an account keeps at most
       // its plan's number of recipes, both decided under the repository's lock.
-      const limit = recipeLimitFor(ctx.account.tier);
+      const limit = recipeLimitFor(workspace.tier);
       const outcome = await recipes.createIfUnderLimit({
-        accountId: ctx.account.id,
+        accountId: workspace.accountId,
         agentSessionId: source.id,
         label: body.label,
         ...(body.description !== undefined ? { description: body.description } : {}),
@@ -243,13 +294,13 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
       if (outcome.kind === 'limit_reached') {
         throw new TierLimitError(
           `Your plan keeps up to ${limit.toString()} recipes, and this account has ${outcome.current.toString()}. Delete a recipe to save a new one.`,
-          { limit, current: outcome.current, resource: 'recipe', tier: ctx.account.tier },
+          { limit, current: outcome.current, resource: 'recipe', tier: workspace.tier },
         );
       }
       // A retried save: the recipe it made the first time, and no second audit row.
       if (outcome.kind === 'existing') return reply.code(201).send(publicRecipe(outcome.record));
       const created = outcome.record;
-      await emitRecipeAudit(req, ctx, 'recipe.created', created.id, {
+      await emitRecipeAudit(req, ctx, workspace.accountId, 'recipe.created', created.id, {
         label: created.label,
         agent_session_id: source.id,
         intent_count: intentLog.length,
@@ -269,8 +320,16 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
       const ctx = requireCtx(req);
       const parsed = PaginationQuerySchema.safeParse(req.query ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // Security sweep #15 — the workspace the header names. In a teammate's
+      // workspace the admin role is required, as for the owner's agent sessions:
+      // a recipe is a saved copy of a session's steps.
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
+      if (effective.kind === 'team' && effective.role !== 'admin') {
+        throw new ForbiddenError(RECIPES_TEAM_ROLE_DETAIL);
+      }
+      const accountId = effective.accountId;
       const page = await recipes.list({
-        accountId: ctx.account.id,
+        accountId,
         limit: parsed.data.limit,
         ...(parsed.data.cursor !== undefined ? { cursor: parsed.data.cursor } : {}),
       });
@@ -290,7 +349,13 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
     { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
-      const rec = await recipes.getById({ accountId: ctx.account.id, id: req.params.id });
+      // Same workspace and role rule as the list above (security sweep #15).
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
+      if (effective.kind === 'team' && effective.role !== 'admin') {
+        throw new ForbiddenError(RECIPES_TEAM_ROLE_DETAIL);
+      }
+      const accountId = effective.accountId;
+      const rec = await recipes.getById({ accountId, id: req.params.id });
       if (rec === null) throw new NotFoundError(`Recipe ${req.params.id} not found.`);
       return publicRecipeDetail(rec);
     },
@@ -303,14 +368,15 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
     { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
+      const accountId = effectiveAccountIdForWrite(req, ctx) ?? ctx.account.id;
       // Read before deleting so the audit row can carry the label. The row is the
       // ONLY trace that survives the delete — recording a bare id would say that
       // something was destroyed without saying what. One indexed lookup on a rare
       // operation. A concurrent delete between the two still 404s, unchanged.
-      const existing = await recipes.getById({ accountId: ctx.account.id, id: req.params.id });
-      const deleted = await recipes.deleteById({ accountId: ctx.account.id, id: req.params.id });
+      const existing = await recipes.getById({ accountId, id: req.params.id });
+      const deleted = await recipes.deleteById({ accountId, id: req.params.id });
       if (!deleted) throw new NotFoundError(`Recipe ${req.params.id} not found.`);
-      await emitRecipeAudit(req, ctx, 'recipe.deleted', req.params.id, {
+      await emitRecipeAudit(req, ctx, accountId, 'recipe.deleted', req.params.id, {
         ...(existing !== null ? { label: existing.label } : {}),
       });
       return reply.code(204).send();

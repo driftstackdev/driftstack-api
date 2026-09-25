@@ -18,6 +18,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AiCreditsRuntime } from '../../src/services/ai-credits-runtime.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { signInTheFixtureAccount } from './_helpers/sign-in-the-fixture-account.js';
 
 const OWNER_EMAIL = 'owner-scope-fix@driftstack.test';
 
@@ -105,17 +106,21 @@ describe('the owner-only tools refuse an owner key without the staff scope', () 
     expect(res.statusCode, res.body).toBe(200);
   });
 
-  it('CONTROL — the owner with the staff scope reaches the publish handler: an empty body is its own 400, not a 403', async () => {
+  it('CONTROL — the owner signed in with the staff scope reaches the publish handler: an empty body is its own 400, not a 403', async () => {
     fx = await buildTestApp({
       aiCredits: unreachableRuntime(),
       email: OWNER_EMAIL,
       ownerEmail: OWNER_EMAIL,
       scopes: ['read', 'driftstack_internal_admin'],
     });
+    // A signed-in session, not the key: the rate-card tools refuse every API key
+    // (security sweep #17), which the-owner-tools-need-a-signed-in-session-and-a-fresh-
+    // second-factor.test.ts proves.
+    const session = await signInTheFixtureAccount(fx);
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/admin/credit-rate-cards',
-      headers: { authorization: `Bearer ${fx.plaintext}` },
+      headers: { authorization: `Bearer ${session}` },
       payload: {},
     });
     expect(res.statusCode, res.body).toBe(400);

@@ -487,7 +487,40 @@ const apiBaseUrl = resolveApiBaseUrl();
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
       }
 
+      // The owner tools (secret reveal / write / delete, the price edit) answer
+      // 403 with `requires_mfa_step_up` when this session's second factor is more
+      // than five minutes old. Ask for a code once, prove it through
+      // POST /v1/auth/mfa/step-up, and send the same request again. Every other
+      // response passes through untouched.
       function authedFetch(path, init) {
+        return sendAuthed(path, init).then(function (response) {
+          if (response.status !== 403) return response;
+          return response
+            .clone()
+            .json()
+            .catch(function () {
+              return null;
+            })
+            .then(function (problem) {
+              if (!problem || problem.requires_mfa_step_up !== true) return response;
+              var entered = window.prompt(
+                'Enter the 6-digit code from your authenticator app, or a recovery code, to continue.',
+              );
+              var code = typeof entered === 'string' ? entered.trim() : '';
+              if (!code) return response;
+              var proof = /^\d{6}$/.test(code) ? { code: code } : { recovery_code: code };
+              return sendAuthed('/v1/auth/mfa/step-up', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(proof),
+              }).then(function (stepUp) {
+                return stepUp.ok ? sendAuthed(path, init) : response;
+              });
+            });
+        });
+      }
+
+      function sendAuthed(path, init) {
         // Optional `init` lets callers issue non-GET requests (e.g. the owner
         // pricing PATCH); the bearer + credentials are merged in. Back-compat:
         // GET callers pass no init and behave exactly as before.

@@ -160,6 +160,12 @@ export class AuthResource {
    * Returns a one-shot code, a separate user code displayed by the
    * initiating device, and the browser URL. The user types that code in
    * the dashboard before the CLI/GUI can receive the API key.
+   *
+   * Send `code_challenge` (unpadded base64url SHA-256 of a `code_verifier`
+   * you keep) with `code_challenge_method: 'S256'`, then pass the verifier to
+   * {@link cliAuthorizeExchange}: the `code` and `state` in `browser_url`
+   * cannot collect the key without it. Omitting the challenge is refused from
+   * 31 January 2027.
    */
   cliAuthorizeInitiate(body: CliAuthorizeInitiateRequest): Promise<CliAuthorizeInitiateResponse> {
     return this.http.request<CliAuthorizeInitiateResponse>({
@@ -195,6 +201,9 @@ export class AuthResource {
    * - `{ status: 'bound', api_key, account_id }` — one-shot delivery
    *   of the plaintext API key. Subsequent calls 404.
    * - `{ status: 'expired' }` — user took too long; restart the flow.
+   *
+   * Pass `code_verifier` when the flow started with a `code_challenge`; a
+   * missing or wrong verifier is a 400. Never put the verifier in a URL.
    */
   cliAuthorizeExchange(body: CliAuthorizeExchangeRequest): Promise<CliAuthorizeExchangeResponse> {
     return this.http.request<CliAuthorizeExchangeResponse>({

@@ -5,6 +5,35 @@
 # private key, uploads to a GitHub Release, and writes the
 # `latest.json` manifest the in-app updater consumes.
 #
+# Security sweep E-10 — the signing key never meets the build. Four jobs:
+#
+#   preflight         tag and version checks before anything builds, and a refusal
+#                     when two releases carry the tag. No release YET is fine: the
+#                     draft is created after the tag push (runbook step 4).
+#   build             every platform, with NO signing key and a read-only token.
+#                     This is the job that runs third-party code: npm install
+#                     scripts, every npm build plugin, every cargo build.rs. It
+#                     builds unsigned (`--no-sign`) and hands the bundles on as
+#                     workflow artifacts.
+#   sign              a fresh runner that builds nothing. It installs only the
+#                     tauri CLI the lockfile pins (integrity-checked, no install
+#                     scripts), then fetches the build's bundles and refuses
+#                     anything but the five a release carries, so nothing the
+#                     build wrote can run next to the key. It signs in ONE step —
+#                     the only step that ever holds the key — verifies every
+#                     signature against the public key installed clients trust,
+#                     and assembles latest.json.
+#   publish-manifest  tag pushes only. Needs exactly one release for the tag, else
+#                     stops before writing (`gh run rerun <run-id> --failed` then
+#                     finishes it). Uploads every asset into the draft release, then
+#                     publishes it: once, after every platform is signed.
+#
+# DRY RUN — `gh workflow run gui-release.yml --ref main`. A manual run is ALWAYS a
+# dry run: it builds and signs every platform and keeps the result as the
+# `signed-release` workflow artifact. publish-manifest does not run, so no release
+# is created, changed or published and no latest.json reaches one. See
+# docs/runbooks/gui-release.md.
+#
 # Required GitHub repository secrets:
 #   * TAURI_UPDATER_PUBKEY — public key embedded in tauri.conf.json
 #     replacement step. Generate via `npx tauri signer generate`
@@ -16,6 +45,12 @@
 # Required GitHub repository variables:
 #   * (none yet — VITE_SENTRY_DSN can be added when the Sentry project
 #     is created; absence cleanly disables telemetry per V-242 gate.)
+#
+# Optional GitHub repository variable:
+#   * TAURI_UPDATER_TRUSTED_PUBKEY — set ONLY for a key-rotation release, to
+#     the OLD public key that installed clients trust. The sign job then
+#     verifies every signature against it instead of TAURI_UPDATER_PUBKEY
+#     (see the verify step and docs/founder-actions/v243-tauri-updater-keys.md).
 #
 # Pre-launch posture: NO OS-level binary signing. Customers see
 # "unknown publisher" / Gatekeeper warnings on first install (normal
@@ -29,15 +64,157 @@ on:
   push:
     tags:
       - 'gui-v*'
+  # The dry run. It takes no inputs on purpose: nothing a person types into the
+  # dispatch form can turn publishing on, because the only job that writes to a
+  # release runs on a tag push and on nothing else.
+  workflow_dispatch:
+
+# Read-only unless a job says otherwise. Two jobs do, and neither installs a
+# dependency or runs build code.
+permissions:
+  contents: read
 
 jobs:
-  build:
-    # tauri-action creates + publishes the GitHub Release (releaseName /
-    # releaseDraft:false below) using GITHUB_TOKEN — which needs
-    # contents:write. The repo default is read-only, so scope it here
-    # (least-privilege: only this job, only on gui-v* tags).
+  # ── preflight: everything knowable in a second, checked before any build ──
+  preflight:
+    runs-on: ubuntu-latest
+    # Write, because the release this run fills is a DRAFT, and a draft is
+    # invisible to a read-only token. This job runs git, `node -p` on a JSON file
+    # and gh: no dependency is installed and no build code runs here.
     permissions:
       contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      # Security sweep E-10 — every action in this workflow is pinned to a full
+      # commit SHA (a tag or branch can be moved by its owner), and no checkout
+      # leaves the token in .git/config for later steps: a step that needs it
+      # takes it from env.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      # The version names the assets and fills latest.json. A dry run has no tag
+      # to take it from, so both modes take it from here; a tag push must then
+      # agree with it (next steps).
+      - name: Read the app version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_version=$(node -p "require('./apps/gui-client/src-tauri/tauri.conf.json').version")
+          echo "version=${app_version}" >> "$GITHUB_OUTPUT"
+          echo "tag=gui-v${app_version}" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_EVENT_NAME}" != "push" ]; then
+            echo "::notice::DRY RUN of gui-v${app_version} from ${GITHUB_REF_NAME}: builds and signs every platform and keeps the result as workflow artifacts. No release is created, changed or published."
+          fi
+
+      # W-27 — BACKSTOP for the pre-push check of the same name. The real
+      # enforcement is local (.husky/pre-push), because by the time this workflow
+      # runs the tag is already on origin and the release policy forbids
+      # retagging — so a failure here means the bad tag exists and cannot be
+      # replaced, only abandoned. This still earns its place: a push with
+      # --no-verify, or from a clone without hooks installed, reaches origin
+      # without ever meeting that check, and a release built on a tag carrying no
+      # tagger, date or message is worth failing loudly rather than shipping.
+      #
+      # FAIL-CLOSED on an unresolvable ref: a guard that cannot see its subject
+      # must not report success. The explicit fetch is why that should not arise —
+      # actions/checkout can leave only the commit behind a tag push.
+      - name: Tag must be annotated
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --force origin \
+            "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}" 2>/dev/null || true
+          kind=$(git for-each-ref "refs/tags/${GITHUB_REF_NAME}" --format='%(objecttype)')
+          if [ -z "$kind" ]; then
+            echo "::error::cannot resolve refs/tags/${GITHUB_REF_NAME} in this checkout, so this step cannot tell an annotated tag from a lightweight one. Failing closed rather than passing on absence."
+            exit 1
+          fi
+          if [ "$kind" != "tag" ]; then
+            echo "::error::${GITHUB_REF_NAME} is a LIGHTWEIGHT tag (objecttype=${kind}). docs/operations/release-policy.md requires annotated tags — they carry the tagger, the date and the release message. This tag is already published and the policy forbids replacing it: abandon it and cut the next version with 'git tag -a'."
+            exit 1
+          fi
+          echo "${GITHUB_REF_NAME} is an annotated tag"
+
+      # A tag that disagrees with the app version ships a DEAD updater: the
+      # assets are named for the app version, latest.json advertises the app
+      # version, and every install already running that version is told it is
+      # current. gui-v0.1.0 was cut against version 0.0.1 and did exactly that.
+      # Fail the release instead of publishing something that can never update.
+      - name: Tag must match the app version
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          app_version=$(node -p "require('./apps/gui-client/src-tauri/tauri.conf.json').version")
+          expected="gui-v${app_version}"
+          if [ "${GITHUB_REF_NAME}" != "$expected" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match the app version (${app_version}). Expected ${expected}. Bump apps/gui-client/{package.json,src-tauri/tauri.conf.json,src-tauri/Cargo.toml} or retag."
+            exit 1
+          fi
+          echo "tag ${GITHUB_REF_NAME} matches app version ${app_version}"
+
+      # This workflow never creates a release. A person creates it as a DRAFT
+      # (docs/runbooks/gui-release.md, step 4) and publish-manifest fills and
+      # publishes that draft once every platform is signed.
+      #
+      # ⛔ NO RELEASE YET IS NOT A FAILURE HERE. Step 4 comes AFTER the tag push
+      # (step 3), because `gh release create` against a tag that is not on origin
+      # makes a lightweight one. The push is what started this run, and preflight
+      # gets here about 30 s later, usually before the draft exists. Failing then
+      # would put a red run on a tag that can never be pushed again. The draft is
+      # first needed by publish-manifest, after every platform is built and signed,
+      # and that job is the gate. If the draft is still missing then, it stops
+      # without writing anything. The signed set is kept with the run, so
+      # `gh run rerun <run-id> --failed` finishes the release.
+      #
+      # TWO OR MORE releases do fail, here: waiting never fixes that, and a person
+      # has to keep one. On gui-v0.1.62 and gui-v0.1.63 the action that used to
+      # upload created a second, published release beside the hand-made draft,
+      # and `gh release view <tag>` resolved to the draft while the other was live.
+      #
+      # Found by tag_name in the release LIST, because `GET /releases/tags/:tag`
+      # does not return drafts. This script runs against each case in
+      # a-release-run-survives-a-late-draft-and-a-key-rotation.test.ts.
+      - name: At most one release carries the tag (the draft may follow the push)
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | [.id, .tag_name, .draft] | @tsv' > "$RUNNER_TEMP/releases.tsv"
+          awk -F'\t' -v tag="$TAG" '$2 == tag' "$RUNNER_TEMP/releases.tsv" > "$RUNNER_TEMP/matches.tsv"
+          count=$(wc -l < "$RUNNER_TEMP/matches.tsv" | tr -d ' ')
+          if [ "$count" -gt 1 ]; then
+            echo "::error::${count} releases carry the tag ${TAG} (id, tag, draft):"
+            cat "$RUNNER_TEMP/matches.tsv"
+            echo "::error::Keep one — address them by id, never by tag (docs/runbooks/gui-release.md) — then:  gh run rerun ${GITHUB_RUN_ID} --failed"
+            exit 1
+          fi
+          if [ "$count" -eq 0 ]; then
+            echo "::warning::No release carries ${TAG} yet. That is expected just after the tag push, and the build goes ahead: the draft is first needed when every platform is signed. Create it now if you have not (docs/runbooks/gui-release.md, step 4):  gh release create ${TAG} --draft --title 'Desktop client ${TAG#gui-v}' --notes-file <notes>   If the run reaches publish-manifest first, that job stops without writing anything; create the draft, then:  gh run rerun ${GITHUB_RUN_ID} --failed"
+            exit 0
+          fi
+          echo "release ${TAG} exists (id, tag, draft): $(cat "$RUNNER_TEMP/matches.tsv")"
+
+  # ── build: every platform, unsigned ─────────────────────────────────────────
+  build:
+    needs: preflight
+    # ⛔ NO SIGNING KEY AND NO WRITE TOKEN IN THIS JOB (security sweep E-10).
+    # It runs more third-party code than anything else here — npm install
+    # scripts, every npm build plugin, every cargo build.rs — on one runner,
+    # where any step can tamper with every later one. So it builds with
+    # `--no-sign`, holds a read-only token, and its bundles reach a release only
+    # through the `sign` job. The-release-job-pins-every-action-to-a-commit-
+    # and-keeps-no-token-on-disk.test.ts fails if the key comes back.
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -52,11 +229,6 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-      # Security sweep E-10 — every action below is pinned to a full commit SHA (a
-      # tag or branch can be moved by its owner, and this job holds the updater
-      # signing key and contents:write), and the checkout does not leave the token
-      # in .git/config for later steps: every step that needs it (gh release,
-      # tauri-action) takes it from env.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
@@ -113,80 +285,6 @@ jobs:
 
       - name: Build SDK (transitive dep of gui-client)
         run: npm run build --workspace packages/sdk-typescript
-
-      # W-27 — BACKSTOP for the pre-push check of the same name. The real
-      # enforcement is local (.husky/pre-push), because by the time this workflow
-      # runs the tag is already on origin and the release policy forbids
-      # retagging — so a failure here means the bad tag exists and cannot be
-      # replaced, only abandoned. This still earns its place: a push with
-      # --no-verify, or from a clone without hooks installed, reaches origin
-      # without ever meeting that check, and a release built on a tag carrying no
-      # tagger, date or message is worth failing loudly rather than shipping.
-      #
-      # FAIL-CLOSED on an unresolvable ref: a guard that cannot see its subject
-      # must not report success. The explicit fetch is why that should not arise —
-      # actions/checkout can leave only the commit behind a tag push.
-      - name: Tag must be annotated
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch --no-tags --force origin \
-            "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}" 2>/dev/null || true
-          kind=$(git for-each-ref "refs/tags/${GITHUB_REF_NAME}" --format='%(objecttype)')
-          if [ -z "$kind" ]; then
-            echo "::error::cannot resolve refs/tags/${GITHUB_REF_NAME} in this checkout, so this step cannot tell an annotated tag from a lightweight one. Failing closed rather than passing on absence."
-            exit 1
-          fi
-          if [ "$kind" != "tag" ]; then
-            echo "::error::${GITHUB_REF_NAME} is a LIGHTWEIGHT tag (objecttype=${kind}). docs/operations/release-policy.md requires annotated tags — they carry the tagger, the date and the release message. This tag is already published and the policy forbids replacing it: abandon it and cut the next version with 'git tag -a'."
-            exit 1
-          fi
-          echo "${GITHUB_REF_NAME} is an annotated tag"
-
-      # A tag that disagrees with the app version ships a DEAD updater: the
-      # assets are named for the app version, latest.json advertises the app
-      # version, and every install already running that version is told it is
-      # current. gui-v0.1.0 was cut against version 0.0.1 and did exactly that.
-      # Fail the release instead of publishing something that can never update.
-      - name: Tag must match the app version
-        shell: bash
-        run: |
-          app_version=$(node -p "require('./apps/gui-client/src-tauri/tauri.conf.json').version")
-          expected="gui-v${app_version}"
-          if [ "${GITHUB_REF_NAME}" != "$expected" ]; then
-            echo "::error::tag ${GITHUB_REF_NAME} does not match the app version (${app_version}). Expected ${expected}. Bump apps/gui-client/{package.json,src-tauri/tauri.conf.json,src-tauri/Cargo.toml} or retag."
-            exit 1
-          fi
-          echo "tag ${GITHUB_REF_NAME} matches app version ${app_version}"
-
-      # tauri-action publishes by creating the GitHub Release itself. That call
-      # fails on this org — verified, not guessed:
-      #
-      #   PUT /repos/.../actions/permissions/workflow
-      #   409 Conflict: "Write permissions for workflows are disabled by the
-      #                  organization"
-      #
-      # The org policy overrides both the repo default AND this job's
-      # `permissions: contents: write`, so the run log cheerfully prints
-      # "Contents: write" and the REST call still answers "Resource not
-      # accessible by integration". gui-v0.1.0 built all three platforms and
-      # then threw every artifact away at that last step.
-      #
-      # Until an org owner allows write (Settings -> Actions -> General ->
-      # Workflow permissions, org level), the release must already exist so
-      # tauri-action uploads into it instead of creating one. Check that FIRST:
-      # a ten-minute cross-platform build that ends in a permissions error is
-      # the most expensive way possible to learn this.
-      - name: Release must already exist (org blocks Actions from creating one)
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if ! gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            echo "::error::Release ${GITHUB_REF_NAME} does not exist, and this org forbids Actions from creating one (see docs/runbooks/gui-release.md). Create it first:  gh release create ${GITHUB_REF_NAME} --title 'Driftstack GUI ${GITHUB_REF_NAME}' --notes '...'"
-            exit 1
-          fi
-          echo "release ${GITHUB_REF_NAME} exists; tauri-action will upload into it"
 
       # ── The companion Simulator app ────────────────────────────────────
       #
@@ -261,35 +359,25 @@ jobs:
         env:
           TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
 
-      - name: Build + sign Tauri bundles
+      # Build only: no tagName and no releaseId, so tauri-action uploads nothing
+      # and needs no token. `--no-sign` keeps tauri from demanding the private key
+      # ("A public key has been found, but no private key") while still producing
+      # every updater artifact createUpdaterArtifacts asks for — unsigned, for the
+      # sign job. It skips nothing else: tauri.conf.json configures no OS code
+      # signing to skip.
+      - name: Build Tauri bundles (no signing key)
+        id: tauri
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
-          # tauri-action reads GITHUB_TOKEN from env to create the
-          # release; Actions does not auto-export secrets.GITHUB_TOKEN.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVKEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVKEY_PASSWORD }}
           # V-242 — Sentry DSN. Empty when unset; gate in telemetry.ts
           # short-circuits cleanly so no event leaves the customer.
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-          VITE_APP_VERSION: ${{ github.ref_name }}
+          # The release tag. preflight guarantees it equals github.ref_name on a
+          # tag push, and a dry run builds exactly what that tag would.
+          VITE_APP_VERSION: ${{ needs.preflight.outputs.tag }}
         with:
           projectPath: apps/gui-client
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Driftstack GUI ${{ github.ref_name }}'
-          releaseBody: |
-            Cross-platform Driftstack GUI client release.
-
-            **Install**
-            - macOS: download the `.dmg`. First-launch may prompt about an unidentified developer; right-click → Open to override.
-            - Windows: download the `.exe` installer. Windows SmartScreen may flag the unsigned binary; click "More info" → "Run anyway".
-            - Linux: download the `.AppImage` (portable) or `.deb` (Debian/Ubuntu).
-
-            **Auto-update**
-            Subsequent versions auto-update via the Tauri Updater (public-key signed). The manifest at `latest.json` is consumed by every running install.
-          releaseDraft: false
-          prerelease: false
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} --no-sign
 
       # ⛔ VERIFY THE EMBED, do not assume it. Tauri copies `resources` itself, and
       # an .app is a directory of symlinks and exec bits — a lossy copy produces a
@@ -297,9 +385,10 @@ jobs:
       # that only tests for presence. Assert the nested app has its Info.plist and
       # an EXECUTABLE main binary.
       #
-      # Failure here is deliberately safe: `publish-manifest` needs this job, so a
-      # red verification means no latest.json is written and NO running install is
-      # ever told to update to the broken build.
+      # Failure here is deliberately safe: nothing reaches a release except
+      # through `sign` and `publish-manifest`, which both wait on this job, so a
+      # red verification means no asset is uploaded, no latest.json is written and
+      # NO running install is ever told to update to the broken build.
       - name: Verify the Simulator really shipped inside the app
         if: matrix.platform == 'macos-latest'
         shell: bash
@@ -334,40 +423,385 @@ jobs:
           echo "  executable(s) in the unpacked bundle:"; ls -la "$macos_dir"
           echo "verified: archive $(du -sh "$nested" | cut -f1) unpacks to a launchable Simulator"
 
-  # ── latest.json, assembled ONCE after every platform has uploaded ─────────
-  #
-  # ⛔ gui-v0.1.6 shipped a manifest with FIVE platform keys and no darwin at
-  # all, while both macOS artifacts sat on the release. gui-v0.1.5, same
-  # workflow, produced all nine. The difference is a race: `includeUpdaterJson`
-  # defaults on, so each of the three matrix jobs read-modify-writes the SAME
-  # latest.json, and whichever pair interleaves badly drops a platform.
-  #
-  # The consequence is silent and total for the dropped platform: the updater
-  # fetches a manifest that parses fine and simply has no key for it, so a macOS
-  # client is told nothing — the exact silence the 0.1.6 release existed to fix.
-  #
-  # Assembling once, after the matrix, removes the concurrency instead of
-  # narrowing it. And the completeness assertion is the point: a manifest that is
-  # merely VALID is what shipped, so validity is not the property worth checking.
-  publish-manifest:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Assemble and verify the updater manifest
+      # The SAME asset names the releases have always carried. tauri-action used
+      # to upload these itself and named each one after the file tauri wrote,
+      # except the macOS updater archive, which it gave an arch suffix
+      # (Driftstack.app.tar.gz -> Driftstack_universal.app.tar.gz). Only files it
+      # would have uploaded are kept, and each platform must produce exactly the
+      # kinds it always has: a new kind would reach the release unsigned and
+      # unknown to latest.json, so it fails here instead.
+      #
+      # ⛔ A .sig here means the build could sign, i.e. a key reached this job.
+      # That fails the run: it is the one thing this job must never be able to do.
+      #
+      # ⛔ release-assets/ is handed over WHOLE, and the sign job runs next to the
+      # key. So it starts empty (anything the build left there is deleted, not
+      # uploaded), holds only plain file names, and must hold exactly what this
+      # step copied. The sign job checks the same again on its own runner, which
+      # is the check that counts: a build process still running could write here
+      # after this step.
+      - name: Collect the unsigned bundles under their release asset names
+        shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          node - <<'JS'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const out = path.resolve('release-assets');
+          fs.rmSync(out, { recursive: true, force: true });
+          fs.mkdirSync(out);
+          const fail = (msg) => { console.log(`::error::${msg}`); process.exit(1); };
+          const paths = JSON.parse(process.env.ARTIFACT_PATHS || '[]');
+          const names = [];
+          for (const p of paths) {
+            if (!fs.statSync(p).isFile()) continue; // the .app directory; its .app.tar.gz is what ships
+            const base = path.basename(p);
+            if (base.endsWith('.sig')) fail(`${base}: the build job produced a signature, so a signing key reached it`);
+            if (!/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(base)) {
+              fail(`${JSON.stringify(base)} is not a plain file name (letters, digits and . _ + -); the sign job refuses it`);
+            }
+            let name = base;
+            if (base.endsWith('.app.tar.gz')) {
+              const arch = /universal-apple-darwin/.test(p) ? 'universal'
+                : /aarch64-apple-darwin/.test(p) ? 'aarch64'
+                : /x86_64-apple-darwin/.test(p) ? 'x64'
+                : process.arch === 'arm64' ? 'aarch64' : 'x64';
+              name = `${base.slice(0, -'.app.tar.gz'.length)}_${arch}.app.tar.gz`;
+            }
+            fs.copyFileSync(p, path.join(out, name));
+            names.push(name);
+          }
+          const kinds = {
+            'macos-latest': ['.dmg', '.app.tar.gz'],
+            'ubuntu-22.04': ['.AppImage', '.deb'],
+            'windows-latest': ['-setup.exe'],
+          }[process.env.PLATFORM];
+          if (!kinds) fail(`no asset list for platform ${process.env.PLATFORM}`);
+          const wrong = kinds.filter((k) => names.filter((n) => n.endsWith(k)).length !== 1);
+          const unknown = names.filter((n) => !kinds.some((k) => n.endsWith(k)));
+          if (wrong.length > 0 || unknown.length > 0) {
+            fail(`expected exactly one each of [${kinds.join(', ')}], got [${names.join(', ')}]`);
+          }
+          const present = fs.readdirSync(out).sort();
+          if (JSON.stringify(present) !== JSON.stringify([...names].sort())) {
+            fail(`release-assets holds ${JSON.stringify(present)}, but only ${JSON.stringify(names)} were collected into it`);
+          }
+          console.log(`collected for signing: ${names.join(', ')}`);
+          JS
+
+      # `overwrite`: a re-run of failed jobs keeps the earlier attempt's artifacts
+      # (that is what lets a re-run reuse them), and without it an upload under a
+      # name an earlier attempt already used fails the job instead of replacing it.
+      - name: Hand the unsigned bundles to the sign job
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: unsigned-${{ matrix.platform }}
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  # ── sign: the only place the updater key is ever present ─────────────────────
+  sign:
+    needs: [preflight, build]
+    runs-on: ubuntu-latest
+    # A fresh runner, so nothing the build ran can have touched it. It checks out
+    # only the lockfile, runs only first-party actions, installs only the pinned
+    # signer, and builds nothing.
+    permissions:
+      contents: read
+    steps:
+      # The lockfile and nothing else: it pins the one tool this job runs.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            /package-lock.json
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      # Installed BEFORE the build's bundles are fetched, so nothing the build
+      # made is on this runner while the signer is installed.
+      #
+      # The same tauri CLI the app builds with, byte for byte: its version AND
+      # integrity hash come from the repo lockfile, and `npm ci` refuses a tarball
+      # that does not match. Two packages — the CLI and this runner's native
+      # binary — and no install scripts.
+      #
+      # ⛔ The binary is a HARD dependency here, not the optional one it is in the
+      # repo: npm skips an optional package whose tarball fails its integrity
+      # check and carries on, which would leave the CLI loading a binary from
+      # wherever it could find one. (Measured: a corrupted hash on the optional
+      # entry installed "successfully"; on a hard entry it fails EINTEGRITY.)
+      - name: Install the signer (the tauri CLI the lockfile pins, nothing else)
+        shell: bash
         run: |
           set -euo pipefail
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.sig' --dir sigs
-          python3 - <<'PY'
+          export SIGNER_DIR="$RUNNER_TEMP/updater-signer"
+          node - <<'JS'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const host = {
+            'linux-x64': 'linux-x64-gnu',
+            'darwin-arm64': 'darwin-arm64',
+            'darwin-x64': 'darwin-x64',
+            'win32-x64': 'win32-x64-msvc',
+          }[`${process.platform}-${process.arch}`];
+          const cliKey = 'node_modules/@tauri-apps/cli';
+          const binKey = `node_modules/@tauri-apps/cli-${host}`;
+          const cli = lock.packages?.[cliKey];
+          const bin = lock.packages?.[binKey];
+          if (!host || !cli?.integrity || !bin?.integrity || bin.version !== cli.version) {
+            console.log(`::error::package-lock.json does not pin @tauri-apps/cli and its ${host ?? process.platform} binary with integrity hashes; refusing to sign with an unpinned tool`);
+            process.exit(1);
+          }
+          const { optional: _optional, ...binEntry } = bin;
+          const deps = { '@tauri-apps/cli': cli.version, [`@tauri-apps/cli-${host}`]: bin.version };
+          const dir = process.env.SIGNER_DIR;
+          fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(path.join(dir, 'package.json'),
+            JSON.stringify({ name: 'updater-signer', private: true, devDependencies: deps }, null, 2));
+          fs.writeFileSync(path.join(dir, 'package-lock.json'), JSON.stringify({
+            name: 'updater-signer',
+            lockfileVersion: 3,
+            requires: true,
+            packages: { '': { name: 'updater-signer', devDependencies: deps }, [cliKey]: cli, [binKey]: binEntry },
+          }, null, 2));
+          console.log(`pinned @tauri-apps/cli ${cli.version} (${host}) from the repo lockfile`);
+          JS
+          cd "$SIGNER_DIR"
+          npm ci --ignore-scripts --no-audit --no-fund
+          shopt -s nullglob
+          binding=( node_modules/@tauri-apps/cli-*/cli.*.node )
+          if [ "${#binding[@]}" -ne 1 ]; then
+            echo "::error::expected exactly one native signer binary, found ${#binding[@]}"
+            exit 1
+          fi
+          NAPI_RS_NATIVE_LIBRARY_PATH="$SIGNER_DIR/${binding[0]}" ./node_modules/.bin/tauri --version
+
+      - name: Fetch the unsigned bundles
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: unsigned-*
+          merge-multiple: true
+          path: release-assets
+
+      # ⛔⛔ Everything in release-assets/ was written by the build job, which runs
+      # every npm build plugin and cargo build.rs the app depends on, and this job
+      # holds the key. Nothing from that directory may run here, and an extra file
+      # is how it would: an interpreter started inside it can import a module
+      # planted there, a .git directory changes what git runs, a dotfile changes
+      # what a tool reads. The key does not have to be in a step's env to be
+      # reached: the runner holds every secret of the job in memory, and a
+      # GitHub-hosted runner gives any step root.
+      #
+      # So before ANY step reads the directory: exactly the five bundles a release
+      # carries, one of each kind, each a regular file with a plain name (which
+      # also means no name can start with "-" and be read as an option), and
+      # nothing else. This step runs from the workspace root, not inside the
+      # directory it checks. It must stay the step right after the fetch:
+      # the-sign-job-runs-nothing-the-build-left-beside-its-bundles.test.ts
+      # runs it against planted files and fails if it moves.
+      - name: The build handed over the five bundles and nothing else
+        shell: bash
+        run: |
+          node - <<'JS'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const dir = 'release-assets';
+          const KINDS = ['.dmg', '.app.tar.gz', '-setup.exe', '.AppImage', '.deb'];
+          const PLAIN = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
+          const names = fs.readdirSync(dir).sort();
+          const problems = [];
+          for (const name of names) {
+            const shown = JSON.stringify(name);
+            if (!fs.lstatSync(path.join(dir, name)).isFile()) problems.push(`${shown} is not a regular file`);
+            else if (!PLAIN.test(name)) problems.push(`${shown} is not a plain file name`);
+            else if (!KINDS.some((k) => name.endsWith(k))) problems.push(`${shown} is not a release bundle`);
+          }
+          for (const k of KINDS) {
+            const n = names.filter((name) => name.endsWith(k)).length;
+            if (n !== 1) problems.push(`${n} *${k} (expected exactly one)`);
+          }
+          if (problems.length > 0) {
+            console.log(`::error::the build handed over more or other than the five release bundles, so nothing in it is signed and the run stops here: ${problems.join('; ')}`);
+            process.exit(1);
+          }
+          console.log(`the five bundles and nothing else: ${names.join(', ')}`);
+          JS
+
+      # ⛔⛔ THE ONLY STEP IN THIS WORKFLOW THAT HOLDS THE UPDATER SIGNING KEY.
+      #
+      # A run step, not an action, and it runs one program: the signer installed
+      # above, loaded from exactly the binary that was integrity-checked
+      # (NAPI_RS_NATIVE_LIBRARY_PATH stops it looking anywhere else). The key
+      # reaches it through env, never argv, so it is not in any process listing.
+      # It signs exactly the files tauri's own build would have signed — each
+      # updater artifact; the .dmg is not one — and writes <file>.sig beside each.
+      #
+      # Do not add a step to this job that installs or builds anything, and do not
+      # move these two env lines to the job or the workflow: the guard test
+      # the-release-job-pins-every-action-to-a-commit-and-keeps-no-token-on-disk
+      # fails on either.
+      - name: Sign the updater artifacts
+        shell: bash
+        working-directory: release-assets
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVKEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVKEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
+            echo "::error::TAURI_UPDATER_PRIVKEY secret missing — see docs/founder-actions/v243-tauri-updater-keys.md"
+            exit 1
+          fi
+          signer="$RUNNER_TEMP/updater-signer/node_modules"
+          shopt -s nullglob
+          binding=( "$signer"/@tauri-apps/cli-*/cli.*.node )
+          export NAPI_RS_NATIVE_LIBRARY_PATH="${binding[0]}"
+          for suffix in .app.tar.gz -setup.exe .AppImage .deb; do
+            matches=( *"$suffix" )
+            if [ "${#matches[@]}" -ne 1 ]; then
+              echo "::error::expected exactly one *${suffix} to sign, found ${#matches[@]}"
+              exit 1
+            fi
+            # ./ so the name is always a path, never an option.
+            "$signer/.bin/tauri" signer sign ./"${matches[0]}" </dev/null >/dev/null
+            if [ ! -s "${matches[0]}.sig" ]; then
+              echo "::error::no signature was written for ${matches[0]}"
+              exit 1
+            fi
+            echo "signed ${matches[0]}"
+          done
+
+      # Signed is not the same as ACCEPTED. The updater checks each signature
+      # against the public key compiled into the INSTALLED app, and tauri only
+      # WARNS when the private key it signs with does not match the public key the
+      # new build compiles in, so a wrong key would ship updates no install can
+      # apply. Check what the client checks, the way it checks it: the minisign key
+      # id, the Ed25519 signature over the BLAKE2b-512 of the file ("ED") or the
+      # file itself ("Ed"), and the global signature over the trusted comment.
+      #
+      # ⛔ KEY ROTATION is the one release where those keys differ on purpose
+      # (docs/founder-actions/v243-tauri-updater-keys.md, "Rotation"): it is signed
+      # with the OLD private key, which installed clients trust, and compiles in the
+      # NEW public key. Checking it against the compiled key would refuse the one
+      # release a key compromise needs. So the step verifies against the key
+      # installed clients trust: the repository VARIABLE
+      # TAURI_UPDATER_TRUSTED_PUBKEY when it is set (the old public key, for the
+      # rotation only), else TAURI_UPDATER_PUBKEY. A variable, not a secret: it is
+      # a public key, and `gh variable list` shows at a glance whether it is still
+      # set. While it differs from the compiled key, every run warns; a release
+      # signed with any other key fails and names the variable to clear.
+      - name: Every signature must verify against the updater public key
+        shell: bash
+        working-directory: release-assets
+        env:
+          TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
+          TAURI_UPDATER_TRUSTED_PUBKEY: ${{ vars.TAURI_UPDATER_TRUSTED_PUBKEY }}
+        run: |
+          node - <<'JS'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const unb64 = (s) => Buffer.from(String(s).trim(), 'base64');
+          const fail = (msg) => { console.log(`::error::${msg}`); process.exit(1); };
+          // A key id as the key file's comment prints it: the little-endian u64 in hex.
+          const label = (id) => Buffer.from(id).reverse().toString('hex').toUpperCase().replace(/^0+(?=.)/, '');
+          const publicKey = (name) => {
+            const pub = unb64(unb64(process.env[name] ?? '').toString('utf8').split('\n')[1] ?? '');
+            if (pub.length !== 42 || pub.subarray(0, 2).toString('latin1') !== 'Ed') {
+              fail(`${name} is not a minisign Ed25519 public key`);
+            }
+            return {
+              id: pub.subarray(2, 10),
+              raw: pub.subarray(10),
+              key: crypto.createPublicKey({
+                key: { kty: 'OKP', crv: 'Ed25519', x: pub.subarray(10).toString('base64url') },
+                format: 'jwk',
+              }),
+            };
+          };
+          const compiled = publicKey('TAURI_UPDATER_PUBKEY');
+          // An unset variable reaches the step as "".
+          const rotation = (process.env.TAURI_UPDATER_TRUSTED_PUBKEY ?? '').trim() !== '';
+          const trusted = rotation ? publicKey('TAURI_UPDATER_TRUSTED_PUBKEY') : compiled;
+          if (rotation && trusted.raw.equals(compiled.raw)) {
+            console.log(`::notice::TAURI_UPDATER_TRUSTED_PUBKEY is set and equals the key this build compiles in (${label(compiled.id)}); it can be cleared: gh variable delete TAURI_UPDATER_TRUSTED_PUBKEY`);
+          } else if (rotation) {
+            console.log(`::warning::KEY ROTATION: verifying against TAURI_UPDATER_TRUSTED_PUBKEY (key ${label(trusted.id)}), the key installed clients trust, NOT the key this build compiles in (${label(compiled.id)}). Clear it when installed clients should verify against the compiled key again (docs/founder-actions/v243-tauri-updater-keys.md, Rotation): gh variable delete TAURI_UPDATER_TRUSTED_PUBKEY`);
+          }
+          const sigFiles = fs.readdirSync('.').filter((n) => n.endsWith('.sig'));
+          const bad = [];
+          for (const sigName of sigFiles) {
+            const asset = sigName.slice(0, -4);
+            const lines = unb64(fs.readFileSync(sigName, 'utf8')).toString('utf8').split('\n');
+            const blob = unb64(lines[1] ?? '');
+            const alg = blob.subarray(0, 2).toString('latin1');
+            const data = fs.existsSync(asset) ? fs.readFileSync(asset) : Buffer.alloc(0);
+            const message = alg === 'ED' ? crypto.createHash('blake2b512').update(data).digest() : data;
+            const comment = (lines[2] ?? '').replace(/^trusted comment: /, '');
+            const ok =
+              fs.existsSync(asset) &&
+              blob.length === 74 &&
+              (alg === 'ED' || alg === 'Ed') &&
+              blob.subarray(2, 10).equals(trusted.id) &&
+              crypto.verify(null, message, trusted.key, blob.subarray(10)) &&
+              crypto.verify(null, Buffer.concat([blob.subarray(10), Buffer.from(comment, 'utf8')]), trusted.key, unb64(lines[3] ?? ''));
+            console.log(ok ? `verified ${asset}` : `FAILED   ${asset} (signed by key ${blob.length === 74 ? label(blob.subarray(2, 10)) : 'unreadable'})`);
+            if (!ok) bad.push(asset);
+          }
+          if (sigFiles.length === 0) fail('there are no signatures to verify');
+          if (bad.length > 0 && rotation) {
+            fail(`signature(s) that do not verify against TAURI_UPDATER_TRUSTED_PUBKEY (key ${label(trusted.id)}), which is set for a key rotation. If the rotation release has shipped, clear it: gh variable delete TAURI_UPDATER_TRUSTED_PUBKEY. Failed: ${bad.join(', ')}`);
+          }
+          if (bad.length > 0) {
+            fail(`signature(s) that do not verify against TAURI_UPDATER_PUBKEY (key ${label(compiled.id)}), the key this build compiles in. For a key-rotation release (signed with the old key, compiling in the new one), set the repository variable TAURI_UPDATER_TRUSTED_PUBKEY to the old public key first (docs/founder-actions/v243-tauri-updater-keys.md, Rotation). Failed: ${bad.join(', ')}`);
+          }
+          JS
+
+      # ── latest.json, assembled ONCE after every platform has been signed ──────
+      #
+      # ⛔ gui-v0.1.6 shipped a manifest with FIVE platform keys and no darwin at
+      # all, while both macOS artifacts sat on the release. gui-v0.1.5, same
+      # workflow, produced all nine. The difference was a race: tauri-action's
+      # `includeUpdaterJson` defaults on, so each of the three matrix jobs
+      # read-modify-wrote the SAME latest.json, and whichever pair interleaved
+      # badly dropped a platform.
+      #
+      # The consequence is silent and total for the dropped platform: the updater
+      # fetches a manifest that parses fine and simply has no key for it, so a macOS
+      # client is told nothing — the exact silence the 0.1.6 release existed to fix.
+      #
+      # Assembling once, after the matrix, removes the concurrency instead of
+      # narrowing it. And the completeness assertion is the point: a manifest that is
+      # merely VALID is what shipped, so validity is not the property worth checking.
+      # It runs in a dry run too, so the manifest is tested before any release is.
+      #
+      # ⛔ `python3 -I`: isolated, so the working directory — the build's bundles —
+      # is not on the import path. Without it a json.py beside the bundles would
+      # run here. The hand-over check already refuses one; this holds even if a
+      # later change lets one through.
+      - name: Assemble and verify the updater manifest
+        shell: bash
+        working-directory: release-assets
+        env:
+          TAG: ${{ needs.preflight.outputs.tag }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 -I - <<'PY'
           import json, os, sys, pathlib
           tag = os.environ['TAG']
+          version = os.environ['VERSION']
           repo = os.environ['GITHUB_REPOSITORY']
           base = f"https://github.com/{repo}/releases/download/{tag}"
-          version = tag.removeprefix('gui-v')
 
           # asset-suffix -> the platform keys tauri's updater looks up for it.
           WANT = {
@@ -377,17 +811,29 @@ jobs:
             '.deb':        ['linux-x86_64-deb'],
             '-setup.exe':  ['windows-x86_64', 'windows-x86_64-nsis'],
           }
-          sigs = {p.name[:-4]: p.read_text().strip() for p in pathlib.Path('sigs').glob('*.sig')}
-          platforms, missing = {}, []
+          files = sorted(p.name for p in pathlib.Path('.').iterdir() if p.is_file())
+          sigs = {n[:-4]: pathlib.Path(n).read_text().strip() for n in files if n.endswith('.sig')}
+          platforms, problems = {}, []
           for suffix, keys in WANT.items():
-              hit = next((n for n in sigs if n.endswith(suffix)), None)
-              if hit is None:
-                  missing.append(suffix); continue
+              hits = [n for n in sigs if n.endswith(suffix)]
+              if len(hits) != 1:
+                  problems.append(f"{len(hits)} signed *{suffix}")
+                  continue
               for k in keys:
-                  platforms[k] = {'signature': sigs[hit], 'url': f"{base}/{hit}"}
-          if missing:
-              print(f"::error::no signature for {missing} — refusing to publish a manifest "
-                    f"that would leave those platforms silently un-updatable")
+                  platforms[k] = {'signature': sigs[hits[0]], 'url': f"{base}/{hits[0]}"}
+          # The whole release, not only what the manifest names: each updater
+          # artifact with its signature, the macOS disk image, and nothing else.
+          assets = [n for n in files if not n.endswith('.sig')]
+          if len([n for n in assets if n.endswith('.dmg')]) != 1:
+              problems.append('not exactly one .dmg')
+          unsigned = [n for n in assets if any(n.endswith(s) for s in WANT) and n not in sigs]
+          orphan = [s for s in sigs if s not in assets]
+          unknown = [n for n in assets if not n.endswith('.dmg') and not any(n.endswith(s) for s in WANT)]
+          for label, names in (('unsigned', unsigned), ('signature without asset', orphan), ('unknown', unknown)):
+              if names:
+                  problems.append(f"{label}: {names}")
+          if problems:
+              print(f"::error::refusing to write a manifest over an incomplete release: {problems}")
               sys.exit(1)
           expected = sorted(k for keys in WANT.values() for k in keys)
           if sorted(platforms) != expected:
@@ -396,9 +842,121 @@ jobs:
           json.dump({'version': version, 'notes': f"Driftstack GUI {tag}",
                      'pub_date': None, 'platforms': platforms},
                     open('latest.json', 'w'), indent=2)
-          print(f"assembled {len(platforms)} platform keys for {version}")
+          print(f"assembled {len(platforms)} platform keys for {version}, every one signed and verified")
           PY
+          ls -l
+
+      # Kept with the run for 7 days: a publish that stopped (no draft yet, two
+      # releases) is finished by `gh run rerun <run-id> --failed`, which re-runs
+      # publish-manifest alone against this artifact. `overwrite` as above.
+      - name: Keep the signed release as a workflow artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: signed-release
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  # ── publish: tag pushes only, once, after every platform is signed ──────────
+  #
+  # The draft is filled and published HERE, in one place, after all three
+  # platforms have built and been signed. That is what makes the draft protect
+  # anything: on gui-v0.1.63 each platform job published on its own, a GitHub-side
+  # upload failure left the live release without Linux for ~25 minutes, and only
+  # latest.json's per-platform shape kept Linux clients from a broken update. Now
+  # nothing reaches the release until everything exists, and latest.json goes up
+  # after every asset it names.
+  publish-manifest:
+    needs: [preflight, sign]
+    # ⛔ A tag push and NOTHING else. A manual dispatch is a dry run, and this is
+    # the only job that writes to a release.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Fetch the signed release
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: signed-release
+          path: release-assets
+
+      - name: Upload every asset into the draft, then publish it
+        shell: bash
+        working-directory: release-assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          manifest_version=$(jq -r .version latest.json)
+          if [ "gui-v${manifest_version}" != "$TAG" ]; then
+            echo "::error::latest.json advertises ${manifest_version}, but this is ${TAG}"
+            exit 1
+          fi
+          # THE gate: exactly one release carries this tag. preflight only refused
+          # two, because the draft is created after the tag push and may not have
+          # existed yet. Found in the list, because a draft is not returned by tag.
+          # Either failure writes nothing, and signed-release stays with this run
+          # (7 days), so re-running this job alone finishes the release.
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | [.id, .tag_name, .draft] | @tsv' > "$RUNNER_TEMP/releases.tsv"
+          awk -F'\t' -v tag="$TAG" '$2 == tag' "$RUNNER_TEMP/releases.tsv" > "$RUNNER_TEMP/matches.tsv"
+          count=$(wc -l < "$RUNNER_TEMP/matches.tsv" | tr -d ' ')
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No release carries ${TAG}, so there is nowhere to publish; nothing was written. Create the draft (docs/runbooks/gui-release.md, step 4):  gh release create ${TAG} --draft --title 'Desktop client ${TAG#gui-v}' --notes-file <notes>   then re-run only this job, which reuses the signed set:  gh run rerun ${GITHUB_RUN_ID} --failed"
+            exit 1
+          fi
+          if [ "$count" -gt 1 ]; then
+            echo "::error::${count} releases carry the tag ${TAG}; nothing was written. Keep one — address them by id, never by tag (docs/runbooks/gui-release.md) — then:  gh run rerun ${GITHUB_RUN_ID} --failed"
+            cat "$RUNNER_TEMP/matches.tsv"
+            exit 1
+          fi
+          if [ "$(cut -f3 "$RUNNER_TEMP/matches.tsv")" != "true" ]; then
+            echo "::warning::the release for ${TAG} was already published before its assets arrived; create it with --draft (docs/runbooks/gui-release.md) so nothing half-uploaded is ever live"
+          fi
+
+          # Every asset first, latest.json LAST: the manifest must never name an
+          # asset that is not there yet.
+          assets=()
+          for f in *; do [ "$f" = latest.json ] || assets+=("$f"); done
+          gh release upload "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
           gh release upload "$TAG" latest.json --repo "$GITHUB_REPOSITORY" --clobber
+
+          # The release must now carry exactly these files at exactly these sizes.
+          # 0.1.63 lost an upload to a GitHub error page mid-transfer; a size check
+          # catches that, and an extra asset is a leftover nobody meant to ship.
+          for f in *; do echo "$f $(wc -c < "$f" | tr -d ' ')"; done | sort > "$RUNNER_TEMP/local.txt"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[] | "\(.name) \(.size)"' | sort > "$RUNNER_TEMP/remote.txt"
+          if ! diff -u "$RUNNER_TEMP/local.txt" "$RUNNER_TEMP/remote.txt"; then
+            echo "::error::the release does not carry exactly the signed set (above: - is ours, + is the release). It is left as it was — still a draft if it was one."
+            exit 1
+          fi
+
+          # Publish. The title and notes are the ones the draft was created with;
+          # the install section a first-time downloader needs is appended once,
+          # if the notes do not already carry it.
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$RUNNER_TEMP/notes.md"
+          if ! grep -q '^\*\*Install\*\*' "$RUNNER_TEMP/notes.md"; then
+            cat >> "$RUNNER_TEMP/notes.md" <<'MD'
+
+          ---
+
+          Cross-platform Driftstack GUI client release.
+
+          **Install**
+          - macOS: download the `.dmg`. First-launch may prompt about an unidentified developer; right-click → Open to override.
+          - Windows: download the `.exe` installer. Windows SmartScreen may flag the unsigned binary; click "More info" → "Run anyway".
+          - Linux: download the `.AppImage` (portable) or `.deb` (Debian/Ubuntu).
+
+          **Auto-update**
+          Subsequent versions auto-update via the Tauri Updater (public-key signed). The manifest at `latest.json` is consumed by every running install.
+          MD
+          fi
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --notes-file "$RUNNER_TEMP/notes.md"
+          echo "published ${TAG}: $(wc -l < "$RUNNER_TEMP/local.txt" | tr -d ' ') assets, latest.json last"
 
       # ⛔ The updater fetches ANONYMOUSLY — tauri.conf.json's updater block has only
       # `endpoints` and `pubkey`, no token and no header. So the manifest and its
@@ -419,7 +977,7 @@ jobs:
             echo "::error::updater manifest NOT anonymously reachable (HTTP $code at $man). Every installed client would silently report 'You are on the latest version' forever. If this repo went private, move the updater endpoint off-repo and ship a client BEFORE the flip."
             exit 1
           fi
-          asset=$(python3 -c "import json;d=json.load(open('/tmp/lj.json'));print(next(iter(d['platforms'].values()))['url'])")
+          asset=$(python3 -I -c "import json;d=json.load(open('/tmp/lj.json'));print(next(iter(d['platforms'].values()))['url'])")
           acode=$(curl -sS -o /dev/null -w '%{http_code}' -L --max-time 120 -H 'Authorization:' "$asset")
           if [ "$acode" != "200" ]; then
             echo "::error::manifest reachable but its ASSET is not (HTTP $acode at $asset) — clients would see an update and fail to download it"

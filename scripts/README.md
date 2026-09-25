@@ -12,6 +12,7 @@ automation deploy key appended 2026-05-12).
 | `deploy-bridge.sh`       | mutating  | Manual SSH deploy of `origin/main` (or explicit SHA) to staging/prod. Auto-reverts on verify FAIL. |
 | `revert-bridge.sh`       | mutating  | Revert to `.last-good-sha`. Supports `--dry-run` (exit 0 no-op, 2 revert-needed).                  |
 | `post-deploy-verify.mjs` | read-only | 9 invariants vs public origin. `--json` for tooling.                                               |
+| `deploy-is-forward.mjs`  | read-only | Refuses a deploy that would move an environment to an older commit (exit 3) or off main (exit 1).  |
 | `deploy-status.sh`       | read-only | Snapshot of git_sha + uptime + activation flags. `--json`, `--check` (cron), `--quiet`.            |
 
 Full runbook: `docs/runbooks/deploy-bridge.md`.

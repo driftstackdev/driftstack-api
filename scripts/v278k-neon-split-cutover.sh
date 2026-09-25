@@ -16,6 +16,7 @@
 #     (pre-authorized 2026-05-12 — see the internal 2026-05-15
 #     session wrap-up notes)
 #   - pg_dump + psql 16+ locally
+#   - CURRENT_SHARED_PROJECT exported (the shared project id step 1 lists)
 #
 # Modes:
 #   --dry-run   default; print every command, write nothing
@@ -41,6 +42,29 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
+
+# ─── the database snapshot ───────────────────────────────────────
+# Security sweep E-27 (2026-09-24). Step 4 dumps the WHOLE shared database. It
+# used to go to the fixed path /tmp/v278k-snapshot.sql: 0644 under the default
+# umask, so every other local account could read it, and nothing ever removed
+# it. It now goes into a private directory (umask 077, mktemp -d) that is
+# removed on every exit path, including an operator answering "n" part way
+# through. Dry-run creates nothing.
+SNAPSHOT_DIR=""
+remove_snapshot() {
+  if [[ -n "$SNAPSHOT_DIR" ]]; then rm -rf -- "$SNAPSHOT_DIR"; fi
+}
+trap remove_snapshot EXIT
+# A signal must still reach the EXIT trap, or an interrupted run leaves the dump.
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+if [[ "$MODE" == "execute" ]]; then
+  umask 077
+  SNAPSHOT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/v278k.XXXXXXXX")
+  SNAPSHOT="$SNAPSHOT_DIR/snapshot.sql"
+else
+  SNAPSHOT="<private temp dir>/snapshot.sql"
+fi
 
 log()   { printf '\033[1;34m[v278k]\033[0m %s\n' "$*" >&2; }
 warn()  { printf '\033[1;33m[v278k]\033[0m %s\n' "$*" >&2; }
@@ -68,7 +92,9 @@ dry_or_run() {
 # ─── phase 1: discover current shared db ─────────────────────────
 step 1 "Discover current shared Neon project + branch"
 dry_or_run "neonctl projects list --output json | jq '.[] | {id, name, region_id}'"
-dry_or_run "neonctl branches list --project-id <CURRENT_SHARED_PROJECT> --output json"
+# An environment variable, not a <PLACEHOLDER>: execute mode evals this line, and
+# `<NAME>` there is an input redirect from a file called NAME, not a prompt.
+dry_or_run "neonctl branches list --project-id \"\${CURRENT_SHARED_PROJECT:?set CURRENT_SHARED_PROJECT to the shared project id from step 1}\" --output json"
 
 # ─── phase 2: provision new projects ─────────────────────────────
 step 2 "Provision new Neon prod project (driftstack-prod, region aws-eu-central-1)"
@@ -77,12 +103,12 @@ step 3 "Provision new Neon staging project (driftstack-staging, region aws-eu-ce
 dry_or_run "neonctl projects create --name driftstack-staging --region-id aws-eu-central-1"
 
 # ─── phase 3: dump shared + restore into both ────────────────────
-step 4 "pg_dump the current shared db → /tmp/v278k-snapshot.sql"
-dry_or_run "pg_dump \"\$SHARED_DATABASE_URL\" --schema=public --no-owner --no-acl > /tmp/v278k-snapshot.sql"
-step 5 "Restore /tmp/v278k-snapshot.sql into the new prod project"
-dry_or_run "psql \"\$NEW_PROD_DATABASE_URL\" < /tmp/v278k-snapshot.sql"
-step 6 "Restore /tmp/v278k-snapshot.sql into the new staging project"
-dry_or_run "psql \"\$NEW_STAGING_DATABASE_URL\" < /tmp/v278k-snapshot.sql"
+step 4 "pg_dump the current shared db → a private temp dir (removed on exit)"
+dry_or_run "pg_dump \"\$SHARED_DATABASE_URL\" --schema=public --no-owner --no-acl > \"$SNAPSHOT\""
+step 5 "Restore the snapshot into the new prod project"
+dry_or_run "psql \"\$NEW_PROD_DATABASE_URL\" < \"$SNAPSHOT\""
+step 6 "Restore the snapshot into the new staging project"
+dry_or_run "psql \"\$NEW_STAGING_DATABASE_URL\" < \"$SNAPSHOT\""
 
 # ─── phase 4: SSH-swap DATABASE_URL ──────────────────────────────
 # NOTE: the new URL is interpolated into a `sed 's|...|...|'` replacement

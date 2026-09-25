@@ -104,7 +104,8 @@ as a team member reading the owner's log does.
 record the caller's IP address and user agent inside `payload`, as
 `issued_from_ip` and `user_agent`. On rows for actions you performed
 yourself, these are visible to you. On a cross-account-caused row, or
-when a team member reads the owner's log via `X-Driftstack-Account`,
+when a team member reads the owner's log via `X-Driftstack-Account` or
+with an API key they created on the owner's account,
 they are removed from `payload` as well as from the top-level
 `ip_address` / `user_agent` fields.
 

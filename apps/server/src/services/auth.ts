@@ -249,6 +249,29 @@ export interface AccountContext {
   webSession: { id: string; mfaSatisfiedAt: Date | null } | null;
 }
 
+/**
+ * Security sweep #12 — true for a key minted by an account other than the one it
+ * lives on: a key a team member minted on the owner's account. Such a key
+ * authenticates AS the owner, but the person holding it is the member
+ * (`api_keys.created_by_account_id`), so a read the owner alone may make must not
+ * take it for the owner. A null or absent minter is not delegated; web sessions and
+ * OAuth tokens never carry one.
+ */
+export function isKeyHeldByTeamMember(ctx: AccountContext): boolean {
+  const minter = ctx.apiKey.createdByAccountId;
+  return minter !== null && minter !== undefined && minter !== ctx.apiKey.accountId;
+}
+
+/**
+ * The context a request is served with. The owner's team memberships belong to the
+ * owner: a key a team member holds on the owner's account acts for none of them, so
+ * it carries no teams — which is what every membership check (`resolveEffectiveAccount`,
+ * the agent-session access predicate, `/v1/account/me` teams) then reads.
+ */
+export function contextForKeyHolder(ctx: AccountContext): AccountContext {
+  return isKeyHeldByTeamMember(ctx) && ctx.teams.length > 0 ? { ...ctx, teams: [] } : ctx;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Authentication entrypoint
 // ───────────────────────────────────────────────────────────────────────────

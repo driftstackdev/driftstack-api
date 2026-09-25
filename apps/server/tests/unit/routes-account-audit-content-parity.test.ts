@@ -112,7 +112,13 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     expect(body).toMatch(/timestamp: row\.timestamp\.toISOString\(\),/);
     // The request-level half of the redaction fires on the team
     // (cross-actor) read + export paths only.
-    expect(body).toMatch(/const redactActorPrivacy = effective\.kind === 'team';/);
+    // Security sweep #12 — a key a team member minted on the owner's account is
+    // redacted as the header read is.
+    expect(
+      body.match(
+        /const redactActorPrivacy = effective\.kind === 'team' \|\| isKeyHeldByTeamMember\(ctx\);/g,
+      ),
+    ).toHaveLength(2);
     expect(body).toMatch(/const ACTOR_PRIVACY_PAYLOAD_KEYS = new Set\(\[/);
   });
 
@@ -216,13 +222,15 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     expect(body).toMatch(/buildCsv applies the shared CSV formula-injection guard/);
   });
 
-  it('imports: FastifyInstance/FastifyRequest + ListAccountAuditLogQuerySchema + AccountAuditEntryRow/AccountAuditService + BadRequestError + resolveEffectiveAccount + zod', () => {
+  it('imports: FastifyInstance/FastifyRequest + ListAccountAuditLogQuerySchema + AccountAuditEntryRow/AccountAuditService + BadRequestError + isKeyHeldByTeamMember/resolveEffectiveAccount + zod', () => {
     expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
     expect(body).toMatch(
       /import type \{ AccountAuditEntryRow, AccountAuditService \} from '\.\.\/services\/account-audit\.js';/,
     );
     expect(body).toMatch(/import \{ BadRequestError \} from '\.\.\/lib\/errors\.js';/);
-    expect(body).toMatch(/import \{ resolveEffectiveAccount \} from '\.\.\/services\/auth\.js';/);
+    expect(body).toMatch(
+      /import \{ isKeyHeldByTeamMember, resolveEffectiveAccount \} from '\.\.\/services\/auth\.js';/,
+    );
     expect(body).toMatch(/import \{ z \} from 'zod';/);
   });
 

@@ -32,6 +32,10 @@ import { FeatureUnavailableError, NotFoundError, ValidationError } from '../lib/
 import { readClientIp } from '../lib/client-ip.js';
 import { TIER_MONTHLY_PRICE_CENTS } from '../lib/cost-defaults.js';
 import {
+  OWNER_TOOL_MFA_FRESHNESS_SECONDS,
+  requireOwnerSignedInSession,
+} from '../lib/owner-account-guard.js';
+import {
   isValidPlatformSecretValue,
   PLATFORM_SECRET_VALUE_MAX_UTF8_BYTES,
 } from '../lib/platform-secret-value-encryption.js';
@@ -144,6 +148,9 @@ export function registerAdminOwnerRoutes(
       preHandler: [
         app.requireScope('driftstack_internal_admin'),
         app.requireOwner,
+        // Security sweep #17 — a signed-in session with a fresh second factor.
+        requireOwnerSignedInSession,
+        app.requireMfaFresh({ freshnessSeconds: OWNER_TOOL_MFA_FRESHNESS_SECONDS }),
         app.rateLimit('global'),
       ],
     },
@@ -228,6 +235,9 @@ export function registerAdminOwnerRoutes(
       preHandler: [
         app.requireScope('driftstack_internal_admin'),
         app.requireOwner,
+        // Security sweep #17 — a signed-in session with a fresh second factor.
+        requireOwnerSignedInSession,
+        app.requireMfaFresh({ freshnessSeconds: OWNER_TOOL_MFA_FRESHNESS_SECONDS }),
         app.rateLimit('global'),
       ],
     },
@@ -299,6 +309,9 @@ export function registerAdminOwnerRoutes(
       preHandler: [
         app.requireScope('driftstack_internal_admin'),
         app.requireOwner,
+        // Security sweep #17 — a signed-in session with a fresh second factor.
+        requireOwnerSignedInSession,
+        app.requireMfaFresh({ freshnessSeconds: OWNER_TOOL_MFA_FRESHNESS_SECONDS }),
         app.rateLimit('global'),
       ],
     },
@@ -355,6 +368,9 @@ export function registerAdminOwnerRoutes(
       preHandler: [
         app.requireScope('driftstack_internal_admin'),
         app.requireOwner,
+        // Security sweep #17 — a signed-in session with a fresh second factor.
+        requireOwnerSignedInSession,
+        app.requireMfaFresh({ freshnessSeconds: OWNER_TOOL_MFA_FRESHNESS_SECONDS }),
         app.rateLimit('global'),
       ],
     },

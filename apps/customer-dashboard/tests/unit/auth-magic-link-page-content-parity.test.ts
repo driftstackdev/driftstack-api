@@ -58,9 +58,12 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
     expect(body).toMatch(/credentials: 'include'/);
   });
 
-  it('URL-token auto-submit when ?token= present (no manual paste required)', () => {
+  // Security sweep #21 — auto-submit stays for a browser with no session; a browser
+  // already signed in is asked first (confirmAccountSwitch), so a link someone else
+  // requested cannot swap it into their account without a click.
+  it('URL-token auto-submit when ?token= present and no session is held (no manual paste required)', () => {
     expect(body).toMatch(
-      /const linkToken = params\.get\('token'\);[\s\S]*?if \(linkToken && linkToken\.length > 0\) \{\s*submitToken\(linkToken\);/,
+      /const linkToken = params\.get\('token'\);[\s\S]*?if \(linkToken && linkToken\.length > 0\) \{\s*if \(previousSessionToken\) confirmAccountSwitch\(linkToken\);\s*else submitToken\(linkToken\);/,
     );
     expect(body).toMatch(
       /if \(linkToken\) \{\s*params\.delete\('token'\);[\s\S]*?window\.history\.replaceState\([\s\S]*?window\.location\.pathname[\s\S]*?window\.location\.hash/,

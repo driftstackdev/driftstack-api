@@ -210,6 +210,106 @@ function stripEnclosingQuotes(token: string): string {
   return out;
 }
 
+/** OpenVPN's `isspace` in the C locale: the six ASCII whitespace characters. */
+function isOpenvpnSpace(c: string): boolean {
+  return c === ' ' || c === '\t' || c === '\n' || c === '\v' || c === '\f' || c === '\r';
+}
+
+/**
+ * Security sweep #19 — one config line split into tokens the way OpenVPN's own
+ * lexer (options.c `parse_line`) splits it. Measured against the shipped 2.7.0
+ * (`--test-crypto`, no network):
+ *   - a token that STARTS with `"` or `'` runs to the matching quote, which ends it
+ *     whether or not whitespace follows: `remote "192.0.2.12"1194` is remote
+ *     `192.0.2.12`, port `1194`; `"up"/x.sh` is `up /x.sh`;
+ *   - a quote inside a bare token is an ordinary character: `192.0.2.6"x"`;
+ *   - a backslash takes the next character literally, except inside single quotes
+ *     (`"192\"0.2.17"` → `192"0.2.17`, `a\ b` → `a b`). OpenVPN refuses a backslash
+ *     before anything but `\`, `"` or a space; taking it literally here only ever
+ *     reads MORE directives than OpenVPN would run, never fewer;
+ *   - `#` or `;` starts a comment only between tokens (`192.0.2.14#c` is a host);
+ *   - an unterminated quote runs to the end of the line (OpenVPN refuses the file).
+ *
+ * Pure and total. Returns [] for a blank or comment line.
+ */
+export function tokenizeOpenvpnLine(line: string): string[] {
+  const tokens: string[] = [];
+  let i = 0;
+  while (i < line.length) {
+    while (i < line.length && isOpenvpnSpace(line[i] ?? '')) i += 1;
+    if (i >= line.length) break;
+    const first = line[i] ?? '';
+    if (first === '#' || first === ';') break;
+    let token = '';
+    if (first === '"' || first === "'") {
+      i += 1;
+      while (i < line.length && line[i] !== first) {
+        if (first === '"' && line[i] === '\\' && i + 1 < line.length) {
+          token += line[i + 1] ?? '';
+          i += 2;
+          continue;
+        }
+        token += line[i] ?? '';
+        i += 1;
+      }
+      i += 1; // the closing quote ends the token
+    } else {
+      while (i < line.length && !isOpenvpnSpace(line[i] ?? '')) {
+        if (line[i] === '\\' && i + 1 < line.length) {
+          token += line[i + 1] ?? '';
+          i += 2;
+          continue;
+        }
+        token += line[i] ?? '';
+        i += 1;
+      }
+    }
+    tokens.push(token);
+  }
+  return tokens;
+}
+
+/** One reading of a config line as `<directive> <args…>`. */
+export interface OpenvpnDirectiveReading {
+  /** Lower-cased, enclosing quotes and a leading `--` stripped (OpenVPN's bypass_doubledash). */
+  keyword: string;
+  /** The arguments exactly as that reading tokenised them. */
+  args: string[];
+}
+
+function openvpnKeyword(token: string): string {
+  let keyword = stripEnclosingQuotes(token.toLowerCase());
+  if (keyword.length >= 3 && keyword.startsWith('--')) keyword = keyword.slice(2);
+  return stripEnclosingQuotes(keyword);
+}
+
+/**
+ * Security sweep #19 — every way a trimmed config line can be read as a directive:
+ * OpenVPN's lexer (tokenizeOpenvpnLine) and the plain whitespace split the screens
+ * always used. A screen that refuses on ANY reading refuses everything OpenVPN
+ * would honour and everything it refused before; the two readings are identical
+ * for an ordinary line, so it is returned once. [] for a blank or comment line.
+ */
+export function readOpenvpnDirectiveLine(line: string): OpenvpnDirectiveReading[] {
+  const text = line.trim();
+  if (text === '' || text.startsWith('#') || text.startsWith(';')) return [];
+  const readings: OpenvpnDirectiveReading[] = [];
+  const lexed = tokenizeOpenvpnLine(text);
+  if (lexed.length > 0) {
+    readings.push({ keyword: openvpnKeyword(lexed[0] ?? ''), args: lexed.slice(1) });
+  }
+  const split = text.split(/\s+/);
+  const plain = { keyword: openvpnKeyword(split[0] ?? ''), args: split.slice(1) };
+  const same = readings.some(
+    (r) =>
+      r.keyword === plain.keyword &&
+      r.args.length === plain.args.length &&
+      r.args.every((a, i) => a === plain.args[i]),
+  );
+  if (!same) readings.push(plain);
+  return readings;
+}
+
 /**
  * The inline blocks an OpenVPN config may carry. Everything between `<ca>` and
  * `</ca>` is PEM/key DATA, not directives — openvpn never reads a directive
@@ -245,6 +345,28 @@ const OPENVPN_INLINE_BLOCK_TAGS: ReadonlySet<string> = new Set([
   // this finder exists to catch.
 ]);
 
+/** A script-security level of 2 or more, as one reading tokenised it. */
+function raisesScriptSecurity(reading: OpenvpnDirectiveReading): boolean {
+  if (reading.keyword !== 'script-security') return false;
+  const level = Number(reading.args[0]);
+  return Number.isFinite(level) && level >= 2;
+}
+
+/**
+ * The reading `findUnsupportedOpenvpnLines` acts on: one naming a script or
+ * code-loading directive, else one naming a directive OpenVPN cannot parse, else
+ * a raised `script-security`. Undefined when no reading names any of them.
+ */
+function strongestOpenvpnReading(
+  readings: readonly OpenvpnDirectiveReading[],
+): OpenvpnDirectiveReading | undefined {
+  return (
+    readings.find((r) => DANGEROUS_OPENVPN_DIRECTIVES.has(r.keyword)) ??
+    readings.find((r) => OPENVPN_UNRECOGNISED_DIRECTIVES.has(r.keyword)) ??
+    readings.find(raisesScriptSecurity)
+  );
+}
+
 export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsupportedLine[] {
   const hits: OpenvpnUnsupportedLine[] = [];
   // ⛔ LINE ENDINGS: \r\n / \r / \n — the same three `findUnresolvableOpenvpnFileReferences`
@@ -272,9 +394,51 @@ export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsuppor
   let openBlockLine = 0;
   let openBlockText = '';
   for (let i = 0; i < lines.length; i += 1) {
-    const text = (lines[i] ?? '').trim();
+    const raw = lines[i] ?? '';
+    // ⛔ Security sweep #19 — the NUL byte. OpenVPN's line parser (options.c
+    // `parse_line`) works on a C string, so a U+0000 ENDS the line THERE: every
+    // token after it is dropped, and the host/directive OpenVPN acts on diverges
+    // from the one this guard reads — the same class of divergence as the quoting
+    // and CR bypasses above. MEASURED against the shipped 2.7.0 (`--verb 4
+    // --test-crypto`, documentation-range addresses, no network):
+    //   `remote 192.0.2.50\0junk 1194`   → remote = '192.0.2.50', default port;
+    //   `socks-proxy 192.0.2.61\0junk`   → socks_proxy_server = '192.0.2.61';
+    // while the JS lexer and the whitespace split both read PAST the NUL, so
+    // `169.254.169.254\0…` reached the SSRF classifier as a non-IP hostname and
+    // was allowed — the metadata/loopback bypass this item claimed to close. A
+    // level check would miss it too (`Number('2\0')` is NaN). No OpenVPN config
+    // ever needs a NUL, and PEM/base64 carries none, so a line holding one is
+    // refused outright — independently of inline-block state, and before the line
+    // is tokenised at all. There is no safe auto-fix (see stripUnsupportedOpenvpnLines).
+    if (raw.includes('\0')) {
+      hits.push({
+        line: i + 1,
+        directive: 'nul-byte',
+        // Echo only the part OpenVPN would read (up to the NUL), so the message
+        // never carries a raw control byte back to the customer.
+        text: (raw.split('\0')[0] ?? '').trim(),
+        reason: 'contains a NUL (zero) byte, which OpenVPN reads as the end of the line',
+      });
+      continue;
+    }
+    const text = raw.trim();
     if (openBlock !== null) {
-      if (text.toLowerCase() === `</${openBlock}>`) openBlock = null;
+      // OpenVPN closes an inline block on the FIRST line that — after leading
+      // whitespace — STARTS WITH `</tag>`; anything after the `>` on that line is
+      // ignored. MEASURED on 2.7.0: `</ca>`, `</ca>junk`, `</ca> `, `\t</ca>` and
+      // `  </ca>junk more` all close it; `</ca >` (inner space) and `x</ca>` (lead
+      // junk) do not. This USED to require an exact whole-line match, which let a
+      // config close the block early in OpenVPN's eyes (`</ca>junk`) while this
+      // cursor kept reading it as certificate DATA — a later exact `</ca>` then
+      // re-closed our view, so every directive between the two, `plugin`/`up`
+      // included, reached the finder as inert block bytes and passed with zero
+      // hits while OpenVPN RAN them (measured: a carrier config returned []). A
+      // prefix test closes exactly when OpenVPN does, so the finder never keeps a
+      // block open longer than the egress host. (`text` is already trimmed, so the
+      // leading-whitespace rule is covered; the lower-case compare only ever
+      // closes SOONER than OpenVPN's case-sensitive one, i.e. it over-inspects,
+      // never under.)
+      if (text.toLowerCase().startsWith(`</${openBlock}>`)) openBlock = null;
       // Everything else inside the block is certificate/key/credential DATA.
       // Never matched, never reported, so never rewritten.
       continue;
@@ -312,6 +476,19 @@ export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsuppor
     keyword = stripEnclosingQuotes(keyword);
     if (keyword.length >= 3 && keyword.startsWith('--')) keyword = keyword.slice(2);
     keyword = stripEnclosingQuotes(keyword);
+    // ⛔ Security sweep #19 — the split above misses a quote CLOSED against the next
+    // token. OpenVPN ends a quoted token at its closing quote, so `"up"/x.sh` IS
+    // `up /x.sh` (measured on 2.7.0: `Options error: --up script fails with …`)
+    // while this split reads one token, `"up"/x.sh`, and reports nothing. Every
+    // reading of the line is weighed — OpenVPN's lexer and this split — and the one
+    // naming a directive this screen acts on wins, so nothing refused before is
+    // accepted now.
+    const reading = strongestOpenvpnReading(readOpenvpnDirectiveLine(text)) ?? {
+      keyword,
+      args: tokens.slice(1),
+    };
+    keyword = reading.keyword;
+    const args = reading.args;
     if (DANGEROUS_OPENVPN_DIRECTIVES.has(keyword)) {
       hits.push({
         line: i + 1,
@@ -342,13 +519,13 @@ export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsuppor
       continue;
     }
     if (keyword === 'script-security') {
-      const level = Number(tokens[1]);
+      const level = Number(args[0]);
       if (Number.isFinite(level) && level >= 2) {
         hits.push({
           line: i + 1,
           directive: keyword,
           text,
-          reason: `\`script-security ${tokens[1] ?? ''}\` allows the config to run external programs (level 2 or higher)`,
+          reason: `\`script-security ${args[0] ?? ''}\` allows the config to run external programs (level 2 or higher)`,
         });
       }
     }
@@ -488,13 +665,20 @@ export function stripUnsupportedOpenvpnLines(configBlob: string): {
     } else if (hit.directive === 'script-security') {
       const indent = text.slice(0, text.length - text.trimStart().length);
       config += `${indent}script-security 1${ending}`;
-    } else if (OPENVPN_INLINE_BLOCK_TAGS.has(hit.directive)) {
+    } else if (OPENVPN_INLINE_BLOCK_TAGS.has(hit.directive) || hit.directive === 'nul-byte') {
       // ⛔ V-217 — the UNTERMINATED-BLOCK hit is a refusal this stripper must NOT
       // "fix". Deleting the `<ca>` line that opened the block would leave the PEM
       // body as bare config lines and hand the customer a config missing its CA:
       // a worse file than the one they pasted, produced by the repair path. The
       // finder reports it so the refusal message can name it; nothing auto-fixes
       // it, because the only real fix is the closing tag the customer must add.
+      //
+      // ⛔ Security sweep #19 — a `nul-byte` hit is left in place for the same
+      // reason: dropping the line would silently rewrite the customer's config
+      // around a byte OpenVPN reads as end-of-line, and cutting it at the NUL
+      // (the other tempting "fix") would hand back a DIFFERENT config than either
+      // side saw. It has no safe auto-fix, so it stays and the paste flow surfaces
+      // it as an honest error the customer must correct.
       config += text + ending;
     }
     // Any other hit: the line and its ending are dropped.
@@ -565,7 +749,9 @@ export const OPENVPN_INLINE_REQUIRED_DIRECTIVES: ReadonlySet<string> = new Set([
  * ⚠️ `findUnsupportedOpenvpnLines` above still splits TOKENS on `/\s+/` ON PURPOSE: it
  * is the SECURITY guard (script-executing directives), it has no cross-source
  * contract declaring its tokenizer, and for it over-refusal is the safe
- * direction. Do not "make them consistent".
+ * direction. Do not "make them consistent". (Security sweep #19 ADDED OpenVPN's
+ * own lexer beside that split — `readOpenvpnDirectiveLine` — and refuses on either
+ * reading; the split is kept, not replaced, for exactly this reason.)
  *
  * ⛔ That licence is about the TOKEN separator and NOTHING else. Both functions split
  * LINES on the same three endings (`\r\n|\r|\n`) and must keep doing so. The security

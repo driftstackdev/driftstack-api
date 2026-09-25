@@ -107,7 +107,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
       /const trimmedUrl = opts\.baseUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\);/,
     );
     expect(body).toMatch(
-      /const initiateRes = await fetchWithDeadline\(`\$\{trimmedUrl\}\/v1\/auth\/cli-authorize\/initiate`, \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*body: JSON\.stringify\(\{\s*state: stateToken,\s*client_label: opts\.clientLabel \?\? `Driftstack desktop on \$\{navigator\.platform\}`,\s*\}\),\s*\}\);/,
+      /const initiateRes = await fetchWithDeadline\(`\$\{trimmedUrl\}\/v1\/auth\/cli-authorize\/initiate`, \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*body: JSON\.stringify\(\{\s*state: stateToken,\s*client_label: opts\.clientLabel \?\? `Driftstack desktop on \$\{navigator\.platform\}`,\s*code_challenge: codeChallenge,\s*code_challenge_method: 'S256',\s*\}\),\s*\}\);/,
     );
     expect(body).toMatch(
       /throw Object\.assign\(new Error\(await readApiErrorMessage\(initiateRes\)\), \{\s*customerSafe: true,\s*\}\);/,
@@ -122,7 +122,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
 
   it("Deep-link seam wiring: onUrl = opts.__onOpenUrl ?? onOpenUrl (V-328 test seam fallthrough to real plugin) + handler iterates urls + handleDeepLink with trimmedUrl + initiate.code + stateToken; deepLinkUnlistenRef stop() cleanup with try/catch swallow comment 'the listener may have already been torn down' + on-unmount cleanup useEffect", () => {
     expect(body).toMatch(
-      /const onUrl = opts\.__onOpenUrl \?\? onOpenUrl;\s*const unlisten = await onUrl\(\(urls\) => \{\s*for \(const url of urls\) \{\s*void handleDeepLink\(url, trimmedUrl, initiate\.code, stateToken\);\s*\}\s*\}\);\s*deepLinkUnlistenRef\.current = unlisten;/,
+      /const onUrl = opts\.__onOpenUrl \?\? onOpenUrl;\s*const unlisten = await onUrl\(\(urls\) => \{\s*for \(const url of urls\) \{\s*void handleDeepLink\(url, trimmedUrl, initiate\.code, stateToken, codeVerifier\);\s*\}\s*\}\);\s*deepLinkUnlistenRef\.current = unlisten;/,
     );
     expect(body).toMatch(
       /if \(deepLinkUnlistenRef\.current !== null\) \{\s*try \{\s*deepLinkUnlistenRef\.current\(\);\s*\} catch \{\s*\/\* swallow — the listener may have already been torn down \*\/\s*\}\s*deepLinkUnlistenRef\.current = null;\s*\}/,
@@ -134,13 +134,13 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
 
   it("handleDeepLink CSRF guard: parseDeepLink(rawUrl) + !result.ok silent skip + result.payload.kind !== 'cli-authorize' silent skip + code !== expectedCode || state !== expectedState silent skip (CSRF guard against arbitrary attacker-armed driftstack:// URL) + pollOnce delegation", () => {
     expect(body).toMatch(
-      /async function handleDeepLink\(\s*rawUrl: string,\s*serverUrl: string,\s*expectedCode: string,\s*expectedState: string,\s*\): Promise<void> \{\s*const result = parseDeepLink\(rawUrl\);\s*if \(!result\.ok\) return;\s*if \(result\.payload\.kind !== 'cli-authorize'\) return;\s*if \(result\.payload\.code !== expectedCode \|\| result\.payload\.state !== expectedState\) return;\s*await pollOnce\(serverUrl, expectedCode, expectedState\);\s*\}/,
+      /async function handleDeepLink\(\s*rawUrl: string,\s*serverUrl: string,\s*expectedCode: string,\s*expectedState: string,\s*codeVerifier: string,\s*\): Promise<void> \{\s*const result = parseDeepLink\(rawUrl\);\s*if \(!result\.ok\) return;\s*if \(result\.payload\.kind !== 'cli-authorize'\) return;\s*if \(result\.payload\.code !== expectedCode \|\| result\.payload\.state !== expectedState\) return;\s*await pollOnce\(serverUrl, expectedCode, expectedState, codeVerifier\);\s*\}/,
     );
   });
 
   it('pollOnce branches: POST /v1/auth/cli-authorize/exchange with {code, state: stateToken} + !res.ok 4xx → stop + fixed typed/status copy + pending/expired/bound terminal handling + silent network retry', () => {
     expect(body).toMatch(
-      /const res = await fetchWithDeadline\(`\$\{serverUrl\}\/v1\/auth\/cli-authorize\/exchange`, \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*body: JSON\.stringify\(\{ code, state: stateToken \}\),\s*\}\);/,
+      /const res = await fetchWithDeadline\(`\$\{serverUrl\}\/v1\/auth\/cli-authorize\/exchange`, \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*body: JSON\.stringify\(\{ code, state: stateToken, code_verifier: codeVerifier \}\),\s*\}\);/,
     );
     expect(body).toMatch(
       /if \(res\.status >= 400 && res\.status < 500\) \{\s*stop\(\);\s*setState\(\{\s*kind: 'error',\s*message: await readApiErrorMessage\(res\),\s*\}\);/,
@@ -159,7 +159,7 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
 
   it('Poll timer wiring: setInterval cadence opts.__pollIntervalMs ?? POLL_INTERVAL_MS + setTimeout backstop opts.__pollTimeoutMs ?? POLL_TIMEOUT_MS firing stop() + setState error \'Authorization expired. Click "Sign in with browser" to try again.\'', () => {
     expect(body).toMatch(
-      /pollHandleRef\.current = window\.setInterval\(\(\) => \{\s*void pollOnce\(trimmedUrl, initiate\.code, stateToken\);\s*\}, opts\.__pollIntervalMs \?\? POLL_INTERVAL_MS\);\s*timeoutHandleRef\.current = window\.setTimeout\(\(\) => \{\s*stop\(\);\s*setState\(\{\s*kind: 'error',\s*message: 'Authorization expired\. Click "Sign in with browser" to try again\.',\s*\}\);\s*\}, opts\.__pollTimeoutMs \?\? POLL_TIMEOUT_MS\);/,
+      /pollHandleRef\.current = window\.setInterval\(\(\) => \{\s*void pollOnce\(trimmedUrl, initiate\.code, stateToken, codeVerifier\);\s*\}, opts\.__pollIntervalMs \?\? POLL_INTERVAL_MS\);\s*timeoutHandleRef\.current = window\.setTimeout\(\(\) => \{\s*stop\(\);\s*setState\(\{\s*kind: 'error',\s*message: 'Authorization expired\. Click "Sign in with browser" to try again\.',\s*\}\);\s*\}, opts\.__pollTimeoutMs \?\? POLL_TIMEOUT_MS\);/,
     );
   });
 

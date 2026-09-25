@@ -95,10 +95,13 @@ Field shape:
 - Max raw size: 2 MiB (route body limit is 3.5 MiB to allow the base64 envelope).
 - Returns `{ avatar_url, content_type, bytes }`.
 
-`DELETE /v1/account/me/avatar` clears the avatar pointer on your
-account, so the image stops being served from `/v1/account/me`. The
-image file itself is not deleted, so a previously shared link keeps
-working. Do not treat the delete as an erasure of the image.
+Uploading a new image replaces the previous one, which is
+deleted; a link to the old image stops working.
+
+`DELETE /v1/account/me/avatar` removes your uploaded image and
+deletes it, so a link to it stops working, including one you shared
+earlier. If image storage is unavailable, the request fails with `503` and your
+avatar stays set; retry it. Returns `204` once the image is gone.
 
 ## Active sign-ins
 
@@ -106,7 +109,8 @@ The dashboard's "active sign-ins" panel and SDK `client.account`
 resource expose the calling account's web-session list:
 
 Listing active sign-ins requires broad `read`. Revoking one or all
-sign-ins remains an `account_owner` operation.
+sign-ins remains an `account_owner` operation. An API key a team member
+created on your account is refused (403): the list is the owner's.
 
 ```ts
 const { data } = await client.account.listWebSessions();
@@ -140,8 +144,9 @@ call with `revokeAllOtherWebSessions()` / equivalent.
 `GET /v1/account/me/oauth-links`
 
 Lists the sign-in-with-Google/GitHub identities linked to the calling
-account. Requires broad `read`. There is no SDK wrapper for this endpoint
-yet — call it over HTTP.
+account. Requires broad `read`. An API key a team member created on your
+account is refused (403): the list is the owner's. There is no SDK wrapper
+for this endpoint yet — call it over HTTP.
 
 Pass `?active_only=true` to omit links that were revoked upstream at the
 identity provider.

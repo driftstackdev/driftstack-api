@@ -385,16 +385,16 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     ).toEqual([]);
   });
 
-  it('CRITICAL V-1114 the recipes correction stays: the header is ignored there, not rejected, and the recipe lands under the caller. A reader who only learns that recipes are "per-caller" still does not know that team membership DOES reach the source agent-session, which is the half that makes the endpoint useful to a team.', () => {
+  it("CRITICAL security sweep #15 — recipes honour the header now, and the guide says so. V-1114 documented that the header was IGNORED on recipes and the recipe landed under the caller, which was the defect: a recipe saved from the owner's session sat in the member's personal account, out of the owner's sight. The row moved to the honouring table, with the admin-only rule, and the \"ignored\" entry must not come back.", () => {
     const p = read(PAGE);
-    expect(p, 'the recipes entry left the non-honouring list').toMatch(
-      /`\/v1\/recipes\/\*` — the header is IGNORED here, not rejected/,
+    expect(p, 'the recipes row is missing from the honouring table').toMatch(
+      /\| Recipes\s+\| every `\/v1\/recipes` route — the recipe is saved from, and filed under, the owner's workspace\. Every one needs `admin`, reads included/,
     );
-    expect(p, 'the source-reach half is gone').toMatch(
-      /accepts an\s*`agent_session_id` owned by a team you hold `admin` on/,
+    expect(p, 'the old "header is ignored" entry came back').not.toMatch(
+      /`\/v1\/recipes\/\*` — the header is IGNORED here/,
     );
-    expect(p, 'the recipes row must not return to the honouring table').not.toMatch(
-      /\| Recipes\s+\|/,
+    expect(p, 'the old "recipe belongs to you" claim came back').not.toMatch(
+      /into a recipe that belongs to you/,
     );
   });
 });

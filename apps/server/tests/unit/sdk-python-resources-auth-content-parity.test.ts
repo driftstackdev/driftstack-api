@@ -195,7 +195,7 @@ describe('W583.A packages/sdk-python/src/driftstack/resources/auth.py content pa
       /def cli_authorize_exchange\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(
-      /CLI\/GUI activation flow: exchange\.\s*\n\s*\n\s*Polled by the CLI\/GUI\. Discriminated-union response on\s*\n\s*``status``: ``pending`` \(keep polling\) \/ ``bound`` \(one-shot\s*\n\s*delivery; ``api_key`` \+ ``account_id`` in body\) \/ ``expired``\.\s*\n\s*"""/,
+      /CLI\/GUI activation flow: exchange\.\s*\n\s*\n\s*Polled by the CLI\/GUI\. Discriminated-union response on\s*\n\s*``status``: ``pending`` \(keep polling\) \/ ``bound`` \(one-shot\s*\n\s*delivery; ``api_key`` \+ ``account_id`` in body\) \/ ``expired``\.\s*\n\s*\n\s*Include ``code_verifier`` when the flow started with a\s*\n\s*``code_challenge``; a missing or wrong verifier is a 400\.\s*\n\s*"""/,
     );
     expect(body).toMatch(
       /"POST", "\/v1\/auth\/cli-authorize\/exchange", json_body=coerce_body\(body\)/,

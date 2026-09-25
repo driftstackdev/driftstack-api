@@ -256,3 +256,31 @@ export function avatarKey(accountId: string, contentType: string): string {
           : 'bin';
   return `avatars/${accountId}.${ext}`;
 }
+
+/**
+ * Security sweep E-23 (2026-09-24) — EVERY key an account's avatar can occupy.
+ * The extension follows the content type, so replacing a PNG with a JPEG leaves
+ * the PNG at its own key; removal and account purge delete all of these, not
+ * only the one the account row currently points at. Derived from `avatarKey`
+ * so a new accepted type cannot be missed here.
+ */
+export function avatarKeysForAccount(accountId: string): string[] {
+  return ['image/png', 'image/jpeg', 'image/webp', 'application/octet-stream'].map((type) =>
+    avatarKey(accountId, type),
+  );
+}
+
+/**
+ * Delete every avatar object an account can have from `bucket` (the public one).
+ * S3/R2 DELETE is idempotent, so keys that were never written cost nothing; the
+ * first failure throws, so a caller never records the avatar as gone while an
+ * object may remain.
+ */
+export async function deleteAvatarObjects(
+  bucket: Pick<R2, 'deleteObject'>,
+  accountId: string,
+): Promise<void> {
+  for (const key of avatarKeysForAccount(accountId)) {
+    await bucket.deleteObject(key);
+  }
+}

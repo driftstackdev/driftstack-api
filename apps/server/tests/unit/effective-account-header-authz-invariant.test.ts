@@ -235,8 +235,13 @@ describe('X-Driftstack-Account acting-as authz invariant (all routes/)', () => {
     // billing.ts, which was already a reader file (GET /v1/billing). Both resolve
     // the header only to REFUSE a non-self account; the arm below proves the
     // parser goes straight into resolveEffectiveAccount.
-    expect(reads).toHaveLength(40);
-    expect(new Set(reads.map((read) => read.file)).size).toBe(13);
+    // The 41st (2026-09-24, security sweep #13): POST /v1/billing/checkout-session
+    // in billing.ts, the same Self-workspace refusal as its two portal siblings.
+    // The 42nd–44th (2026-09-24, security sweep #15): recipes.ts — a fourteenth
+    // reader file — in its write helper (save and delete) and in the list and
+    // detail GETs, each passing the parser straight into resolveEffectiveAccount.
+    expect(reads).toHaveLength(44);
+    expect(new Set(reads.map((read) => read.file)).size).toBe(14);
     expect(
       reads
         .filter(

@@ -48,6 +48,7 @@ import type {
 import type { UsageService, UsageSummary } from '../services/usage.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { readClientIp } from '../lib/client-ip.js';
+import { refuseStaffActionOnTheOwner } from '../lib/owner-account-guard.js';
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
@@ -108,6 +109,12 @@ export interface AdminAccountsRoutesOptions {
    * are not registered.
    */
   accountAudit?: AccountAuditService;
+  /**
+   * Security sweep #16 — the project owner's email (DRIFTSTACK_OWNER_EMAIL). A
+   * staff suspend, delete or tier change naming the owner's account is refused
+   * unless the owner is asking. Absent → nothing is protected.
+   */
+  ownerEmail?: string | null;
 }
 
 export function registerAdminAccountsRoutes(
@@ -115,6 +122,21 @@ export function registerAdminAccountsRoutes(
   opts: AdminAccountsRoutesOptions,
 ): void {
   const { accountsAdmin, usage, rateLimitOverrides, audit, accountAudit } = opts;
+
+  /**
+   * Security sweep #16 — refuse a staff action on the project owner's account
+   * (see lib/owner-account-guard.ts). Runs inside `perform`, so the refusal is
+   * audited like any other failed staff action; an absent account is the
+   * service's own 404, as before.
+   */
+  async function refuseIfTheOwner(
+    ctx: NonNullable<FastifyRequest['account']>,
+    accountId: string,
+    action: string,
+  ): Promise<void> {
+    const target = await accountsAdmin.getAccount(ctx, accountId);
+    refuseStaffActionOnTheOwner(ctx, target, opts.ownerEmail, action);
+  }
 
   // Helper that wraps a mutation with audit-on-success + audit-on-error.
   // The route logic stays focused on the action; the wrapper enforces
@@ -188,11 +210,13 @@ export function registerAdminAccountsRoutes(
           ...(body.reason ? { reason: body.reason } : {}),
           ...(body.monthly_credits !== undefined ? { monthly_credits: body.monthly_credits } : {}),
         },
-        () =>
-          accountsAdmin.changeTier(ctx, accountId, body.tier, {
+        async () => {
+          await refuseIfTheOwner(ctx, accountId, 'change the plan of');
+          return accountsAdmin.changeTier(ctx, accountId, body.tier, {
             ...(body.monthly_credits !== undefined ? { monthlyCredits: body.monthly_credits } : {}),
             setByKeyId: ctx.apiKey.id,
-          }),
+          });
+        },
       );
       return publicAccount(updated);
     },
@@ -215,7 +239,10 @@ export function registerAdminAccountsRoutes(
         'account.suspended',
         accountId,
         { ...(body.reason ? { reason: body.reason } : {}) },
-        () => accountsAdmin.suspend(ctx, accountId),
+        async () => {
+          await refuseIfTheOwner(ctx, accountId, 'suspend');
+          return accountsAdmin.suspend(ctx, accountId);
+        },
       );
       return publicAccount(updated);
     },
@@ -269,8 +296,15 @@ export function registerAdminAccountsRoutes(
       const auditPayload: Record<string, unknown> = {
         ...(body.reason ? { reason: body.reason } : {}),
       };
-      const updated = await withAudit(request, 'account.deleted', accountId, auditPayload, () =>
-        accountsAdmin.deleteAccount(ctx, accountId, auditPayload),
+      const updated = await withAudit(
+        request,
+        'account.deleted',
+        accountId,
+        auditPayload,
+        async () => {
+          await refuseIfTheOwner(ctx, accountId, 'delete');
+          return accountsAdmin.deleteAccount(ctx, accountId, auditPayload);
+        },
       );
       return publicAccount(updated);
     },

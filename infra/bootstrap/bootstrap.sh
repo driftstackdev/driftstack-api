@@ -95,7 +95,12 @@ install -d -m 0755 /opt/driftstack/web
 if ! id -u driftstack >/dev/null 2>&1; then
   useradd --system --home-dir /opt/driftstack --shell /usr/sbin/nologin driftstack
 fi
-chown -R driftstack:driftstack /opt/driftstack
+# The deploy tree stays ROOT-owned (security sweep E-22, 2026-09-24). The deploy
+# works inside it as root, so a directory the service account could write would
+# let a planted link redirect a root write. The service only ever reads the tree,
+# and its systemd sandbox (ProtectSystem=strict) cannot write it. The deploy
+# (scripts/deploy-bridge.sh) re-asserts this ownership on every run.
+chown driftstack:driftstack /opt/driftstack/web
 
 # ── 6. nginx ──────────────────────────────────────────────────────────
 # The deploy step (V-278.B onward) lays vhost configs into

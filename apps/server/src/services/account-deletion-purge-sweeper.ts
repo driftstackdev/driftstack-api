@@ -153,6 +153,55 @@ export interface TerminatedAccountRecipePurgeRepo {
   purgeForTerminatedAccountsBefore(cutoff: Date, maxPerTick?: number): Promise<number>;
 }
 
+/**
+ * Security sweep E-23 (2026-09-24) — the avatar half. A customer-uploaded avatar
+ * sits on the PUBLIC bucket at `avatars/<account_id>.<ext>`, and account deletion
+ * never removed it, so a terminated account's image stayed publicly readable for
+ * good. Self-limiting like the arms above: clearing the pointer drops the account
+ * out of the candidate set.
+ */
+export interface TerminatedAccountAvatarPurgeRepo {
+  /**
+   * Account ids where accounts.status = 'deleted' AND accounts.deleted_at <
+   * cutoff AND accounts.avatar_r2_key IS NOT NULL. Bounded per tick.
+   */
+  findTerminatedAccountIdsWithAvatarBefore(cutoff: Date, maxPerTick?: number): Promise<string[]>;
+  /** Null the avatar pointer of a TERMINATED account (never touches a live one). */
+  clearAvatarKey(accountId: string): Promise<void>;
+}
+
+/**
+ * The avatar arm as the sweeper sees it: the candidate repo plus the one
+ * operation it needs on the PUBLIC bucket. Deliberately not an `R2` client —
+ * this sweeper's `r2` must stay the private bucket (sealed profile blobs), and a
+ * second client in its deps would be one identifier away from a swap. Built in
+ * bootstrap by TerminatedAccountAvatarPurge.
+ */
+export interface TerminatedAccountAvatarPurgeArm extends TerminatedAccountAvatarPurgeRepo {
+  /** Delete every avatar object the account can have; throws if any delete fails. */
+  deleteAvatarObjects(accountId: string): Promise<void>;
+}
+
+/**
+ * Security sweep E-23 — avatar images NO account points at: removed or replaced
+ * before removal and replacement deleted them, or left by a cleanup delete that
+ * failed. Nothing selects those through a pointer, so a pass lists the bucket.
+ * Built in bootstrap by AvatarOrphanReaper, on the public bucket.
+ */
+export interface AvatarOrphanReapResult {
+  /** Objects listed under the avatar prefix. */
+  readonly scanned: number;
+  /** Objects deleted this pass. */
+  readonly reaped: number;
+  /** Deletes that failed; those objects stay for the next pass. */
+  readonly failed: number;
+}
+
+export interface AvatarOrphanReap {
+  /** One pass; rejects when the bucket cannot be listed. */
+  reapOrphanedAvatars(now: Date): Promise<AvatarOrphanReapResult>;
+}
+
 export interface AccountDeletionPurgeSweeperDeps {
   readonly repo: AccountDeletionPurgeRepo;
   /**
@@ -211,6 +260,20 @@ export interface AccountDeletionPurgeSweeperDeps {
    * → DB-only purge, and the leftover object is logged.
    */
   readonly r2?: R2 | null;
+  /**
+   * Security sweep E-23 — terminated accounts' avatars on the public bucket.
+   * Absent (no public bucket configured, so no avatars can exist) means the arm
+   * is skipped, and reported as skipped.
+   */
+  readonly avatars?: TerminatedAccountAvatarPurgeArm;
+  /**
+   * Security sweep E-23 — avatar images no account points at, including every one
+   * removed or replaced before removal and replacement deleted them. Not about
+   * terminated accounts only, but it is the same erasure and rides the same daily,
+   * database-scheduled tick, which survives restarts. Absent (no public bucket)
+   * means skipped.
+   */
+  readonly avatarOrphans?: AvatarOrphanReap;
   /** Days after deletedAt before the purge fires. Defaults to 30 (privacy-policy.md §9). */
   readonly retentionDays?: number;
   readonly logger?: Logger;
@@ -235,6 +298,10 @@ export interface AccountDeletionPurgeResult {
   readonly turnReceiptsPurged: number;
   /** Agent sessions hard-deleted for terminated accounts this tick. */
   readonly agentSessionsPurged: number;
+  /** Terminated accounts whose avatar objects were deleted from the public bucket this tick. */
+  readonly avatarsPurged: number;
+  /** Avatar objects no account points at, deleted from the public bucket this tick. */
+  readonly avatarOrphansReaped: number;
 }
 
 export class AccountDeletionPurgeSweeperService {
@@ -414,6 +481,71 @@ export class AccountDeletionPurgeSweeperService {
       }
     }
 
+    // The avatar objects go FIRST and the pointer second, per account: a failed
+    // delete leaves the pointer set, so the account stays a candidate and the
+    // next tick retries, instead of forgetting an image that is still public.
+    let avatarsPurged = 0;
+    const avatars = this.deps.avatars;
+    if (avatars === undefined) {
+      count('avatars', 'skipped');
+    } else {
+      try {
+        const avatarIds = await avatars.findTerminatedAccountIdsWithAvatarBefore(cutoff);
+        for (const accountId of avatarIds) {
+          try {
+            await avatars.deleteAvatarObjects(accountId);
+            await avatars.clearAvatarKey(accountId);
+            avatarsPurged += 1;
+            count('avatars', 'purged');
+          } catch (err) {
+            count('avatars', 'failed');
+            this.deps.logger?.error?.(
+              { component: 'account-deletion-purge', accountId, err },
+              'failed to delete a terminated account avatar from the public bucket (will retry next sweep)',
+            );
+          }
+        }
+      } catch (err) {
+        count('avatars', 'failed');
+        this.deps.logger?.error?.(
+          { component: 'account-deletion-purge', err },
+          'failed to list terminated-account avatars (will retry next sweep)',
+        );
+      }
+    }
+
+    // Last, after the avatar arm: a terminated account past the window has just
+    // lost its pointer there, and its objects with it. Anything this pass finds is
+    // an image nothing points at; see AvatarOrphanReaper for what it keeps.
+    let avatarOrphansReaped = 0;
+    const avatarOrphans = this.deps.avatarOrphans;
+    if (avatarOrphans === undefined) {
+      count('avatar_orphans', 'skipped');
+    } else {
+      try {
+        const pass = await avatarOrphans.reapOrphanedAvatars(now);
+        avatarOrphansReaped = pass.reaped;
+        count('avatar_orphans', pass.failed > 0 ? 'failed' : 'purged');
+        if (pass.failed > 0) {
+          this.deps.logger?.error?.(
+            { component: 'account-deletion-purge', ...pass },
+            'some unreferenced avatar images could not be deleted from the public bucket (will retry next sweep)',
+          );
+        } else {
+          this.deps.logger?.info?.(
+            { component: 'account-deletion-purge', ...pass },
+            'unreferenced avatar images swept from the public bucket',
+          );
+        }
+      } catch (err) {
+        count('avatar_orphans', 'failed');
+        this.deps.logger?.error?.(
+          { component: 'account-deletion-purge', err },
+          'failed to list avatar images on the public bucket — needs list permission? (will retry next sweep)',
+        );
+      }
+    }
+
     return {
       purged,
       proxySecretsPurged,
@@ -422,6 +554,8 @@ export class AccountDeletionPurgeSweeperService {
       snapshotsPurged,
       turnReceiptsPurged,
       agentSessionsPurged,
+      avatarsPurged,
+      avatarOrphansReaped,
     };
   }
 }

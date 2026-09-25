@@ -14,9 +14,12 @@
 //     ubuntu-22.04 + windows-latest.
 //   • TAURI_UPDATER_PUBKEY substitution into tauri.conf.json before
 //     Tauri build.
-//   • tauri-apps/tauri-action@v0 with TAURI_SIGNING_PRIVATE_KEY +
-//     TAURI_SIGNING_PRIVATE_KEY_PASSWORD + V-242 VITE_SENTRY_DSN
-//     gate + VITE_APP_VERSION = github.ref_name.
+//   • tauri-apps/tauri-action@v0 BUILDS ONLY (`--no-sign`, V-242
+//     VITE_SENTRY_DSN gate, VITE_APP_VERSION = the release tag); the
+//     updater key (TAURI_SIGNING_PRIVATE_KEY + _PASSWORD) is in the sign
+//     job's one signing step (security sweep E-10), and the draft is
+//     published once, by publish-manifest, after every platform is signed.
+//   • a manual dispatch is a dry run that never writes to a release.
 //   • V-240 rust-toolchain.toml pin.
 //   • macOS aarch64 + x86_64 target setup for universal binary.
 
@@ -70,6 +73,8 @@ describe('W542.C /.github/workflows/gui-release.yml content parity', () => {
   it("Trigger + 3-platform-matrix framing pinned: 'name: GUI Release' + 'on: push: tags: - gui-v*' + 'strategy: fail-fast: false + matrix: include:' + '- platform: macos-latest + args: --target universal-apple-darwin' + '- platform: ubuntu-22.04 + args: \\'\\''  + '- platform: windows-latest + args: \\'\\''  + 'runs-on: ${{ matrix.platform }}' — pinned so the gui-v*-tag-trigger + 3-platform-matrix + macOS-universal-binary (aarch64+x86_64 combined) + fail-fast:false (other platforms keep going if one fails) commitment survives (drift to dropping universal-apple-darwin would mean macOS-arm64 customers get x86_64 binaries via Rosetta — slower app)", () => {
     expect(body).toMatch(/^name: GUI Release$/m);
     expect(body).toMatch(/on:\s*\n\s*push:\s*\n\s*tags:\s*\n\s*- 'gui-v\*'/);
+    // The dry run: a bare dispatch, no inputs (see the E-10 guard for why).
+    expect(body).toMatch(/^ {2}workflow_dispatch:\s*$/m);
     expect(body).toMatch(/strategy:\s*\n\s*fail-fast: false/);
     expect(body).toMatch(/matrix:\s*\n\s*include:/);
     expect(body).toMatch(
@@ -111,20 +116,26 @@ describe('W542.C /.github/workflows/gui-release.yml content parity', () => {
     expect(body).toMatch(/fs\.writeFileSync\(path, JSON\.stringify\(cfg, null, 2\)\);/);
   });
 
-  it("tauri-action@v0 build + sign + V-242 telemetry gate + Release framing pinned: 'Build + sign Tauri bundles + uses: tauri-apps/tauri-action@v0' + 'TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVKEY }}' + 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVKEY_PASSWORD }}' + '# V-242 — Sentry DSN. Empty when unset; gate in telemetry.ts short-circuits cleanly so no event leaves the customer.' + 'VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}' + 'VITE_APP_VERSION: ${{ github.ref_name }}' + 'projectPath: apps/gui-client + tagName: ${{ github.ref_name }} + releaseName: Driftstack GUI ${{ github.ref_name }}' + Install/Auto-update releaseBody + 'releaseDraft: false + prerelease: false + args: ${{ matrix.args }}' — pinned so the tauri-action-v0 + 3-signing-env (privkey + privkey_password + V-242 VITE_SENTRY_DSN-gate) + ref_name-as-version + 3-OS-installer-instructions + releaseDraft:false-prerelease:false commitment survives", () => {
-    expect(body).toMatch(/name: Build \+ sign Tauri bundles/);
+  it("tauri-action@v0 BUILD (no key) + one signing step + V-242 telemetry gate + draft-then-publish framing pinned (security sweep E-10): the build step 'Build Tauri bundles (no signing key)' runs tauri-action with projectPath apps/gui-client and `args: ${{ matrix.args }} --no-sign`, V-242 `VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}` and `VITE_APP_VERSION: ${{ needs.preflight.outputs.tag }}`, and no tagName/releaseName — it uploads nothing. The key goes to 'Sign the updater artifacts' as `TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVKEY }}` + `TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVKEY_PASSWORD }}` and is used by `tauri signer sign`. publish-manifest uploads into the draft and publishes it with `--draft=false`, appending the 3-OS install text + the Tauri-Updater auto-update line when the notes lack them", () => {
+    expect(body).toMatch(/name: Build Tauri bundles \(no signing key\)/);
     expect(body).toMatch(/uses: tauri-apps\/tauri-action@[0-9a-f]{40} # v0/);
+    expect(body).toMatch(/# V-242 — Sentry DSN\. Empty when unset; gate in telemetry\.ts/);
+    expect(body).toMatch(/# short-circuits cleanly so no event leaves the customer\./);
+    expect(body).toMatch(/VITE_SENTRY_DSN: \$\{\{ secrets\.VITE_SENTRY_DSN \}\}/);
+    expect(body).toMatch(/VITE_APP_VERSION: \$\{\{ needs\.preflight\.outputs\.tag \}\}/);
+    expect(body).toMatch(/projectPath: apps\/gui-client/);
+    expect(body).toMatch(/args: \$\{\{ matrix\.args \}\} --no-sign/);
+    // tauri-action no longer creates, fills or publishes a release.
+    expect(body).not.toMatch(/^\s+(tagName|releaseName|releaseId|releaseDraft):/m);
+
+    expect(body).toMatch(/name: Sign the updater artifacts/);
     expect(body).toMatch(/TAURI_SIGNING_PRIVATE_KEY: \$\{\{ secrets\.TAURI_UPDATER_PRIVKEY \}\}/);
     expect(body).toMatch(
       /TAURI_SIGNING_PRIVATE_KEY_PASSWORD: \$\{\{ secrets\.TAURI_UPDATER_PRIVKEY_PASSWORD \}\}/,
     );
-    expect(body).toMatch(/# V-242 — Sentry DSN\. Empty when unset; gate in telemetry\.ts/);
-    expect(body).toMatch(/# short-circuits cleanly so no event leaves the customer\./);
-    expect(body).toMatch(/VITE_SENTRY_DSN: \$\{\{ secrets\.VITE_SENTRY_DSN \}\}/);
-    expect(body).toMatch(/VITE_APP_VERSION: \$\{\{ github\.ref_name \}\}/);
-    expect(body).toMatch(/projectPath: apps\/gui-client/);
-    expect(body).toMatch(/tagName: \$\{\{ github\.ref_name \}\}/);
-    expect(body).toMatch(/releaseName: 'Driftstack GUI \$\{\{ github\.ref_name \}\}'/);
+    expect(body).toMatch(/signer sign \.\/"\$\{matches\[0\]\}"/);
+    expect(body).toMatch(/name: Every signature must verify against the updater public key/);
+
     expect(body).toMatch(/Cross-platform Driftstack GUI client release\./);
     expect(body).toMatch(/macOS: download the `\.dmg`/);
     expect(body).toMatch(/Windows: download the `\.exe` installer/);
@@ -132,9 +143,10 @@ describe('W542.C /.github/workflows/gui-release.yml content parity', () => {
     expect(body).toMatch(
       /Subsequent versions auto-update via the Tauri Updater \(public-key signed\)\./,
     );
-    expect(body).toMatch(/releaseDraft: false/);
-    expect(body).toMatch(/prerelease: false/);
-    expect(body).toMatch(/args: \$\{\{ matrix\.args \}\}/);
+    expect(body).toMatch(/gh release edit "\$TAG" --repo "\$GITHUB_REPOSITORY" --draft=false/);
+    // Published only after the upload is checked, and never as a prerelease.
+    expect(body.indexOf('--draft=false')).toBeGreaterThan(body.indexOf('diff -u'));
+    expect(body).not.toMatch(/--prerelease/);
   });
 
   it('file exists at canonical path', () => {

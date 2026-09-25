@@ -52,12 +52,13 @@ export interface RecipeSuggestion {
 }
 
 export interface CreateRecipeRequest {
-  /** Source agent_session id to snapshot. Must be a session you can
-   *  ACCESS: one your own account owns, or one owned by a team you hold
-   *  `admin` on. Anything else returns 404 (the server intentionally
+  /** Source agent_session id to snapshot. Must be a session of the
+   *  workspace you save into: your own account's, or — with
+   *  `effectiveAccount` set to a team owner you hold `admin` for — the
+   *  owner's. The recipe is filed under that same account. Anything
+   *  else returns 404 (the server intentionally
    *  doesn't distinguish missing from forbidden, to avoid existence
-   *  leakage). A team admin snapshotting the owner's session gets a
-   *  201; the recipe itself is still filed under YOUR account. */
+   *  leakage). */
   agent_session_id: string;
   /** Human-facing label, 1..120 chars after trim. */
   label: string;
@@ -87,7 +88,8 @@ export class RecipesResource {
     });
   }
 
-  /** List the calling account's recipes, newest first. Cursor-paginated. */
+  /** List the recipes of the workspace the client acts in (your own, or the
+   *  team owner's `effectiveAccount` names), newest first. Cursor-paginated. */
   list(query: PaginationQueryInput = {}): Promise<RecipesListPage> {
     return this.http.request<RecipesListPage>({
       method: 'GET',
@@ -100,7 +102,7 @@ export class RecipesResource {
   }
 
   /**
-   * Lazily iterate every recipe for the calling account, walking
+   * Lazily iterate every recipe of the workspace the client acts in, walking
    * cursor pages automatically. See `iteratePaginated` for semantics.
    */
   iterate(opts: { limit?: number } = {}): AsyncGenerator<Recipe, void, void> {

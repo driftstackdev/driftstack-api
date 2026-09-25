@@ -22,8 +22,13 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /** Every owner route's gate: the staff scope first, then the owner identity. */
+// Security sweep #17 — the four routes that reveal or change secrets and prices add
+// a signed-in-session check and a fresh second factor between the owner gate and the
+// rate limit; the optional group below admits exactly that pair and nothing else.
 const OWNER_GATE =
-  /preHandler: \[\s*app\.requireScope\('driftstack_internal_admin'\),\s*app\.requireOwner,\s*app\.rateLimit\('global'\),\s*\]/;
+  /preHandler: \[\s*app\.requireScope\('driftstack_internal_admin'\),\s*app\.requireOwner,\s*(?:\/\/[^\n]*\s*requireOwnerSignedInSession,\s*app\.requireMfaFresh\(\{ freshnessSeconds: OWNER_TOOL_MFA_FRESHNESS_SECONDS \}\),\s*)?app\.rateLimit\('global'\),\s*\]/;
+const STEP_UP_GATE =
+  /app\.requireOwner,\s*\/\/[^\n]*\s*requireOwnerSignedInSession,\s*app\.requireMfaFresh\(\{ freshnessSeconds: OWNER_TOOL_MFA_FRESHNESS_SECONDS \}\),/g;
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-owner.ts');
 const APP = resolve(REPO_ROOT, 'apps/server/src/lib/app.ts');
@@ -124,6 +129,20 @@ describe('owner platform-secrets routes (secrets Phase A slice 2) parity', () =>
     // Each registration uses the owner-identity gate, behind the staff scope.
     const gateCount = (body.match(new RegExp(OWNER_GATE.source, 'g')) ?? []).length;
     expect(gateCount).toBeGreaterThanOrEqual(7); // 3 pre-existing + 4 secrets routes
+  });
+
+  it('security sweep #17 — reveal, write and delete of a secret and the price edit need a signed-in session and a fresh second factor; the reads do not', () => {
+    expect(body.match(STEP_UP_GATE) ?? []).toHaveLength(4);
+    for (const path of [
+      "'/v1/admin/owner/pricing/:tier',",
+      "'/v1/admin/owner/secrets/:name/reveal',",
+    ]) {
+      const at = body.indexOf(path);
+      expect(at, path).toBeGreaterThan(0);
+      expect(body.slice(at, at + 400), path).toMatch(/requireOwnerSignedInSession/);
+    }
+    const listAt = body.indexOf("'/v1/admin/owner/secrets',");
+    expect(body.slice(listAt, listAt + 300)).not.toMatch(/requireMfaFresh/);
   });
 
   it('reveal is the audited decrypt: secret.revealed recorded BEFORE the plaintext returns', () => {

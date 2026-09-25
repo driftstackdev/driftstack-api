@@ -77,10 +77,15 @@ describe('deploy-bridge SSH/SCP transport liveness', () => {
     );
     expect(body).not.toMatch(/root@\$\{HOST\}:\/tmp\/ds-deploy\.bundle"/);
     expect(body).toMatch(/^run_ssh "root@\$\{HOST\}" "set -euo pipefail;/m);
+    // Security sweep E-22 (2026-09-24): both writes became link-refusing,
+    // root-owned writes (the last-good-sha one renamed into place), so the pins
+    // follow the property — each still crosses the wrapper — not the old text.
     expect(body).toMatch(
-      /run_ssh "root@\$\{HOST\}" "echo '\$EXPECTED_SHORT_SHA' > \/opt\/driftstack\/api\/\.last-good-sha/,
+      /run_ssh "root@\$\{HOST\}" "set -eu; cd \/opt\/driftstack\/api;[^\n]*echo '\$EXPECTED_SHORT_SHA' > [^\n]*\.last-good-sha"/,
     );
-    expect(body).toMatch(/run_ssh "root@\$\{HOST\}" "echo .*\.deploy-history\.log/);
+    expect(body).toMatch(
+      /run_ssh "root@\$\{HOST\}" "set -eu; f=\/opt\/driftstack\/api\/\.deploy-history\.log;[^\n]*echo /,
+    );
   });
 
   it('contains no executable bare ssh/scp bypass outside the two wrappers', () => {

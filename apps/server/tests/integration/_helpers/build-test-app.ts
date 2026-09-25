@@ -1036,6 +1036,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'OAuth /token exchange outcomes (ok + OAuthError codes + error).',
     ['outcome'],
   );
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.cliAuthorizeFlowTotal,
+    'Desktop browser sign-in flows by step, flow and outcome.',
+    ['step', 'flow', 'outcome'],
+  );
   // Arc 7 obs.8 — Stripe webhook receiver outcome counter.
   metricsRegistry.registerCounter(
     METRIC_NAMES.stripeWebhookTotal,

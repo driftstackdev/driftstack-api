@@ -136,7 +136,7 @@ describe('W1034 routes/auth-cli V-266 cross-source invariant', () => {
   it("CRITICAL initiate + exchange are public but each carries a dedicated per-IP gate (initiate 5/min, exchange 60/min poll); bind has [requireAuth, rateLimit('global')].", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/auth-cli.ts'));
     expect(p).toMatch(
-      /app\.post\('\/v1\/auth\/cli-authorize\/initiate', \{ preHandler: \[initiateGate\] \}, async/,
+      /app\.post\(\s*'\/v1\/auth\/cli-authorize\/initiate',\s*\{ preHandler: \[initiateGate\] \},\s*async/,
     );
     expect(p).toMatch(
       /app\.post\('\/v1\/auth\/cli-authorize\/exchange', \{ preHandler: \[exchangeGate\] \}, async/,

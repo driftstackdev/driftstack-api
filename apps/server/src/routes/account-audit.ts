@@ -14,7 +14,7 @@ import { ListAccountAuditLogQuerySchema } from '@driftstack/api-types';
 import type { AccountAuditEntryRow, AccountAuditService } from '../services/account-audit.js';
 import { BadRequestError } from '../lib/errors.js';
 import { buildCsv } from '../lib/csv.js';
-import { resolveEffectiveAccount } from '../services/auth.js';
+import { isKeyHeldByTeamMember, resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { z } from 'zod';
 
@@ -141,7 +141,11 @@ export function registerAccountAuditRoutes(
       // publicEntry() unions it with the per-ROW check (rowNeedsActorPrivacyRedaction)
       // so a self-view still scrubs any individual row whose own recorded
       // actor differs from the account (e.g. a staff support-note row).
-      const redactActorPrivacy = effective.kind === 'team';
+      //
+      // Security sweep #12 — a key a team member minted on the owner's account
+      // reads as the owner with no header, but the person holding it is the
+      // member, so it is redacted exactly as the header read is.
+      const redactActorPrivacy = effective.kind === 'team' || isKeyHeldByTeamMember(ctx);
       return {
         data: page.items.map((row) => publicEntry(row, redactActorPrivacy)),
         next_cursor: page.nextCursor,
@@ -201,7 +205,8 @@ export function registerAccountAuditRoutes(
       // the owner's log must not receive the owner's IP/UA). Request-level
       // only — see rowNeedsActorPrivacyRedaction for the per-row half that
       // publicEntry() (JSON branch below) and the CSV branch both union in.
-      const redactActorPrivacy = effective.kind === 'team';
+      // A team member's key on the owner's account is redacted too (sweep #12).
+      const redactActorPrivacy = effective.kind === 'team' || isKeyHeldByTeamMember(ctx);
 
       const filenameBase = `driftstack-audit-log-${new Date().toISOString().slice(0, 10)}`;
 

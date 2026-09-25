@@ -75,6 +75,15 @@ case "$ENV" in
     ;;
 esac
 
+# Security sweep E-22 (2026-09-24): $SHA is spliced into a ROOT shell on the host
+# (`git checkout`), and revert-bridge.sh feeds it a value read back from the host,
+# so it must be a commit id and nothing else.
+readonly SHA_PATTERN='^[0-9a-f]{7,40}$'
+if [ "$SHA" != "main" ] && ! [[ "$SHA" =~ $SHA_PATTERN ]]; then
+  echo "[bridge] refusing deploy target: expected 'main' or a 7-40 character lowercase hex commit id" >&2
+  exit 2
+fi
+
 echo "=== deploy-bridge: $ENV ($HOST) → $SHA ===" >&2
 
 # Pre-flight: refuse to deploy to staging if its DATABASE_URL resolves
@@ -162,6 +171,12 @@ DEPLOY_STARTED_AT=$(date +%s)
 # show "X over Y" — answers "what did I just kick off?" without a
 # separate SSH. Empty if no .last-good-sha existed yet (fresh server).
 PREVIOUS_SHA=$(run_ssh "root@${HOST}" "cat /opt/driftstack/api/.last-good-sha 2>/dev/null || echo ''" 2>/dev/null || echo "")
+# The file is read from the host and later written into a root shell command, so
+# anything that is not a commit id is dropped rather than trusted (E-22).
+if [ -n "$PREVIOUS_SHA" ] && ! [[ "$PREVIOUS_SHA" =~ $SHA_PATTERN ]]; then
+  echo "[bridge] ignoring .last-good-sha on $HOST: not a commit id" >&2
+  PREVIOUS_SHA=""
+fi
 
 # GitHub-independent deploy path (2026-06-09): when DEPLOY_VIA_BUNDLE=1 we ship
 # the repo to the host as a git bundle over scp instead of having the host
@@ -232,12 +247,36 @@ else
   REMOTE_CLONE="git clone -q --depth 400 https://github.com/driftstackdev/driftstack-api.git ."
 fi
 
-# All work happens in /tmp/driftstack-deploy-<unix> on the host so we
-# can atomic-swap at the end.
+# All work happens in a private mktemp -d directory on the host so we can
+# atomic-swap at the end. (Security sweep E-22: it was the predictable
+# /tmp/driftstack-deploy-<unix>, with its logs at fixed /tmp paths.)
 run_ssh "root@${HOST}" "set -euo pipefail; \
+  umask 022; \
+  # Security sweep E-22 (2026-09-24). This shell is ROOT on the host that holds
+  # every production secret, so it must never act inside a directory the service
+  # account can write: a link planted there turns a root chown or write into one
+  # aimed wherever the planter likes. The deploy tree is root-owned from here on.
+  # The service only reads it, and its systemd sandbox (ProtectSystem=strict)
+  # cannot write it anyway. The .env stays owned by the service account, whose
+  # runbooks read it as that user, but root never evaluates it: every step that
+  # loads it runs as the service account through sudo, and it must be a regular
+  # file, never a link.
+  for d in /opt/driftstack /opt/driftstack/api; do \
+    if [ -L \"\$d\" ] || [ ! -d \"\$d\" ]; then echo \"[bridge] \$d is not a plain directory; refusing\" >&2; exit 1; fi; \
+    chown root:root \"\$d\"; chmod 0755 \"\$d\"; \
+  done; \
+  if [ -L /opt/driftstack/api/.env ] || [ ! -f /opt/driftstack/api/.env ]; then \
+    echo '[bridge] /opt/driftstack/api/.env is missing or not a regular file; refusing' >&2; exit 1; \
+  fi; \
   STAMP=\$(date +%s); \
-  BUILD_DIR=/tmp/driftstack-deploy-\$STAMP; \
-  mkdir -p \$BUILD_DIR; \
+  WORK_DIR=\$(mktemp -d /tmp/driftstack-deploy.XXXXXXXXXX); \
+  # Readable, not writable, by the service account, which runs the migration
+  # pre-gate from this checkout. The logs stay root-only.
+  chmod 0755 \"\$WORK_DIR\"; \
+  BUILD_DIR=\$WORK_DIR/build; \
+  LOG_DIR=\$WORK_DIR/logs; \
+  mkdir \"\$BUILD_DIR\"; \
+  mkdir -m 0700 \"\$LOG_DIR\"; \
   cd \$BUILD_DIR; \
   echo '[bridge] cloning…' >&2; \
   # Source = GitHub clone (default) OR the scp'd bundle (DEPLOY_VIA_BUNDLE=1);
@@ -261,11 +300,11 @@ run_ssh "root@${HOST}" "set -euo pipefail; \
   # is plain tsc and the runtime needs no native install step (the packages with
   # install scripts are esbuild, @sentry/cli, workerd, fsevents and husky — none
   # used on the host); the predecessor deploy-api.sh used --ignore-scripts too.
-  npm ci --no-audit --include=dev --ignore-scripts > /tmp/deploy-install.log 2>&1 || (tail -50 /tmp/deploy-install.log; exit 1); \
+  npm ci --no-audit --include=dev --ignore-scripts > \"\$LOG_DIR/install.log\" 2>&1 || (tail -50 \"\$LOG_DIR/install.log\"; exit 1); \
   echo '[bridge] tsc --build api-types + webhook-delivery' >&2; \
   npx tsc --build packages/api-types packages/webhook-delivery; \
   echo '[bridge] npm run build --workspace=@driftstack/server' >&2; \
-  npm run build --workspace=@driftstack/server > /tmp/deploy-build.log 2>&1 || (tail -50 /tmp/deploy-build.log; exit 1); \
+  npm run build --workspace=@driftstack/server > \"\$LOG_DIR/build.log\" 2>&1 || (tail -50 \"\$LOG_DIR/build.log\"; exit 1); \
   # NOT pruning dev deps — fresh npm-install diverges from lockfile + drops
   # transitive runtime deps like require-in-the-middle that the runtime
   # needs (caught 2026-05-15 first staging-deploy attempt). The runtime
@@ -280,24 +319,24 @@ run_ssh "root@${HOST}" "set -euo pipefail; \
   # 0.38.4 would silent-skip, journal/DB count mismatch. See the
   # 2026-05-19 migration-audit incident for the prevention rationale.
   echo '[bridge] migration-immutability + journal-integrity pre-gate' >&2; \
-  # Subshell-scope the .env source so DATABASE_URL is exported to the
-  # migration-check.mjs child without polluting the parent shell — the
-  # parent has GIT_SHA set from line 91 (git rev-parse on the freshly-
-  # cloned build dir, e.g. f9da041) and the .env on disk still has the
-  # PRIOR deploy's GIT_SHA (e.g. b48f557). Pre-2026-05-19 16:00 UTC this
-  # was \`set -a; source .env; set +a;\` in the parent shell which
-  # overwrote \$GIT_SHA with the stale .env value, and the subsequent
-  # \"GIT_SHA=\$GIT_SHA\" >> .env at line 138 below wrote the OLD sha
-  # back into .env. Net: every deploy left .env with the previous
-  # deploy's GIT_SHA, /version misreported, post-deploy-verify failed
-  # the --expected-sha check, auto-revert flailed. Subshell isolates the
-  # source so parent \$GIT_SHA stays correct.
-  (set -a; source /opt/driftstack/api/.env; set +a; \
-    node \$BUILD_DIR/scripts/migration-immutability-check.mjs > /tmp/deploy-mig-check.log 2>&1) \
-    || (tail -30 /tmp/deploy-mig-check.log; exit 1); \
+  # Runs as the service account, which owns the .env it loads (E-22): root used
+  # to source that file itself, so whoever could write it ran code as root. A
+  # separate process also keeps the PRIOR deploy's GIT_SHA recorded in .env from
+  # overwriting this shell's GIT_SHA. Before 2026-05-19 a source in this shell
+  # did exactly that: every deploy wrote the previous sha back into .env, the
+  # version endpoint misreported, and post-deploy-verify failed its sha check.
+  sudo -u driftstack bash -c 'set -a; source /opt/driftstack/api/.env; set +a; exec node \"\$1\"' migration-check \"\$BUILD_DIR/scripts/migration-immutability-check.mjs\" > \"\$LOG_DIR/mig-check.log\" 2>&1 \
+    || (tail -30 \"\$LOG_DIR/mig-check.log\"; exit 1); \
 \
   echo '[bridge] swapping artefacts into /opt/driftstack/api' >&2; \
   cd /opt/driftstack/api; \
+  # Every directory the swap moves things into or out of is made root-owned
+  # first, top-down, so none of them can be swapped for a link mid-deploy.
+  for d in apps apps/server apps/server/src apps/server/src/db packages packages/api-types packages/webhook-delivery; do \
+    if [ -L \"\$d\" ]; then echo \"[bridge] /opt/driftstack/api/\$d is a symlink; refusing\" >&2; exit 1; fi; \
+    mkdir -p \"\$d\"; chown root:root \"\$d\"; chmod 0755 \"\$d\"; \
+  done; \
+  if [ -L .env.deploy-marker ]; then echo '[bridge] .env.deploy-marker is a symlink; refusing' >&2; exit 1; fi; \
   for d in node_modules apps/server/dist apps/server/src/db/migrations packages/api-types packages/webhook-delivery; do \
     [ -e \"\$d\" ] && mv \"\$d\" \"\$d.bak.\$STAMP\" || true; \
   done; \
@@ -328,8 +367,8 @@ run_ssh "root@${HOST}" "set -euo pipefail; \
   # compiled migrate.js are pinned via DATABASE_URL from .env;
   # migrate.js bails non-zero on any failure, blocking the restart.
   echo '[bridge] applying DB migrations (idempotent)' >&2; \
-  sudo -u driftstack bash -c 'set -a; source /opt/driftstack/api/.env; set +a; node /opt/driftstack/api/apps/server/dist/db/migrate.js' > /tmp/deploy-migrate.log 2>&1 \
-    || (tail -30 /tmp/deploy-migrate.log; exit 1); \
+  sudo -u driftstack bash -c 'set -a; source /opt/driftstack/api/.env; set +a; node /opt/driftstack/api/apps/server/dist/db/migrate.js' > \"\$LOG_DIR/migrate.log\" 2>&1 \
+    || (tail -30 \"\$LOG_DIR/migrate.log\"; exit 1); \
   echo '[bridge] systemctl restart driftstack-api' >&2; \
   systemctl restart driftstack-api; \
   for i in 1 2 3 4 5 6 7 8 9 10; do \
@@ -339,7 +378,7 @@ run_ssh "root@${HOST}" "set -euo pipefail; \
       echo; \
       echo \"[bridge] cleaning .bak.\$STAMP\" >&2; \
       find /opt/driftstack/api -maxdepth 4 -name '*.bak.'\$STAMP -exec rm -rf {} + 2>/dev/null || true; \
-      rm -rf \$BUILD_DIR; \
+      rm -rf \$WORK_DIR; \
       exit 0; \
     fi; \
     echo \"[bridge] attempt \$i: not healthy yet, sleeping 3s\" >&2; \
@@ -398,8 +437,17 @@ fi
 # /opt/driftstack/api/.last-good-sha, so revert-bridge.sh always
 # reverts to a SHA that previously passed all 8 post-deploy-verify
 # invariants. Idempotent overwrite.
+#
+# Root-owned, and written beside the target then renamed over it (E-22): the file
+# is read back and fed to a root deploy by revert-bridge.sh, so the service
+# account must not be able to write it, and a link left in its place is replaced
+# rather than followed.
+if [ -n "$EXPECTED_SHORT_SHA" ] && ! [[ "$EXPECTED_SHORT_SHA" =~ $SHA_PATTERN ]]; then
+  echo "[bridge] not recording a last-good-sha: resolved sha is not a commit id" >&2
+  EXPECTED_SHORT_SHA=""
+fi
 if [ -n "$EXPECTED_SHORT_SHA" ]; then
-  run_ssh "root@${HOST}" "echo '$EXPECTED_SHORT_SHA' > /opt/driftstack/api/.last-good-sha && chown driftstack:driftstack /opt/driftstack/api/.last-good-sha"
+  run_ssh "root@${HOST}" "set -eu; cd /opt/driftstack/api; if [ -L .last-good-sha ]; then echo '[bridge] .last-good-sha is a symlink; refusing' >&2; exit 1; fi; t=\$(mktemp .last-good-sha.XXXXXX); echo '$EXPECTED_SHORT_SHA' > \"\$t\"; chmod 644 \"\$t\"; mv -f \"\$t\" .last-good-sha"
   echo "[bridge] recorded $EXPECTED_SHORT_SHA as $ENV last-good-sha" >&2
 fi
 
@@ -409,6 +457,8 @@ fi
 # recurring rollbacks (same SHA appearing as both new + previous in
 # adjacent rows = thrash). Tail-only — no rotation needed; file is
 # tiny (~80 bytes/deploy × ~10 deploys/day × 365 days ≈ 290 KB/year).
+# Root-owned like .last-good-sha; every value in the line is a validated sha or a
+# number, and a link in the file's place is refused rather than appended through.
 if [ -n "$EXPECTED_SHORT_SHA" ]; then
-  run_ssh "root@${HOST}" "echo \"\$(date -u +%Y-%m-%dT%H:%M:%SZ) $EXPECTED_SHORT_SHA ${PREVIOUS_SHA:-fresh} ${DEPLOY_ELAPSED}s\" >> /opt/driftstack/api/.deploy-history.log && chown driftstack:driftstack /opt/driftstack/api/.deploy-history.log"
+  run_ssh "root@${HOST}" "set -eu; f=/opt/driftstack/api/.deploy-history.log; if [ -L \"\$f\" ]; then echo '[bridge] .deploy-history.log is a symlink; refusing' >&2; exit 1; fi; echo \"\$(date -u +%Y-%m-%dT%H:%M:%SZ) $EXPECTED_SHORT_SHA ${PREVIOUS_SHA:-fresh} ${DEPLOY_ELAPSED}s\" >> \"\$f\"; chown root:root \"\$f\"; chmod 644 \"\$f\""
 fi

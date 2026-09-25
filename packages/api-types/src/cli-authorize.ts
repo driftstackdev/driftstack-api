@@ -21,6 +21,16 @@
 // on exchange — defends against the dashboard binding a code that
 // wasn't issued in the same session. The separate 40-bit `user_code`
 // is never placed in the URL and proves access to the initiating device.
+//
+// GUI audit #9 — `code` and `state` both travel in the browser URL and in
+// the `driftstack://auth/callback` hand-off, so on their own they must not
+// be enough to collect the key. The CLI/GUI binds the flow to a secret that
+// never leaves it (RFC 7636 PKCE, S256 only): it sends
+// `code_challenge = BASE64URL(SHA-256(code_verifier))` at initiate and the
+// `code_verifier` at exchange. A flow that started with a challenge cannot be
+// exchanged without the matching verifier. A flow without one is accepted
+// until LEGACY_CLI_AUTHORIZE_FLOW_ENDS_AT (server side) for installed apps
+// that predate this, and is refused at initiate from then on.
 
 import { z } from 'zod';
 import { ApiKeyScopeListRequestSchema, Iso8601Schema } from './common.js';
@@ -33,6 +43,12 @@ export const CliAuthorizeUserCodeSchema = z
   .toUpperCase()
   .regex(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
 
+/** RFC 7636 §4.2 S256 challenge: BASE64URL(SHA-256(code_verifier)), unpadded. */
+export const CliAuthorizeCodeChallengeSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+
+/** RFC 7636 §4.1 verifier: 43–128 unreserved characters. */
+export const CliAuthorizeCodeVerifierSchema = z.string().regex(/^[A-Za-z0-9._~-]{43,128}$/);
+
 // ─── /v1/auth/cli-authorize/initiate ──────────────────────────────
 
 export const CliAuthorizeInitiateRequestSchema = z.object({
@@ -44,6 +60,11 @@ export const CliAuthorizeInitiateRequestSchema = z.object({
    *  screen ("Driftstack desktop app on John's MacBook Pro") so the
    *  user knows what they're authorizing. */
   client_label: z.string().min(1).max(120).optional(),
+  /** BASE64URL(SHA-256(code_verifier)). The verifier stays on the device and
+   *  is required at exchange. Send together with `code_challenge_method`. */
+  code_challenge: CliAuthorizeCodeChallengeSchema.optional(),
+  /** Only `S256` is accepted. Required whenever `code_challenge` is sent. */
+  code_challenge_method: z.literal('S256').optional(),
 });
 export type CliAuthorizeInitiateRequest = z.infer<typeof CliAuthorizeInitiateRequestSchema>;
 
@@ -89,6 +110,9 @@ export type CliAuthorizeBindResponse = z.infer<typeof CliAuthorizeBindResponseSc
 export const CliAuthorizeExchangeRequestSchema = z.object({
   code: z.string().min(16).max(128),
   state: z.string().min(16).max(128),
+  /** The secret whose S256 hash was sent as `code_challenge` at initiate.
+   *  Required when the flow started with a challenge; never put it in a URL. */
+  code_verifier: CliAuthorizeCodeVerifierSchema.optional(),
 });
 export type CliAuthorizeExchangeRequest = z.infer<typeof CliAuthorizeExchangeRequestSchema>;
 

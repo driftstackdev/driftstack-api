@@ -1,7 +1,7 @@
 # Driftstack API — deploy pipeline (Option B verdict 2026-05-17:
 # drop Docker, match prod systemd+node reality).
 #
-# Triggered on push to main. The previous docker-compose approach
+# Triggered when CI completes on main (below). The previous docker-compose approach
 # (image build → ghcr.io push → docker compose pull) did not match
 # what prod actually runs — production is bare-systemd + Node 22 at
 # /opt/driftstack/api (per the internal 2026-05-15 deploy-pipeline
@@ -13,10 +13,19 @@
 # GH Actions runner call it. Single execution path for both manual
 # and CI-triggered deploys; no Docker drift between dev and CI.
 #
-# Two-environment flow:
-#   - Staging deploy auto-fires on main merge. No approval gate.
-#   - Production deploy is a manual job that requires the
-#     "production" GitHub environment's approver list to ack.
+# Two-environment flow (gated on CI since 2026-09-24, security sweep E-9):
+#   - Runs when the CI workflow COMPLETES on a push to main
+#     (workflow_run) and deploys exactly the commit that CI run tested.
+#     A red CI run deploys nothing and raises the deploy-failure issue;
+#     a cancelled one (superseded by a newer push) deploys nothing.
+#     CI cancels a superseded run on main, so during a burst of pushes
+#     production waits for the first CI run that finishes, with no alert
+#     while it waits; the tip deploys once the pushes stop for a CI run's
+#     length (about 15-25 minutes).
+#   - Staging deploys first. Production follows only after staging
+#     deployed the same commit in the same run. No approval gate.
+#   - Neither environment is ever moved to a commit older than the one
+#     it is running (scripts/deploy-is-forward.mjs).
 #
 # Per Workstream A spec (V-051 — REVISED 2026-05-17):
 #   - Hetzner Cloud VMs (CCX13 default — 4 vCPU, 16GB RAM, €25/mo).
@@ -50,23 +59,149 @@
 name: Deploy
 
 on:
-  push:
+  # Security sweep E-9 (2026-09-24). This ran on every push to main, and a push
+  # says nothing about its tests: main is not branch-protected, the production
+  # job needed only the source-map and staging jobs, and a commit whose CI was
+  # red (or still running) reached production minutes after the push. It now
+  # runs when CI COMPLETES on main; the ci-gate job below lets a run through only
+  # if it succeeded on a push to main in this repository, and every job deploys
+  # that run's head_sha, never the branch tip.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
+  # A manual re-run from main. The gate asks GitHub for a successful CI run on a
+  # push to main for the exact commit, exactly as for the automatic path.
   workflow_dispatch:
 
 concurrency:
-  group: deploy-${{ github.ref }}
+  # One deploy at a time, in arrival order, never cancelled mid-rollout.
+  #
+  # Only a run that can deploy joins `deploy-api`: a successful CI run on a push
+  # to main in this repository (the ci-gate's own test, plus success), or a
+  # dispatch. Every other CI completion (red, cancelled, a pull request, a fork
+  # whose branch is called main) gets a group of its own, so it can neither
+  # wait behind a deploy nor take a pending deploy's place. A red run still runs
+  # its ci-gate, which fails and raises the deploy-failure issue.
+  #
+  # `queue: max` keeps every pending deploy instead of GitHub's default of one:
+  # by default a newly queued run CANCELS the pending one, so a re-run of an old
+  # CI run arriving behind a newer commit's pending deploy replaced it, then
+  # skipped as older, and the newer commit waited for the next green push with no
+  # alert. Queued in order, the older run is a no-op (deploy-is-forward exit 3).
+  # A fixed name rather than the ref: every workflow_run event carries the
+  # default branch as its ref whatever commit it is about.
+  # (Every line of the expression below is indented alike so YAML folds it into
+  # one line; a deeper-indented line would keep its newline.)
+  group: >-
+    ${{ (github.event_name == 'workflow_dispatch' ||
+    (github.event.workflow_run.event == 'push' &&
+    github.event.workflow_run.head_branch == 'main' &&
+    github.event.workflow_run.head_repository.full_name == github.repository &&
+    github.event.workflow_run.conclusion == 'success'))
+    && 'deploy-api' || format('deploy-nothing-{0}', github.run_id) }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
+  # Proves CI passed on the commit about to be deployed, and names that commit
+  # for every later job. A pull request's CI run also completes, and a fork's
+  # branch can be called main, so the event, the branch AND the repository are
+  # all checked: only a push to main in this repository is deployable.
+  ci-gate:
+    name: CI passed on this commit, and it is on main
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      sha: ${{ steps.pick.outputs.sha }}
+      deploy: ${{ steps.pick.outputs.deploy }}
+    steps:
+      - name: Pick the commit and prove CI passed on it
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          DISPATCH_REF: ${{ github.ref }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            SHA="$RUN_SHA"
+            case "$RUN_CONCLUSION" in
+              success) ;;
+              cancelled|skipped)
+                # CI on main cancels an in-flight run when a newer commit lands,
+                # so this commit was superseded; the newer one deploys when its
+                # own CI passes.
+                echo "::notice::CI on ${SHA} was ${RUN_CONCLUSION}; nothing to deploy."
+                echo "deploy=false" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+              *)
+                # Red CI on main FAILS this job, so notify-on-failure raises the
+                # deploy-failure issue: production is not advancing, and saying so
+                # is the point (see the note above notify-on-failure).
+                echo "::error::CI concluded '${RUN_CONCLUSION}' on ${SHA}. Production does not advance until CI passes on main."
+                exit 1
+                ;;
+            esac
+          else
+            if [ "$DISPATCH_REF" != "refs/heads/main" ]; then
+              echo "::error::a manual deploy runs from main only (dispatched from ${DISPATCH_REF})."
+              exit 1
+            fi
+            SHA="$DISPATCH_SHA"
+          fi
+          if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::not a commit id: ${SHA}"
+            exit 1
+          fi
+          # Asked of GitHub, not taken from the event alone: a successful CI run
+          # on a push to main for exactly this commit. For a dispatch it is the
+          # only evidence there is.
+          passed=$(gh api -X GET "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+            -f head_sha="$SHA" -f event=push -f branch=main -f status=success \
+            --jq '.total_count')
+          # A non-number (an API error body, "null") must refuse, not fall through:
+          # `[ x -lt 1 ]` on a non-integer is an error, which `if` reads as false.
+          if ! [[ "$passed" =~ ^[0-9]+$ ]] || [ "$passed" -lt 1 ]; then
+            echo "::error::no successful CI run on a push to main for ${SHA}; refusing to deploy it."
+            exit 1
+          fi
+          # And the commit is on main: main is ahead of it, or it is main's tip.
+          relation=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${SHA}...main" --jq '.status')
+          case "$relation" in
+            ahead|identical) ;;
+            *)
+              echo "::error::${SHA} is not on main (compare: ${relation}); refusing to deploy it."
+              exit 1
+              ;;
+          esac
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "deploy=true" >> "$GITHUB_OUTPUT"
+
   source-map-upload:
     name: Build + upload source maps to Sentry
+    needs: ci-gate
+    if: needs.ci-gate.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # The commit CI passed. Under workflow_run the default checkout is the
+          # branch tip, which can be a newer commit CI has not finished with.
+          ref: ${{ needs.ci-gate.outputs.sha }}
 
       - name: Set up Node 22
         uses: actions/setup-node@v6
@@ -92,7 +227,7 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
-          SENTRY_RELEASE: ${{ github.sha }}
+          SENTRY_RELEASE: ${{ needs.ci-gate.outputs.sha }}
         run: |
           if [ -z "${SENTRY_AUTH_TOKEN}" ]; then
             echo "SENTRY_AUTH_TOKEN unset — skipping source-map upload."
@@ -109,8 +244,12 @@ jobs:
 
   deploy-staging:
     name: Deploy to staging (via deploy-bridge.sh)
-    needs: source-map-upload
+    needs: [ci-gate, source-map-upload]
+    if: needs.ci-gate.outputs.deploy == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      # Production runs only when this is true: staging took THIS commit.
+      deployed: ${{ steps.forward.outputs.proceed }}
     environment:
       name: staging
       url: https://staging.driftstack.dev
@@ -141,6 +280,8 @@ jobs:
         if: steps.gate.outputs.ready == 'true'
         uses: actions/checkout@v6
         with:
+          # The commit the ci-gate proved; see the source-map job.
+          ref: ${{ needs.ci-gate.outputs.sha }}
           # ⛔ FULL history. deploy-bridge.sh's DEPLOY_VIA_BUNDLE path runs
           # `git bundle create` from THIS checkout, and a bundle built from a
           # shallow clone cannot be cloned on the far side: the remote fails
@@ -198,16 +339,44 @@ jobs:
             fi
           done
 
-      - name: Run scripts/deploy-bridge.sh staging
+      # Never backwards (E-9): a re-run of an old CI run completes long after a
+      # newer commit went live. Exit 0 deploys; 3 means staging already runs a
+      # newer commit, which skips this run (production too) without failing it;
+      # anything else — not on main, diverged, or a live commit that cannot be
+      # read while this is not main's tip — fails the job and raises the
+      # deploy-failure issue. (With /version down, main's tip still deploys:
+      # nothing on main is newer, and it is how a fix-forward reaches a broken
+      # environment.)
+      - name: Refuse to move staging to an older commit
+        id: forward
         if: steps.gate.outputs.ready == 'true'
-        # 2026-05-20 — pass github.sha explicitly. Without it, the
+        env:
+          SHA: ${{ needs.ci-gate.outputs.sha }}
+        run: |
+          set +e
+          node scripts/deploy-is-forward.mjs --base-url https://staging.driftstack.dev --sha "$SHA"
+          rc=$?
+          set -e
+          case "$rc" in
+            0) echo "proceed=true" >> "$GITHUB_OUTPUT" ;;
+            3)
+              echo "::notice::staging already runs a newer commit than ${SHA}; not deploying it."
+              echo "proceed=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *) exit "$rc" ;;
+          esac
+
+      - name: Run scripts/deploy-bridge.sh staging
+        if: steps.forward.outputs.proceed == 'true'
+        # 2026-05-20 — pass the sha explicitly. Without it, the
         # bridge defaults SHA to "main" and clones the current tip,
         # which may have moved past the workflow-triggering commit if
         # another push landed during the workflow run. The bridge
         # then ships THAT newer commit but post-deploy-verify is
         # told to expect the original (triggering) SHA, causing a
-        # false-negative auto-revert. Pinning github.sha makes the
-        # bridge deploy the exact ref that triggered the workflow.
+        # false-negative auto-revert. Since 2026-09-24 the sha is the
+        # one the ci-gate proved CI passed on (under workflow_run,
+        # github.sha is the branch tip, not the tested commit).
         # ⛔ DEPLOY_VIA_BUNDLE=1 — do NOT let the host clone from GitHub.
         # deploy-bridge.sh:186 defaults to an ANONYMOUS clone, which works only
         # while this repo is public. Every operator runbook already prescribes the
@@ -217,11 +386,15 @@ jobs:
         # the host.
         env:
           DEPLOY_VIA_BUNDLE: '1'
-        run: bash scripts/deploy-bridge.sh staging '${{ github.sha }}'
+          SHA: ${{ needs.ci-gate.outputs.sha }}
+        run: bash scripts/deploy-bridge.sh staging "$SHA"
 
   deploy-production:
     name: Deploy to production (CONTINUOUS — no approval gate; via deploy-bridge.sh)
-    needs: [source-map-upload, deploy-staging]
+    needs: [ci-gate, source-map-upload, deploy-staging]
+    # Staging first: production runs only when staging deployed this same commit
+    # in this run.
+    if: needs.deploy-staging.outputs.deployed == 'true'
     runs-on: ubuntu-latest
     # ⛔ CORRECTED 2026-09-06. This previously asserted that the "production"
     # environment was configured in repo settings to demand founder sign-off before
@@ -242,11 +415,13 @@ jobs:
     # nobody configured is worse than an acknowledged absence: an auditor reads the
     # sentence and stops looking.
     #
-    # ⚠️ ALSO NOT GATED ON CI. `needs:` lists only source-map-upload and
-    # deploy-staging, so a red test suite does not block a production deploy. If
-    # that is ever wanted, adding the CI workflow to `needs:` is the one-line
-    # change — deliberately NOT made, since it would block the auto-deploy the
-    # owner asked for. Tracked on ledger row N-DEPLOY-GATE.
+    # ✅ GATED ON CI since 2026-09-24 (security sweep E-9; ledger row
+    # N-DEPLOY-GATE). This used to say the opposite: `needs:` listed only
+    # source-map-upload and deploy-staging, so a red test suite did not block a
+    # production deploy. The workflow now runs only when CI completes on main,
+    # the ci-gate job proves CI succeeded on exactly the commit deployed, and
+    # this job runs only after staging took that same commit. Still continuous —
+    # a green CI deploys with nobody approving — and still no approval gate.
     environment:
       name: production
       url: https://api.driftstack.dev
@@ -271,6 +446,8 @@ jobs:
         if: steps.gate.outputs.ready == 'true'
         uses: actions/checkout@v6
         with:
+          # The commit the ci-gate proved; see the source-map job.
+          ref: ${{ needs.ci-gate.outputs.sha }}
           # ⛔ FULL history. deploy-bridge.sh's DEPLOY_VIA_BUNDLE path runs
           # `git bundle create` from THIS checkout, and a bundle built from a
           # shallow clone cannot be cloned on the far side: the remote fails
@@ -310,10 +487,31 @@ jobs:
             exit 1
           fi
 
-      - name: Run scripts/deploy-bridge.sh prod
+      # Never backwards, against production's own live commit (same exit codes
+      # as the staging step).
+      - name: Refuse to move production to an older commit
+        id: forward
         if: steps.gate.outputs.ready == 'true'
-        # 2026-05-20 — pass github.sha explicitly (same race-fix as
-        # staging deploy step above).
+        env:
+          SHA: ${{ needs.ci-gate.outputs.sha }}
+        run: |
+          set +e
+          node scripts/deploy-is-forward.mjs --base-url https://api.driftstack.dev --sha "$SHA"
+          rc=$?
+          set -e
+          case "$rc" in
+            0) echo "proceed=true" >> "$GITHUB_OUTPUT" ;;
+            3)
+              echo "::notice::production already runs a newer commit than ${SHA}; not deploying it."
+              echo "proceed=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *) exit "$rc" ;;
+          esac
+
+      - name: Run scripts/deploy-bridge.sh prod
+        if: steps.forward.outputs.proceed == 'true'
+        # 2026-05-20 — pass the sha explicitly (same race-fix as
+        # staging deploy step above; the ci-gate's sha since 2026-09-24).
         # ⛔ DEPLOY_VIA_BUNDLE=1 — do NOT let the host clone from GitHub.
         # deploy-bridge.sh:186 defaults to an ANONYMOUS clone, which works only
         # while this repo is public. Every operator runbook already prescribes the
@@ -323,7 +521,8 @@ jobs:
         # the host.
         env:
           DEPLOY_VIA_BUNDLE: '1'
-        run: bash scripts/deploy-bridge.sh prod '${{ github.sha }}'
+          SHA: ${{ needs.ci-gate.outputs.sha }}
+        run: bash scripts/deploy-bridge.sh prod "$SHA"
 
   # ⛔ THE PIPELINE'S REAL FAILURE MODE WAS SILENCE, NOT BREAKAGE.
   #
@@ -341,9 +540,13 @@ jobs:
   # ⚠️ DEDUPED ON PURPOSE. 18 failures must produce ONE issue with 18 comments,
   # not 18 issues — an alert that floods is unread for the same reason a silent
   # one is.
+  #
+  # Since 2026-09-24 a red CI run on main fails the ci-gate job and lands here
+  # too: production no longer advances past a red main, and a stall nobody hears
+  # about is the failure this job exists for.
   notify-on-failure:
     name: Open or update the deploy-failure issue
-    needs: [source-map-upload, deploy-staging, deploy-production]
+    needs: [ci-gate, source-map-upload, deploy-staging, deploy-production]
     if: failure()
     runs-on: ubuntu-latest
     permissions:
@@ -351,13 +554,17 @@ jobs:
     steps:
       - name: Create or comment the tracking issue
         uses: actions/github-script@v8
+        env:
+          # The commit this run was about. Under workflow_run, context.sha is the
+          # default branch tip, not the commit CI tested.
+          DEPLOY_SHA: ${{ needs.ci-gate.outputs.sha || github.event.workflow_run.head_sha || github.sha }}
         with:
           script: |
             const MARKER = '<!-- deploy-failure-tracker -->';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const body = [
               MARKER,
-              `**Deploy failed** on \`${context.sha.slice(0, 9)}\` (${context.ref}).`,
+              `**Deploy failed** on \`${(process.env.DEPLOY_SHA ?? context.sha).slice(0, 9)}\`.`,
               '',
               `Run: ${runUrl}`,
               '',

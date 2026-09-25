@@ -136,7 +136,10 @@ describe('W1037 routes/account-audit V-216 + V-297 + V-330b/c + V-484 cross-sour
     expect(p).toMatch(/ip_address: redact \? null : row\.ipAddress,/);
     expect(p).toMatch(/user_agent: redact \? null : row\.userAgent,/);
     expect(p).toMatch(/timestamp: row\.timestamp\.toISOString\(\),/);
-    expect(p).toMatch(/const redactActorPrivacy = effective\.kind === 'team';/);
+    // Security sweep #12 — also for a key a team member minted on the owner's account.
+    expect(p).toMatch(
+      /const redactActorPrivacy = effective\.kind === 'team' \|\| isKeyHeldByTeamMember\(ctx\);/,
+    );
   });
 
   it('CRITICAL CSV header 9 columns — timestamp + action + actor_type + actor_account_id + actor_key_id + target_resource_id + ip_address + user_agent + payload.', () => {

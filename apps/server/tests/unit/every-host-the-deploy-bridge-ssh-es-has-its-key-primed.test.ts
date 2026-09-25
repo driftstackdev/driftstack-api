@@ -154,7 +154,11 @@ describe('every host the deploy bridge SSHes to has its key primed', () => {
     );
     expect(workflow).toContain('notify-on-failure');
     // It must depend on the jobs that can actually fail, or it never fires.
-    expect(workflow).toMatch(/needs:\s*\[source-map-upload, deploy-staging, deploy-production\]/);
+    // 2026-09-24: and the CI gate, whose failure (red CI on main) now stops
+    // production advancing just as surely as a failed deploy.
+    expect(workflow).toMatch(
+      /needs:\s*\[ci-gate, source-map-upload, deploy-staging, deploy-production\]/,
+    );
     // ⚠️ And it must DEDUPE. 18 failures producing 18 issues is unread for the
     // same reason one silent failure is.
     expect(workflow, 'the alert must find an existing issue before opening one').toContain(

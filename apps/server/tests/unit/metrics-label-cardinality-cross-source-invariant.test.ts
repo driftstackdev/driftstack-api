@@ -264,11 +264,17 @@ describe('metric label cardinality', () => {
     // values. Neither counter's emit site passes the reservation, the call or
     // the account it knows about — those are in the log line, for the same
     // reason every id on this page is.
+    //
+    // `step` and `flow` arrived with driftstack_cli_authorize_flow_total (GUI
+    // audit #9): step is initiate | exchange and flow is pkce | legacy, both
+    // literal unions in routes/auth-cli.ts and services/cli-authorize.ts. The
+    // account, the code and the client label are in the log line, never a label.
     expect(distinct).toEqual([
       'actor_type',
       'arm',
       'bucket',
       'call_kind',
+      'flow',
       'from',
       'intent',
       'job_type',
@@ -290,6 +296,7 @@ describe('metric label cardinality', () => {
       'route',
       'settle_basis',
       'status_class',
+      'step',
       'step_kind',
       'template',
       'terminal_state',

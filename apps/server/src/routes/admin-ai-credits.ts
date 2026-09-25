@@ -104,6 +104,10 @@ import type {
 } from '../services/ai-credits-runtime.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import {
+  OWNER_TOOL_MFA_FRESHNESS_SECONDS,
+  requireOwnerSignedInSession,
+} from '../lib/owner-account-guard.js';
+import {
   buildAdminCreditsAccountState,
   buildForgiveDebtAdjustmentResponse,
   buildGoodwillAdjustmentResponse,
@@ -665,6 +669,11 @@ export function registerAdminAiCreditsRoutes(
       preHandler: [
         app.requireScope('driftstack_internal_admin'),
         app.requireOwner,
+        // Security sweep #17 — a signed-in session with a fresh second factor. An
+        // API key is refused: an owner session holds the staff scope, so a stolen
+        // one could otherwise mint a staff key and skip the second factor with it.
+        requireOwnerSignedInSession,
+        app.requireMfaFresh({ freshnessSeconds: OWNER_TOOL_MFA_FRESHNESS_SECONDS }),
         app.rateLimit('global'),
       ],
     },
@@ -764,6 +773,11 @@ export function registerAdminAiCreditsRoutes(
       preHandler: [
         app.requireScope('driftstack_internal_admin'),
         app.requireOwner,
+        // Security sweep #17 — a signed-in session with a fresh second factor. An
+        // API key is refused: an owner session holds the staff scope, so a stolen
+        // one could otherwise mint a staff key and skip the second factor with it.
+        requireOwnerSignedInSession,
+        app.requireMfaFresh({ freshnessSeconds: OWNER_TOOL_MFA_FRESHNESS_SECONDS }),
         app.rateLimit('global'),
       ],
     },

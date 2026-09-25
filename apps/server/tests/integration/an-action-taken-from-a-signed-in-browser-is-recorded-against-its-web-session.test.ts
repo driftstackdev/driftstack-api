@@ -449,11 +449,19 @@ describe.skipIf(!RUN_DB_TESTS)(
         ]);
       });
 
-      it('CRITICAL the owner’s price edit answers 200, the price moves with the caller recorded on it, and it is audited', async () => {
+      it('CRITICAL the owner’s price edit answers 200 from a signed-in session, the price moves with the caller recorded on it, and it is audited (an API key is refused)', async () => {
         const cents = label === 'a web session' ? 4_900 : 5_100;
         const res = await send(actor(), 'PATCH', '/v1/admin/owner/pricing/api_starter', {
           monthly_cents: cents,
         });
+        // Security sweep #17 — a price is changed only from a signed-in session; an
+        // owner API key carrying the staff scope is refused and moves nothing.
+        if (label === 'an API key') {
+          expect(res.status, JSON.stringify(res.body)).toBe(403);
+          const rows = await rowsOf('pricing', `tier = 'api_starter'`, []);
+          expect(rows[0]?.monthly_cents).not.toBe(cents);
+          return;
+        }
         expect(res.status, JSON.stringify(res.body)).toBe(200);
         const rows = await rowsOf('pricing', `tier = 'api_starter'`, []);
         expect(rows[0]?.monthly_cents).toBe(cents);
@@ -466,12 +474,21 @@ describe.skipIf(!RUN_DB_TESTS)(
         expectActor(audits, 'admin_key_id', 'admin_web_session_id', actor(), 'pricing.updated');
       });
 
-      it('CRITICAL a platform secret is set (201) and revealed (200), the secret records the caller, and both are audited', async () => {
+      it('CRITICAL a platform secret is set (201) and revealed (200) from a signed-in session, the secret records the caller, and both are audited (an API key is refused)', async () => {
         const name = `web_session_actor_${label === 'a web session' ? 'ws' : 'key'}`;
         const set = await send(actor(), 'PUT', `/v1/admin/owner/secrets/${name}`, {
           value: 'not-a-real-secret',
           description: 'attribution probe',
         });
+        // Security sweep #17 — platform secrets are set and revealed only from a
+        // signed-in session; an owner API key is refused and stores nothing.
+        if (label === 'an API key') {
+          expect(set.status, JSON.stringify(set.body)).toBe(403);
+          expect(await rowsOf('platform_secrets', `name = $1`, [name])).toEqual([]);
+          const revealed = await send(actor(), 'POST', `/v1/admin/owner/secrets/${name}/reveal`);
+          expect(revealed.status, JSON.stringify(revealed.body)).toBe(403);
+          return;
+        }
         expect(set.status, JSON.stringify(set.body)).toBe(201);
         expectActor(
           await rowsOf('platform_secrets', `name = $1`, [name]),
@@ -639,12 +656,23 @@ describe.skipIf(!RUN_DB_TESTS)(
         );
       });
 
-      it('CRITICAL the owner publishes a rate card (200), the card records the caller, and it is audited', async () => {
+      it('CRITICAL the owner publishes a rate card (200) from a signed-in session, the card records the caller, and it is audited (an API key is refused)', async () => {
         const days = label === 'a web session' ? 31 : 32;
+        const effectiveAt = new Date(Date.now() + days * 24 * 3600 * 1000).toISOString();
         const res = await send(actor(), 'POST', '/v1/admin/credit-rate-cards', {
           markup_bp: 20000,
-          effective_at: new Date(Date.now() + days * 24 * 3600 * 1000).toISOString(),
+          effective_at: effectiveAt,
         });
+        // Security sweep #17 — a rate card is published only from a signed-in
+        // session; an owner API key carrying the staff scope is refused and
+        // publishes nothing.
+        if (label === 'an API key') {
+          expect(res.status, JSON.stringify(res.body)).toBe(403);
+          expect(
+            await rowsOf('credit_rate_cards', `effective_at = $1::timestamptz`, [effectiveAt]),
+          ).toEqual([]);
+          return;
+        }
         expect(res.status, JSON.stringify(res.body)).toBe(200);
         const version = (res.body as { version: number }).version;
         expectActor(

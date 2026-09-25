@@ -22,6 +22,7 @@ import {
 } from '../lib/errors.js';
 import type { OAuthLinksRepo, OAuthLinkRow } from '../services/oauth-client.js';
 import type { AuthFlowsService } from '../services/auth-flows.js';
+import { isKeyHeldByTeamMember } from '../services/auth.js';
 
 // A link's public id is `ol_<uuid>` (publicLink below). The prefix is two
 // letters, so it is pinned in the regex rather than matched by the usual
@@ -87,6 +88,15 @@ export function registerAccountOauthLinksRoutes(
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
+      // Security sweep #12 — the provider emails of the owner's linked sign-ins
+      // are the owner's. A key a team member minted on the owner's account
+      // authenticates as the owner but is held by the member; the header never
+      // reached this read (it always answers for the caller), so neither may that key.
+      if (isKeyHeldByTeamMember(ctx)) {
+        throw new ForbiddenError(
+          "Linked sign-ins are visible only to the account's owner, and this key was created by a team member.",
+        );
+      }
       const rows = await opts.links.listForAccount(ctx.account.id);
       // V-667.C — provider_avatar_url + provider_name are first-link-
       // only IDP signals (Verdict 3) and used internally; not surfaced

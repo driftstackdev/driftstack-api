@@ -1202,6 +1202,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     rateLimitOverrides: deps.rateLimitOverridesService,
     audit: deps.adminAuditService,
     accountAudit: deps.accountAuditService,
+    ownerEmail: deps.ownerEmail ?? null,
   });
   if (deps.incidentsService !== undefined) {
     registerAdminIncidentsRoutes(app, {
@@ -1462,6 +1463,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       cliAuthorizeService: deps.cliAuthorizeService,
       apiKeysService: deps.apiKeysService,
       rateLimitStore: deps.rateLimitStore,
+      ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
     });
   } else {
     // V-1756 — activation-gate pattern: 503 FeatureUnavailable, not a bare 404.
@@ -1832,6 +1834,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
       recipes: deps.recipesRepo,
       agentSessions: deps.agentSessionsRepo,
+      authRepo: deps.authRepo,
     });
   } else {
     registerRecipesDisabledRoutes(app);

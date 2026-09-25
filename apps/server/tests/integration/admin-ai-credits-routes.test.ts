@@ -31,6 +31,7 @@ import {
   type AdminCreditsHarness,
 } from './_helpers/admin-credits-route-fixtures.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { signInTheFixtureAccount } from './_helpers/sign-in-the-fixture-account.js';
 
 const ISOLATED_DB_NAME = 'driftstack_iso_s15_admin_credits_routes';
 const RUN_DB_TESTS = Boolean(process.env.CI || process.env.DATABASE_URL);
@@ -421,10 +422,12 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
         email: OWNER_EMAIL,
         ownerEmail: OWNER_EMAIL,
       });
+      // The rate-card tools need a signed-in session (security sweep #17).
+      const owner = { authorization: `Bearer ${await signInTheFixtureAccount(fx)}` };
       const res = await fx.app.inject({
         method: 'POST',
         url: '/v1/admin/credit-rate-cards',
-        headers: { authorization: `Bearer ${fx.plaintext}` },
+        headers: owner,
         payload: {
           markup_bp: 20000,
           effective_at: new Date(Date.now() + 31 * 24 * 3600 * 1000).toISOString(),
@@ -438,7 +441,7 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
       const listed = await fx.app.inject({
         method: 'GET',
         url: '/v1/admin/credit-rate-cards',
-        headers: { authorization: `Bearer ${fx.plaintext}` },
+        headers: owner,
       });
       expect(listed.statusCode).toBe(200);
       const cards = listed.json<{ data: Array<{ version: number; status: string }> }>().data;
@@ -452,10 +455,12 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
         email: OWNER_EMAIL,
         ownerEmail: OWNER_EMAIL,
       });
+      // The rate-card tools need a signed-in session (security sweep #17).
+      const owner = { authorization: `Bearer ${await signInTheFixtureAccount(fx)}` };
       const res = await fx.app.inject({
         method: 'POST',
         url: '/v1/admin/credit-rate-cards',
-        headers: { authorization: `Bearer ${fx.plaintext}` },
+        headers: owner,
         payload: {
           markup_bp: 20000,
           effective_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
@@ -489,10 +494,12 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
         email: OWNER_EMAIL,
         ownerEmail: OWNER_EMAIL,
       });
+      // The rate-card tools need a signed-in session (security sweep #17).
+      const owner = { authorization: `Bearer ${await signInTheFixtureAccount(fx)}` };
       const res = await fx.app.inject({
         method: 'POST',
         url: '/v1/admin/credit-rate-cards/999999/withdraw',
-        headers: { authorization: `Bearer ${fx.plaintext}` },
+        headers: owner,
       });
       expect(res.statusCode).toBe(404);
     });
@@ -504,10 +511,12 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
         email: OWNER_EMAIL,
         ownerEmail: OWNER_EMAIL,
       });
+      // The rate-card tools need a signed-in session (security sweep #17).
+      const owner = { authorization: `Bearer ${await signInTheFixtureAccount(fx)}` };
       const publish = await fx.app.inject({
         method: 'POST',
         url: '/v1/admin/credit-rate-cards',
-        headers: { authorization: `Bearer ${fx.plaintext}` },
+        headers: owner,
         payload: {
           // 20000 (2.0x, the launch card's own markup): every on-credits
           // model's prices are known to divide into whole microcredits at
@@ -525,7 +534,7 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
       const withdrawn = await fx.app.inject({
         method: 'POST',
         url: `/v1/admin/credit-rate-cards/${String(version)}/withdraw`,
-        headers: { authorization: `Bearer ${fx.plaintext}` },
+        headers: owner,
       });
       expect(withdrawn.statusCode).toBe(200);
       expect(withdrawn.json<{ status: string }>().status).toBe('withdrawn');
@@ -533,7 +542,7 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
       const again = await fx.app.inject({
         method: 'POST',
         url: `/v1/admin/credit-rate-cards/${String(version)}/withdraw`,
-        headers: { authorization: `Bearer ${fx.plaintext}` },
+        headers: owner,
       });
       expect(again.statusCode).toBe(409);
     });
@@ -545,6 +554,8 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
         email: OWNER_EMAIL,
         ownerEmail: OWNER_EMAIL,
       });
+      // The rate-card tools need a signed-in session (security sweep #17).
+      const owner = { authorization: `Bearer ${await signInTheFixtureAccount(fx)}` };
       const [nextRow] = await sql()<Array<{ next: number }>>`
         SELECT (coalesce(max(version), 0) + 1)::int AS next FROM credit_rate_cards`;
       const next = nextRow?.next;
@@ -554,7 +565,7 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
       const res = await fx.app.inject({
         method: 'POST',
         url: `/v1/admin/credit-rate-cards/${String(next)}/withdraw`,
-        headers: { authorization: `Bearer ${fx.plaintext}` },
+        headers: owner,
       });
       expect(res.statusCode).toBe(409);
     });

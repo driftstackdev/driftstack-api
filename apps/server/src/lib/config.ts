@@ -109,6 +109,15 @@ const ConfigSchema = z.object({
        *   • customer-uploaded AVATARS, keyed `avatars/<account_id>.<ext>`,
        *     via `r2Public.putObject` in routes/account-me.ts (V-352b).
        *
+       * Security sweep E-23 (2026-09-24) settled the reaping half of D-2:
+       * removing or replacing an avatar deletes the old objects
+       * (routes/account-me.ts), TerminatedAccountAvatarPurge deletes a
+       * terminated account's avatars after the retention window, and
+       * AvatarOrphanReaper lists `avatars/` daily and deletes every image no
+       * account points at, including those left before the fix (it needs list
+       * permission on this bucket). Whether avatars belong on a public bucket
+       * at all is still open.
+       *
        * V-1134 — this comment used to restrict the bucket to the first of
        * those, which stopped being true the moment avatars landed here. An
        * avatar is customer personal data sitting on a public-readable

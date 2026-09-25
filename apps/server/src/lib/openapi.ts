@@ -2018,6 +2018,12 @@ function buildRegistry(): OpenAPIRegistry {
         content: problemContent,
         headers: requestIdHeader,
       },
+      503: {
+        // Security sweep E-23 — the image itself is deleted before the avatar is
+        // cleared; when storage refuses, the avatar stays set and a retry finishes.
+        description: 'Avatar storage is unavailable; the avatar was not removed. Retry.',
+        content: problemContent,
+      },
     },
   });
 
@@ -7735,6 +7741,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/auth/cli-authorize/initiate',
     summary: 'Start CLI/GUI activation; returns a device user code + browser URL',
+    description:
+      'Send `code_challenge` (unpadded base64url SHA-256 of a `code_verifier` the device keeps) with `code_challenge_method: S256`; the exchange then requires that verifier, so the `code` and `state` in the browser URL cannot collect the key on their own. Omitting both is accepted until 31 January 2027 (the response then carries `Deprecation` and `Sunset` headers) and refused with 400 from that date.',
     tags: ['auth'],
     request: {
       body: {
@@ -7751,6 +7759,18 @@ function buildRegistry(): OpenAPIRegistry {
         description:
           'Opaque activation code, separate device-displayed user code, and browser URL. Codes expire after ~5min.',
         content: { 'application/json': { schema: CliAuthorizeInitiateResponseSchema } },
+        headers: {
+          Deprecation: {
+            description:
+              'RFC 9745. Sent only when the request had no `code_challenge`: that way of starting is deprecated.',
+            schema: { type: 'string' },
+          },
+          Sunset: {
+            description:
+              'RFC 8594. Sent only when the request had no `code_challenge`: the date from which such a request is refused.',
+            schema: { type: 'string' },
+          },
+        },
       },
       ...errors4xx,
     },
@@ -7792,6 +7812,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/auth/cli-authorize/exchange',
     summary: 'Poll for the bound API key plaintext (one-shot delivery)',
+    description:
+      'Send the `code_verifier` whose S256 hash was the `code_challenge` at initiate. A flow started with a challenge answers 400 — before and after approval, without saying which — to a request whose verifier is missing or wrong, and the refusal does not use up the code.',
     tags: ['auth'],
     request: {
       body: {

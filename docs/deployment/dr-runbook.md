@@ -257,16 +257,25 @@ customers.
    git push origin main
    ```
 
-   The `Deploy server` workflow at
-   `.github/workflows/server-deploy.yml` runs on the push and
-   redeploys the revert SHA to Hetzner.
+   The `Deploy` workflow at `.github/workflows/deploy.yml` deploys
+   the revert commit to staging and then production once CI passes
+   on it. **It waits for that CI run** (about 15-25 minutes); a red
+   CI run on the revert deploys nothing. When that is too slow, use
+   step 5.
 
 3. **Watch the deploy land** via gh CLI:
 
    ```
-   gh run list --workflow server-deploy.yml --limit 3
+   gh run list --workflow ci.yml --branch main --limit 3
+   gh run list --workflow deploy.yml --limit 3
    gh run watch <run-id>
    ```
+
+   If production's `/version` is down or reports `unknown`, the
+   workflow still deploys the revert while it is the tip of main.
+   If another commit has landed on main since, it refuses (it
+   cannot tell whether that would move production backwards):
+   use step 5.
 
 4. Confirm `/version` reports the revert SHA + `/ready`
    returns 200 + all readiness checks green:
@@ -276,20 +285,23 @@ customers.
    curl -sS https://api.driftstack.dev/ready | jq .
    ```
 
-5. **Express rollback when the deploy pipeline itself is broken**
-   (rare — the revert push didn't trigger CI for some reason): SSH
-   into the prod host and re-run the deploy script manually:
+5. **Express rollback when the pipeline is too slow or broken**
+   (CI has not finished on the revert, the workflow refused, or it
+   did not run): from an operator checkout of main, either roll back
+   to the last known-good build, or deploy the revert commit by hand.
+   Both run the same post-deploy checks as the workflow
+   (docs/runbooks/deploy-bridge.md):
 
    ```
-   ssh root@128.140.37.74
-   cd /opt/driftstack
-   git fetch origin && git checkout <revert-sha>
-   # apply migrations only if necessary; usually a revert doesn't
-   # touch schema
-   systemctl restart driftstack-api
-   exit
+   bash scripts/revert-bridge.sh --dry-run prod   # shows the known-good target
+   bash scripts/revert-bridge.sh prod
+   # or, the revert commit itself:
+   DEPLOY_VIA_BUNDLE=1 bash scripts/deploy-bridge.sh prod <revert-sha>
    curl -sS https://api.driftstack.dev/version | jq .git_sha
    ```
+
+   `/opt/driftstack/api` is not a git checkout; do not try to
+   `git checkout` on the host.
 
 6. Customer-facing comms: only if the broken deploy lasted long
    enough to be customer-noticeable (>5min of sustained 5xx) or

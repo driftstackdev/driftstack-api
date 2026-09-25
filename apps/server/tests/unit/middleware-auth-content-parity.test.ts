@@ -93,12 +93,14 @@ describe('W394.B apps/server/src/middleware/auth.ts content parity', () => {
     expect(body).toMatch(/app\.decorateRequest\('account', null\);/);
   });
 
-  it('requireAuth + requireAuthEventSource: authenticate, enforce current-tier and Free-device route access, then assign request.account', () => {
+  // Security sweep #12 — the context assigned is the key HOLDER's: a key a team
+  // member minted on the owner's account carries none of the owner's teams.
+  it("requireAuth + requireAuthEventSource: authenticate, enforce current-tier and Free-device route access, then assign the key holder's request.account", () => {
     expect(body).toMatch(
-      /const requireAuth = async \(request: FastifyRequest, _reply: FastifyReply\): Promise<void> => \{\s*try \{\s*const token = extractBearerToken\(request\.headers\.authorization\);\s*const ctx = await authenticate\(\s*opts\.authRepo,\s*token,\s*opts\.authCache,\s*new Date\(\),\s*opts\.authCoalescer,\s*opts\.staffEmails \?\? new Set\(\),\s*opts\.negativeAuthCache \?\? null,\s*opts\.oauthStore \?\? null,\s*\);\s*requireProgrammaticApiAccess\(ctx, request\);\s*request\.account = ctx;/,
+      /const requireAuth = async \(request: FastifyRequest, _reply: FastifyReply\): Promise<void> => \{\s*try \{\s*const token = extractBearerToken\(request\.headers\.authorization\);\s*const ctx = await authenticate\(\s*opts\.authRepo,\s*token,\s*opts\.authCache,\s*new Date\(\),\s*opts\.authCoalescer,\s*opts\.staffEmails \?\? new Set\(\),\s*opts\.negativeAuthCache \?\? null,\s*opts\.oauthStore \?\? null,\s*\);\s*requireProgrammaticApiAccess\(ctx, request\);\s*(?:\/\/[^\n]*\s*)*request\.account = contextForKeyHolder\(ctx\);/,
     );
     expect(body).toMatch(
-      /const requireAuthEventSource = async \(\s*request: FastifyRequest,\s*_reply: FastifyReply,\s*\): Promise<void> => \{[\s\S]*?const ctx = await authenticate\(\s*opts\.authRepo,\s*token,\s*opts\.authCache,\s*new Date\(\),\s*opts\.authCoalescer,\s*opts\.staffEmails \?\? new Set\(\),\s*opts\.negativeAuthCache \?\? null,\s*opts\.oauthStore \?\? null,\s*\);\s*requireProgrammaticApiAccess\(ctx, request\);\s*request\.account = ctx;/,
+      /const requireAuthEventSource = async \(\s*request: FastifyRequest,\s*_reply: FastifyReply,\s*\): Promise<void> => \{[\s\S]*?const ctx = await authenticate\(\s*opts\.authRepo,\s*token,\s*opts\.authCache,\s*new Date\(\),\s*opts\.authCoalescer,\s*opts\.staffEmails \?\? new Set\(\),\s*opts\.negativeAuthCache \?\? null,\s*opts\.oauthStore \?\? null,\s*\);\s*requireProgrammaticApiAccess\(ctx, request\);\s*(?:\/\/[^\n]*\s*)*request\.account = contextForKeyHolder\(ctx\);/,
     );
   });
 
@@ -144,9 +146,9 @@ describe('W394.B apps/server/src/middleware/auth.ts content parity', () => {
     expect(body).toMatch(/export default fp\(authPlugin, \{ name: 'auth' \}\);/);
   });
 
-  it('imports: services/auth (3 named) + AuthCache + AuthCoalescer + MfaService + MfaStepUpRequiredError + ApiKeyScope', () => {
+  it('imports: services/auth (4 named) + AuthCache + AuthCoalescer + MfaService + MfaStepUpRequiredError + ApiKeyScope', () => {
     expect(body).toMatch(
-      /import \{ authenticate, extractBearerToken, requireScope \} from '\.\.\/services\/auth\.js';/,
+      /import \{\s*authenticate,\s*contextForKeyHolder,\s*extractBearerToken,\s*requireScope,\s*\} from '\.\.\/services\/auth\.js';/,
     );
     expect(body).toMatch(/import type \{ AuthCache \} from '\.\.\/services\/auth-cache\.js';/);
     expect(body).toMatch(

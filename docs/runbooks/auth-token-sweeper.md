@@ -49,12 +49,15 @@ the service's `tickOnce(now)` returns:
 ```
 
 To confirm the job is scheduled and when it last/next runs, inspect the
-`scheduled_jobs` table:
+`scheduled_jobs` table. Every command here reads the environment as the
+`driftstack` user, never as root: the file belongs to that account, and a
+root shell that sources it runs whatever was written into it. The SQL goes
+over standard input.
 
 ```sh
-ssh root@128.140.37.74 "set -a; source /opt/driftstack/api/.env; set +a; psql \$DATABASE_URL -At -c \"
+ssh root@128.140.37.74 "sudo -u driftstack bash -c 'set -a; source /opt/driftstack/api/.env; set +a; exec psql \"\$DATABASE_URL\" -At'" <<'SQL'
 SELECT job_type, status, run_at, last_run_at FROM scheduled_jobs WHERE job_type = 'auth_tokens.sweep' ORDER BY run_at DESC LIMIT 5;
-\""
+SQL
 ```
 
 ### Forcing an immediate sweep
@@ -67,9 +70,9 @@ needed before the next 03:00 UTC run, advance the pending row's
 `run_at` to now so the poller picks it up on its next tick:
 
 ```sh
-ssh root@128.140.37.74 "set -a; source /opt/driftstack/api/.env; set +a; psql \$DATABASE_URL -c \"
+ssh root@128.140.37.74 "sudo -u driftstack bash -c 'set -a; source /opt/driftstack/api/.env; set +a; exec psql \"\$DATABASE_URL\"'" <<'SQL'
 UPDATE scheduled_jobs SET run_at = now() WHERE job_type = 'auth_tokens.sweep' AND status = 'pending';
-\""
+SQL
 ```
 
 The job re-arms to the normal 03:00 UTC cadence after it runs.
@@ -77,7 +80,7 @@ The job re-arms to the normal 03:00 UTC cadence after it runs.
 ## Investigation: how many stale rows are out there right now?
 
 ```sh
-ssh root@128.140.37.74 "set -a; source /opt/driftstack/api/.env; set +a; psql \$DATABASE_URL -At -c \"
+ssh root@128.140.37.74 "sudo -u driftstack bash -c 'set -a; source /opt/driftstack/api/.env; set +a; exec psql \"\$DATABASE_URL\" -At'" <<'SQL'
 SELECT 'magic_link_total', count(*) FROM magic_link_tokens
 UNION ALL SELECT 'magic_link_consumed_>30d', count(*) FROM magic_link_tokens WHERE consumed_at IS NOT NULL AND consumed_at < now() - interval '30 days'
 UNION ALL SELECT 'magic_link_expired_>7d', count(*) FROM magic_link_tokens WHERE consumed_at IS NULL AND expires_at < now() - interval '7 days'
@@ -87,7 +90,7 @@ UNION ALL SELECT 'email_verify_expired_>7d', count(*) FROM email_verify_tokens W
 UNION ALL SELECT 'password_reset_total', count(*) FROM password_reset_tokens
 UNION ALL SELECT 'password_reset_consumed_>30d', count(*) FROM password_reset_tokens WHERE consumed_at IS NOT NULL AND consumed_at < now() - interval '30 days'
 UNION ALL SELECT 'password_reset_expired_>7d', count(*) FROM password_reset_tokens WHERE consumed_at IS NULL AND expires_at < now() - interval '7 days';
-\""
+SQL
 ```
 
 ## Risk model

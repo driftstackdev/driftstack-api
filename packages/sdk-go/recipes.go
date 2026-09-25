@@ -60,15 +60,12 @@ type CreateRecipeRequest struct {
 // Create snapshots a finished agent_session's intent_log + transcript
 // into a new recipe row. Returns the inserted Recipe.
 //
-// AgentSessionID must be a session the caller can ACCESS: one their own
-// account owns, or one owned by a team they hold admin on. Anything else
-// returns 404 (not 403) — the server intentionally doesn't distinguish
+// AgentSessionID must be a session of the workspace the recipe is saved
+// in: the caller's own account's, or — when the client acts for a team
+// owner the caller holds admin for — the owner's. The recipe is filed
+// under that same account. Anything else returns 404 (not 403) — the
+// server intentionally doesn't distinguish
 // missing from forbidden to avoid existence leakage.
-//
-// A team admin snapshotting the owner's session therefore succeeds, and
-// the recipe is filed under the ADMIN's account. The Get/Delete comments
-// below are about recipeID and say something different on purpose: those
-// really are strictly own-account.
 func (r *RecipesResource) Create(ctx context.Context, body CreateRecipeRequest) (*Recipe, error) {
 	var out Recipe
 	if err := r.client.do(ctx, requestOptions{

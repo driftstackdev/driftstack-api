@@ -99,12 +99,14 @@ describe('W736 reset-password + magic-link dashboard pages parity', () => {
     );
   });
 
-  it('CRITICAL magic-link auto-submit pattern pinned — `if (linkToken && linkToken.length > 0) submitToken(linkToken)`. Drift to requiring manual paste would mis-document the canonical happy-path (click email link → signed in).', () => {
+  // Security sweep #21 — the happy path is unchanged for a browser with no session;
+  // one already signed in is asked before the link replaces that session.
+  it('CRITICAL magic-link auto-submit pattern pinned — a browser with no session submits the link on load (`else submitToken(linkToken)`); one already signed in confirms first. Drift to requiring manual paste would mis-document the canonical happy-path (click email link → signed in).', () => {
     const m = read(MAGIC);
 
     expect(m).toMatch(/const linkToken = params\.get\('token'\)/);
     expect(m).toMatch(
-      /if \(linkToken && linkToken\.length > 0\) \{\s*\n\s+submitToken\(linkToken\);\s*\n\s+\} else \{\s*\n\s+showFallbackForm\(null\);/,
+      /if \(linkToken && linkToken\.length > 0\) \{\s*\n\s+if \(previousSessionToken\) confirmAccountSwitch\(linkToken\);\s*\n\s+else submitToken\(linkToken\);\s*\n\s+\} else \{\s*\n\s+showFallbackForm\(null\);/,
     );
   });
 

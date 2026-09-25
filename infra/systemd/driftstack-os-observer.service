@@ -7,6 +7,13 @@ Wants=network-online.target
 ExecStart=/usr/bin/python3 /opt/driftstack/os-observer/observer.py
 Restart=always
 RestartSec=2
+# Not root (security sweep E-24, 2026-09-24). This process parses packets from
+# the internet, and as uid 0 it could read every root-owned file through plain
+# permissions even with its capabilities stripped. A transient unprivileged user
+# keeps CAP_NET_RAW as an ambient capability, which is all the raw socket needs;
+# both ports it binds (7791, 7792) are above 1023. observer.py must stay
+# world-readable (0644) or the service cannot start.
+DynamicUser=yes
 # Raw socket only; nothing else.
 AmbientCapabilities=CAP_NET_RAW
 CapabilityBoundingSet=CAP_NET_RAW
@@ -14,6 +21,9 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+# The API's code and .env, and the host keys. The leading "-" tolerates a host
+# where a path does not exist.
+InaccessiblePaths=-/opt/driftstack/api -/etc/ssh
 
 [Install]
 WantedBy=multi-user.target

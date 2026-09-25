@@ -8,6 +8,13 @@
 // take (e.g. Linux without a desktop env, Windows without HKCU
 // write access). Both paths converge on the same setState path.
 //
+// GUI audit #9 — PKCE (RFC 7636, S256). `code` and `state` are readable in
+// the sign-in link and in the driftstack:// hand-off, so they must not be
+// enough to collect the key. Each attempt makes a fresh `code_verifier` that
+// lives only in this closure: initiate sends its SHA-256 as `code_challenge`,
+// and every exchange — poll or deep link — sends the verifier in the POST
+// body. It is never put in a URL, in React state, or in storage.
+//
 // Caller passes:
 //   - baseUrl: the configured control-plane origin
 //   - clientLabel: human-readable label that appears on the
@@ -130,6 +137,25 @@ export function generateBrowserSignInState(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+function base64Url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** RFC 7636 §4.1 — 32 random bytes, base64url: a 43-character verifier. */
+export function generateCodeVerifier(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return base64Url(bytes);
+}
+
+/** RFC 7636 §4.2 S256 — BASE64URL(SHA-256(ASCII(code_verifier))), unpadded. */
+export async function s256CodeChallenge(codeVerifier: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier));
+  return base64Url(new Uint8Array(digest));
+}
+
 export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignInResult {
   const [state, setState] = useState<BrowserSignInState>({ kind: 'idle' });
   const pollHandleRef = useRef<number | null>(null);
@@ -222,13 +248,18 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
     setState({ kind: 'opening' });
     const trimmedUrl = opts.baseUrl.trim().replace(/\/+$/, '');
     const stateToken = generateBrowserSignInState();
+    // GUI audit #9 — stays in this closure; only its hash leaves the app.
+    const codeVerifier = generateCodeVerifier();
     try {
+      const codeChallenge = await s256CodeChallenge(codeVerifier);
       const initiateRes = await fetchWithDeadline(`${trimmedUrl}/v1/auth/cli-authorize/initiate`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           state: stateToken,
           client_label: opts.clientLabel ?? `Driftstack desktop on ${navigator.platform}`,
+          code_challenge: codeChallenge,
+          code_challenge_method: 'S256',
         }),
       });
       if (!initiateRes.ok) {
@@ -286,7 +317,7 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
         const onUrl = opts.__onOpenUrl ?? onOpenUrl;
         const unlisten = await onUrl((urls) => {
           for (const url of urls) {
-            void handleDeepLink(url, trimmedUrl, initiate.code, stateToken);
+            void handleDeepLink(url, trimmedUrl, initiate.code, stateToken, codeVerifier);
           }
         });
         deepLinkUnlistenRef.current = unlisten;
@@ -296,7 +327,7 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
       }
 
       pollHandleRef.current = window.setInterval(() => {
-        void pollOnce(trimmedUrl, initiate.code, stateToken);
+        void pollOnce(trimmedUrl, initiate.code, stateToken, codeVerifier);
       }, opts.__pollIntervalMs ?? POLL_INTERVAL_MS);
       timeoutHandleRef.current = window.setTimeout(() => {
         stop();
@@ -329,21 +360,29 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
 
   // Handle a deep-link URL via the shared parser (V-534.A). Mismatched
   // state or non-cli-authorize payloads → silent skip; the poll loop
-  // continues as the fallback path.
+  // continues as the fallback path. The hand-off is only a "poll now"
+  // signal: the exchange it triggers still carries this attempt's verifier,
+  // which the hand-off never contained.
   async function handleDeepLink(
     rawUrl: string,
     serverUrl: string,
     expectedCode: string,
     expectedState: string,
+    codeVerifier: string,
   ): Promise<void> {
     const result = parseDeepLink(rawUrl);
     if (!result.ok) return;
     if (result.payload.kind !== 'cli-authorize') return;
     if (result.payload.code !== expectedCode || result.payload.state !== expectedState) return;
-    await pollOnce(serverUrl, expectedCode, expectedState);
+    await pollOnce(serverUrl, expectedCode, expectedState, codeVerifier);
   }
 
-  async function pollOnce(serverUrl: string, code: string, stateToken: string): Promise<void> {
+  async function pollOnce(
+    serverUrl: string,
+    code: string,
+    stateToken: string,
+    codeVerifier: string,
+  ): Promise<void> {
     if (pollInFlightRef.current || settledRef.current) return;
     if (Date.now() < nextPollAtRef.current) return; // still inside a Retry-After
     pollInFlightRef.current = true;
@@ -351,7 +390,7 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
       const res = await fetchWithDeadline(`${serverUrl}/v1/auth/cli-authorize/exchange`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ code, state: stateToken }),
+        body: JSON.stringify({ code, state: stateToken, code_verifier: codeVerifier }),
       });
       // The flow may have terminated (success / cancel / unmount /
       // timeout) while this exchange was in-flight — drop the late

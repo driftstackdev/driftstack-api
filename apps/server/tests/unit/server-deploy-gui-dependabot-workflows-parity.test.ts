@@ -9,7 +9,9 @@
 //     deploy with V-549.A pre-deploy smoke + V-549.B auto-rollback.
 //
 //   gui-release.yml (V-243 / D-2026-05-06-03) — gui-v* tag triggers
-//     macOS + Linux + Windows GUI release with Tauri Updater signing.
+//     macOS + Linux + Windows GUI release with Tauri Updater signing
+//     (in its own job since security sweep E-10; a manual dispatch is a
+//     dry run that never publishes).
 //
 //   gui-build-check.yml (V-245) — every PR + main commit touching
 //     apps/gui-client/** runs a 3-platform debug build (no signing).
@@ -111,11 +113,15 @@ describe('W726 server-deploy + gui + dependabot workflow parity', () => {
     expect(w).toMatch(/Pre-launch posture: NO OS-level binary signing/);
   });
 
-  it('CRITICAL gui-release.yml triggers on `gui-v*` tag (only — no push/PR/dispatch). The tag-only trigger keeps GUI releases explicit; drift to push:[main] would auto-publish every commit.', () => {
+  it('CRITICAL gui-release.yml PUBLISHES only on a `gui-v*` tag push (no branch push, no PR). The tag-only trigger keeps GUI releases explicit; drift to push:[main] would auto-publish every commit. A bare workflow_dispatch is allowed since security sweep E-10 as a DRY RUN: it builds and signs, and the only job that writes to a release is confined to a tag push.', () => {
     const w = read(GUI_RELEASE);
     expect(w).toMatch(/on:\s*\n\s*push:\s*\n\s*tags:\s*\n\s*- 'gui-v\*'/);
-    // No pull_request trigger.
+    // No pull_request trigger, and the push is tags-only.
     expect(w).not.toMatch(/^on:[\s\S]{0,200}pull_request:/m);
+    expect(w).not.toMatch(/^on:[\s\S]{0,200}branches:/m);
+    // The dispatch takes no inputs, and publishing is a tag push's alone.
+    expect(w).toMatch(/^ {2}workflow_dispatch:\s*$/m);
+    expect(w).toMatch(/publish-manifest:[\s\S]{0,400}\n {4}if: github\.event_name == 'push'\n/);
   });
 
   it('CRITICAL gui-release.yml 3-platform matrix pinned — macos-latest + ubuntu-22.04 + windows-latest. macOS gets `--target universal-apple-darwin` for fat binaries.', () => {
@@ -139,16 +145,20 @@ describe('W726 server-deploy + gui + dependabot workflow parity', () => {
     expect(w).toMatch(/cfg\.plugins\.updater\.pubkey = process\.env\.TAURI_UPDATER_PUBKEY/);
   });
 
-  it('CRITICAL gui-release.yml tauri-action invocation with TAURI_SIGNING_PRIVATE_KEY + TAURI_SIGNING_PRIVATE_KEY_PASSWORD env. The signing env names match the tauri-action contract; drift would silently disable signing.', () => {
+  it('CRITICAL gui-release.yml signs with TAURI_SIGNING_PRIVATE_KEY + TAURI_SIGNING_PRIVATE_KEY_PASSWORD env — the names `tauri signer sign` reads — in the sign job, while tauri-action builds with `--no-sign` and no key (security sweep E-10). Drift in the env names would silently disable signing; drift of the key back into the build would hand it to every build dependency.', () => {
     const w = read(GUI_RELEASE);
 
     expect(w).toMatch(/uses: tauri-apps\/tauri-action@[0-9a-f]{40} # v0/);
+    expect(w).toMatch(/args: \$\{\{ matrix\.args \}\} --no-sign/);
     expect(w).toMatch(/TAURI_SIGNING_PRIVATE_KEY: \$\{\{ secrets\.TAURI_UPDATER_PRIVKEY \}\}/);
     expect(w).toMatch(
       /TAURI_SIGNING_PRIVATE_KEY_PASSWORD: \$\{\{ secrets\.TAURI_UPDATER_PRIVKEY_PASSWORD \}\}/,
     );
-    expect(w).toMatch(/tagName: \$\{\{ github\.ref_name \}\}/);
-    expect(w).toMatch(/releaseName: 'Driftstack GUI \$\{\{ github\.ref_name \}\}'/);
+    // Both env lines sit in the signing step, AFTER the build step in the file.
+    expect(w.indexOf('TAURI_SIGNING_PRIVATE_KEY: ')).toBeGreaterThan(
+      w.indexOf('name: Build Tauri bundles (no signing key)'),
+    );
+    expect(w).toMatch(/name: Sign the updater artifacts/);
   });
 
   it('CRITICAL gui-release.yml V-242 Sentry DSN gate framing pinned — "Empty when unset; gate in telemetry.ts short-circuits cleanly so no event leaves the customer". Drift to dropping the empty-default would let unset VITE_SENTRY_DSN crash at runtime.', () => {

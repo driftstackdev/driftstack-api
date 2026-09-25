@@ -47,12 +47,11 @@ class RecipesResource:
         agent_session_id + label + description + intent_count +
         timestamps).
 
-        Server-side: ``agent_session_id`` must be a session you can
-        ACCESS — one your own account owns, or one owned by a team you
-        hold ``admin`` on. Anything else returns 404 (not 403) by
-        design; existence isn't leaked. A team admin snapshotting the
-        owner's session gets a 201, and the recipe is still filed under
-        YOUR account either way.
+        Server-side: ``agent_session_id`` must be a session of the
+        workspace you save into — your own account's, or, when acting
+        for a team owner you hold ``admin`` for, the owner's. The recipe
+        is filed under that same account. Anything else
+        returns 404 (not 403) by design; existence isn't leaked.
         """
         body: dict[str, Any] = {
             "agent_session_id": agent_session_id,

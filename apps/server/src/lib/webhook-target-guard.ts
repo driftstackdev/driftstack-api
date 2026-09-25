@@ -25,6 +25,7 @@
 import {
   findUnsupportedOpenvpnLines,
   findUnresolvableOpenvpnFileReferences,
+  readOpenvpnDirectiveLine,
 } from '@driftstack/api-types';
 import { BlockList, isIP } from 'node:net';
 
@@ -192,18 +193,48 @@ function vpnEndpointHost(endpoint: string): string {
   return e;
 }
 
-/** Hosts of every `remote <host> [port]` directive in an OpenVPN config blob. */
-export function openvpnRemoteHosts(configBlob: string): string[] {
+/**
+ * The first argument of every `keyword` directive in an OpenVPN config blob, as
+ * EVERY reading of the line names it (security sweep #19).
+ *
+ * This used to match the raw line with `^(?:--)?remote\s+(\S+)`, which OpenVPN's
+ * own lexer normalisation walked past: `remote "169.254.169.254" 1194` handed the
+ * classifier the host WITH its quotes (not an IP literal, so allowed), and
+ * `"http-proxy" 127.0.0.1 8080` did not match at all. Measured against the
+ * shipped 2.7.0, both are the target the unquoted form names. The shared reader
+ * (`readOpenvpnDirectiveLine`) gives OpenVPN's lexer reading and the plain
+ * whitespace split, keyword lower-cased with quotes and a leading `--` stripped
+ * (bypass_doubledash), and every host either reading names is returned.
+ *
+ * A host the lexer reads with an escaped space in it (`169.254.169.254\ 1194`)
+ * is also returned cut at that space: a resolver that parses the leading address
+ * and ignores the rest must not find it unclassified. Lines split on `\r\n`, `\r`
+ * and `\n`, as the directive screen splits them.
+ */
+function openvpnDirectiveHosts(configBlob: string, keywords: ReadonlySet<string>): string[] {
   const hosts: string[] = [];
-  for (const line of configBlob.split(/\r?\n/)) {
-    // `(?:--)?` — OpenVPN strips a leading `--` from config-file directives
-    // (bypass_doubledash), so `--remote 169.254.169.254 80` is honored as a real
-    // remote yet would evade an un-prefixed match: a metadata/internal target
-    // smuggled past this SSRF guard. Match both forms.
-    const m = line.trim().match(/^(?:--)?remote\s+(\S+)/i);
-    if (m) hosts.push(m[1]!);
+  for (const line of configBlob.split(/\r\n|\r|\n/)) {
+    const found = new Set<string>();
+    for (const reading of readOpenvpnDirectiveLine(line)) {
+      const host = reading.args[0];
+      if (!keywords.has(reading.keyword) || host === undefined) continue;
+      found.add(host);
+      const head = host.trim().split(/\s/)[0] ?? '';
+      if (head.length > 0) found.add(head);
+    }
+    hosts.push(...found);
   }
   return hosts;
+}
+
+const OPENVPN_REMOTE_KEYWORDS: ReadonlySet<string> = new Set(['remote']);
+const OPENVPN_PROXY_KEYWORDS: ReadonlySet<string> = new Set(['http-proxy', 'socks-proxy']);
+
+/** Hosts of every `remote <host> [port]` directive in an OpenVPN config blob. */
+export function openvpnRemoteHosts(configBlob: string): string[] {
+  // `--remote 169.254.169.254 80` is honored as a real remote (OpenVPN strips a
+  // leading `--` from config-file directives) — the shared reader strips it too.
+  return openvpnDirectiveHosts(configBlob, OPENVPN_REMOTE_KEYWORDS);
 }
 
 /**
@@ -215,14 +246,9 @@ export function openvpnRemoteHosts(configBlob: string): string[] {
  * `http-proxy 169.254.169.254 80`), which `openvpnRemoteHosts` alone never sees — SSRF.
  */
 export function openvpnProxyHosts(configBlob: string): string[] {
-  const hosts: string[] = [];
-  for (const line of configBlob.split(/\r?\n/)) {
-    // `(?:--)?` — see openvpnRemoteHosts: `--http-proxy 169.254.169.254 80` is
-    // honored by OpenVPN (it strips the `--`) and must not evade the SSRF guard.
-    const m = line.trim().match(/^(?:--)?(?:http-proxy|socks-proxy)\s+(\S+)/i);
-    if (m) hosts.push(m[1]!);
-  }
-  return hosts;
+  // See openvpnRemoteHosts: `--http-proxy 169.254.169.254 80` and the quoted forms
+  // are honored by OpenVPN and must not evade the SSRF guard.
+  return openvpnDirectiveHosts(configBlob, OPENVPN_PROXY_KEYWORDS);
 }
 
 /**
@@ -271,6 +297,15 @@ export function unsupportedOpenvpnDirectiveDetail(configBlob: string): string {
     return (
       'OpenVPN config must not use a script-executing directive ' +
       '(up/down/route-up/tls-verify/plugin/…).'
+    );
+  }
+  if (first.directive === 'nul-byte') {
+    // Security sweep #19 — a NUL byte is not a "script line to remove"; naming it
+    // that way would send the customer hunting for a directive that isn't there.
+    // The offending byte is invisible, so the message says what it is and where.
+    return (
+      `Line ${String(first.line)}: your OpenVPN config contains a NUL (zero) byte, ` +
+      `which OpenVPN reads as the end of the line. Remove it and try again.`
     );
   }
   const text =

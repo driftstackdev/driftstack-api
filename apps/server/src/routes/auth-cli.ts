@@ -7,6 +7,17 @@
 // The bind endpoint requires an authenticated account (typically via
 // the dashboard's web session). It mints an API key on that account
 // and hands the plaintext to the CLI/GUI via the exchange endpoint.
+//
+// GUI audit #9 — PKCE. The CLI/GUI sends an S256 `code_challenge` at
+// initiate and the `code_verifier` at exchange; the service refuses an
+// exchange of a challenged flow without it, because `code` and `state` are
+// readable in the browser URL and the `driftstack://` hand-off. A flow
+// started without a challenge (an app installed before this) still works
+// until LEGACY_CLI_AUTHORIZE_FLOW_ENDS_AT; its initiate answer carries
+// `Deprecation` + `Sunset` headers naming that date. Every started and
+// every delivered or refused flow is counted by kind
+// (driftstack_cli_authorize_flow_total) and logged, so the removal can be
+// timed against real use.
 
 import type { FastifyInstance } from 'fastify';
 import {
@@ -16,7 +27,13 @@ import {
 } from '@driftstack/api-types';
 import type { ApiKeyScope } from '@driftstack/api-types';
 import type { ApiKeysService } from '../services/api-keys.js';
-import { CliAuthorizeError, type CliAuthorizeService } from '../services/cli-authorize.js';
+import {
+  CliAuthorizeError,
+  LEGACY_CLI_AUTHORIZE_FLOW_DEPRECATED_AT,
+  LEGACY_CLI_AUTHORIZE_FLOW_ENDS_AT,
+  type CliAuthorizeFlow,
+  type CliAuthorizeService,
+} from '../services/cli-authorize.js';
 import {
   BadRequestError,
   FeatureUnavailableError,
@@ -27,6 +44,7 @@ import {
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
+import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 
 const DEFAULT_KEY_NAME = 'Desktop client';
 const DEFAULT_SCOPES: ApiKeyScope[] = ['account_owner'];
@@ -41,10 +59,32 @@ export interface AuthCliRoutesDeps {
    * route adds a dedicated per-IP gate on top of the app-wide pre-auth limiter.
    */
   rateLimitStore: RateLimitStore;
+  /** Counts each flow by kind (pkce | legacy); see the header. */
+  metrics?: MetricsRegistry;
 }
 
+// RFC 9745 / RFC 8594 values for the initiate answer to a flow without a challenge.
+const LEGACY_FLOW_DEPRECATION = `@${Math.floor(
+  LEGACY_CLI_AUTHORIZE_FLOW_DEPRECATED_AT.getTime() / 1000,
+).toString()}`;
+const LEGACY_FLOW_SUNSET = LEGACY_CLI_AUTHORIZE_FLOW_ENDS_AT.toUTCString();
+
 export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesDeps): void {
-  const { cliAuthorizeService, apiKeysService, rateLimitStore } = deps;
+  const { cliAuthorizeService, apiKeysService, rateLimitStore, metrics } = deps;
+
+  // A missing registration must never fail a sign-in; the
+  // emitted-metrics-are-registered invariant is what catches it.
+  const recordFlow = (
+    step: 'initiate' | 'exchange',
+    flow: CliAuthorizeFlow,
+    outcome: 'ok' | 'refused',
+  ): void => {
+    try {
+      metrics?.inc(METRIC_NAMES.cliAuthorizeFlowTotal, { step, flow, outcome });
+    } catch {
+      /* counted nowhere rather than refusing the customer */
+    }
+  };
 
   // /initiate mints a code + browser URL per call → signup posture (5/min/IP).
   const initiateGate = ipRateLimit(rateLimitStore, {
@@ -60,21 +100,47 @@ export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesD
     refillPerSecond: AUTH_IP_LIMITS.cliAuthorizeExchange.refillPerSecond,
   });
 
-  app.post('/v1/auth/cli-authorize/initiate', { preHandler: [initiateGate] }, async (req) => {
-    const parsed = CliAuthorizeInitiateRequestSchema.safeParse(req.body);
-    if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+  app.post(
+    '/v1/auth/cli-authorize/initiate',
+    { preHandler: [initiateGate] },
+    async (req, reply) => {
+      const parsed = CliAuthorizeInitiateRequestSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // RFC 7636 makes an absent method mean `plain`, which is not accepted; so
+      // a challenge needs its method, and a method alone binds nothing.
+      if (
+        (parsed.data.code_challenge === undefined) !==
+        (parsed.data.code_challenge_method === undefined)
+      ) {
+        throw new BadRequestError(
+          'Send code_challenge and code_challenge_method together; the method is S256.',
+        );
+      }
 
-    const result = await cliAuthorizeService.initiate({
-      state: parsed.data.state,
-      client_label: parsed.data.client_label ?? null,
-    });
-    return {
-      code: result.code,
-      user_code: result.user_code,
-      browser_url: result.browser_url,
-      expires_at: result.expires_at.toISOString(),
-    };
-  });
+      const result = await cliAuthorizeService
+        .initiate({
+          state: parsed.data.state,
+          client_label: parsed.data.client_label ?? null,
+          code_challenge: parsed.data.code_challenge ?? null,
+        })
+        .catch((err: unknown) => {
+          if (!(err instanceof CliAuthorizeError)) throw err;
+          if (err.code === 'code_challenge_required') recordFlow('initiate', 'legacy', 'refused');
+          throw mapCliAuthorizeError(err);
+        });
+      recordFlow('initiate', result.flow, 'ok');
+      if (result.flow === 'legacy') {
+        void reply.header('Deprecation', LEGACY_FLOW_DEPRECATION);
+        void reply.header('Sunset', LEGACY_FLOW_SUNSET);
+      }
+      return {
+        code: result.code,
+        user_code: result.user_code,
+        browser_url: result.browser_url,
+        expires_at: result.expires_at.toISOString(),
+      };
+    },
+  );
 
   app.post(
     '/v1/auth/cli-authorize/bind-device-code',
@@ -123,6 +189,10 @@ export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesD
           account_id: `acc_${ctx.account.id}`,
           api_key_plaintext: created.plaintext,
         });
+        req.log.info(
+          { apiKeyId: created.row.id, cliAuthorizeFlow: result.flow },
+          'desktop sign-in approved',
+        );
         return {
           ok: true as const,
           account_id: result.account_id,
@@ -154,13 +224,28 @@ export function registerAuthCliRoutes(app: FastifyInstance, deps: AuthCliRoutesD
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
     try {
-      const result = await cliAuthorizeService.exchange({
+      const { result, flow } = await cliAuthorizeService.exchangeWithFlow({
         code: parsed.data.code,
         state: parsed.data.state,
+        ...(parsed.data.code_verifier !== undefined
+          ? { code_verifier: parsed.data.code_verifier }
+          : {}),
       });
+      if (result.status === 'bound' && flow !== null) {
+        recordFlow('exchange', flow, 'ok');
+        req.log.info(
+          { accountId: result.account_id, cliAuthorizeFlow: flow },
+          'desktop sign-in key collected',
+        );
+      }
       return result;
     } catch (err) {
-      if (err instanceof CliAuthorizeError) throw mapCliAuthorizeError(err);
+      if (err instanceof CliAuthorizeError) {
+        if (err.code === 'code_verifier_required' || err.code === 'code_verifier_mismatch') {
+          recordFlow('exchange', 'pkce', 'refused');
+        }
+        throw mapCliAuthorizeError(err);
+      }
       throw err;
     }
   });
@@ -179,6 +264,18 @@ function mapCliAuthorizeError(err: CliAuthorizeError): Error {
       return new NotFoundError('Authorization code not found or expired.');
     case 'invalid_code':
       return new BadRequestError('Authorization code is invalid.');
+    case 'invalid_code_challenge':
+      return new BadRequestError(
+        'code_challenge must be the unpadded base64url SHA-256 of the code verifier.',
+      );
+    case 'code_challenge_required':
+      return new BadRequestError(
+        'This sign-in needs a code_challenge. Update the app and sign in again.',
+      );
+    case 'code_verifier_required':
+      return new BadRequestError('This sign-in needs the code_verifier to collect the key.');
+    case 'code_verifier_mismatch':
+      return new BadRequestError('Code verifier does not match.');
   }
 }
 
