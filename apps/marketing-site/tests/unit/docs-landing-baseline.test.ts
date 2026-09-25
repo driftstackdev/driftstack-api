@@ -40,4 +40,9 @@ describe('W331.B /docs landing card-grid baseline', () => {
     const offenders = cards.filter((h) => !pageExists(h));
     expect(offenders).toEqual([]);
   });
+
+  it("the grid is two columns on a tablet and three from lg (2026-09-25): three 224px columns at 768px broke the Webhooks card's event names mid-word", () => {
+    expect(body).toMatch(/<div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">/);
+    expect(body).not.toMatch(/md:grid-cols-3/);
+  });
 });

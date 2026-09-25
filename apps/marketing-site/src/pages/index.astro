@@ -526,7 +526,11 @@ const PROXIES_ALT =
           </p>
         </div>
         <div class="card overflow-hidden">
-          <div class="grid grid-cols-[1fr_auto_auto] items-center gap-x-6 gap-y-3 px-6 py-5 text-sm">
+          {/* Tighter column gaps and padding below sm (2026-09-25): at 360px
+              the three columns' narrowest widths overran the card by 21px and
+              the card cut "Apple's JavaScriptCore" off. The footnote below
+              takes the same padding so the two stay on one edge. */}
+          <div class="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 gap-y-3 px-4 py-5 text-sm sm:gap-x-6 sm:px-6">
             <span class="font-mono text-xs uppercase tracking-[0.15em] text-tk-ink-3">
               Signal
             </span>
@@ -565,7 +569,7 @@ const PROXIES_ALT =
             <span class="text-center text-tk-ink-3">unique to that browser</span>
             <span class="text-center font-mono text-tk-accent-text">blends in with real iPhones</span>
           </div>
-          <p class="border-t border-tk-border px-6 py-4 text-xs leading-relaxed text-tk-ink-3">
+          <p class="border-t border-tk-border px-4 py-4 text-xs leading-relaxed text-tk-ink-3 sm:px-6">
             Blends in = the answers a real iPhone gives: the fixed ones stay
             fixed, and the ones Safari deliberately varies are varied the same
             way. A fingerprint that is unique to one browser is itself a tell.

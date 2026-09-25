@@ -30,7 +30,11 @@ const year = new Date().getUTCFullYear();
         the desktop app.
       </p>
     </div>
-    <div class="grid grid-cols-2 gap-8 text-sm md:grid-cols-2">
+    {/* shrink-0 (2026-09-25): beside the tagline from md up, the link grid's
+        minmax(0,1fr) columns let the row squeeze it narrower than its longest
+        link, and at 768px support@driftstack.dev ran 14px past the page edge.
+        The tagline wraps instead; the links keep their width. */}
+    <div class="grid shrink-0 grid-cols-2 gap-8 text-sm md:grid-cols-2">
       <div>
         <h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Product</h3>
         <ul class="mt-4 space-y-2.5 text-tk-ink-2">

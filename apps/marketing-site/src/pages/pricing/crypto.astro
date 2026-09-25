@@ -117,7 +117,12 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
         account to the new tier.</li>
     </ol>
 
-    <p class="rounded-md border border-status-warning bg-status-warning/15 p-3 text-sm">
+    {/* The notice box is the desktop app's banner recipe on the busy (warning)
+        hue: a /10 wash, a /30 hairline, 6px radius (2026-09-25). Its old
+        border-status-warning / bg-status-warning/15 classes produced no CSS
+        until the shared preset defined status.warning, then rendered as a
+        solid brown border outside every recipe on the site. */}
+    <p class="rounded-lg border border-tk-busy/30 bg-tk-busy/10 px-4 py-3 text-sm">
       <strong>⚠︎ Crypto payments are non-refundable.</strong> You may
       cancel anytime — cancellation stops future billing periods —
       but the current billing period is not refunded. See

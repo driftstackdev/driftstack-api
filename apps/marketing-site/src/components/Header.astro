@@ -25,8 +25,8 @@ const navItems = [
 const mobileExtraItems: Array<{ href: string; label: string; external?: boolean }> = [
   { href: '/self-hosted', label: 'Self-hosted' },
   { href: '/glossary', label: 'Glossary' },
-  // The desktop Download sits in the CTA row, which is hidden below md — so it
-  // has to be repeated here or it is unreachable on a phone.
+  // The desktop Download sits in the CTA row, which is hidden below xl — so it
+  // has to be repeated here or it is unreachable on a phone or a tablet.
   {
     href: 'https://github.com/driftstackdev/driftstack-api/releases/latest',
     label: 'Download',
@@ -67,8 +67,13 @@ function isActiveItem(item: { href: string; external?: boolean }): boolean {
       <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent-text">STACK</span></span>
     </a>
 
-    <!-- Desktop nav (md+) -->
-    <nav class="hidden items-center gap-6 md:flex">
+    <!-- Desktop nav (xl+). 2026-09-25: was md+, but the row (the logo, six
+         links, the theme toggle, Download, Sign in, Sign up and Start free)
+         needs about 1,110px. At 768px it overran the tablet by 153px and the
+         page's overflow-x:clip cut Sign in, Sign up and Start free off; from
+         1024px to about 1,100px the links broke onto two lines. Below xl the
+         header is the logo, Start free and the menu. -->
+    <nav class="hidden items-center gap-6 xl:flex">
       {
         navItems.map((item) => (
           <a
@@ -127,8 +132,8 @@ function isActiveItem(item: { href: string; external?: boolean }): boolean {
       <a href="/pricing/#free" class="btn-primary">Start free</a>
     </nav>
 
-    <!-- Mobile: CTA visible at all widths, nav collapsed into <details> -->
-    <div class="flex items-center gap-3 md:hidden">
+    <!-- Below xl: CTA visible at all widths, nav collapsed into <details> -->
+    <div class="flex items-center gap-3 xl:hidden">
       <a href="/pricing/#free" class="btn-primary text-sm">Start free</a>
       <details class="relative" data-mobile-nav>
         <summary

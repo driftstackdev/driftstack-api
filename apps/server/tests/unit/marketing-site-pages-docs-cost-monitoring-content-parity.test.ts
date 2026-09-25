@@ -67,6 +67,15 @@ describe('W514.B marketing operational-cost docs content parity', () => {
     expect(body).not.toMatch(/will move to nightly|future|coming soon/i);
   });
 
+  it("the three threshold-state chips use the site's one badge recipe (2026-09-25; they were hand-rolled washes with no hairline), in the status hue each state means", () => {
+    expect(body).toMatch(/<span\s+class="badge badge--ready font-mono"\s*>under-soft<\/span/);
+    expect(body).toMatch(
+      /<span\s+class="badge badge--busy font-mono"\s*>between-soft-and-hard<\/span/,
+    );
+    expect(body).toMatch(/<span\s+class="badge badge--err font-mono"\s*>over-hard<\/span/);
+    expect(body).not.toMatch(/inline-block rounded-full bg-tk-/);
+  });
+
   it('keeps the live endpoint shape and fresh-account zero response', () => {
     expect(body).toMatch(/GET \/v1\/account\/cost\?billing_cycle=YYYY-MM/);
     expect(body).toMatch(/all-zero breakdown for fresh accounts/);

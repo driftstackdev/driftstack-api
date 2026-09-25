@@ -97,6 +97,13 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
     expect(body).toMatch(/pre \{[\s\S]*?overflow-x: auto;\s*\}/);
   });
 
+  it("running text breaks a long token at its box edge (html overflow-wrap: break-word, 2026-09-25): three changelog entries at 390px and a /docs/ card at 768px were cut off by the card's overflow-hidden (32-116px of text unreachable) while the page stayed viewport-wide, so a body-width check could not see it. break-word, not anywhere, so flex and grid min-content sizing is unchanged", () => {
+    const htmlBlock = body.match(/\n {2}html \{[\s\S]*?\n {2}\}/)?.[0] ?? '';
+    expect(htmlBlock).toMatch(/overflow-x: clip;/);
+    expect(htmlBlock).toMatch(/overflow-wrap: break-word;/);
+    expect(htmlBlock).not.toMatch(/overflow-wrap: anywhere;/);
+  });
+
   it('self-hosted @font-face set pinned (Fleet v2 port 2026-07-03): Geist VF (100 900 variable) + JetBrains Mono Regular/Bold from public/fonts/, all font-display: swap; Berkeley Mono is NEVER vendored (commercial license)', () => {
     expect(body).toMatch(/src: url\('\/fonts\/geist\/GeistVF\.woff2'\) format\('woff2'\);/);
     expect(body).toMatch(/font-weight: 100 900;/);

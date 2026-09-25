@@ -28,10 +28,12 @@ import IconTile from '../components/IconTile.astro';
     </p>
   </PageHero>
 
-  <!-- Doc categories -->
+  <!-- Doc categories. Two columns on a tablet, three from lg (2026-09-25:
+       three 224px columns at 768px broke the Webhooks card's event names
+       mid-word). -->
   <section class="bg-tk-surface">
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <div class="grid gap-6 md:grid-cols-3">
+      <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <a href="https://docs.driftstack.io/quickstart-curl/" class="group card p-6">
           <IconTile class="mb-3">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

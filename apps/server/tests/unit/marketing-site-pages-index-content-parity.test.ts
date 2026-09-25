@@ -450,6 +450,16 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).not.toMatch(/Run identities like infrastructure\./);
   });
 
+  it('the Stealth Chromium / Driftstack comparison grid tightens below sm (2026-09-25): at 360px the narrowest width of the grid overran the card by 21px and the card cut "Apple\'s JavaScriptCore" off', () => {
+    expect(body).toMatch(
+      /<div class="grid grid-cols-\[1fr_auto_auto\] items-center gap-x-3 gap-y-3 px-4 py-5 text-sm sm:gap-x-6 sm:px-6">/,
+    );
+    // its footnote keeps the same inset, so the table and the note share an edge
+    expect(body).toMatch(
+      /<p class="border-t border-tk-border px-4 py-4 text-xs leading-relaxed text-tk-ink-3 sm:px-6">\s*Blends in = /,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

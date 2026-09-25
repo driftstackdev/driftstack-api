@@ -161,6 +161,12 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     expect(body).toMatch(/'nav-link font-medium'/);
   });
 
+  it('the desktop nav row starts at xl, not md (2026-09-25): the row needs about 1,110px, so at 768px it overran the tablet by 153px and the page clip cut Sign in, Sign up and Start free off, and from 1024px to about 1,100px its links broke onto two lines; below xl the header is the logo, Start free and the menu', () => {
+    expect(body).toMatch(/<nav class="hidden items-center gap-6 xl:flex">/);
+    expect(body).toMatch(/<div class="flex items-center gap-3 xl:hidden">/);
+    expect(body).not.toMatch(/\b(?:md|lg):(?:flex|hidden)\b/);
+  });
+
   it('built desktop and mobile nav expose the current top-level section', () => {
     const pricing = read(BUILT_PRICING);
     const qa = read(BUILT_QA);
@@ -221,6 +227,10 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     expect(body).toMatch(
       /<a href="https:\/\/app\.driftstack\.io\/login\/" class="nav-link">Sign in<\/a>/,
     );
+  });
+
+  it('the link grid keeps its width beside the tagline (shrink-0, 2026-09-25): its minmax(0,1fr) columns let the md row squeeze it, and at 768px support@driftstack.dev ran 14px past the page edge', () => {
+    expect(body).toMatch(/<div class="grid shrink-0 grid-cols-2 gap-8 text-sm md:grid-cols-2">/);
   });
 
   it('Company column: About / FAQ / Changelog + support@ + sales@ mailto', () => {

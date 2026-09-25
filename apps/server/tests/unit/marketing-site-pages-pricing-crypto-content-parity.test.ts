@@ -148,6 +148,14 @@ describe('W502.B apps/marketing-site/src/pages/pricing/crypto.astro content pari
     );
   });
 
+  it("the non-refundable notice is the desktop app's banner recipe on the busy hue (2026-09-25): /10 wash, /30 hairline, 6px radius. Its old border-status-warning / bg-status-warning/15 classes generated nothing until the shared preset defined status.warning, then drew a solid brown border outside every recipe on the site", () => {
+    expect(body).toMatch(
+      /<p class="rounded-lg border border-tk-busy\/30 bg-tk-busy\/10 px-4 py-3 text-sm">\s*<strong>⚠︎ Crypto payments are non-refundable\.<\/strong>/,
+    );
+    // (the source comment names the old classes; no class attribute may use them)
+    expect(body).not.toMatch(/class="[^"]*status-warning/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

@@ -66,6 +66,15 @@
        because it doesn't create a scroll container that would break
        position:sticky on descendant elements. */
     overflow-x: clip;
+    /* A long unbroken token in running text (an API call, an env value, a
+       list of event names) breaks at its box's edge instead of running past
+       it. Measured 2026-09-25: three changelog entries at 390px and a /docs/
+       card at 768px ran 32-116px past a card's overflow-hidden edge, so the
+       text was cut off with no way to scroll to it, while the page itself
+       stayed exactly viewport-wide. break-word, not anywhere: it only acts
+       where a word would overflow, and leaves min-content sizing (flex and
+       grid tracks) as it was. */
+    overflow-wrap: break-word;
   }
 
   body {
