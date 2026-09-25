@@ -99,6 +99,10 @@ describe('the archetype registry keeps its shape', () => {
     // selectable in a commit that had already entered the pre-push gate, and the
     // generator's `--check` reds inside that gate's lint step is what stopped
     // them. That is the whole argument for generating this file.
+    //
+    // 2026-09-24: available 95 -> 88 and planned 9 -> 16. Seven Safari 26.2 /
+    // 26.0.1 profiles are held while their canvas fidelity is verified (the
+    // production canvas resolvers have no atlas for those bands yet).
     const byStatus = ARCHETYPE_REGISTRY.reduce<Record<string, number>>((acc, a) => {
       acc[a.status] = (acc[a.status] ?? 0) + 1;
       return acc;
@@ -106,8 +110,8 @@ describe('the archetype registry keeps its shape', () => {
     expect(ARCHETYPE_REGISTRY.length, 'registry size changed').toBe(106);
     expect(byStatus, 'the status mix changed').toEqual({
       launch: 1,
-      available: 95,
-      planned: 9,
+      available: 88,
+      planned: 16,
       reference: 1,
     });
   });
