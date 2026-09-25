@@ -510,10 +510,16 @@ export async function persistServerProbe(
   opts: { adoptExit?: boolean } = {},
 ): Promise<ProbeCacheMap | null> {
   if (outcome.kind === 'failed') {
-    if (opts.adoptExit !== true) return null;
     // (h) finding 3 — the sentence is persisted with the stamp, so the card and
     // a remounted grid render the same verdict the view that ran the check did.
-    return saveFleetFailure(proxyId, outcome.at, outcome.reason).catch(() => null);
+    // ⛔ Proxy-accuracy audit G2 (a) — for a SOCKS5 caller (no `adoptExit`) too.
+    // It used to write nothing here, so the failure lived only in the grid's
+    // memory and the next cache write or display tick rebuilt the row from the
+    // store — back to the numbers and the ✓ QUIC the fleet took BEFORE it failed.
+    // A SOCKS5 row keeps what THIS Mac measured (its verdict and its exit).
+    return saveFleetFailure(proxyId, outcome.at, outcome.reason, {
+      keepNativeExit: opts.adoptExit !== true,
+    }).catch(() => null);
   }
   if (outcome.kind === 'not_run') {
     if (opts.adoptExit !== true || outcome.exitObserved === undefined) return null;
@@ -742,6 +748,86 @@ export type ListExitRow = Pick<AccountProxyMeta, 'id' | 'exit_observed' | 'exit_
  *  carries the contradiction's date, not the node's reason. */
 export const LIST_TUNNEL_DOWN_REASON = 'The last check could not connect this VPN.';
 
+/** Proxy-accuracy audit G2 (d) — the same, for a SOCKS5 row: the list says
+ *  Driftstack's last check could not use it, and carries no cause. */
+export const LIST_FLEET_FAILED_REASON = 'Driftstack’s last check could not use this proxy.';
+
+/** Whether this Mac holds a DRIFTSTACK (fleet) answer about a SOCKS5 row taken
+ *  after `t`. Only such an answer outranks a failure the list carries — this
+ *  Mac's own verdict and exit never do (§4.3). */
+function holdsFleetAnswerAfter(existing: CachedProbe, t: number): boolean {
+  return (
+    existing.measuredFrom === 'fleet' &&
+    existing.serverProbeAt !== undefined &&
+    existing.serverProbeAt > t
+  );
+}
+
+/**
+ * ⛔ Proxy-accuracy audit G2 (d) — a SOCKS5 row's Driftstack failure reaches
+ * EVERY Mac. The server stamps `exit_superseded_at` for every scheme when a fleet
+ * test finds the proxy unusable, and lists it; this was adopted for VPN rows only,
+ * so a second Mac (or a reinstall) kept adopting the readings from BEFORE the
+ * failure and never showed it. §4.3: a fleet failure retires every fleet reading
+ * dated before it, on every Mac.
+ *
+ * The stamp is written through `saveFleetFailure` keeping what THIS Mac measured;
+ * on a Mac that never tested the row it lands on a seeded entry, which stays
+ * seeded, so the OS and capability adoptions that run after this one refuse every
+ * reading dated at or before it. A Driftstack answer this Mac holds from after the
+ * stamp outranks the list. The server's explicit clear — no stamp, beside an
+ * observation dated after the one held here — lifts it, as on a VPN row.
+ */
+async function adoptListFleetFailureForSocks5(
+  p: ListExitProxyLike,
+  row: ListExitRow,
+  cache: ProbeCacheMap,
+  gate: ListAdoptionGate,
+  nowMs: number,
+): Promise<{ cache: ProbeCacheMap; wrote: boolean }> {
+  let existing = cache[p.id];
+  const stampMs = existing?.exitSupersededAt;
+  const seenUpAt =
+    row.exit_observed?.observed_at !== undefined && row.exit_observed?.observed_at !== null
+      ? Date.parse(row.exit_observed.observed_at)
+      : Number.NaN;
+  if (
+    existing !== undefined &&
+    stampMs !== undefined &&
+    row.exit_superseded_at === null &&
+    Number.isFinite(seenUpAt) &&
+    seenUpAt > stampMs
+  ) {
+    try {
+      return { cache: await clearFleetFailure(p.id, stampMs), wrote: true };
+    } catch {
+      return { cache, wrote: false };
+    }
+  }
+  const serverStamp = listSupersededStamp(row.exit_superseded_at);
+  if (serverStamp === undefined) return { cache, wrote: false };
+  if (stampMs !== undefined && stampMs >= serverStamp) return { cache, wrote: false };
+  if (existing !== undefined && holdsFleetAnswerAfter(existing, serverStamp))
+    return { cache, wrote: false };
+  try {
+    if (existing === undefined) {
+      cache = await ensureServerSeededEntry(p.id, nowMs);
+      existing = cache[p.id];
+      if (existing === undefined) return { cache, wrote: false };
+    }
+    if (gate.refuses(p.id)) return { cache, wrote: false };
+    cache = await saveFleetFailure(
+      p.id,
+      serverStamp,
+      existing.fleetFailureReason ?? LIST_FLEET_FAILED_REASON,
+      { keepNativeExit: true },
+    );
+    return { cache, wrote: true };
+  } catch {
+    return { cache, wrote: false };
+  }
+}
+
 /** The list's `exit_superseded_at`, as a time — or undefined when the row was
  *  never contradicted, the server predates the field, or the value is not a
  *  date (a malformed stamp refuses nothing). */
@@ -907,7 +993,18 @@ export async function adoptListExitObserved(
     return written;
   }
   for (const p of proxies) {
-    if (p.serverId === undefined || !isVpnScheme(p.scheme)) continue;
+    if (p.serverId === undefined) continue;
+    if (!isVpnScheme(p.scheme)) {
+      // A SOCKS5 row adopts no EXIT from the list — its own is measured from this
+      // Mac — but it does adopt a Driftstack FAILURE (G2 d).
+      if (!isSocks5Probeable(p.scheme) || gate.refuses(p.id)) continue;
+      const socksRow = byServerId.get(p.serverId);
+      if (socksRow === undefined) continue;
+      const adopted = await adoptListFleetFailureForSocks5(p, socksRow, cache, gate, nowMs);
+      cache = adopted.cache;
+      if (adopted.wrote) written.push(p.id);
+      continue;
+    }
     // Before everything below, the address check included: that is an entry
     // invented for the edited row, for the old endpoint's exit to land on.
     if (gate.refuses(p.id)) continue;
@@ -2004,7 +2101,9 @@ export async function persistAutomaticServerProbe(
   let written: ProbeCacheMap | null;
   if (hasLocalVerdict) {
     const vpn = isVpnScheme(p.scheme);
-    if (vpn && outcome.kind === 'failed' && !holdsFleetVerdict(entry)) return null;
+    // ⛔ G2 — on every scheme: a timer writes a failure only over an earlier
+    // Driftstack answer it replaces, never onto a row nobody asked Driftstack about.
+    if (outcome.kind === 'failed' && !holdsFleetVerdict(entry)) return null;
     written = await persistServerProbe(p.id, outcome, { adoptExit: vpn });
   } else {
     if (outcome.kind !== 'ok') return null;

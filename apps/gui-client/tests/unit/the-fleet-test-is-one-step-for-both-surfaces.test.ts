@@ -80,6 +80,7 @@ vi.mock('../../src/lib/proxies', async (importOriginal) => ({
 
 import {
   ensureAccountProxyRow,
+  persistAutomaticServerProbe,
   persistServerProbe,
   quicVerdictStamp,
   serverProbeOutcome,
@@ -87,9 +88,11 @@ import {
 } from '../../src/lib/proxy-server-test';
 import {
   loadProbeCache,
+  saveEndpointResult,
   saveExitResult,
   saveProbeResult,
   saveServerProbeResult,
+  serverCapabilityReadingsToAdopt,
 } from '../../src/lib/proxy-probe-cache';
 
 const OK = {
@@ -252,11 +255,19 @@ describe('persistServerProbe — one cache write for both surfaces', () => {
     expect(cleared?.['p1']?.serverLatencyMs).toBeUndefined();
   });
 
-  it('VACUITY CONTROL — `failed` and `unavailable` write nothing and return null', async () => {
+  it('VACUITY CONTROL — `unavailable` writes nothing and returns null; a SOCKS5 `failed` is written (G2) as the stamp and the sentence beside this Mac’s own verdict', async () => {
     await saveProbeResult('p1', OK, 1);
     expect(await persistServerProbe('p1', { kind: 'unavailable' })).toBeNull();
-    expect(await persistServerProbe('p1', { kind: 'failed', at: NOW, reason: 'no' })).toBeNull();
     expect((await loadProbeCache())['p1']).toEqual({ result: OK, at: 1 });
+    expect(
+      await persistServerProbe('p1', { kind: 'failed', at: NOW, reason: 'no' }),
+    ).not.toBeNull();
+    expect((await loadProbeCache())['p1']).toEqual({
+      result: OK,
+      at: 1,
+      exitSupersededAt: NOW,
+      fleetFailureReason: 'no',
+    });
   });
 
   // ⛔ (V4 round 3, 2026-09-12) — the arm above is the vacuity control, on an
@@ -277,13 +288,10 @@ describe('persistServerProbe — one cache write for both surfaces', () => {
   // `saveFleetFailure`'s blanket drop is a TUNNEL rule: for a VPN row the fleet
   // is the only thing that ever saw an exit.
   //
-  // So this arm pins the shape of whatever write eventually lands here: it must
-  // not take the native exit with it. ⚠️ TODAY it passes because the SOCKS5 arm
-  // writes NOTHING at all — which is its own open defect (the fleet's refusal
-  // does not survive the next cache emit; see the V4 report of 2026-09-12) —
-  // and the write that closes THAT must keep this arm green. The CONTROL below
-  // is what stops this being vacuous: the same call from a VPN caller does
-  // supersede the exit, through the same writer.
+  // So this arm pins the shape of the write that now lands here (proxy-accuracy
+  // audit G2): it saves the failure and must not take the native exit with it.
+  // The CONTROL below is what stops this being vacuous: the same call from a VPN
+  // caller does supersede the exit, through the same writer.
   it('CRITICAL a SOCKS5 row’s fleet failure never costs the row the exit THIS Mac measured', async () => {
     const refused =
       'The proxy refused the connection from the test Mac (reply 0x02 — not allowed by ruleset).';
@@ -312,6 +320,12 @@ describe('persistServerProbe — one cache write for both surfaces', () => {
     // fleet, and this row still connected from here.
     expect(entry?.result).toEqual(OK);
     expect(entry?.at).toBe(1);
+    // G2 — and the failure IS saved now: the stamp, the sentence, and not one
+    // Driftstack reading from before it.
+    expect(entry?.exitSupersededAt).toBe(NOW);
+    expect(entry?.fleetFailureReason).toBe(refused);
+    expect(entry?.serverLatencyMs).toBeUndefined();
+    expect(entry?.measuredFrom).toBeUndefined();
 
     // CONTROL — the SAME outcome from a VPN caller DOES supersede the exit and
     // records the sentence, so the assertions above are about the caller, not
@@ -498,5 +512,115 @@ describe('(V4) ensureAccountProxyRow — the local id write cannot orphan a VPN 
     expect(await ensureAccountProxyRow(VPN, 'http://cp', null)).toBeUndefined();
     expect(createProxy).not.toHaveBeenCalled();
     expect(deleteProxy).not.toHaveBeenCalled();
+  });
+});
+
+// Proxy-accuracy audit G2 (paths-04 + paths-13) — a SOCKS5 row's Driftstack
+// failure disappeared. `persistServerProbe` wrote nothing for a `failed` reply
+// unless the caller passed `adoptExit` (only VPN callers do), so the failure
+// lived in the grid's memory until the next cache write or the next sixty-second
+// tick rebuilt it from the store — "fails from Driftstack" turned back into
+// "slow from Driftstack · 180ms", "~QUIC" into "✓QUIC". And once saved, the next
+// native Test would have erased it (`saveProbeResult` dropped the stamp and the
+// sentence; `saveExitResult` cleared them). §4.3: a fleet failure retires every
+// fleet reading dated before it; this Mac's native verdict never retires a fleet
+// verdict, and the fleet verdict never retires the native one; only a later
+// FLEET answer lifts it.
+describe('G2 — a SOCKS5 Driftstack failure is saved, and only a later Driftstack answer lifts it', () => {
+  const refused = 'The proxy did not answer. Check the host and port, and that it is online.';
+  const failed = (): ReturnType<typeof serverProbeOutcome> =>
+    serverProbeOutcome({ ok: false, reason: refused, measured_from: 'fleet' }, NOW);
+  async function failedRow(): Promise<void> {
+    await saveProbeResult('p1', OK, 1);
+    await saveExitResult('p1', '203.0.113.20', 'BR', { timezone: 'America/Sao_Paulo' }, 2);
+    await saveServerProbeResult(
+      'p1',
+      { latencyMs: 180, measuredFrom: 'fleet', nodeId: 'mac-07', quicProbe: true, udpProbe: true },
+      3,
+    );
+    await persistServerProbe('p1', failed());
+  }
+
+  it('CRITICAL (a) the failure drops every Driftstack reading from before it — latency, vantage, QUIC, UDP — and keeps this Mac’s verdict and exit', async () => {
+    await failedRow();
+    const e = (await loadProbeCache())['p1'];
+    expect(e).toMatchObject({ result: OK, at: 1, exitIp: '203.0.113.20', exitAt: 2 });
+    expect(e?.fleetFailureReason).toBe(refused);
+    expect(e?.exitSupersededAt).toBe(NOW);
+    for (const k of [
+      'serverLatencyMs',
+      'measuredFrom',
+      'nodeId',
+      'quicProbe',
+      'udpProbe',
+      'serverProbeAt',
+    ])
+      expect(e, k).not.toHaveProperty(k);
+  });
+
+  it('CRITICAL (b) a native re-test from this Mac keeps the failure, its stamp and every retirement stamp', async () => {
+    await failedRow();
+    await saveProbeResult('p1', { ...OK, latency_ms: 30 }, NOW + 60_000);
+    const e = (await loadProbeCache())['p1'];
+    expect(e?.at).toBe(NOW + 60_000);
+    expect(e?.fleetFailureReason).toBe(refused);
+    expect(e?.exitSupersededAt).toBe(NOW);
+  });
+
+  it('CRITICAL (c) an exit measured from this Mac afterwards keeps the failure on a SOCKS5 row — while on a VPN row an exit seen after the failure still lifts it (control)', async () => {
+    await failedRow();
+    await saveExitResult('p1', '203.0.113.21', 'BR', {}, NOW + 60_000);
+    const e = (await loadProbeCache())['p1'];
+    expect(e?.exitIp).toBe('203.0.113.21');
+    expect(e?.fleetFailureReason).toBe(refused);
+    expect(e?.exitSupersededAt).toBe(NOW);
+
+    // CONTROL — an endpoint (VPN) row: the exit is the tunnel seen up again.
+    await saveEndpointResult('v1', { resolved: true, ip: '198.51.100.1', message: 'ok' }, 1);
+    await persistServerProbe('v1', failed(), { adoptExit: true });
+    await saveExitResult('v1', '198.51.100.9', 'NL', {}, NOW + 60_000);
+    expect((await loadProbeCache())['v1']?.fleetFailureReason).toBeUndefined();
+  });
+
+  it('CRITICAL (f) a control-plane answer does not lift the failure; a Driftstack (fleet) answer does', async () => {
+    await failedRow();
+    await persistServerProbe(
+      'p1',
+      serverProbeOutcome({ ok: true, latency_ms: 50, measured_from: 'control_plane' }, NOW + 1_000),
+    );
+    expect((await loadProbeCache())['p1']?.fleetFailureReason).toBe(refused);
+    await persistServerProbe(
+      'p1',
+      serverProbeOutcome(
+        { ok: true, latency_ms: 40, measured_from: 'fleet', node_id: 'mac-07' },
+        NOW + 2_000,
+      ),
+    );
+    const e = (await loadProbeCache())['p1'];
+    expect(e?.fleetFailureReason).toBeUndefined();
+    expect(e?.serverLatencyMs).toBe(40);
+  });
+
+  it('the automatic check writes a failure only onto a row that already holds a Driftstack answer — a timer never paints one on a row nobody asked Driftstack about', async () => {
+    await saveProbeResult('p1', OK, 1);
+    expect(await persistAutomaticServerProbe({ id: 'p1', scheme: 'socks5' }, failed())).toBeNull();
+    expect((await loadProbeCache())['p1']).not.toHaveProperty('fleetFailureReason');
+    await saveServerProbeResult('p1', { latencyMs: 40, measuredFrom: 'fleet' }, 3);
+    await persistAutomaticServerProbe({ id: 'p1', scheme: 'socks5' }, failed());
+    expect((await loadProbeCache())['p1']?.fleetFailureReason).toBe(refused);
+  });
+
+  it('a reading Driftstack stored BEFORE the failure is refused by the next list sync on this Mac (retire-older-readings)', async () => {
+    await failedRow();
+    const prior = (await loadProbeCache())['p1'];
+    expect(
+      serverCapabilityReadingsToAdopt(prior, {
+        quicProbe: { value: true, at: NOW - 1 },
+        udpProbe: { value: true, at: NOW - 1 },
+      }),
+    ).toEqual({});
+    expect(
+      serverCapabilityReadingsToAdopt(prior, { quicProbe: { value: true, at: NOW + 1 } }),
+    ).toEqual({ quicProbe: { value: true, at: NOW + 1 } });
   });
 });

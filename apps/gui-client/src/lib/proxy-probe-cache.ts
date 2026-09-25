@@ -1354,6 +1354,21 @@ export function saveProbeResult(
       ...(prior?.udpProbe !== undefined ? { udpProbe: prior.udpProbe } : {}),
       ...(prior?.udpProbeAt !== undefined ? { udpProbeAt: prior.udpProbeAt } : {}),
       ...(prior?.serverProbeAt !== undefined ? { serverProbeAt: prior.serverProbeAt } : {}),
+      // ⛔ Proxy-accuracy audit G2 (b) — a Driftstack failure and the stamps that
+      // retire readings survive a re-test from THIS Mac. This Mac's verdict never
+      // retires Driftstack's (§4.3): the failure was a fact about the machine that
+      // runs the profile, and a native handshake from here says nothing about it.
+      // Dropped here, the next native Test — or the background sweep's — erased
+      // "fails from Driftstack" and let the list put the pre-failure readings back.
+      ...(prior?.exitSupersededAt !== undefined
+        ? { exitSupersededAt: prior.exitSupersededAt }
+        : {}),
+      ...(prior?.fleetFailureReason !== undefined
+        ? { fleetFailureReason: prior.fleetFailureReason }
+        : {}),
+      ...(prior?.serverReadingsRetiredAt !== undefined
+        ? { serverReadingsRetiredAt: prior.serverReadingsRetiredAt }
+        : {}),
     };
     await getStore().set(KEY, all);
     await getStore().save();
@@ -1382,20 +1397,24 @@ export function saveExitResult(
     const all = await loadProbeCache();
     const prior = all[proxyId];
     if (prior === undefined) return all; // exit probe only runs after a capability probe
+    // ⛔ Proxy-accuracy audit G2 (c) — the stamp's two rules below are ENDPOINT
+    // (VPN / HTTP) rules. On a tunnel the only exit is the one Driftstack sees, so
+    // an exit seen after a failure is the tunnel seen up. A SOCKS5 row's exit is
+    // measured from THIS Mac, which says nothing about the machine that runs the
+    // profile: it neither is refused by a Driftstack failure nor lifts one.
+    const endpointRow = prior.endpoint !== undefined;
     // (h) — an observation dated at or before the fleet failure that dropped
     // this row's exit describes the tunnel BEFORE it went down; it is not
     // adopted, whoever offers it. A later one clears the stamp: the tunnel
     // was seen up again.
-    if (prior.exitSupersededAt !== undefined && at <= prior.exitSupersededAt) return all;
+    if (endpointRow && prior.exitSupersededAt !== undefined && at <= prior.exitSupersededAt)
+      return all;
     // …and an exit seen AFTER the failure is the tunnel seen up: the failure
     // verdict goes with the stamp (finding 3 — the sentence lives here now).
     // (l) #14 — a measured exit is the answer the failed probe lacked.
-    const {
-      exitSupersededAt: _superseded,
-      fleetFailureReason: _failure,
-      exitProbeFailedAt: _probeFailed,
-      ...kept
-    } = prior;
+    const { exitProbeFailedAt: _probeFailed, ...rest } = prior;
+    const { exitSupersededAt: _superseded, fleetFailureReason: _failure, ...withoutFailure } = rest;
+    const kept = endpointRow ? withoutFailure : rest;
     all[proxyId] = {
       ...kept,
       exitIp,
@@ -1827,6 +1846,9 @@ export function saveServerProbeResult(
     const vantage = cleanServerVantage(server.measuredFrom, server.nodeId);
     // (h) finding 3 — a server VERDICT replaces the fleet-failure sentence
     // too: this is the "next fleet answer" that clears it.
+    // ⛔ Proxy-accuracy audit G2 (f) — and ONLY a fleet answer. A control-plane
+    // fallback reached the proxy from a different machine; it is shown as its own
+    // labelled reading and says nothing about the machine that failed.
     const {
       measuredFrom: _m,
       nodeId: _n,
@@ -1835,9 +1857,10 @@ export function saveServerProbeResult(
       quicProbeRetiredAt: priorRelayRetiredAt,
       udpProbe: _u,
       udpProbeAt: _ua,
-      fleetFailureReason: _failure,
+      fleetFailureReason: priorFailure,
       ...kept
     } = prior;
+    const failureStands = priorFailure !== undefined && vantage?.measuredFrom !== 'fleet';
     // An explicit null erases the stored number so it cannot outlive the
     // measurement that failed to produce one. `undefined` deliberately does not.
     if (server.latencyMs === null) delete kept.serverLatencyMs;
@@ -1864,6 +1887,7 @@ export function saveServerProbeResult(
     }
     all[proxyId] = {
       ...kept,
+      ...(failureStands ? { fleetFailureReason: priorFailure } : {}),
       ...(typeof server.latencyMs === 'number' ? { serverLatencyMs: server.latencyMs } : {}),
       ...(quic !== undefined
         ? { quicMeasured: quic, quicMeasuredAt: server.quicMeasuredAt ?? at }
@@ -2010,15 +2034,36 @@ export function saveFleetFailure(
    *  reads this entry (the grid after a remount, the profile card for a check
    *  the grid ran) renders the same "tunnel down". Empty = no sentence. */
   reason = '',
+  /**
+   * ⛔ Proxy-accuracy audit G2 (a) — a SOCKS5 row: keep what THIS Mac measured.
+   * The fleet refusing a SOCKS5 proxy says nothing about the native verdict or
+   * the exit this Mac saw through it (a tunnel has no exit but Driftstack's, which
+   * is why the default drops it). Every Driftstack reading still goes, the stamp
+   * dates the failure, and a `serverSeeded` entry stays seeded — a failure the
+   * list carries onto a row this Mac never tested is not a local verdict.
+   */
+  opts: { keepNativeExit?: boolean } = {},
 ): Promise<ProbeCacheMap> {
   return writeLock(async () => {
     const all = await loadProbeCache();
     const prior = all[proxyId];
     if (prior === undefined) return all;
+    const native = opts.keepNativeExit === true;
     all[proxyId] = {
       result: prior.result,
       at: prior.at,
       ...(prior.endpoint !== undefined ? { endpoint: prior.endpoint } : {}),
+      ...(native && prior.serverSeeded === true ? { serverSeeded: true as const } : {}),
+      ...(native && prior.exitIp !== undefined ? { exitIp: prior.exitIp } : {}),
+      ...(native && prior.exitCountry !== undefined ? { exitCountry: prior.exitCountry } : {}),
+      ...(native && prior.exitCity !== undefined ? { exitCity: prior.exitCity } : {}),
+      ...(native && prior.exitRegion !== undefined ? { exitRegion: prior.exitRegion } : {}),
+      ...(native && prior.exitTimezone !== undefined ? { exitTimezone: prior.exitTimezone } : {}),
+      ...(native && prior.exitAsnOrg !== undefined ? { exitAsnOrg: prior.exitAsnOrg } : {}),
+      ...(native && prior.exitAt !== undefined ? { exitAt: prior.exitAt } : {}),
+      ...(native && prior.exitProbeFailedAt !== undefined
+        ? { exitProbeFailedAt: prior.exitProbeFailedAt }
+        : {}),
       // ⛔ The OTHER retirement stamps survive this rebuild. While the stamp below
       // stands it refuses everything they would, which is how their loss hid: the
       // failure's stamp is the one stamp that is later REMOVED (`clearFleetFailure`,

@@ -288,6 +288,27 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
     expect(line(container, 'this_mac')?.textContent).toContain('42ms');
   });
 
+  it('G2 (e) — the live-session HTTP/3 reading a row showed goes with the failure too: no "✓ QUIC" beside "fails from Driftstack"', async () => {
+    const reason = 'The proxy did not answer. Check the host and port, and that it is online.';
+    cacheFixture = {
+      p1: {
+        result: NATIVE_42,
+        at: Date.now() - 60_000,
+        quicMeasured: 'h3',
+        quicMeasuredAt: Date.now() - 60_000,
+      },
+    };
+    const { container } = render(<ProxiesView />);
+    await screen.findByText('london-socks');
+    const quic = (): string | null | undefined =>
+      container.querySelector('[data-capability="quic"]')?.getAttribute('data-ok');
+    await vi.waitFor(() => expect(quic()).toBe('true'));
+    testAccountProxy.mockResolvedValue({ ok: false, reason, measured_from: 'fleet' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Re-test' }));
+    await screen.findByText('fails from Driftstack');
+    expect(quic()).not.toBe('true');
+  });
+
   it('CRITICAL the test Mac’s failure survives a REMOUNT — the cache holds the reason, so the reopened row must not go green', async () => {
     // ⛔ The arm above drives the live click. A customer reopens the app far
     // more often than they press Test, and the grid then renders from the
@@ -306,23 +327,11 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
     // triple, the superseded stamp, the sentence, and not one server-measured
     // field.
     //
-    // ⚠️ PROVENANCE, so nobody reads this arm as covering the WRITE: nothing in
-    // the app puts that entry on a SOCKS5 row today. `persistServerProbe`'s
-    // `failed` arm returns null unless the caller passes `adoptExit`, and both
-    // SOCKS5 call sites (ProxiesView's Test, ProfilesView's card Test) pass
-    // none — only the VPN callers do. So this arm pins the RENDER rule alone,
-    // and the missing write is still open. MEASURED end-to-end on 2026-09-12
-    // (scratchpad/v4c-two-rows.mjs, the real Test button against a stubbed
-    // control plane): after the test Mac REFUSES a SOCKS5 proxy the row says
-    // "fails on the test Mac" from memory only — press Test on ANY OTHER row
-    // and that row's cache emit re-hydrates this one from the store, back to
-    // "180ms · from the test Mac" under a "slow from the test Mac" pill, a
-    // number the test Mac took before it refused the proxy. The write that
-    // closes it cannot simply be `saveFleetFailure` here: that writer also
-    // drops the exit THIS Mac measured (pinned in
-    // the-fleet-test-is-one-step-for-both-surfaces.test.ts, "never costs the
-    // row the exit THIS Mac measured"), which is a tunnel rule, not a SOCKS5
-    // one. It needs `saveFleetFailure` to keep a natively measured exit.
+    // PROVENANCE: this arm pins the RENDER rule. The WRITE is pinned in
+    // a-socks5-driftstack-failure-survives-every-cache-write.test.tsx — since
+    // proxy-accuracy audit G2 `persistServerProbe` saves a SOCKS5 row's failure
+    // (`saveFleetFailure` keeping this Mac's verdict and exit), a native re-test
+    // keeps it, and only a later Driftstack answer lifts it.
     const reason = 'The proxy did not answer. Check the host and port, and that it is online.';
     cacheFixture = {
       p1: {

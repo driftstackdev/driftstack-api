@@ -132,6 +132,7 @@ import type { MeasuredQuic } from '../lib/account-proxies';
 import type { AgedRowReadings } from '../lib/proxy-probe-cache';
 import { vantageLabel, type ServerVantage } from '../lib/proxy-vantage';
 import {
+  FLEET_FAILED_PILL,
   CHECK_VPN_ACTION,
   CHECK_VPN_TITLE,
   ENDPOINT_OK_PILL,
@@ -699,6 +700,18 @@ export function healthPill(p: HealthPillInput): HealthPill {
       state: 'broken',
       tone: 'error',
       title: p.vpnNotice !== undefined ? `${p.vpnFailure} — ${p.vpnNotice}` : p.vpnFailure,
+    };
+  }
+  // ⛔ Proxy-accuracy audit G2 — a SOCKS5 proxy Driftstack could not use: the
+  // Proxies tab's pill, on the card too. It outranks a green check from this Mac,
+  // because the session runs on Driftstack's side; it is saved with the row, so it
+  // survives every cache write until a later Driftstack answer lifts it.
+  if (p.vpn !== true && p.vpnFailure !== undefined) {
+    return {
+      text: FLEET_FAILED_PILL,
+      state: 'broken',
+      tone: 'error',
+      title: p.vpnFailure,
     };
   }
   if (endpointUnresolved(p)) {

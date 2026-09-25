@@ -112,6 +112,7 @@ import {
   adoptListCapabilityReadings,
   adoptListExitObserved,
   adoptListOsFingerprint,
+  LIST_FLEET_FAILED_REASON,
   syncListExitObserved,
   type ListExitProxyLike,
 } from '../../src/lib/proxy-server-test';
@@ -472,5 +473,74 @@ describe('⛔ FAILS CLOSED — a ledger that cannot be read adopts nothing, for 
     expect(await syncListExitObserved('https://api.example', 'k', [SOCKS], NOW)).toEqual([]);
     expect(reads.get(LEDGER_KEY), 'fixture: the fault hit the second read').toBe(2);
     expect(await loadProbeCache()).toEqual({});
+  });
+});
+
+// Proxy-accuracy audit G2 (d) / T2 — the list's `exit_superseded_at` is the date a
+// Driftstack check found the proxy unusable, for EVERY scheme. It was adopted for
+// VPN rows only, so a second Mac kept adopting a SOCKS5 row's readings from
+// BEFORE the failure — its ✓ QUIC, ✓ UDP and OS — and never showed the failure.
+// §4.3: a fleet failure retires every fleet reading dated before it, on every Mac.
+describe('G2 (d) — a SOCKS5 row’s listed Driftstack failure reaches every Mac', () => {
+  const failedAt = NOW - 5 * MIN;
+  const failedRow = (id: string): ListRow => ({
+    ...accountRow(id),
+    exit_observed: null,
+    exit_superseded_at: iso(failedAt),
+  });
+
+  it('CRITICAL (T2) a second Mac that never tested the row: the failure lands, and the QUIC, UDP and OS readings the list carries from before it are refused', async () => {
+    const rows = [failedRow('aprx_1')];
+    await adoptListExitObserved(rows, [SOCKS], NOW);
+    await adoptListOsFingerprint(rows, [SOCKS], NOW);
+    await adoptListCapabilityReadings(rows, [SOCKS], NOW);
+    const e = (await loadProbeCache()).p1;
+    expect(e?.exitSupersededAt).toBe(failedAt);
+    expect(e?.fleetFailureReason).toBe(LIST_FLEET_FAILED_REASON);
+    // Still NOT a local verdict: nothing on this Mac tested the row.
+    expect(e?.serverSeeded).toBe(true);
+    for (const k of ['quicProbe', 'udpProbe', 'quicMeasured', 'osFingerprint'])
+      expect(e, k).not.toHaveProperty(k);
+  });
+
+  it('CRITICAL a Mac that tested the row BEFORE the failure: the Driftstack readings go, the verdict and the exit it measured itself stay', async () => {
+    await testedSocks();
+    await saveExitResult(
+      'p1',
+      '203.0.113.20',
+      'BR',
+      { timezone: 'America/Sao_Paulo' },
+      NOW - 9 * MIN,
+    );
+    await adoptListExitObserved([failedRow('aprx_1')], [SOCKS], NOW);
+    const e = (await loadProbeCache()).p1;
+    expect(e?.exitSupersededAt).toBe(failedAt);
+    expect(e?.fleetFailureReason).toBe(LIST_FLEET_FAILED_REASON);
+    expect(e?.result).toEqual(OK);
+    expect(e?.exitIp).toBe('203.0.113.20');
+    for (const k of ['quicProbe', 'udpProbe', 'serverLatencyMs', 'osFingerprint'])
+      expect(e, k).not.toHaveProperty(k);
+  });
+
+  it('CONTROL a Driftstack answer this Mac took AFTER the listed failure outranks it; no stamp on the list stamps nothing', async () => {
+    await saveProbeResult('p1', OK, NOW - 2 * MIN);
+    await saveServerProbeResult('p1', { latencyMs: 30, measuredFrom: 'fleet' }, NOW - 2 * MIN);
+    expect(await adoptListExitObserved([failedRow('aprx_1')], [SOCKS], NOW)).toEqual([]);
+    expect((await loadProbeCache()).p1).not.toHaveProperty('fleetFailureReason');
+    expect(await adoptListExitObserved([accountRow('aprx_1')], [SOCKS], NOW)).toEqual([]);
+    expect((await loadProbeCache()).p1).not.toHaveProperty('exitSupersededAt');
+  });
+
+  it('the server’s explicit clear (no stamp, beside a session that saw the proxy after the failure) lifts it', async () => {
+    await testedSocks();
+    await adoptListExitObserved([failedRow('aprx_1')], [SOCKS], NOW);
+    expect((await loadProbeCache()).p1?.fleetFailureReason).toBeDefined();
+    const seenUp: ListRow = {
+      ...accountRow('aprx_1'),
+      exit_observed: { ...accountRow('aprx_1').exit_observed!, observed_at: iso(NOW - MIN) },
+      exit_superseded_at: null,
+    };
+    await adoptListExitObserved([seenUp], [SOCKS], NOW);
+    expect((await loadProbeCache()).p1).not.toHaveProperty('fleetFailureReason');
   });
 });

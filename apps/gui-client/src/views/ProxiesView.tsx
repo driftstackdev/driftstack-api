@@ -112,6 +112,7 @@ import { planExcludesFleetTest, planExcludesVpnEgress } from '../lib/plan-featur
 import { humanizeError } from '../lib/humanize-error';
 import { vantageLabel, type ServerVantage } from '../lib/proxy-vantage';
 import {
+  FLEET_FAILED_PILL,
   CHECK_ENDPOINT_ACTION,
   CHECK_ENDPOINT_TITLE,
   CHECK_VPN_ACTION,
@@ -493,10 +494,6 @@ const NO_NATIVE_NUMBER_TITLE = 'Your computer has not measured this proxy yet.';
 /** The label beside the native number, and the words the health pill borrows
  *  for it. One constant so the pill and the cell cannot disagree. */
 const NATIVE_VANTAGE_LABEL = 'from this Mac';
-/** (P2) — the pill when the Mac that RUNS the profile could not use this proxy,
- *  whatever the local handshake said. It outranks a green local verdict: the
- *  session runs there, not here. The reason renders beside the pill. */
-const FLEET_FAILED_PILL = 'fails from Driftstack';
 /** At or under this many ms a latency reads "healthy"; over it, "slow". One
  *  constant for the pill and for every per-side meter, so a bar cannot be green
  *  beside a number the pill calls slow. */
@@ -1713,7 +1710,10 @@ export function ProxiesView(): JSX.Element {
       setServerProbeAt((m) => (measured !== null ? { ...m, [id]: outcome.at } : dropKey(m, id)));
       // (P2) — an `ok` verdict retires the last fleet failure on ANY row, not
       // only a VPN one: the SOCKS5 pill, the sort and the hero read it now.
-      setVpnFailures((m) => dropKey(m, id));
+      // ⛔ Proxy-accuracy audit G2 (f) — a FLEET `ok` only, as the cache write
+      // does: a control-plane fallback reached the proxy from another machine and
+      // is shown as its own labelled reading beside the failure it cannot lift.
+      if (outcome.vantage?.measuredFrom === 'fleet') setVpnFailures((m) => dropKey(m, id));
       const quic = outcome.quicMeasured;
       if (quic !== undefined) setQuicMeasured((m) => ({ ...m, [id]: quic }));
       // T-1 — where that number was measured travels WITH it: a fleet Mac
@@ -1789,6 +1789,9 @@ export function ProxiesView(): JSX.Element {
       setServerProbeAt((m) => dropKey(m, id));
       setServerVantage((m) => dropKey(m, id));
       setQuicProbe((m) => dropKey(m, id));
+      // ⛔ Proxy-accuracy audit G2 (e) — and the live-session QUIC verdict, which
+      // the cache write drops too: it was taken before the failure.
+      setQuicMeasured((m) => dropKey(m, id));
       // (V6) — and the UDP-relay verdict with it: the machine that runs the profile
       // says this proxy does not work, so every server-measured value goes. The
       // cache write does the same (`saveFleetFailure` rebuilds the entry).

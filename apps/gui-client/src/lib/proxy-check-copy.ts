@@ -21,6 +21,12 @@ export const CHECK_VPN_ACTION = 'Check VPN';
  *  exit to measure), so its button must not promise either. */
 export const CHECK_ENDPOINT_ACTION = 'Check endpoint';
 
+/** (P2) — the health pill when Driftstack could not use this proxy, whatever this
+ *  Mac's own check said. It outranks a green verdict from here: the session runs
+ *  there, not here. ONE word for the Proxies tab and the profile card
+ *  (proxy-accuracy audit G2 — the card never showed it for a SOCKS5 row). */
+export const FLEET_FAILED_PILL = 'fails from Driftstack';
+
 /** Both buttons once the row holds a pre-flight verdict. */
 export const RECHECK_ACTION = 'Re-check';
 

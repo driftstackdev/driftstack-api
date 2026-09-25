@@ -125,6 +125,7 @@ import {
   adoptListExitObserved,
   ENDPOINT_MOVED_NO_VERDICT_NOTICE,
   holdsFleetVerdict,
+  LIST_FLEET_FAILED_REASON,
   LIST_TUNNEL_DOWN_REASON,
   NO_VERDICT_YET_NOTICE,
   persistServerProbe,
@@ -744,11 +745,15 @@ describe('(h) persistServerProbe — a fleet FAILURE on a VPN row supersedes the
     expect(cache.vpn1?.serverLatencyMs).toBeUndefined();
   });
 
-  it('VACUITY CONTROL — a SOCKS5 caller (no adoptExit) still writes nothing on a failure', async () => {
+  it('VACUITY CONTROL — a SOCKS5 caller (no adoptExit) keeps the exit it measured itself: the failure is saved (proxy-accuracy audit G2), the exit is not superseded', async () => {
     await seedMeasured();
-    const before = JSON.stringify(await loadProbeCache());
-    expect(await persistServerProbe('vpn1', serverProbeOutcome(FLEET_FAILED, NOW))).toBeNull();
-    expect(JSON.stringify(await loadProbeCache())).toBe(before);
+    const before = (await loadProbeCache()).vpn1;
+    expect(await persistServerProbe('vpn1', serverProbeOutcome(FLEET_FAILED, NOW))).not.toBeNull();
+    const after = (await loadProbeCache()).vpn1;
+    expect(after?.exitIp).toBe(before?.exitIp);
+    expect(after?.exitAt).toBe(before?.exitAt);
+    expect(after?.exitSupersededAt).toBe(NOW);
+    expect(after?.serverLatencyMs).toBeUndefined();
   });
 });
 
@@ -1682,7 +1687,7 @@ describe('(i) I7 — the list adoption honours the server’s exit_superseded_at
     expect(entry?.exitSupersededAt).toBeUndefined();
   });
 
-  it('SOCKS5 rows are untouched by a stamp (VPN rows only, as ever)', async () => {
+  it('G2 (d) — a SOCKS5 row adopts the STAMP (a Driftstack failure reaches every Mac) and never the exit — its own is measured from this Mac', async () => {
     await saveEndpointResult(
       'socks1',
       { resolved: true, ip: '198.51.100.2', message: 'Resolved' },
@@ -1690,8 +1695,11 @@ describe('(i) I7 — the list adoption honours the server’s exit_superseded_at
     );
     const row = { ...listRow(NOW - 1, STAMP), id: 'aprx_socks' };
     const socks = { ...socks5Row(), id: 'socks1', serverId: 'aprx_socks' };
-    expect(await adoptListExitObserved([row], [socks], NOW + 5)).toEqual([]);
-    expect((await loadProbeCache()).socks1?.exitSupersededAt).toBeUndefined();
+    expect(await adoptListExitObserved([row], [socks], NOW + 5)).toEqual(['socks1']);
+    const e = (await loadProbeCache()).socks1;
+    expect(e?.exitSupersededAt).toBe(STAMP);
+    expect(e?.fleetFailureReason).toBe(LIST_FLEET_FAILED_REASON);
+    expect(e?.exitIp).toBeUndefined();
   });
 
   it('CRITICAL the wire: listProxies keeps exit_superseded_at as a string or null and nulls anything else', async () => {
