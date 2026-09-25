@@ -73,6 +73,7 @@ import {
   deriveProbeViewState,
   loadProbeCache,
   PROBE_CACHE_SCHEMA_VERSION,
+  retireLocalGrantUdpReadings,
   type ProbeCacheMap,
 } from '../../src/lib/proxy-probe-cache';
 import { MEASURED_READING_TTL_MS } from '../../src/lib/proxy-reading-windows';
@@ -247,5 +248,86 @@ describe('the backfills themselves — pure, over a cleaned map', () => {
     expect(backfillQuicMeasuredAt(cache, NOW)).toEqual(['a']);
     expect(cache.a?.quicMeasuredAt).toBe(NOW - HOUR);
     expect(cache.b).not.toHaveProperty('quicProbeAt');
+  });
+});
+
+// Proxy-accuracy audit S1 — the V4 pass. Every SOCKS5 `udpProbe` this app stored
+// came from the fleet node's own local relay granting UDP before the customer's
+// proxy was contacted; the server stopped sending it and cleared its copies
+// (migration 0145), and this pass drops the copies on this Mac. A VPN / HTTP
+// row's reading — only ever sent beside the node's own sentence — is kept.
+describe('V4 — a SOCKS5 UDP reading from the fleet node’s local grant does not survive the upgrade', () => {
+  it('CRITICAL a V3 store loads with no udpProbe on a SOCKS5 entry (tested here, or only Driftstack-measured) — and "✓ UDP (measured by Driftstack)" is gone from the view. NEGATIVE CONTROL: drop the V4 pass from migrateOnce and this reds', async () => {
+    seed(
+      {
+        tested: { result: OK, at: NOW - HOUR, udpProbe: true, udpProbeAt: NOW - HOUR },
+        seeded: {
+          result: OK,
+          at: NOW - HOUR,
+          serverSeeded: true,
+          udpProbe: false,
+          udpProbeAt: NOW - HOUR,
+        },
+        vpn: {
+          result: {
+            ...OK,
+            reachable: false,
+            auth_ok: false,
+            udp_associate: false,
+            can_route: false,
+          },
+          at: NOW - HOUR,
+          endpoint: { resolved: true, ip: '203.0.113.7', message: 'ok' },
+          udpProbe: true,
+          udpProbeAt: NOW - HOUR,
+        },
+      },
+      3,
+    );
+    const cache = await loadProbeCache();
+    expect(cache.tested).not.toHaveProperty('udpProbe');
+    expect(cache.tested).not.toHaveProperty('udpProbeAt');
+    expect(cache.seeded).not.toHaveProperty('udpProbe');
+    expect(deriveProbeViewState(cache, NOW).udpProbe.tested).toBeUndefined();
+    // VACUITY CONTROL — the endpoint row's reading stands.
+    expect(cache.vpn?.udpProbe).toBe(true);
+    expect(cache.vpn?.udpProbeAt).toBe(NOW - HOUR);
+    const raw = stores.get('proxy-probe-cache.json')?.get('probes') as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(raw.tested).not.toHaveProperty('udpProbe');
+    expect(stores.get('proxy-probe-cache.json')?.get('probes_schema')).toBe(4);
+  });
+
+  it('runs once: a UDP reading written AFTER the upgrade (a round trip the server now sends) survives the next load', async () => {
+    seed({ p1: { result: OK, at: NOW, udpProbe: true, udpProbeAt: NOW } }, 4);
+    expect((await loadProbeCache()).p1?.udpProbe).toBe(true);
+  });
+
+  it('G1 — a native result’s relay verdict survives a reload; a value this build does not know reads as not run, never as a relay', async () => {
+    seed(
+      {
+        silent: { result: { ...OK, udp_relay: 'silent' }, at: NOW },
+        relays: { result: { ...OK, udp_relay: 'relays' }, at: NOW },
+        odd: { result: { ...OK, udp_relay: 'maybe' }, at: NOW },
+        legacy: { result: OK, at: NOW },
+      },
+      4,
+    );
+    const cache = await loadProbeCache();
+    expect(cache.silent?.result.udp_relay).toBe('silent');
+    expect(cache.relays?.result.udp_relay).toBe('relays');
+    expect(cache.odd?.result.udp_relay).toBe('not_run');
+    expect(cache.legacy?.result).not.toHaveProperty('udp_relay');
+  });
+
+  it('reports exactly the ids it changed', () => {
+    const cache = {
+      a: { result: OK, at: NOW, udpProbe: true, udpProbeAt: NOW },
+      b: { result: OK, at: NOW },
+    } as unknown as ProbeCacheMap;
+    expect(retireLocalGrantUdpReadings(cache)).toEqual(['a']);
+    expect(retireLocalGrantUdpReadings(cache)).toEqual([]);
   });
 });

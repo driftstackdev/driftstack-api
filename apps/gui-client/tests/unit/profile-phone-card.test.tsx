@@ -177,6 +177,7 @@ function props(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardProps
       reachable: true,
       auth_ok: true,
       udp_associate: true,
+      udp_relay: 'relays',
       can_route: true,
       connect_reply: 0x00,
       latency_ms: 42,
@@ -213,6 +214,7 @@ const CANNOT_ROUTE = {
   reachable: true,
   auth_ok: true,
   udp_associate: false,
+  udp_relay: 'refused',
   can_route: false,
   connect_reply: 0x05,
   latency_ms: 0,
@@ -222,6 +224,7 @@ const NOT_REACHABLE = {
   reachable: false,
   auth_ok: false,
   udp_associate: false,
+  udp_relay: 'refused',
   can_route: false,
   connect_reply: 0xff,
   latency_ms: 0,
@@ -1449,7 +1452,9 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(widths({ quicMeasured: 'h3' })).toMatchObject({ '✓ QUIC': 44.3 });
     expect(widths({ quicMeasured: 'h2-only' })).toMatchObject({ '⤵ QUIC': 43.55 });
     expect(
-      widths({ capabilities: { ...props().capabilities!, udp_associate: false } }),
+      widths({
+        capabilities: { ...props().capabilities!, udp_associate: false, udp_relay: 'refused' },
+      }),
     ).toMatchObject({
       '⤵ UDP': 39.47,
     });
@@ -2292,7 +2297,9 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // for `!udpOk` reds this.
     const { container } = render(
       <ProfilePhoneCard
-        {...props({ capabilities: { ...props().capabilities!, udp_associate: false } })}
+        {...props({
+          capabilities: { ...props().capabilities!, udp_associate: false, udp_relay: 'refused' },
+        })}
       />,
     );
     const udp = container.querySelector('[data-udp="false"]') as HTMLElement;

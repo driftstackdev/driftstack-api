@@ -13,6 +13,7 @@
 import { LazyStore } from '@tauri-apps/plugin-store';
 import { makeWriteLock } from './store-write-lock';
 import { isProxyUsable, type ProxyExitProbeResult, type ProxyTestResult } from './proxies';
+import { udpRelayOf } from './udp-relay-verdict';
 import { cleanMeasuredQuic, type MeasuredQuic } from './account-proxies';
 import {
   isFingerprintConfidence,
@@ -1065,6 +1066,11 @@ function cleanEntry(raw: unknown): CachedProbe | null {
       reachable: res.reachable,
       auth_ok: res.auth_ok,
       udp_associate: res.udp_associate,
+      // G1 — the relay verdict survives a reload; a value this build does not
+      // know reads as 'not_run' (never as a relay), and an absent one stays absent.
+      ...(res.udp_relay !== undefined
+        ? { udp_relay: udpRelayOf({ udp_relay: res.udp_relay }) }
+        : {}),
       // A cache written before routing was measured has no verdict to restore.
       // Default to NOT usable rather than inheriting a green badge from an era
       // when "healthy" meant "authenticated" — a stale optimistic verdict is
@@ -1108,8 +1114,17 @@ function cleanEntry(raw: unknown): CachedProbe | null {
  * on the same v0.1.62 file is 0), so that pair has no hole; `osFingerprint.at`
  * is required by `cleanOsFingerprint` and a reading without it never survives a
  * load, so that one has no hole either. One field, one backfill.
+ *
+ * ⛔ VERSION 4 (proxy-accuracy audit S1) — a RETIREMENT, not a backfill. Every
+ * `udpProbe` this app has stored for a SOCKS5 row came from the fleet node's bare
+ * `udp_associate`, which is the node's OWN local relay granting UDP before the
+ * customer's proxy is contacted: proxies that refuse UDP and proxies that drop
+ * every datagram were stored as "UDP works". The server no longer sends that
+ * value and its migration 0145 clears the copies it stored, but the copy on this
+ * Mac would keep drawing ✓ UDP for eight hours and an aged one for thirty days.
+ * See `retireLocalGrantUdpReadings`.
  */
-export const PROBE_CACHE_SCHEMA_VERSION = 3;
+export const PROBE_CACHE_SCHEMA_VERSION = 4;
 const SCHEMA_KEY = 'probes_schema';
 
 /** The one-time W-30 backfill, pure over a cleaned map. Returns the entries
@@ -1182,6 +1197,26 @@ export function backfillQuicProbeAt(cache: ProbeCacheMap, loadTimeMs: number): s
   return changed;
 }
 
+/**
+ * The V4 retirement — drop `udpProbe` / `udpProbeAt` from every entry that is not
+ * an endpoint (VPN / HTTP) verdict: a SOCKS5 row this Mac tested, or one only
+ * Driftstack measured. Those readings all came from the fleet node's local grant
+ * (see the V4 note on `PROBE_CACHE_SCHEMA_VERSION`). An endpoint row's reading is
+ * kept: the server only ever sent one beside the node's own sentence. Pure over a
+ * cleaned map; returns the ids it changed. Exported for the guard.
+ */
+export function retireLocalGrantUdpReadings(cache: ProbeCacheMap): string[] {
+  const changed: string[] = [];
+  for (const [id, c] of Object.entries(cache)) {
+    if (c.endpoint !== undefined) continue;
+    if (c.udpProbe === undefined && c.udpProbeAt === undefined) continue;
+    delete c.udpProbe;
+    delete c.udpProbeAt;
+    changed.push(id);
+  }
+  return changed;
+}
+
 export async function loadProbeCache(): Promise<ProbeCacheMap> {
   try {
     const raw = await getStore().get<Record<string, unknown>>(KEY);
@@ -1225,6 +1260,7 @@ async function migrateOnce(cache: ProbeCacheMap): Promise<void> {
     ...new Set([
       ...(before < 2 ? backfillQuicMeasuredAt(cache, loadTime) : []),
       ...(before < 3 ? backfillQuicProbeAt(cache, loadTime) : []),
+      ...(before < 4 ? retireLocalGrantUdpReadings(cache) : []),
     ]),
   ];
   try {

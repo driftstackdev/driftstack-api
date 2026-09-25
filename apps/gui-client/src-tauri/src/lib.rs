@@ -17,10 +17,15 @@
 
 use keyring::Entry;
 use std::collections::VecDeque;
-use std::io::{Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
+use std::io::Write;
+use std::net::ToSocketAddrs;
 use std::time::{Duration, Instant};
 use zeroize::{Zeroize, Zeroizing};
+
+mod socks5_probe;
+use socks5_probe::{run_socks5_probe, ProxyTestResult, UdpRelay};
+#[cfg(test)]
+use socks5_probe::{socks5_greeting, socks5_userpass};
 
 /// Wall-clock ceiling on each blocking socket op in the SOCKS5 probe.
 /// Eight seconds is generous for a reachable proxy yet short enough
@@ -2498,290 +2503,6 @@ fn secret_delete(window: tauri::WebviewWindow, key: String) -> Result<(), String
     }
 }
 
-/// Structured result of a SOCKS5 proxy probe. Serialized straight to
-/// the React side, so field names are the camel/snake the GUI reads.
-#[derive(serde::Serialize)]
-struct ProxyTestResult {
-    /// TCP connect + SOCKS5 greeting handshake succeeded.
-    reachable: bool,
-    /// Username/password auth (RFC 1929) was accepted, or no auth was
-    /// required. `false` only when credentials were offered + rejected.
-    auth_ok: bool,
-    /// Server answered a `UDP ASSOCIATE` request with success — i.e. it
-    /// can relay UDP, so QUIC / WebRTC / HTTP-3 route through it instead
-    /// of leaking over the host's direct connection.
-    udp_associate: bool,
-    /// A real SOCKS5 CONNECT (CMD 0x01) to a public destination succeeded.
-    ///
-    /// This is the verdict that actually answers "can this proxy carry my
-    /// traffic". Everything above it is preamble: a proxy can accept TCP,
-    /// complete the greeting and accept credentials and STILL refuse every
-    /// CONNECT. That is not a corner case — five NodeMaven endpoints did
-    /// exactly that on 2026-08-18, answering 0x02 "not allowed by ruleset"
-    /// to every request while this probe reported "Connected · auth ok" and
-    /// customers launched profiles that could not reach anything.
-    can_route: bool,
-    /// Raw SOCKS5 reply byte from the CONNECT attempt (RFC 1928 §6), kept so
-    /// the UI can say WHY rather than just "failed". 0x00 success, 0x02 not
-    /// allowed by ruleset, 0x03 network unreachable, 0x04 host unreachable,
-    /// 0x05 connection refused, 0x06 TTL expired. 0xFF = no reply read.
-    connect_reply: u8,
-    /// Round-trip wall-clock to complete the handshake, in milliseconds.
-    latency_ms: u64,
-    /// Human-readable summary the GUI shows verbatim under the button.
-    message: String,
-}
-
-/// Build the SOCKS5 greeting (RFC 1928 §3): version 5, the method
-/// count, then the offered methods. We always offer `0x00` (no auth)
-/// and additionally `0x02` (username/password) when credentials are
-/// present, letting the server pick.
-fn socks5_greeting(use_auth: bool) -> Vec<u8> {
-    let methods: &[u8] = if use_auth { &[0x00, 0x02] } else { &[0x00] };
-    let mut greeting = vec![0x05u8, methods.len() as u8];
-    greeting.extend_from_slice(methods);
-    greeting
-}
-
-/// Build the RFC 1929 username/password sub-negotiation packet:
-/// version `0x01`, ULEN, username, PLEN, password.
-fn socks5_userpass(user: &str, pass: &str) -> Vec<u8> {
-    let mut auth = vec![0x01u8, user.len() as u8];
-    auth.extend_from_slice(user.as_bytes());
-    auth.push(pass.len() as u8);
-    auth.extend_from_slice(pass.as_bytes());
-    auth
-}
-
-/// Probe a SOCKS5 proxy: TCP connect → greeting → optional RFC 1929
-/// auth → `UDP ASSOCIATE` capability check. Native (not WebView) so we
-/// can open the raw socket the browser sandbox forbids.
-fn run_socks5_probe(
-    host: &str,
-    port: u16,
-    username: Option<&str>,
-    password: Option<&str>,
-) -> Result<ProxyTestResult, String> {
-    let start = Instant::now();
-    let addr = (host, port)
-        .to_socket_addrs()
-        .map_err(|e| format!("DNS resolution failed: {e}"))?
-        .next()
-        .ok_or_else(|| "Host resolved to no addresses.".to_string())?;
-    let mut stream = TcpStream::connect_timeout(&addr, PROXY_PROBE_TIMEOUT)
-        .map_err(|e| format!("TCP connect failed: {e}"))?;
-    stream.set_read_timeout(Some(PROXY_PROBE_TIMEOUT)).ok();
-    stream.set_write_timeout(Some(PROXY_PROBE_TIMEOUT)).ok();
-
-    let use_auth = username.is_some();
-    stream
-        .write_all(&socks5_greeting(use_auth))
-        .map_err(|e| format!("write greeting: {e}"))?;
-
-    let mut sel = [0u8; 2];
-    stream
-        .read_exact(&mut sel)
-        .map_err(|e| format!("read method selection: {e}"))?;
-    if sel[0] != 0x05 {
-        return Err(format!("Not a SOCKS5 server (version byte {:#x}).", sel[0]));
-    }
-
-    let mut auth_ok = true;
-    match sel[1] {
-        0x00 => {} // no auth required
-        0x02 => {
-            let user = username.unwrap_or("");
-            let pass = password.unwrap_or("");
-            if user.len() > 255 || pass.len() > 255 {
-                return Err("Username/password exceed the 255-byte SOCKS5 limit.".into());
-            }
-            stream
-                .write_all(&socks5_userpass(user, pass))
-                .map_err(|e| format!("write auth: {e}"))?;
-            let mut auth_reply = [0u8; 2];
-            stream
-                .read_exact(&mut auth_reply)
-                .map_err(|e| format!("read auth reply: {e}"))?;
-            auth_ok = auth_reply[1] == 0x00;
-            if !auth_ok {
-                return Ok(ProxyTestResult {
-                    reachable: true,
-                    auth_ok: false,
-                    udp_associate: false,
-                    can_route: false,
-                    connect_reply: 0xFF,
-                    latency_ms: start.elapsed().as_millis() as u64,
-                    message: "Connected, but the proxy rejected the username/password.".into(),
-                });
-            }
-        }
-        0xFF => {
-            return Ok(ProxyTestResult {
-                reachable: true,
-                auth_ok: false,
-                udp_associate: false,
-                can_route: false,
-                connect_reply: 0xFF,
-                latency_ms: start.elapsed().as_millis() as u64,
-                message: if use_auth {
-                    "Server rejected all offered authentication methods.".into()
-                } else {
-                    "Server requires authentication — add a username + password.".into()
-                },
-            });
-        }
-        other => {
-            return Err(format!(
-                "Server selected unsupported auth method {other:#x}."
-            ))
-        }
-    }
-
-    // CONNECT (RFC 1928 §4, CMD 0x01) to a real public destination.
-    //
-    // This is the check that was missing, and its absence is why the Test
-    // button could not be trusted: auth success was being reported as
-    // "Connected", but authenticating and ROUTING are separate permissions on
-    // every commercial proxy. A residential endpoint whose plan has lapsed, or
-    // whose ruleset forbids a destination, authenticates perfectly and then
-    // refuses every CONNECT.
-    //
-    // Destination is 1.1.1.1:443 as a DOTTED IPv4 (ATYP 0x01), deliberately:
-    // a hostname (ATYP 0x03) would make the proxy resolve DNS, so a DNS fault
-    // would be indistinguishable from a routing refusal. Port 443 because a
-    // proxy that allows only 80 is not usable for this product anyway.
-    let connect_req = [0x05u8, 0x01, 0x00, 0x01, 1, 1, 1, 1, 0x01, 0xBB];
-    stream
-        .write_all(&connect_req)
-        .map_err(|e| format!("write CONNECT: {e}"))?;
-    let mut connect_head = [0u8; 4]; // VER REP RSV ATYP
-    let connect_reply = match stream.read_exact(&mut connect_head) {
-        Ok(()) => connect_head[1],
-        Err(_) => 0xFF,
-    };
-    let can_route = connect_reply == 0x00;
-    // Drain the bound address that follows, so the UDP probe below reads its
-    // own reply rather than this one's tail.
-    if connect_reply != 0xFF {
-        let addr_bytes = match connect_head[3] {
-            0x01 => 4 + 2,
-            0x04 => 16 + 2,
-            0x03 => {
-                let mut len = [0u8; 1];
-                if stream.read_exact(&mut len).is_ok() {
-                    len[0] as usize + 2
-                } else {
-                    0
-                }
-            }
-            _ => 0,
-        };
-        if addr_bytes > 0 {
-            let mut sink = vec![0u8; addr_bytes];
-            let _ = stream.read_exact(&mut sink);
-        }
-    }
-    // A CONNECT that succeeded leaves the stream bound to the destination, so
-    // it can no longer carry a UDP ASSOCIATE. Reconnect for that probe rather
-    // than reporting a false negative on UDP.
-    if can_route {
-        stream = TcpStream::connect_timeout(&addr, PROXY_PROBE_TIMEOUT)
-            .map_err(|e| format!("TCP reconnect for UDP probe failed: {e}"))?;
-        stream.set_read_timeout(Some(PROXY_PROBE_TIMEOUT)).ok();
-        stream.set_write_timeout(Some(PROXY_PROBE_TIMEOUT)).ok();
-        stream
-            .write_all(&socks5_greeting(use_auth))
-            .map_err(|e| format!("write greeting (udp): {e}"))?;
-        let mut sel2 = [0u8; 2];
-        stream
-            .read_exact(&mut sel2)
-            .map_err(|e| format!("read greeting (udp): {e}"))?;
-        if sel2[1] == 0x02 {
-            if let (Some(user), Some(pass)) = (username, password) {
-                stream
-                    .write_all(&socks5_userpass(user, pass))
-                    .map_err(|e| format!("write auth (udp): {e}"))?;
-                let mut a2 = [0u8; 2];
-                let _ = stream.read_exact(&mut a2);
-            }
-        }
-    }
-
-    // UDP ASSOCIATE (RFC 1928 §4, CMD 0x03) with DST 0.0.0.0:0 — the
-    // standard "do you support UDP relay?" probe. ATYP 0x01 (IPv4).
-    let udp_req = [0x05u8, 0x03, 0x00, 0x01, 0, 0, 0, 0, 0, 0];
-    stream
-        .write_all(&udp_req)
-        .map_err(|e| format!("write UDP associate: {e}"))?;
-    let mut reply_head = [0u8; 4]; // VER REP RSV ATYP
-    let udp_associate = match stream.read_exact(&mut reply_head) {
-        Ok(()) => reply_head[1] == 0x00,
-        Err(_) => false,
-    };
-    // Drain the bound-address + port that follows a success reply so we
-    // leave the stream tidy before drop. Best-effort; ignore errors.
-    if udp_associate {
-        let addr_bytes = match reply_head[3] {
-            0x01 => 4 + 2,  // IPv4 + port
-            0x04 => 16 + 2, // IPv6 + port
-            0x03 => {
-                let mut len = [0u8; 1];
-                if stream.read_exact(&mut len).is_ok() {
-                    len[0] as usize + 2
-                } else {
-                    0
-                }
-            }
-            _ => 0,
-        };
-        if addr_bytes > 0 {
-            let mut sink = vec![0u8; addr_bytes];
-            let _ = stream.read_exact(&mut sink);
-        }
-    }
-
-    let latency_ms = start.elapsed().as_millis() as u64;
-    // The headline is whether traffic can actually LEAVE. UDP support is a
-    // qualifier on a working proxy, never a substitute for one — reporting it
-    // as the verdict is what let an endpoint that refuses every CONNECT read
-    // as healthy.
-    let udp_note = if udp_associate {
-        " UDP ASSOCIATE supported — QUIC / WebRTC / HTTP-3 tunnel through it too."
-    } else {
-        " UDP ASSOCIATE is not supported, so QUIC / WebRTC can't be tunnelled."
-    };
-    let message = if can_route {
-        format!("Working — CONNECT succeeded.{udp_note}")
-    } else {
-        // Name the refusal in the proxy's own words. "Failed" sends someone to
-        // re-check a password that was already accepted; "your plan does not
-        // allow this destination" sends them to their provider.
-        let why = match connect_reply {
-            0x02 => "the proxy refused it: not allowed by its ruleset (usually an expired plan, or a destination/port your provider blocks)",
-            0x03 => "the proxy reported the network as unreachable",
-            0x04 => "the proxy reported the host as unreachable",
-            0x05 => "the proxy's upstream refused the connection",
-            0x06 => "the connection expired (TTL) inside the proxy",
-            0x07 => "the proxy does not support CONNECT",
-            0x08 => "the proxy rejected the address type",
-            0xFF => "the proxy accepted the request and then answered nothing",
-            _ => "the proxy returned an unrecognised SOCKS5 error",
-        };
-        format!(
-            "Authenticates, but cannot route: {why}. Credentials are fine — this proxy will not carry traffic, so a profile launched through it cannot reach anything."
-        )
-    };
-    Ok(ProxyTestResult {
-        reachable: true,
-        auth_ok,
-        udp_associate,
-        can_route,
-        connect_reply,
-        latency_ms,
-        message,
-    })
-}
-
 /// Test a saved SOCKS5 proxy from the desktop host (raw sockets are unavailable
 /// inside the WebView, so the GUI invokes this). For an authorized main-window
 /// caller, operational failures return a `reachable: false` result carrying the
@@ -2807,6 +2528,7 @@ async fn proxy_test(
                 reachable: false,
                 auth_ok: false,
                 udp_associate: false,
+                udp_relay: UdpRelay::NotRun,
                 can_route: false,
                 connect_reply: 0xFF,
                 latency_ms: 0,
@@ -2819,6 +2541,7 @@ async fn proxy_test(
         reachable: false,
         auth_ok: false,
         udp_associate: false,
+        udp_relay: UdpRelay::NotRun,
         can_route: false,
         connect_reply: 0xFF,
         latency_ms: 0,

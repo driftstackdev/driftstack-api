@@ -43,6 +43,7 @@ import {
   type ProxyTestResult,
 } from '../lib/proxies';
 import { ProxyHostWarning } from '../components/ProxyHostWarning';
+import { udpRelayOf } from '../lib/udp-relay-verdict';
 import {
   invalidateProbe,
   clearCapabilityMaterialUnsynced,
@@ -536,8 +537,10 @@ export const UDP_AND_QUIC_TALLY_LABEL = 'UDP + QUIC';
  * The chips' own rules, restated once so the header counts exactly the rows that
  * show both ticks:
  *   UDP  — a VPN row: Driftstack's MEASURED relay verdict; a SOCKS5 row this Mac
- *          tested: its handshake reached, authenticated, routed and was granted
- *          UDP; a SOCKS5 row only Driftstack measured: Driftstack's verdict.
+ *          tested: its handshake reached, authenticated, routed, and a datagram
+ *          came back through the proxy's UDP relay (`udp_relay: 'relays'` — a
+ *          GRANT alone is not a tick, proxy-accuracy audit G1); a SOCKS5 row only
+ *          Driftstack measured: Driftstack's verdict.
  *   QUIC — a live session's HTTP/3, else the relay verdict (a live h2-only
  *          outranks a relay tick, as the chip does). An inference is not a tick.
  * Aged readings do not count: they are "when last checked", not now.
@@ -552,7 +555,7 @@ export function rowShowsUdpAndQuic(
   const udp =
     isVpnScheme(p.scheme) || result === undefined
       ? udpProbe === true
-      : isProxyUsable(result) && result.udp_associate;
+      : isProxyUsable(result) && udpRelayOf(result) === 'relays';
   const quic = quicMeasured === 'h3' || (quicMeasured !== 'h2-only' && quicProbe === true);
   return udp && quic;
 }

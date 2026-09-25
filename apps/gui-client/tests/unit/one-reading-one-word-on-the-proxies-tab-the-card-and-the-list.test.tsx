@@ -40,12 +40,13 @@ const OK_UDP: ProxyTestResult = {
   reachable: true,
   auth_ok: true,
   udp_associate: true,
+  udp_relay: 'relays',
   can_route: true,
   connect_reply: 0x00,
   latency_ms: 40,
   message: 'ok',
 };
-const NO_UDP: ProxyTestResult = { ...OK_UDP, udp_associate: false };
+const NO_UDP: ProxyTestResult = { ...OK_UDP, udp_associate: false, udp_relay: 'refused' };
 const DOWN: ProxyTestResult = { ...OK_UDP, reachable: false, auth_ok: false, can_route: false };
 const SOCKS = { scheme: 'socks5' as const };
 const WG = { scheme: 'wireguard' as const };

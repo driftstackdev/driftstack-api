@@ -190,6 +190,7 @@ const NO_UDP: ProxyTestResult = {
   reachable: true,
   auth_ok: true,
   udp_associate: false,
+  udp_relay: 'refused',
   can_route: true,
   connect_reply: 0x00,
   latency_ms: 12,
@@ -200,6 +201,7 @@ const PLACEHOLDER: ProxyTestResult = {
   reachable: false,
   auth_ok: false,
   udp_associate: false,
+  udp_relay: 'refused',
   can_route: false,
   connect_reply: 0xff,
   latency_ms: 0,
@@ -307,7 +309,7 @@ describe('a SOCKS5 row whose two checks DISAGREE says so, identically on both su
 
   it('CONTROL — with UDP WORKING, a measured green reaches both surfaces in the present tense and neither mentions a disagreement', async () => {
     seed({
-      result: { ...NO_UDP, udp_associate: true },
+      result: { ...NO_UDP, udp_associate: true, udp_relay: 'relays' },
       at: Date.now() - MIN,
       quicProbe: true,
       quicProbeAt: Date.now() - MIN,

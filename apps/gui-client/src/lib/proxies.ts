@@ -14,6 +14,7 @@
 // migrate ciphertext-first and are removed only after the encrypted write is
 // durable.
 
+import type { UdpRelayVerdict } from './udp-relay-verdict';
 import { invoke } from '@tauri-apps/api/core';
 import { LazyStore } from '@tauri-apps/plugin-store';
 import type {
@@ -1009,8 +1010,18 @@ export interface ProxyTestResult {
   reachable: boolean;
   /** Auth accepted, or none required. `false` only on rejected creds. */
   auth_ok: boolean;
-  /** `UDP ASSOCIATE` answered with success — QUIC / WebRTC tunnel works. */
+  /**
+   * The RAW grant: the proxy answered `UDP ASSOCIATE` with success. ⛔ NOT a
+   * claim that UDP works — a proxy can grant and drop every datagram (proxy-
+   * accuracy audit G1). What UDP does is `udp_relay`; read it with `udpRelayOf` (lib/udp-relay-verdict).
+   */
   udp_associate: boolean;
+  /**
+   * Whether a datagram went through the proxy's UDP relay and its answer came
+   * back, checked from this Mac (the native `UdpRelay`). Absent on a result
+   * written before the check existed — read as `'not_run'`, never as a relay.
+   */
+  udp_relay?: UdpRelayVerdict;
   /**
    * A real SOCKS5 CONNECT to a public destination succeeded.
    *

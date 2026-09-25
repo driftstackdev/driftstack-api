@@ -14,24 +14,29 @@
 // `udp_associate` alone said they were. Reported: a proxy that relays UDP but
 // does not carry HTTP/3 still showed a green ✓ QUIC.
 //
-// UDP ASSOCIATE is NECESSARY for QUIC and nowhere near SUFFICIENT. The probe
-// establishes that the proxy will relay a UDP datagram — which is exactly what
-// WebRTC needs, so that chip is a fair verdict. QUIC additionally needs
-// sustained bidirectional UDP on :443 with datagrams large enough for the
-// handshake, and plenty of exits relay UDP while blocking UDP/443 outright,
-// DPI-ing the QUIC Initial, or fragmenting past its minimum MTU.
+// ⛔ A UDP ASSOCIATE GRANT IS NOT A RELAY (proxy-accuracy audit G1). This header
+// used to say the probe "establishes that the proxy will relay a UDP datagram";
+// it established only that the proxy said yes. A proxy that grants UDP and drops
+// every datagram read ✓ UDP and "~ QUIC likely". The native check now sends one
+// datagram through the relay and reports `udp_relay`: ✓ only for 'relays', ⤵
+// only for the proxy's own refusal ('refused'), and "— UDP" for a relay that
+// stayed silent ("not verified" — the check is one DNS query, and an exit that
+// blocks only that port reads the same) or a check that did not run.
 //
-// The probe has no QUIC signal (ProxyTestResult carries reachable / auth_ok /
-// udp_associate / can_route / connect_reply / latency_ms), so QUIC cannot be
-// verified from here — only inferred. It is therefore reported as INFERRED, a
-// third state, rather than as a measurement we did not take. Same lesson as
-// isProxyUsable: one signal must not be quietly restated as a different claim.
+// A relay that answered is NECESSARY for QUIC and nowhere near SUFFICIENT: QUIC
+// additionally needs sustained bidirectional UDP on :443 with datagrams large
+// enough for the handshake, and plenty of exits relay UDP while blocking UDP/443
+// outright, DPI-ing the QUIC Initial, or fragmenting past its minimum MTU. The
+// probe has no QUIC signal, so QUIC is reported as INFERRED ('~') — and only from
+// a relay that answered, never from a grant. Same lesson as isProxyUsable: one
+// signal must not be quietly restated as a different claim.
 //
 // proxyCapabilities() is pure + exported for unit tests; the chips component is
 // shared by ProxiesView and ProfilesView so the proxy story is identical
 // everywhere.
 
 import { isProxyUsable, type ProxyTestResult } from '../lib/proxies';
+import { udpRelayOf } from '../lib/udp-relay-verdict';
 import type { MeasuredQuic } from '../lib/account-proxies';
 import {
   agedOsFingerprintVerdict,
@@ -40,7 +45,7 @@ import {
   type OsFingerprint,
 } from '../lib/os-fingerprint-verdict';
 import type { AgedReading, AgedRowReadings } from '../lib/proxy-probe-cache';
-import { READING_MARK } from '../lib/reading-badge-words';
+import { DETAIL_SEPARATOR, READING_MARK } from '../lib/reading-badge-words';
 import { formatRelativeNarrow } from './RelativeTime';
 
 /** Owner item 9 (2026-09-24) — ONE word for the UDP reading on every surface: the
@@ -54,6 +59,17 @@ export const UDP_LABEL = 'UDP';
  *  ("OS not measured yet. Run Test on this proxy.", os-fingerprint-verdict.ts),
  *  so the three missing readings read as one voice wherever they are listed. */
 const NOT_MEASURED_YET_HINT = 'not measured yet. Run Test on this proxy.';
+
+/** G1 — the detail after "— UDP" when the proxy granted UDP and nothing came back. */
+export const UDP_NOT_VERIFIED_DETAIL = 'not verified';
+/** …and its hover. Not a verdict either way: the check is one small query, and an
+ *  exit that blocks only that kind of traffic reads the same as a dead relay. */
+export const UDP_NOT_VERIFIED_HINT =
+  'UDP not verified from this Mac — the proxy accepts UDP, but nothing came back through it when checked. That does not mean UDP fails: some proxies block only the kind of traffic the check sends.';
+/** G1/G4 — this Mac's check did not finish its UDP step (the proxy turned away a
+ *  second connection, or a check from before this release). Not measured. */
+export const UDP_NOT_RUN_HINT =
+  'UDP not measured from this Mac — its check did not finish the UDP step.';
 
 export interface ProxyCapability {
   /** 'quic-relay' — T-1's SEPARATE probe chip: the fleet Mac's standalone QUIC
@@ -77,6 +93,8 @@ export interface ProxyCapability {
    * could ask.
    */
   unmeasured?: true;
+  /** What a not-measured chip says after its word ("— UDP · not verified"). */
+  detail?: string;
   /**
    * Set when this chip shows a reading that is NO LONGER CURRENT: what it found
    * (`value`) and when (`atMs`). `ok` / `inferred` beside it still describe the
@@ -168,7 +186,13 @@ export function proxyCapabilities(
   // Capability chips describe a proxy that can carry traffic. Auth alone is not
   // that: a proxy can authenticate and refuse every CONNECT.
   const live = isProxyUsable(result);
-  const udp = live && result.udp_associate;
+  // G1 — what UDP does is the RELAY verdict, never the grant (`udp_associate`).
+  const relay = udpRelayOf(result);
+  const udp = live && relay === 'relays';
+  // The one measured NO: the proxy refused UDP.
+  const udpRefused = live && relay === 'refused';
+  // Granted but silent, or not run: nothing says whether UDP works.
+  const udpUnknown = live && !udp && !udpRefused;
   // ⛔ A proxy that carried NOTHING on its last test (unreachable, login refused,
   // every CONNECT refused) gave no UDP answer and no QUIC one: its UDP-associate
   // flag is false because nothing was asked, not because the proxy said no. So
@@ -227,17 +251,31 @@ export function proxyCapabilities(
                   unmeasured: true,
                   hint: DOWN_HINT('QUIC'),
                 }
-              : {
-                  key: 'quic',
-                  label: 'QUIC',
-                  // Nothing measured → the UDP inference: LIKELY when UDP relays,
-                  // impossible when it does not. Never green (it's a guess).
-                  ok: udp,
-                  inferred: udp,
-                  hint: udp
-                    ? 'UDP works, so HTTP/3 is likely — not yet tested. Run Test or a session to confirm.'
-                    : 'No UDP — HTTP/3 cannot work here; it falls back to HTTP/2.',
-                };
+              : udpUnknown
+                ? {
+                    // G1 — never "~ likely" from a grant, and never the ⤵ of "no
+                    // UDP" from a relay nobody heard back from.
+                    key: 'quic',
+                    label: 'QUIC',
+                    ok: false,
+                    inferred: false,
+                    unmeasured: true,
+                    hint:
+                      relay === 'silent'
+                        ? 'QUIC not measured — UDP was not verified from this Mac, so nothing here says whether HTTP/3 works.'
+                        : `QUIC ${NOT_MEASURED_YET_HINT}`,
+                  }
+                : {
+                    key: 'quic',
+                    label: 'QUIC',
+                    // Nothing measured → the UDP inference: LIKELY when UDP relays,
+                    // impossible when it does not. Never green (it's a guess).
+                    ok: udp,
+                    inferred: udp,
+                    hint: udp
+                      ? 'UDP works, so HTTP/3 is likely — not yet tested. Run Test or a session to confirm.'
+                      : 'No UDP — HTTP/3 cannot work here; it falls back to HTTP/2.',
+                  };
   // The third state: nothing CURRENT was measured, but something was, a while
   // ago. Showing the inference here ("not yet tested — run Test") is what told a
   // customer to test a proxy they had tested that morning.
@@ -264,29 +302,46 @@ export function proxyCapabilities(
   // sees the card say one thing and the grid another about one proxy. The reading
   // is shown, aged like every other aged reading, and the hint says the two checks
   // disagree rather than pretending either one settles it.
-  const agedStandsIn = nothingCurrent && agedQuic !== undefined && (udp || agedQuic.value);
+  //
+  // G1 — and when UDP is NOT KNOWN (granted but silent, or not run) the fallback
+  // is "not measured", so a dated reading of either polarity beats it, exactly as
+  // it beats the inference.
+  const agedStandsIn =
+    nothingCurrent && agedQuic !== undefined && (udp || udpUnknown || agedQuic.value);
   if (agedStandsIn && agedQuic !== undefined) {
     quicChip.aged = agedQuic;
+    delete quicChip.unmeasured;
     const when = agedReadingHint(agedQuic.atMs, agedHint.nowMs, agedHint.autoRecheck);
-    quicChip.hint = udp
+    quicChip.hint = !udpRefused
       ? `${when} ${
           agedQuic.value
             ? 'HTTP/3 worked through this exit then.'
             : 'HTTP/3 did not work through this exit then — it fell back to HTTP/2.'
         }`
-      : `${when} HTTP/3 worked through this exit then, but UDP is not getting through from this device now — the two checks disagree, so HTTP/3 may fall back to HTTP/2.`;
+      : `${when} HTTP/3 worked through this exit then, but the proxy refused UDP from this Mac now — the two checks disagree, so HTTP/3 may fall back to HTTP/2.`;
   }
   return [
-    live
-      ? {
-          key: 'webrtc',
-          label: UDP_LABEL,
-          ok: udp,
-          hint: udp
-            ? 'UDP works — WebRTC calls and media stream through this exit.'
-            : 'No UDP — WebRTC falls back to a slower, more detectable path.',
-        }
-      : { key: 'webrtc', label: UDP_LABEL, ok: false, unmeasured: true, hint: DOWN_HINT('UDP') },
+    !live
+      ? { key: 'webrtc', label: UDP_LABEL, ok: false, unmeasured: true, hint: DOWN_HINT('UDP') }
+      : udpUnknown
+        ? relay === 'silent'
+          ? {
+              key: 'webrtc',
+              label: UDP_LABEL,
+              ok: false,
+              unmeasured: true,
+              detail: UDP_NOT_VERIFIED_DETAIL,
+              hint: UDP_NOT_VERIFIED_HINT,
+            }
+          : { key: 'webrtc', label: UDP_LABEL, ok: false, unmeasured: true, hint: UDP_NOT_RUN_HINT }
+        : {
+            key: 'webrtc',
+            label: UDP_LABEL,
+            ok: udp,
+            hint: udp
+              ? 'UDP works — WebRTC calls and media stream through this exit.'
+              : 'No UDP — WebRTC falls back to a slower, more detectable path.',
+          },
     quicChip,
     // gui-v0.1.73 review — HTTP/2 is a reading too, and a proxy that carried
     // nothing had it read "⤵ HTTP/2" beside "— UDP" "— QUIC": the mark of a
@@ -368,6 +423,9 @@ export function serverReadingCapabilities(
     reachable: true,
     auth_ok: true,
     udp_associate: udpProbe === true,
+    // Driftstack's reading as the relay verdict it stands for: a measured true
+    // relays, a measured false refused, and no reading is not measured.
+    udp_relay: udpProbe === true ? 'relays' : udpProbe === false ? 'refused' : 'not_run',
     can_route: true,
     connect_reply: 0x00,
     latency_ms: 0,
@@ -464,6 +522,7 @@ export function ProxyCapabilityChips({
           >
             <span aria-hidden="true">{READING_MARK.notMeasured}</span>
             {c.label}
+            {c.detail !== undefined ? `${DETAIL_SEPARATOR}${c.detail}` : ''}
           </span>
         ) : c.aged !== undefined ? (
           // An AGED reading: past tense, muted, dated. `data-ok="aged"` — never

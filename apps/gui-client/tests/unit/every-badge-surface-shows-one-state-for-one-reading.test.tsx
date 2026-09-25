@@ -408,6 +408,7 @@ describe('owner item 9 — the Proxies grid draws Driftstack’s readings of a p
       reachable: false,
       auth_ok: false,
       udp_associate: false,
+      udp_relay: 'refused',
       can_route: false,
       connect_reply: 0xff,
       latency_ms: 0,
@@ -513,18 +514,24 @@ const OK_UDP_RESULT: ProxyTestResult = {
   reachable: true,
   auth_ok: true,
   udp_associate: true,
+  udp_relay: 'relays',
   can_route: true,
   connect_reply: 0x00,
   latency_ms: 40,
   message: 'ok',
 };
-const NO_UDP_RESULT: ProxyTestResult = { ...OK_UDP_RESULT, udp_associate: false };
+const NO_UDP_RESULT: ProxyTestResult = {
+  ...OK_UDP_RESULT,
+  udp_associate: false,
+  udp_relay: 'refused',
+};
 /** A proxy that was DOWN on its last test: nothing got through it, so no UDP or
  *  QUIC reading was taken at all. */
 const DOWN_RESULT: ProxyTestResult = {
   reachable: false,
   auth_ok: false,
   udp_associate: false,
+  udp_relay: 'refused',
   can_route: false,
   connect_reply: 0xff,
   latency_ms: 0,
@@ -1144,7 +1151,10 @@ describe('owner item 9 — ONE vocabulary: every surface badges one state in the
         .join(' ');
     for (const [why, result] of [
       ['unreachable', DOWN_RESULT],
-      ['login refused', { ...OK_UDP_RESULT, auth_ok: false, udp_associate: false }],
+      [
+        'login refused',
+        { ...OK_UDP_RESULT, auth_ok: false, udp_associate: false, udp_relay: 'refused' },
+      ],
       // Reached and logged in, every CONNECT refused: "the login failed" would be false.
       [
         'every CONNECT refused',

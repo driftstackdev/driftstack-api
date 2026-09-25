@@ -452,8 +452,10 @@ function newestReadingAt(
  *
  *   • a SOCKS5 row: its OS reading and its QUIC reading (the live session's or
  *     the Test's, whichever is newer — they answer one question). Its UDP state
- *     is the native handshake's own `udp_associate`, which the reachability
- *     sweep keeps current; there is nothing of Driftstack's to re-take.
+ *     is the native check's own relay verdict (`udp_relay`: a datagram through
+ *     the proxy's relay, never the bare ASSOCIATE grant — proxy-accuracy audit
+ *     G1), which the reachability sweep keeps current; there is nothing of
+ *     Driftstack's to re-take.
  *   • a VPN row: its QUIC and UDP readings. It has NO OS reading to take — there
  *     is no proxy stack behind a tunnel to fingerprint — and says so from its
  *     scheme, so OS is never a reason to bring a tunnel up.

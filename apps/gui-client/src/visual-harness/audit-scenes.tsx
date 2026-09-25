@@ -696,6 +696,7 @@ export function auditProxyProbes(): Record<string, CachedProbe> {
     reachable: true,
     auth_ok: true,
     udp_associate: true,
+    udp_relay: 'relays',
     can_route: true,
     connect_reply: 0,
     latency_ms,

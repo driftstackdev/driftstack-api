@@ -29,6 +29,7 @@ const UDP_OK: ProxyTestResult = {
   reachable: true,
   auth_ok: true,
   udp_associate: true,
+  udp_relay: 'relays',
   can_route: true,
   connect_reply: 0x00,
   latency_ms: 12,
@@ -52,7 +53,7 @@ describe('QUIC is inferred, not measured', () => {
   });
 
   it('the NEGATIVE stays solid — no UDP relay means QUIC genuinely cannot work, which is a measurement', () => {
-    const quic = cap({ ...UDP_OK, udp_associate: false }, 'quic');
+    const quic = cap({ ...UDP_OK, udp_associate: false, udp_relay: 'refused' }, 'quic');
     expect(quic.ok).toBe(false);
     expect(quic.inferred ?? false, 'a negative needs no hedge').toBe(false);
   });
@@ -120,7 +121,7 @@ describe('QUIC measured in a live session overrides the inference', () => {
     expect(capQ(UDP_OK, 'h2-only', 'quic').ok).toBe(false);
     // …and a live session that carried HTTP/3 is proof it works even if the
     // native UDP-associate probe never saw a relay.
-    const noUdp = { ...UDP_OK, udp_associate: false };
+    const noUdp: ProxyTestResult = { ...UDP_OK, udp_associate: false, udp_relay: 'refused' };
     const quic = capQ(noUdp, 'h3', 'quic');
     expect(quic.ok).toBe(true);
     expect(quic.inferred ?? false).toBe(false);

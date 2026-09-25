@@ -96,6 +96,7 @@ const OK: ProxyTestResult = {
   reachable: true,
   auth_ok: true,
   udp_associate: true,
+  udp_relay: 'relays',
   can_route: true,
   connect_reply: 0,
   latency_ms: 40,
@@ -477,7 +478,7 @@ describe('the chips — an aged reading can never be mistaken for a current one'
     // and "HTTP/3 cannot work here" on the grid. The measured reading is shown,
     // aged like every other, and the hint says the two checks disagree.
     const agedPositiveNoUdp = proxyCapabilities(
-      { ...OK, udp_associate: false },
+      { ...OK, udp_associate: false, udp_relay: 'refused' },
       undefined,
       undefined,
       aged,
@@ -504,7 +505,7 @@ describe('the chips — an aged reading can never be mistaken for a current one'
       'p',
     );
     const noUdp = proxyCapabilities(
-      { ...OK, udp_associate: false },
+      { ...OK, udp_associate: false, udp_relay: 'refused' },
       undefined,
       undefined,
       agedNegative,
@@ -633,8 +634,12 @@ describe('the chips — an aged reading can never be mistaken for a current one'
       ),
     );
     expect(
-      render(<ProxyCapabilityChips result={{ ...OK, udp_associate: false }} size="xs" />).container
-        .innerHTML,
+      render(
+        <ProxyCapabilityChips
+          result={{ ...OK, udp_associate: false, udp_relay: 'refused' }}
+          size="xs"
+        />,
+      ).container.innerHTML,
     ).toBe(
       row(
         chip(
