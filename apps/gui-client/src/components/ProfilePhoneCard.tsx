@@ -162,7 +162,7 @@ import {
   QUIC_SENTENCE,
   UDP_WORKS_SENTENCE,
 } from '../lib/proxy-check-copy';
-import { READING_MARK, READING_WORD, badgeText } from '../lib/reading-badge-words';
+import { READING_MARK, READING_WORD, badgeText, badgeWithDetail } from '../lib/reading-badge-words';
 
 /** (o) — the pre-flight of a VPN/HTTP row: a DNS resolve of the configured
  *  endpoint (field names match the cache's `CachedEndpointVerdict`; typed
@@ -1280,13 +1280,27 @@ export function capabilityChips(
     // (The tile is in its 'repair' row then and draws no chip; the sheet and
     // the list read this one.)
     const udp = caps.find((c) => c.key === 'webrtc');
+    // G1 — "granted but silent" carries its detail ('— UDP · not verified', as the
+    // Proxies tab writes it). ⛔ The TILE keeps the bare '— UDP' and the detail
+    // in its hover, for WIDTH: its caps row is 144px at the widest column, and
+    // the detail form measures like '— UDP · not on plan' (102.45 in the table
+    // above) — beside '— QUIC' (44.3) and an OS chip it cannot fit, so it would
+    // push a MEASURED chip behind a '+N'. The sheet has the room and prints it;
+    // the attribute below names the state on both.
+    const text =
+      surface === 'sheet' && udp?.detail !== undefined
+        ? badgeWithDetail(READING_MARK.notMeasured, READING_WORD.udp, udp.detail)
+        : UDP_NOT_MEASURED;
     eligible.push({
       key: 'udp',
-      text: UDP_NOT_MEASURED,
-      width: chipWidth(UDP_NOT_MEASURED),
+      text,
+      width: chipWidth(text),
       className: CHIP_MUTED_CLASS,
       title: udp?.hint ?? '',
-      attrs: { 'data-udp': 'unmeasured' },
+      attrs: {
+        'data-udp': 'unmeasured',
+        ...(udp?.detail !== undefined ? { 'data-udp-detail': udp.detail } : {}),
+      },
     });
   } else if (caps !== null) {
     const udpOk = caps.find((c) => c.key === 'webrtc')?.ok ?? false;

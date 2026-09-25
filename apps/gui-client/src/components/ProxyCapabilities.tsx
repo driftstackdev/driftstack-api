@@ -60,12 +60,12 @@ export const UDP_LABEL = 'UDP';
  *  so the three missing readings read as one voice wherever they are listed. */
 const NOT_MEASURED_YET_HINT = 'not measured yet. Run Test on this proxy.';
 
-/** G1 — the detail after "— UDP" when the proxy granted UDP and nothing came back. */
+/** G1 — the detail after "— UDP" when the proxy granted UDP and no answer came back. */
 export const UDP_NOT_VERIFIED_DETAIL = 'not verified';
 /** …and its hover. Not a verdict either way: the check is one small query, and an
  *  exit that blocks only that kind of traffic reads the same as a dead relay. */
 export const UDP_NOT_VERIFIED_HINT =
-  'UDP not verified from this Mac — the proxy accepts UDP, but nothing came back through it when checked. That does not mean UDP fails: some proxies block only the kind of traffic the check sends.';
+  'UDP not verified from this Mac — the proxy accepts UDP, but no answer came back through it when checked. That does not mean UDP fails: some proxies block only the kind of traffic the check sends.';
 /** G1/G4 — this Mac's check did not finish its UDP step (the proxy turned away a
  *  second connection, or a check from before this release). Not measured. */
 export const UDP_NOT_RUN_HINT =

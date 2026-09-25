@@ -10,7 +10,7 @@
 
 /**
  *   • 'relays'  — a datagram went through the relay and its answer came back (✓);
- *   • 'silent'  — the proxy granted UDP, but nothing came back. NOT a verdict:
+ *   • 'silent'  — the proxy granted UDP, but no answer came back. NOT a verdict:
  *                 the check is one query on one port, and an exit that blocks
  *                 only that port reads the same. "— UDP · not verified";
  *   • 'refused' — the proxy refused UDP: the one measured NO (⤵);

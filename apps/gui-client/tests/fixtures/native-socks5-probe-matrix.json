@@ -11,9 +11,11 @@
         "connects": 1,
         "datagrams_in": 1,
         "datagrams_out": 1,
+        "dns_answers_out": 1,
         "logins": [],
         "tcp_accepted": 2,
-        "tcp_turned_away": 0
+        "tcp_turned_away": 0,
+        "tunnels_closed_at_once": 0
       },
       "result": {
         "auth_ok": true,
@@ -36,20 +38,76 @@
         "connects": 1,
         "datagrams_in": 1,
         "datagrams_out": 0,
+        "dns_answers_out": 0,
         "logins": [],
         "tcp_accepted": 2,
-        "tcp_turned_away": 0
+        "tcp_turned_away": 0,
+        "tunnels_closed_at_once": 0
       },
       "result": {
         "auth_ok": true,
         "can_route": true,
         "connect_reply": 0,
-        "message": "Working — CONNECT succeeded. UDP not verified: the proxy accepts UDP requests, but nothing came back through it.",
+        "message": "Working — CONNECT succeeded. UDP not verified: the proxy accepts UDP requests, but no answer came back through it.",
         "reachable": true,
         "udp_associate": true,
         "udp_relay": "silent"
       },
       "what_really_happens": "grant-drop: ASSOCIATE granted, every datagram dropped"
+    },
+    {
+      "fixture": "B-reflect",
+      "log": {
+        "associate_refused": 0,
+        "associates": 1,
+        "bytes_after_connect_reply": 0,
+        "connect_refused": 0,
+        "connects": 1,
+        "datagrams_in": 1,
+        "datagrams_out": 1,
+        "dns_answers_out": 0,
+        "logins": [],
+        "tcp_accepted": 2,
+        "tcp_turned_away": 0,
+        "tunnels_closed_at_once": 0
+      },
+      "result": {
+        "auth_ok": true,
+        "can_route": true,
+        "connect_reply": 0,
+        "message": "Working — CONNECT succeeded. UDP not verified: the proxy accepts UDP requests, but no answer came back through it.",
+        "reachable": true,
+        "udp_associate": true,
+        "udp_relay": "silent"
+      },
+      "what_really_happens": "grant, then every datagram sent straight back unchanged (no resolver answer)"
+    },
+    {
+      "fixture": "B-wrong-id",
+      "log": {
+        "associate_refused": 0,
+        "associates": 1,
+        "bytes_after_connect_reply": 0,
+        "connect_refused": 0,
+        "connects": 1,
+        "datagrams_in": 1,
+        "datagrams_out": 1,
+        "dns_answers_out": 0,
+        "logins": [],
+        "tcp_accepted": 2,
+        "tcp_turned_away": 0,
+        "tunnels_closed_at_once": 0
+      },
+      "result": {
+        "auth_ok": true,
+        "can_route": true,
+        "connect_reply": 0,
+        "message": "Working — CONNECT succeeded. UDP not verified: the proxy accepts UDP requests, but no answer came back through it.",
+        "reachable": true,
+        "udp_associate": true,
+        "udp_relay": "silent"
+      },
+      "what_really_happens": "grant, then a DNS answer under another transaction id"
     },
     {
       "fixture": "B0",
@@ -61,9 +119,11 @@
         "connects": 1,
         "datagrams_in": 1,
         "datagrams_out": 1,
+        "dns_answers_out": 1,
         "logins": [],
         "tcp_accepted": 2,
-        "tcp_turned_away": 0
+        "tcp_turned_away": 0,
+        "tunnels_closed_at_once": 0
       },
       "result": {
         "auth_ok": true,
@@ -86,9 +146,11 @@
         "connects": 1,
         "datagrams_in": 0,
         "datagrams_out": 0,
+        "dns_answers_out": 0,
         "logins": [],
         "tcp_accepted": 2,
-        "tcp_turned_away": 0
+        "tcp_turned_away": 0,
+        "tunnels_closed_at_once": 0
       },
       "result": {
         "auth_ok": true,
@@ -111,9 +173,11 @@
         "connects": 1,
         "datagrams_in": 0,
         "datagrams_out": 0,
+        "dns_answers_out": 0,
         "logins": [],
         "tcp_accepted": 2,
-        "tcp_turned_away": 0
+        "tcp_turned_away": 0,
+        "tunnels_closed_at_once": 0
       },
       "result": {
         "auth_ok": true,
@@ -136,9 +200,11 @@
         "connects": 0,
         "datagrams_in": 0,
         "datagrams_out": 0,
+        "dns_answers_out": 0,
         "logins": [["u", "wrong"]],
         "tcp_accepted": 1,
-        "tcp_turned_away": 0
+        "tcp_turned_away": 0,
+        "tunnels_closed_at_once": 0
       },
       "result": {
         "auth_ok": false,
@@ -161,9 +227,11 @@
         "connects": 1,
         "datagrams_in": 0,
         "datagrams_out": 0,
+        "dns_answers_out": 0,
         "logins": [],
         "tcp_accepted": 1,
-        "tcp_turned_away": 0
+        "tcp_turned_away": 0,
+        "tunnels_closed_at_once": 0
       },
       "result": {
         "auth_ok": true,
@@ -177,6 +245,33 @@
       "what_really_happens": "login ok, CONNECT refused 0x02, UDP relays"
     },
     {
+      "fixture": "I0",
+      "log": {
+        "associate_refused": 0,
+        "associates": 1,
+        "bytes_after_connect_reply": 0,
+        "connect_refused": 0,
+        "connects": 1,
+        "datagrams_in": 1,
+        "datagrams_out": 0,
+        "dns_answers_out": 0,
+        "logins": [],
+        "tcp_accepted": 2,
+        "tcp_turned_away": 0,
+        "tunnels_closed_at_once": 1
+      },
+      "result": {
+        "auth_ok": true,
+        "can_route": true,
+        "connect_reply": 0,
+        "message": "Working — CONNECT succeeded. UDP not verified: the proxy accepts UDP requests, but no answer came back through it.",
+        "reachable": true,
+        "udp_associate": true,
+        "udp_relay": "silent"
+      },
+      "what_really_happens": "CONNECT answered 0x00, then the tunnel closed at once; UDP granted and dropped"
+    },
+    {
       "fixture": "J",
       "log": {
         "associate_refused": 0,
@@ -186,9 +281,11 @@
         "connects": 1,
         "datagrams_in": 0,
         "datagrams_out": 0,
+        "dns_answers_out": 0,
         "logins": [],
         "tcp_accepted": 1,
-        "tcp_turned_away": 1
+        "tcp_turned_away": 1,
+        "tunnels_closed_at_once": 0
       },
       "result": {
         "auth_ok": true,
@@ -211,9 +308,11 @@
         "connects": 1,
         "datagrams_in": 0,
         "datagrams_out": 0,
+        "dns_answers_out": 0,
         "logins": [],
         "tcp_accepted": 2,
-        "tcp_turned_away": 0
+        "tcp_turned_away": 0,
+        "tunnels_closed_at_once": 0
       },
       "result": {
         "auth_ok": true,
@@ -236,9 +335,11 @@
         "connects": 1,
         "datagrams_in": 0,
         "datagrams_out": 0,
+        "dns_answers_out": 0,
         "logins": [],
         "tcp_accepted": 1,
-        "tcp_turned_away": 0
+        "tcp_turned_away": 0,
+        "tunnels_closed_at_once": 0
       },
       "result": {
         "auth_ok": true,
@@ -261,12 +362,14 @@
         "connects": 1,
         "datagrams_in": 1,
         "datagrams_out": 1,
+        "dns_answers_out": 1,
         "logins": [
           ["u", ""],
           ["u", ""]
         ],
         "tcp_accepted": 2,
-        "tcp_turned_away": 0
+        "tcp_turned_away": 0,
+        "tunnels_closed_at_once": 0
       },
       "result": {
         "auth_ok": true,

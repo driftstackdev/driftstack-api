@@ -4,7 +4,8 @@
 // in src-tauri (socks5_probe.rs): each §5.2 fixture is a fake SOCKS5 proxy on
 // 127.0.0.1 that LOGS what really happened — connections accepted and turned
 // away, each login, each CONNECT and any bytes after its reply, each UDP
-// ASSOCIATE and its refusal, datagrams in and out — beside what the REAL native
+// ASSOCIATE and its refusal, datagrams in and out and which of those were a
+// resolver's answer to the probe's own query — beside what the REAL native
 // probe returned against it. The Rust test fails when the probe stops matching
 // the file, so this suite always reads what the shipped probe does.
 //
@@ -37,6 +38,9 @@ interface FixtureLog {
   associate_refused: number;
   datagrams_in: number;
   datagrams_out: number;
+  /** Of `datagrams_out`, the DNS answers to the probe's own query. */
+  dns_answers_out: number;
+  tunnels_closed_at_once: number;
 }
 interface Fixture {
   fixture: string;
@@ -63,9 +67,24 @@ function tabMarks(r: ProxyTestResult): { udp: string; quic: string } {
 }
 
 describe('§5 matrix — the golden file covers the fixtures stage 1 needs', () => {
-  it('holds A, B, B0, C7, C2, D, H, J, K, L and M, each with a log', () => {
+  it('holds A, B (and its reflector and wrong-id twins), B0, C7, C2, D, H, I0, J, K, L and M, each with a log', () => {
     expect([...byId.keys()].sort()).toEqual(
-      ['A', 'B', 'B0', 'C2', 'C7', 'D', 'H', 'J', 'K', 'L', 'M'].sort(),
+      [
+        'A',
+        'B',
+        'B-reflect',
+        'B-wrong-id',
+        'B0',
+        'C2',
+        'C7',
+        'D',
+        'H',
+        'I0',
+        'J',
+        'K',
+        'L',
+        'M',
+      ].sort(),
     );
     for (const f of MATRIX.fixtures) expect(f.log.tcp_accepted, f.fixture).toBeGreaterThan(0);
   });
@@ -78,11 +97,15 @@ describe('C1 — every UDP mark on every surface is backed by the fixture’s lo
       const caps = proxyCapabilities(r);
       const udp = caps.find((c) => c.key === 'webrtc');
       const quic = caps.find((c) => c.key === 'quic');
-      const relayed = f.log.datagrams_in >= 1 && f.log.datagrams_out >= 1;
+      // ⛔ A datagram merely coming back is not a relay: the reflector fixture
+      // sends our own query straight back, the wrong-id one answers another
+      // query. Only the resolver's answer to the probe's query is the positive
+      // event a ✓ needs.
+      const relayed = f.log.datagrams_in >= 1 && f.log.dns_answers_out >= 1;
       const refused = f.log.associate_refused >= 1;
       const usable = isProxyUsable(r);
 
-      // ✓ UDP ⇔ a datagram went through the fake's relay AND came back.
+      // ✓ UDP ⇔ a query went through the fake's relay AND its answer came back.
       expect(udp?.ok === true && udp.unmeasured !== true, 'a ✓ needs a round trip in the log').toBe(
         usable && relayed,
       );
@@ -145,6 +168,40 @@ describe('§5.2 — the expected badges, fixture by fixture', () => {
     expect(m.quic).not.toContain('⤵');
   });
 
+  // Review minor — "granted but silent" is "— UDP · not verified" on the card too.
+  // The details sheet prints the detail; the TILE keeps the bare "— UDP" for
+  // width (its caps row cannot hold the longer chip beside "— QUIC" and an OS
+  // chip without hiding a measured one behind "+N" — see capabilityChips), and
+  // names the state in its hover and its data attribute instead.
+  it('B on the card: the sheet reads "— UDP · not verified"; the tile reads "— UDP" and says "not verified" in its hover and attribute — never ✓, never ⤵', () => {
+    const input = { hasProxy: true, capabilities: resultOf(byId.get('B')!) } as CapsInput;
+    const sheet = capabilityChips(input, 'sheet').eligible.find((c) => c.key === 'udp');
+    expect(sheet?.text).toBe('— UDP · not verified');
+    const tile = capabilityChips(input).eligible.find((c) => c.key === 'udp');
+    expect(tile?.text).toBe('— UDP');
+    expect(tile?.attrs['data-udp-detail']).toBe('not verified');
+    expect(tile?.title).toMatch(/not verified/);
+    // CONTROL — a UDP stage that did not run carries no such detail.
+    const notRun = capabilityChips({
+      hasProxy: true,
+      capabilities: resultOf(byId.get('J')!),
+    } as CapsInput).eligible.find((c) => c.key === 'udp');
+    expect(notRun?.text).toBe('— UDP');
+    expect(notRun?.attrs['data-udp-detail']).toBeUndefined();
+  });
+
+  it('B-reflect / B-wrong-id: traffic came back but no answer to our query — "— UDP · not verified", never ✓ and never ~ QUIC', () => {
+    for (const id of ['B-reflect', 'B-wrong-id']) {
+      const f = byId.get(id)!;
+      expect(f.log.datagrams_out, id).toBeGreaterThanOrEqual(1);
+      expect(f.log.dns_answers_out, id).toBe(0);
+      const m = marks(id);
+      expect(m.udp, id).toBe('—UDP · not verified');
+      expect(m.quic, id).not.toContain('~');
+      expect(m.quic, id).not.toContain('⤵');
+    }
+  });
+
   it('C7 / C2 refusals: ⤵ UDP ⤵ QUIC — the only measured NO', () => {
     for (const id of ['C7', 'C2']) expect(marks(id)).toEqual({ udp: '⤵UDP', quic: '⤵QUIC' });
   });
@@ -160,6 +217,22 @@ describe('§5.2 — the expected badges, fixture by fixture', () => {
     expect(proxyVerdict(resultOf(f)).label).toBe('Cannot route');
     expect(f.log.associates).toBe(0);
     expect(marks('H').udp).toBe('—UDP');
+  });
+
+  // ⚠️ KNOWN GAP — G13 / G10 are NOT in stage 1. The fake answered CONNECT with
+  // 0x00 and closed the tunnel at once (its log: `tunnels_closed_at_once: 1`), yet
+  // the probe still reads route ✓ and the app "Working" with a green HTTP/2. This
+  // arm pins today's false green ON PURPOSE so it cannot be forgotten: the day
+  // the probe checks the tunnel after REP 0x00, the Rust golden matrix changes and
+  // this arm turns red — flip it then to "not healthy" and "~ HTTP/2" at most.
+  it('KNOWN GAP (G13/G10) I0 CONNECT 0x00 then close: still reads as routing — pinned so the fix turns this red; its UDP is not ✓', () => {
+    const f = byId.get('I0')!;
+    expect(f.log.tunnels_closed_at_once).toBe(1);
+    expect(f.log.bytes_after_connect_reply).toBe(0);
+    const r = resultOf(f);
+    expect(r.can_route).toBe(true);
+    expect(proxyVerdict(r).ok).toBe(true);
+    expect(marks('I0').udp).not.toContain('✓');
   });
 
   it('J one connection at a time and K slow second greeting: healthy, never "unreachable"; UDP not measured', () => {

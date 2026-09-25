@@ -310,11 +310,12 @@ pub(crate) fn run_socks5_probe_with(
     // The headline is whether traffic can actually LEAVE. UDP is a qualifier on
     // a working proxy, never a substitute for one — reporting it as the verdict
     // is what let an endpoint that refuses every CONNECT read as healthy. And a
-    // GRANT is not a relay: only a datagram that came back says UDP works.
+    // GRANT is not a relay: only an ANSWER to our own query that came back says
+    // UDP works (a datagram merely sent back — our query reflected — does not).
     let udp_note = match udp.relay {
         UdpRelay::Relays => " UDP relays through it.",
         UdpRelay::Silent => {
-            " UDP not verified: the proxy accepts UDP requests, but nothing came back through it."
+            " UDP not verified: the proxy accepts UDP requests, but no answer came back through it."
         }
         UdpRelay::Refused => " The proxy refuses UDP.",
         UdpRelay::NotRun => " UDP was not checked this time.",
@@ -561,6 +562,14 @@ mod loopback_fixture_tests {
         associate_refused: u32,
         datagrams_in: u32,
         datagrams_out: u32,
+        /// Of `datagrams_out`, the ones that were a DNS RESPONSE carrying the
+        /// query's own transaction id — what a working relay hands back from the
+        /// resolver. A datagram that merely came back (our query reflected, an
+        /// answer to another query) is counted above and not here.
+        dns_answers_out: u32,
+        /// CONNECTs answered REP 0x00 whose tunnel the fake then closed at once
+        /// (§5.2 I0: no working tunnel behind a success reply).
+        tunnels_closed_at_once: u32,
     }
 
     #[derive(Clone, Copy, PartialEq)]
@@ -569,6 +578,12 @@ mod loopback_fixture_tests {
         Answer,
         /// Swallows every datagram.
         Drop,
+        /// Sends every datagram straight back, unchanged: our own QUERY, which
+        /// is traffic coming back but no answer from anywhere.
+        Reflect,
+        /// Answers with a DNS response under ANOTHER transaction id — an answer,
+        /// but not to the query the probe sent.
+        WrongId,
     }
 
     #[derive(Clone, Copy)]
@@ -590,6 +605,8 @@ mod loopback_fixture_tests {
         /// How long every connection after the first waits before answering its
         /// greeting (§5.2 K — a slow second greeting).
         second_greeting_delay: Duration,
+        /// Answer a CONNECT with REP 0x00 and close the tunnel at once (§5.2 I0).
+        close_tunnel_at_once: bool,
     }
 
     impl Default for Fake {
@@ -604,6 +621,7 @@ mod loopback_fixture_tests {
                 },
                 one_connection: false,
                 second_greeting_delay: Duration::ZERO,
+                close_tunnel_at_once: false,
             }
         }
     }
@@ -715,6 +733,13 @@ mod loopback_fixture_tests {
                     log.lock().unwrap().connect_refused += 1;
                 }
                 let _ = c.write_all(&[0x05, f.connect_rep, 0x00, 0x01, 127, 0, 0, 1, 0x11, 0x5c]);
+                if f.connect_rep == 0x00 && f.close_tunnel_at_once {
+                    // A success reply with nothing behind it: the tunnel closes
+                    // before a byte can cross it.
+                    let _ = c.shutdown(std::net::Shutdown::Both);
+                    log.lock().unwrap().tunnels_closed_at_once += 1;
+                    return Ok(());
+                }
                 let n = drain(&mut c);
                 log.lock().unwrap().bytes_after_connect_reply += n;
             }
@@ -770,16 +795,33 @@ mod loopback_fixture_tests {
                     };
                     log.lock().unwrap().datagrams_in += 1;
                     // RSV RSV FRAG ATYP(1) + IPv4 + port, then the DNS query.
-                    if udp_mode == Udp::Answer && n > 10 + 12 && buf[3] == 0x01 {
-                        let (hdr, q) = (&buf[..10], &buf[10..n]);
-                        let mut answer = hdr.to_vec();
-                        answer.extend_from_slice(&q[..2]); // the query's own txid
-                        answer.extend_from_slice(&[0x81, 0x80]); // a response, no error
-                        answer.extend_from_slice(&q[4..6]);
-                        answer.extend_from_slice(&[0, 0, 0, 0, 0, 0]);
-                        answer.extend_from_slice(&q[12..]);
-                        if udp.send_to(&answer, src).is_ok() {
-                            log.lock().unwrap().datagrams_out += 1;
+                    let is_query = n > 10 + 12 && buf[3] == 0x01;
+                    let reply: Option<(Vec<u8>, bool)> = match udp_mode {
+                        Udp::Drop => None,
+                        Udp::Reflect => Some((buf[..n].to_vec(), false)),
+                        Udp::Answer | Udp::WrongId if is_query => {
+                            let (hdr, q) = (&buf[..10], &buf[10..n]);
+                            let mut answer = hdr.to_vec();
+                            if udp_mode == Udp::Answer {
+                                answer.extend_from_slice(&q[..2]); // the query's own txid
+                            } else {
+                                answer.extend_from_slice(&[q[0] ^ 0xFF, q[1] ^ 0x5A]);
+                            }
+                            answer.extend_from_slice(&[0x81, 0x80]); // a response, no error
+                            answer.extend_from_slice(&q[4..6]);
+                            answer.extend_from_slice(&[0, 0, 0, 0, 0, 0]);
+                            answer.extend_from_slice(&q[12..]);
+                            Some((answer, udp_mode == Udp::Answer))
+                        }
+                        Udp::Answer | Udp::WrongId => None,
+                    };
+                    if let Some((datagram, answers_our_query)) = reply {
+                        if udp.send_to(&datagram, src).is_ok() {
+                            let mut l = log.lock().unwrap();
+                            l.datagrams_out += 1;
+                            if answers_our_query {
+                                l.dns_answers_out += 1;
+                            }
                         }
                     }
                 }
@@ -856,9 +898,39 @@ mod loopback_fixture_tests {
         assert!(r.reachable && r.auth_ok && r.can_route, "{r:?}");
         assert!(relays(&r), "{r:?}");
         assert!(r.udp_associate, "the raw grant stays visible: {r:?}");
-        // ✓ requires the positive event in the log: a datagram in AND one back.
-        assert!(log.datagrams_in >= 1 && log.datagrams_out >= 1, "{log:?}");
+        // ✓ requires the positive event in the log: a datagram in AND the
+        // resolver's answer to it back.
+        assert!(log.datagrams_in >= 1 && log.dns_answers_out >= 1, "{log:?}");
         assert!(r.message.contains("UDP relays"), "{r:?}");
+    }
+
+    #[test]
+    fn g1_a_datagram_that_comes_back_but_answers_nothing_we_asked_is_silent_not_relays() {
+        // Traffic came back through the relay, yet no resolver answered the
+        // probe's query: our own query reflected unchanged, and a DNS response
+        // under another transaction id. Neither is evidence that the proxy
+        // relays UDP to the internet, so neither may read ✓ — and neither is a
+        // refusal, so neither may read ⤵. MUTATION: take any datagram as an
+        // answer (`answered = true` in udp_stage_inner) and both arms read relays.
+        for (name, udp) in [("reflector", Udp::Reflect), ("wrong id", Udp::WrongId)] {
+            let fake = start(Fake {
+                associate: Associate::Grant {
+                    bnd_zero: false,
+                    udp,
+                },
+                ..Fake::default()
+            });
+            let r = probe(fake.port, None, None);
+            let log = fake.settled_log();
+            assert!(r.reachable && r.can_route, "{name}: {r:?}");
+            assert!(
+                log.datagrams_in >= 1 && log.datagrams_out >= 1,
+                "{name}: the fake did send something back: {log:?}"
+            );
+            assert_eq!(log.dns_answers_out, 0, "{name}: {log:?}");
+            assert_eq!(r.udp_relay, UdpRelay::Silent, "{name}: {r:?}");
+            assert!(r.udp_associate, "{name}: the raw grant stays: {r:?}");
+        }
     }
 
     #[test]
@@ -910,7 +982,7 @@ mod loopback_fixture_tests {
         let r = probe(fake.port, None, None);
         let log = fake.settled_log();
         assert!(relays(&r), "{r:?}");
-        assert!(log.datagrams_in >= 1 && log.datagrams_out >= 1, "{log:?}");
+        assert!(log.datagrams_in >= 1 && log.dns_answers_out >= 1, "{log:?}");
     }
 
     #[test]
@@ -1090,6 +1162,26 @@ mod loopback_fixture_tests {
                 None,
             ),
             (
+                "B-reflect",
+                "grant, then every datagram sent straight back unchanged (no resolver answer)",
+                Fake {
+                    associate: grant(false, Udp::Reflect),
+                    ..Fake::default()
+                },
+                None,
+                None,
+            ),
+            (
+                "B-wrong-id",
+                "grant, then a DNS answer under another transaction id",
+                Fake {
+                    associate: grant(false, Udp::WrongId),
+                    ..Fake::default()
+                },
+                None,
+                None,
+            ),
+            (
                 "B0",
                 "grant with BND 0.0.0.0, relays",
                 Fake {
@@ -1134,6 +1226,21 @@ mod loopback_fixture_tests {
                 "login ok, CONNECT refused 0x02, UDP relays",
                 Fake {
                     connect_rep: 0x02,
+                    ..Fake::default()
+                },
+                None,
+                None,
+            ),
+            (
+                // ⚠️ KNOWN GAP, deferred to the G13/G10 stage: the probe still reads
+                // this dead tunnel as routing (and the app as ✓ HTTP/2). Kept in the
+                // matrix so the file changes — and the app's arm for it turns red —
+                // the day the probe checks the tunnel after REP 0x00.
+                "I0",
+                "CONNECT answered 0x00, then the tunnel closed at once; UDP granted and dropped",
+                Fake {
+                    close_tunnel_at_once: true,
+                    associate: grant(false, Udp::Drop),
                     ..Fake::default()
                 },
                 None,
