@@ -27,9 +27,9 @@ const tierApiAccess = Object.fromEntries(
 
     <header class="mb-10 flex flex-wrap items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-tk-ink-3">Keys for your code · choose what each key can do · revoke any time</p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">API keys</h1>
-        <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
+        <p class="page-kicker">Keys for your code · choose what each key can do · revoke any time</p>
+        <h1 class="page-title">API keys</h1>
+        <p class="page-lede">
           Send it as <code class="font-mono">Authorization: Bearer &lt;key&gt;</code>. The full key is
           shown only once, when you create it — save it right away; we can't show it again.
           Revoking a key takes effect immediately.
@@ -78,11 +78,15 @@ const tierApiAccess = Object.fromEntries(
           class="text-xs text-tk-accent-text hover:underline">SDKs →</a
         >
       </div>
-      <pre class="mt-4 overflow-x-auto rounded-lg border border-tk-border bg-tk-code-bg px-4 py-3 font-mono text-xs text-white"><code>curl https://api.driftstack.dev/v1/account/me \
+      {/* A dark island in both modes (the one island colour, --island):
+          the <pre> sets its own data-mode so its ink is the dark theme's. */}
+      <div class="mt-4 overflow-hidden rounded-lg border border-tk-border bg-tk-island">
+        <pre data-mode="dark" class="overflow-x-auto bg-transparent px-4 py-3 font-mono text-xs text-tk-ink"><code>curl https://api.driftstack.dev/v1/account/me \
   -H "Authorization: Bearer ds_live_&lt;your-key&gt;"
 
 # TypeScript SDK
 npm i @driftstack/sdk</code></pre>
+      </div>
       <p class="mt-2 text-xs text-tk-ink-3">
         Replace <code class="font-mono">ds_live_&lt;your-key&gt;</code> with the key you copy on
         creation — the full key is shown once and never stored.
@@ -108,7 +112,7 @@ npm i @driftstack/sdk</code></pre>
       class="mb-8 hidden rounded-lg border border-tk-border bg-tk-surface p-6"
     >
       <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-tk-ink">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="9" cy="12" r="7" />
             <path d="M16 12h6M19 9v6" />
@@ -125,7 +129,7 @@ npm i @driftstack/sdk</code></pre>
             type="text"
             required
             placeholder="e.g. production-server, staging-bot"
-            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm"
+            class="form-input mt-1"
           />
           <p class="mt-1 text-xs text-tk-ink-3">
             Name keys by purpose or environment so you can tell them apart if one is ever leaked.
@@ -197,7 +201,7 @@ npm i @driftstack/sdk</code></pre>
             </p>
             <div class="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
               <fieldset>
-                <legend class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">
+                <legend class="section-label">
                   Sessions
                 </legend>
                 <label class="mt-2 flex items-center gap-2 text-sm">
@@ -210,7 +214,7 @@ npm i @driftstack/sdk</code></pre>
                 </label>
               </fieldset>
               <fieldset>
-                <legend class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">
+                <legend class="section-label">
                   Profiles
                 </legend>
                 <label class="mt-2 flex items-center gap-2 text-sm">
@@ -227,7 +231,7 @@ npm i @driftstack/sdk</code></pre>
                 </label>
               </fieldset>
               <fieldset>
-                <legend class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">
+                <legend class="section-label">
                   Webhooks
                 </legend>
                 <label class="mt-2 flex items-center gap-2 text-sm">
@@ -244,7 +248,7 @@ npm i @driftstack/sdk</code></pre>
                 </label>
               </fieldset>
               <fieldset>
-                <legend class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">
+                <legend class="section-label">
                   API keys
                 </legend>
                 <label class="mt-2 flex items-center gap-2 text-sm">
@@ -257,7 +261,7 @@ npm i @driftstack/sdk</code></pre>
                 </label>
               </fieldset>
               <fieldset>
-                <legend class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">
+                <legend class="section-label">
                   Billing
                 </legend>
                 <label class="mt-2 flex items-center gap-2 text-sm">
@@ -270,7 +274,7 @@ npm i @driftstack/sdk</code></pre>
                 </label>
               </fieldset>
               <fieldset>
-                <legend class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">
+                <legend class="section-label">
                   Audit
                 </legend>
                 <label class="mt-2 flex items-center gap-2 text-sm">
@@ -288,7 +292,7 @@ npm i @driftstack/sdk</code></pre>
           <button type="submit" class="btn-primary" data-create-submit disabled>Create key</button>
           <button
             type="button"
-            class="rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-bg"
+            class="btn-secondary"
             data-create-cancel
           >
             Cancel
@@ -330,7 +334,7 @@ npm i @driftstack/sdk</code></pre>
         <button type="button" class="btn-primary" data-created-copy>Copy to clipboard</button>
         <button
           type="button"
-          class="rounded-md border border-tk-ready/40 bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ready-text hover:bg-tk-ready/20"
+          class="btn-secondary"
           data-created-dismiss
         >
           Dismiss — I've saved it
@@ -368,17 +372,17 @@ npm i @driftstack/sdk</code></pre>
         working until the time shown below; update everything that uses it
         before then, or those requests will be rejected.
       </p>
-      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy-text">
+      <p class="section-label mt-3 text-tk-ink-2">
         Rotated from
       </p>
       <p data-rotate-from-id class="mt-1 font-mono text-xs text-tk-ink"></p>
-      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy-text">
+      <p class="section-label mt-3 text-tk-ink-2">
         New key
       </p>
       <pre
         data-rotate-plaintext
         class="mt-1 overflow-x-auto rounded border border-tk-accent/30 bg-tk-surface px-3 py-2 font-mono text-xs text-tk-ink"></pre>
-      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy-text">
+      <p class="section-label mt-3 text-tk-ink-2">
         Old key valid until
       </p>
       <p data-rotate-grace-expires class="mt-1 text-sm text-tk-ink"></p>
@@ -420,8 +424,8 @@ npm i @driftstack/sdk</code></pre>
       names from MOCK_API_KEYS, just a loading skeleton.
     */}
     {/* 2026-05-22 — empty state with icon + warmer framing. */}
-    <div data-empty class="dashboard-card hidden text-center">
-      <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+    <div data-empty class="empty-state hidden">
+      <div class="empty-state-icon">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="9" cy="12" r="7" />
           <path d="M16 12h6M19 9v6" />
@@ -893,7 +897,7 @@ npm i @driftstack/sdk</code></pre>
         const scopes = (k.scopes || [])
           .map(
             (s) =>
-              '<span class="rounded bg-tk-surface px-2 py-0.5 font-mono text-xs text-tk-ink-2">' +
+              '<span class="rounded border border-tk-border bg-tk-inset px-1.5 py-0.5 font-mono text-xs text-tk-ink-2">' +
               escapeHtml(SCOPE_LABEL[s] || s) +
               '</span>',
           )
@@ -912,7 +916,7 @@ npm i @driftstack/sdk</code></pre>
           (rotateOutcomeUnknown ? 'Rotation outcome unknown' : 'Rotate') +
           '</button>';
         const revokeAction = isRevoked
-          ? '<span class="rounded-full bg-tk-surface px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">revoked ' +
+          ? '<span class="inline-flex items-center rounded-full border border-tk-border bg-tk-inset px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">revoked ' +
             escapeHtml(fmtIso(k.revoked_at)) +
             '</span>'
           : '<div class="flex items-center gap-3">' +
@@ -932,7 +936,7 @@ npm i @driftstack/sdk</code></pre>
             '</div>';
         return (
           '<li class="px-6 py-4">' +
-          '<div class="flex items-start justify-between gap-6">' +
+          '<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">' +
           '<div class="min-w-0">' +
           '<p class="text-base font-medium text-tk-ink">' +
           escapeHtml(k.name) +
@@ -952,7 +956,7 @@ npm i @driftstack/sdk</code></pre>
               '</span>'
             : '') +
           '</p></div>' +
-          '<div class="flex shrink-0 flex-col items-end gap-3">' +
+          '<div class="flex shrink-0 flex-wrap items-center gap-3 sm:flex-col sm:items-end">' +
           '<div class="flex flex-wrap gap-1">' +
           scopes +
           '</div>' +

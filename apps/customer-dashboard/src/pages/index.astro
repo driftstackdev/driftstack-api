@@ -62,7 +62,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             —
           </h1>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Fleet v2 (2026-07-02) — platform-status pill. Hydrated from the
               PUBLIC GET /v1/status (no Authorization header); stays hidden
               on fetch failure (fail-open, matching the endpoint's posture). */}
@@ -71,7 +71,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             href="https://status.driftstack.io"
             target="_blank"
             rel="noopener noreferrer"
-            class="hidden items-center gap-1.5 rounded-full border border-tk-border bg-tk-surface px-2.5 py-1 text-xs text-tk-ink-2 hover:text-tk-ink"
+            class="hidden items-center gap-1.5 whitespace-nowrap rounded-full border border-tk-border bg-tk-surface px-2.5 py-1 text-xs text-tk-ink-2 hover:text-tk-ink"
           >
             <span data-status-dot class="status-dot status-dot--ready"></span>
             <span data-status-text>—</span>
@@ -86,7 +86,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             href="https://github.com/driftstackdev/driftstack-api/releases/latest"
             target="_blank"
             rel="noopener noreferrer"
-            class="btn-primary"
+            class="btn-primary whitespace-nowrap"
           >
             Download desktop app
           </a>
@@ -252,21 +252,21 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       </div>
       <div class="mt-5 grid gap-3 sm:grid-cols-3">
         <div class="tk-liftable rounded-lg border border-tk-border bg-tk-surface p-4 shadow-lift">
-          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Profile encryption</p>
+          <p class="section-label">Profile encryption</p>
           <p class="mt-1.5 text-sm font-semibold text-tk-ink">Encrypted in storage</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
             Profiles are stored encrypted and are only decrypted while a session on your account is using them.
           </p>
         </div>
         <div class="tk-liftable rounded-lg border border-tk-border bg-tk-surface p-4 shadow-lift">
-          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Account binding</p>
+          <p class="section-label">Account binding</p>
           <p class="mt-1.5 text-sm font-semibold text-tk-ink">Locked to your account</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
             Each encrypted value is tied to your account and, when it belongs to a saved record, to that exact record — so it can't be moved somewhere else and read.
           </p>
         </div>
         <div class="tk-liftable rounded-lg border border-tk-border bg-tk-surface p-4 shadow-lift">
-          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Credential audit</p>
+          <p class="section-label">Credential audit</p>
           <p class="mt-1.5 text-sm font-semibold text-tk-ink">Changes are logged</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
             See when a credential was added, changed or removed in your <a href="/audit-log/" class="text-tk-accent-text underline">audit log</a>. Everyday use of a credential, such as a session connecting through it, is not logged as its own entry.
@@ -283,7 +283,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
 
     <section class="mt-10">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
           </svg>
@@ -364,7 +364,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
     {/* Fleet v2 (2026-07-02) — blueprint row2: read-only session
         visibility (left; sessions are DRIVEN in the desktop app) +
         14-day usage mini chart and plan panel (right). */}
-    <section class="mt-10 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+    <section class="mt-10 grid gap-4 lg:grid-cols-[1.5fr_1fr] lg:items-start">
       <div class="panel">
         <h2 class="panel-title">
           Active sessions
@@ -402,7 +402,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           <div data-subscription-card class="hidden">
             <p
               data-subscription-line
-              class="font-mono text-xs uppercase tracking-widest text-tk-ink-3"
+              class="section-label"
             >
             </p>
             <p data-subscription-period class="mt-3 text-sm text-tk-ink-2"></p>
@@ -453,11 +453,11 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       // creating / ready / busy / destroyed / errored — and must stay
       // complete: an uncatalogued status would render unstyled.
       const STATUS_BADGE_CLASS = {
-        creating: 'bg-tk-accent/10 text-tk-accent-text',
-        ready: 'bg-tk-ready/10 text-tk-ready-text',
-        busy: 'bg-tk-busy/10 text-tk-busy-text',
-        destroyed: 'bg-tk-hover text-tk-ink-2',
-        errored: 'bg-tk-err/10 text-tk-err-text',
+        creating: 'border-tk-accent/30 bg-tk-accent/10 text-tk-accent-text',
+        ready: 'border-tk-ready/30 bg-tk-ready/15 text-tk-ready-text',
+        busy: 'border-tk-busy/30 bg-tk-busy/15 text-tk-busy-text',
+        destroyed: 'border-tk-border bg-tk-inset text-tk-ink-2',
+        errored: 'border-tk-err/30 bg-tk-err/15 text-tk-err-text',
       };
 
       function escapeHtml(s) {
@@ -767,7 +767,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
                 // destroyed/errored), which is exactly the state set
                 // base.css defines a light for. Colour is still never the
                 // only signal — the text label right after it is unchanged.
-                '<span class="rounded-full px-2 py-1 text-xs font-medium uppercase tracking-wide ' +
+                '<span class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
                 (STATUS_BADGE_CLASS[s.status] || STATUS_BADGE_CLASS.ready) +
                 '" data-tk-state="' +
                 escapeHtml(s.status || 'ready') +

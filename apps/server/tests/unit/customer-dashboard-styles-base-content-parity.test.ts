@@ -1,7 +1,12 @@
 // Drift guard for apps/customer-dashboard/src/styles/base.css.
-// Pins the dark-mode-first posture + the tokens-shared-with-
-// marketing commitment + the F-1 iPhone-Safari horizontal-scroll
-// prevention.
+// Pins the light-default posture on the shared design tokens + the F-1
+// iPhone-Safari horizontal-scroll prevention.
+//
+// 2026-09-25 — the "light+violet default" header and the "Keep synchronised"
+// pledge were pins on a hand-kept copy of marketing's colour blocks; that copy
+// is gone. The dashboard now imports packages/design-tokens (the desktop app's
+// own theme), so the pledge is structural: the arms below pin the import and
+// that this file declares no token value of its own.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -29,17 +34,27 @@ describe('customer-dashboard styles/base content parity', () => {
     expect(body).toMatch(/@tailwind utilities;/);
   });
 
-  it('Fleet two-axis posture pinned: light+violet default + mode-axis color-scheme. Cross-app brand consistency with marketing-site (same token layer)', () => {
-    expect(body).toMatch(
-      /Fleet two-axis dashboard surface \(light\+violet default, 2026-06-12 rework\)\./,
-    );
-    expect(body).toMatch(/color-scheme: light;/);
+  it('light-default posture pinned on the shared tokens: the header says light is the default and nothing follows the system theme; color-scheme comes with each mode block of the imported tokens', () => {
+    expect(body).toMatch(/Customer dashboard surface \(light default, 2026-09-25\)/);
+    expect(body).toMatch(/nothing follows the system\s+theme/);
+    const tokens = read(resolve(REPO_ROOT, 'packages/design-tokens/dist/tokens.css'));
+    expect(tokens).toMatch(/\[data-mode='light'\] \{\s*color-scheme: light;/);
+    expect(tokens).toMatch(/\[data-mode='dark'\] \{\s*color-scheme: dark;/);
   });
 
-  it("tokens-shared-with-marketing commitment pinned: 'Tokens shared with apps/marketing-site/src/styles/base.css. Keep synchronised — customer experience reads as one product.' — drift would let the two apps drift visually apart", () => {
-    expect(body).toMatch(
-      /Tokens shared with apps\/marketing-\s*site\/src\/styles\/base\.css\. Keep synchronised — customer experience\s*reads as one product\./,
+  it('one token set with every surface: base.css imports the shared tokens and aliases first, and declares no token value of its own (a redeclaration is drift)', () => {
+    expect(body.indexOf("@import '@driftstack/design-tokens/tokens.css';")).toBe(
+      body.indexOf('@import'),
     );
+    expect(body).toMatch(/@import '@driftstack\/design-tokens\/web-aliases\.css';/);
+    expect(body.indexOf('@import')).toBeLessThan(body.indexOf('@tailwind base;'));
+    const declared = [...body.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)].map((m) => m[1]);
+    // The atmosphere glow is the one web-only value, derived from the accent;
+    // --tk-state-rgb is the state-light pip's own per-state variable, which
+    // only points at a token (var(--busy-rgb) and kin).
+    expect([...new Set(declared)].sort()).toEqual(['--glow', '--tk-state-rgb']);
+    expect(body).not.toMatch(/--tk-state-rgb:\s*(?:#|\d)/);
+    expect(body).toMatch(/--glow: rgb\(var\(--accent-rgb\) \/ 0\.\d+\);/);
   });
 
   it('F-1 iPhone-Safari horizontal-scroll prevention pinned: overflow-x:clip on html + body + max-width:100vw on body. Drift to overflow:hidden would break sticky positioning across dashboard pages — a real visual bug previously seen on iPhone Safari', () => {
@@ -66,7 +81,7 @@ describe('customer-dashboard styles/base content parity', () => {
     expect(body).toMatch(/font-feature-settings: 'cv11', 'ss01';/);
   });
 
-  it('::selection bg-tk-accent pinned: brand-accent color for text selection. Drift to a different selection color would break cross-app brand recognition on selection', () => {
-    expect(body).toMatch(/::selection \{\s*@apply bg-tk-accent text-white;\s*\}/);
+  it('::selection bg-tk-accent pinned: brand-accent color for text selection, with the on-accent ink token (2026-09-25: was the raw text-white literal; on-accent is white, 6.18:1 on the accent). Drift to a different selection color would break cross-app brand recognition on selection', () => {
+    expect(body).toMatch(/::selection \{\s*@apply bg-tk-accent text-tk-accent-ink;\s*\}/);
   });
 });

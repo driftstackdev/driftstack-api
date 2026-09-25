@@ -111,15 +111,16 @@ describe('customer dashboard stage-2 elevation + well + state-light baseline', (
     expect(body).toMatch(
       /el\.setAttribute\('data-tk-state',\s*STATE_LIGHT\[toneKey\]\s*\|\|\s*'muted'\);/,
     );
-    // STATUS_BADGE_CLASS itself must stay byte-identical (the apps/server
-    // parity pin depends on it) — this guard fails loudly if this file's
-    // edit ever touches that object instead of adding beside it.
+    // STATUS_BADGE_CLASS stays beside STATE_LIGHT, not merged into it (the
+    // apps/server parity pin depends on it). 2026-09-25 — its values are the
+    // desktop app's badge recipe (edge + /15 wash + text tone), moved together
+    // with that pin.
     expect(body).toMatch(
-      /const STATUS_BADGE_CLASS: Record<string, string> = \{\s*active: 'bg-tk-ready\/10 text-tk-ready-text',/,
+      /const STATUS_BADGE_CLASS: Record<string, string> = \{\s*active: 'border-tk-ready\/30 bg-tk-ready\/15 text-tk-ready-text',/,
     );
   });
 
-  it("usage.astro's four tile figures and the two capture-breakdown rows are the soft headline figure (font-light, tabular-nums); their labels stay the small hard fact (font-mono uppercase)", () => {
+  it("usage.astro's four tile figures and the two capture-breakdown rows are the soft headline figure (font-light, tabular-nums); their labels stay the small hard fact (the app's small-caps section label)", () => {
     const body = page('usage.astro');
     for (const stat of ['session_minute', 'navigate', 'interact', 'captures_total']) {
       expect(body).toMatch(
@@ -131,12 +132,11 @@ describe('customer dashboard stage-2 elevation + well + state-light baseline', (
         new RegExp(`text-xl font-light tabular-nums text-tk-ink" data-stat="${stat}"`),
       );
     }
-    // The capture-breakdown dt labels moved to the same mono/uppercase/hard
-    // treatment the tile labels above already use, so the two sections read
-    // as one hierarchy system rather than two different ones.
-    expect(body).toMatch(
-      /<dt class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Screenshots<\/dt>/,
-    );
+    // The capture-breakdown dt labels share the tile labels' small-caps
+    // treatment, so the two sections read as one hierarchy system. 2026-09-25 —
+    // that treatment is now the desktop app's section label (.section-label:
+    // 11px semibold uppercase, muted ink) instead of a mono eyebrow.
+    expect(body).toMatch(/<dt class="section-label">Screenshots<\/dt>/);
   });
 
   it("webhooks.astro's delivery log has no bare-text loading state left — both the SSR placeholder and the live re-fetch use the same pulsing skeleton the rest of the app uses", () => {

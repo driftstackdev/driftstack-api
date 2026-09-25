@@ -45,11 +45,11 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
 <DashboardLayout title="Usage">
   <div class="mx-auto max-w-5xl px-6 py-10" data-page="usage">
     <header class="mb-10">
-      <p class="text-sm text-tk-ink-3" data-field="period">
+      <p class="page-kicker" data-field="period">
         <span data-field="tier">{PLACEHOLDER_STAT}</span> tier · current billing period
       </p>
-      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Usage</h1>
-      <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
+      <h1 class="page-title">Usage</h1>
+      <p class="page-lede">
         Activity counts for the current billing period. None of these are
         billed separately — your plan only limits how many sessions run at
         once. Use these numbers to spot unusual activity early.
@@ -71,8 +71,8 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
     <section class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <div class="dashboard-card">
         <div class="flex items-center justify-between gap-2">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Session minutes</p>
-          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+          <p class="section-label">Session minutes</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
             </svg>
@@ -97,8 +97,8 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       </div>
       <div class="dashboard-card">
         <div class="flex items-center justify-between gap-2">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Page loads</p>
-          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+          <p class="section-label">Page loads</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polyline points="9 18 15 12 9 6" />
             </svg>
@@ -123,8 +123,8 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       </div>
       <div class="dashboard-card">
         <div class="flex items-center justify-between gap-2">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Interactions</p>
-          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+          <p class="section-label">Interactions</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M14 2a4 4 0 0 0-4 4v6.5a3.5 3.5 0 1 0 7 0V6" />
             </svg>
@@ -149,8 +149,8 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       </div>
       <div class="dashboard-card">
         <div class="flex items-center justify-between gap-2">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Captures</p>
-          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+          <p class="section-label">Captures</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" />
             </svg>
@@ -184,14 +184,14 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
     <section class="mt-10 dashboard-card" data-section="daily-activity">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="flex items-start gap-3">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
+          <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3 3v18h18" />
               <path d="M7 15v3M11 11v7M15 13v5M19 7v11" />
             </svg>
           </div>
           <div>
-            <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Daily activity</p>
+            <p class="section-label">Daily activity</p>
             <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">
               All usage events per day
             </h2>
@@ -238,14 +238,14 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
     <!-- Capture breakdown -->
     <section class="mt-10 dashboard-card">
       <div class="flex items-start gap-3">
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
+        <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
             <circle cx="12" cy="13" r="4" />
           </svg>
         </div>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">
+          <p class="section-label">
             Capture breakdown
           </p>
           <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">Captures by kind</h2>
@@ -253,13 +253,13 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       </div>
       <dl class="mt-6 grid gap-6 md:grid-cols-2">
         <div class="flex items-baseline justify-between border-b border-tk-border pb-3">
-          <dt class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Screenshots</dt>
+          <dt class="section-label">Screenshots</dt>
           <dd class="text-xl font-light tabular-nums text-tk-ink" data-stat="screenshot_capture">
             {PLACEHOLDER_STAT}
           </dd>
         </div>
         <div class="flex items-baseline justify-between border-b border-tk-border pb-3">
-          <dt class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Page snapshots</dt>
+          <dt class="section-label">Page snapshots</dt>
           <dd class="text-xl font-light tabular-nums text-tk-ink" data-stat="state_capture">
             {PLACEHOLDER_STAT}
           </dd>
@@ -273,14 +273,14 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
         populates rows from the live response. */}
     <section class="mt-10 dashboard-card" data-section="rate-limits">
       <div class="flex items-start gap-3">
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
+        <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4" />
             <circle cx="12" cy="12" r="3" />
           </svg>
         </div>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Request limits</p>
+          <p class="section-label">Request limits</p>
           <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">
             Limits for your account
           </h2>
@@ -298,7 +298,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       <div class="mt-6 overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead>
-            <tr class="border-b border-tk-border font-mono text-xs uppercase tracking-widest text-tk-ink-3">
+            <tr class="border-b border-tk-border text-[11px] font-semibold uppercase tracking-[0.09em] text-tk-ink-3">
               <th scope="col" class="pb-2 pr-4">Limit</th>
               <th scope="col" class="pb-2 pr-4">Maximum</th>
               <th scope="col" class="pb-2 pr-4">Recovers per second</th>

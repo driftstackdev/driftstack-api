@@ -207,12 +207,14 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     );
   });
 
-  it("active-link styling pinned: pathname matching → highlighted (bg-tk-accent/10 + text-tk-accent-text + shadow-inset-divider; S23 2026-07-06 — active label is TEXT, so it reads the AA-safe accent-text tone). 2026-05-21 — exact match for '/' (so Overview doesn't highlight on every nested route) + prefix match for the rest. font-medium applied on BOTH active + inactive (constant width prevents click-induced layout shift).", () => {
+  it("active-link styling pinned: pathname matching → highlighted with the desktop app's active nav row (2026-09-25: soft accent wash + semibold primary ink + accent icon, from Sidebar.tsx; it replaced bg-tk-accent/10 + text-tk-accent-text + shadow-inset-divider). 2026-05-21 — exact match for '/' (so Overview doesn't highlight on every nested route) + prefix match for the rest. Rows are full width, so the heavier active weight moves no other item.", () => {
     expect(body).toMatch(
       /item\.href === '\/'\s*\?\s*pathname === '\/'\s*:\s*pathname === item\.href \|\|\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
     );
-    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
-    expect(body).toMatch(/'bg-tk-accent\/10 text-tk-accent-text shadow-inset-divider'/);
-    expect(body).toMatch(/text-sm font-medium transition-colors/);
+    // 2026-09-25 — primary ink on the soft accent wash reads 13.4:1 (light) and
+    // 11.4:1 (dark), above the old accent-text label.
+    expect(body).toMatch(/'bg-tk-accent-soft font-semibold text-tk-ink'/);
+    expect(body).toMatch(/'font-medium text-tk-ink-2 hover:bg-tk-raised hover:text-tk-ink'/);
+    expect(body).toMatch(/text-\[13px\] leading-4 transition-colors/);
   });
 });

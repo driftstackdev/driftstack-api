@@ -49,12 +49,15 @@ describe('W360.B customer-dashboard /billing page content parity', () => {
   );
 
   it('STATUS_BADGE_CLASS keys cover SubscriptionStatusSchema (+ no_subscription synthetic)', () => {
-    // Every schema status renders with a badge.
+    // Every schema status renders with a badge. 2026-09-25 — each value is the
+    // desktop app's badge recipe (edge, then wash, then text tone:
+    // 'border-tk-ready/30 bg-tk-ready/15 text-tk-ready-text'), so the value now
+    // opens with its border class; the pin still requires a bg- wash in it.
     for (const s of statuses) {
-      expect(body).toMatch(new RegExp(`${s}:\\s*'bg-[a-z_-]+`));
+      expect(body).toMatch(new RegExp(`${s}:\\s*'border-[^']*\\bbg-[a-z_-]+`));
     }
     // The synthetic "no subscription yet" sentinel.
-    expect(body).toMatch(/no_subscription:\s*'bg-/);
+    expect(body).toMatch(/no_subscription:\s*'border-[^']*\bbg-/);
   });
 
   it('current-plan display pinned (free-tier upgrade CTA + subscribed tier)', () => {

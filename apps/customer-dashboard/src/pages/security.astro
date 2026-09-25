@@ -28,11 +28,11 @@ const apiBaseUrl = resolveApiBaseUrl();
     </div>
 
     <header class="mb-10">
-      <p class="text-sm text-tk-ink-3" data-field="header-account">
+      <p class="page-kicker" data-field="header-account">
         Account
       </p>
-      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Privacy &amp; security</h1>
-      <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
+      <h1 class="page-title">Privacy &amp; security</h1>
+      <p class="page-lede">
         Password, two-factor authentication, active sign-ins, connected
         accounts, and control over your data. Changes here affect all
         sessions, profiles, and webhooks under this account.
@@ -59,21 +59,21 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
       <div class="mt-5 grid gap-3 sm:grid-cols-3">
         <div class="tk-liftable rounded-lg border border-tk-border bg-tk-surface p-4 shadow-lift">
-          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Profile encryption</p>
+          <p class="section-label">Profile encryption</p>
           <p class="mt-1.5 text-sm font-semibold text-tk-ink">Encrypted in storage</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
             Profiles are stored encrypted (AES-256-GCM) and are only unlocked while an authorized session is using them.
           </p>
         </div>
         <div class="tk-liftable rounded-lg border border-tk-border bg-tk-surface p-4 shadow-lift">
-          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Account binding</p>
+          <p class="section-label">Account binding</p>
           <p class="mt-1.5 text-sm font-semibold text-tk-ink">Tied to your account</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
             Encrypted data is tied to the account that owns it and, for individual records, to that exact record, so it can't be read from anywhere else.
           </p>
         </div>
         <div class="tk-liftable rounded-lg border border-tk-border bg-tk-surface p-4 shadow-lift">
-          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Activity record</p>
+          <p class="section-label">Activity record</p>
           <p class="mt-1.5 text-sm font-semibold text-tk-ink">Changes are logged</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
             Review changes to your credentials in your <a href="/audit-log/" class="text-tk-accent-text underline">audit log</a>. Everyday use of a credential during a session is not logged as a separate event.
@@ -92,7 +92,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     <!-- Security -->
     <section class="dashboard-card mt-6">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="11" width="18" height="11" rx="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -124,7 +124,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       <div class="flex items-start justify-between gap-6">
         <div>
           <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
-            <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+            <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z" />
                 <path d="M9 12l2 2 4-4" />
@@ -141,7 +141,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </div>
         <span
           data-field="mfa-status-badge"
-          class="shrink-0 rounded-full bg-tk-surface px-2 py-1 text-xs font-medium text-tk-ink-2"
+          class="inline-flex shrink-0 items-center rounded-full border border-tk-border bg-tk-surface px-2 py-0.5 text-xs font-medium text-tk-ink-2"
         >
           loading…
         </span>
@@ -176,7 +176,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 >Setup key</label>
               <code
                 data-field="mfa-secret-base32"
-                class="mt-1 block break-all rounded bg-tk-surface px-2 py-1 font-mono text-xs text-tk-ink ring-1 ring-slate-200"
+                class="mt-1 block break-all rounded bg-tk-inset px-2 py-1 font-mono text-xs text-tk-ink ring-1 ring-tk-border"
               >—</code>
               <p class="mt-2 text-xs text-tk-ink-3">
                 Works with any authenticator app using its standard settings.
@@ -193,7 +193,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               type="password"
               autocomplete="current-password"
               maxlength="128"
-              class="mt-2 w-full max-w-xs rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
+              class="form-input mt-2 max-w-xs"
             />
             <p class="mt-1 text-xs text-tk-ink-3">
               Turning on two-factor needs your password. Signed up with Google
@@ -214,7 +214,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 pattern="[0-9]{6}"
                 maxlength="6"
                 placeholder="123456"
-                class="w-32 rounded-md border border-tk-border px-3 py-2 font-mono text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
+                class="form-input w-32 font-mono"
               />
               <button type="button" data-button="mfa-verify" class="btn-primary text-sm">
                 Confirm + finish
@@ -323,7 +323,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             maxlength="11"
             placeholder="123456 or recovery"
             aria-label="Two-factor code"
-            class="w-44 rounded-md border border-tk-accent/40 px-3 py-2 font-mono text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
+            class="form-input w-44 font-mono"
           />
           <button type="button" data-button="mfa-step-up-submit" class="btn-primary text-sm">
             Confirm
@@ -345,7 +345,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     {/* Sessions / devices (V-355) */}
     <section class="dashboard-card mt-6" data-region="web-sessions">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
           </svg>
@@ -388,7 +388,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     {/* Connected accounts (V-667.C-followup — live-wired) */}
     <section class="dashboard-card mt-6" data-region="oauth-links">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
           </svg>
@@ -416,7 +416,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     {/* Audit log (V-216 — live-wired) */}
     <section class="dashboard-card mt-6" data-region="audit-log">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
           </svg>
@@ -733,7 +733,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             const manageFrag = manageUrl
               ? '<a href="' +
                 escapeHtml(manageUrl) +
-                '" target="_blank" rel="noopener noreferrer" class="shrink-0 text-xs text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Manage on ' +
+                '" target="_blank" rel="noopener noreferrer" class="shrink-0 text-xs text-tk-accent-text underline underline-offset-4 hover:text-tk-ink">Manage on ' +
                 escapeHtml(providerLabel(link.provider)) +
                 ' ↗</a>'
               : '';
@@ -753,7 +753,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               '<p class="text-sm font-medium text-tk-ink">' +
               escapeHtml(providerLabel(link.provider)) +
               '</p>' +
-              '<p class="mt-1 text-xs text-tk-ink-3">' +
+              '<p class="mt-1 break-words text-xs text-tk-ink-3">' +
               escapeHtml(link.provider_email || '(email withheld by provider)') +
               ' · linked ' +
               escapeHtml(fmtIso(link.linked_at)) +
@@ -994,7 +994,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               ' · expires ' +
               escapeHtml(fmtIso(s.expires_at));
             const action = s.current
-              ? '<span class="rounded-full bg-tk-ready/10 px-2 py-1 text-xs font-medium text-tk-ready-text">current</span>'
+              ? '<span class="inline-flex items-center rounded-full border border-tk-ready/30 bg-tk-ready/15 px-2 py-0.5 text-xs font-medium text-tk-ready-text">current</span>'
               : '<button type="button" class="btn-secondary text-sm text-tk-err-text" data-revoke-id="' +
                 escapeHtml(s.id) +
                 '">Revoke</button>';
@@ -1621,12 +1621,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (mfaStatusBadge) {
           if (status.enrolled) {
             mfaStatusBadge.textContent = 'enrolled';
-            mfaStatusBadge.classList.remove('bg-tk-surface', 'text-tk-ink-2');
-            mfaStatusBadge.classList.add('bg-tk-ready/10', 'text-tk-ready-text');
+            mfaStatusBadge.classList.remove('border-tk-border', 'bg-tk-surface', 'text-tk-ink-2');
+            mfaStatusBadge.classList.add('border-tk-ready/30', 'bg-tk-ready/15', 'text-tk-ready-text');
           } else {
             mfaStatusBadge.textContent = 'not enrolled';
-            mfaStatusBadge.classList.add('bg-tk-surface', 'text-tk-ink-2');
-            mfaStatusBadge.classList.remove('bg-tk-ready/10', 'text-tk-ready-text');
+            mfaStatusBadge.classList.add('border-tk-border', 'bg-tk-surface', 'text-tk-ink-2');
+            mfaStatusBadge.classList.remove('border-tk-ready/30', 'bg-tk-ready/15', 'text-tk-ready-text');
           }
         }
         showHidden(mfaEnrollSection, status.enrolled);
@@ -1768,7 +1768,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               mfaRecoveryList.innerHTML = (body.recovery_codes || [])
                 .map(
                   (c) =>
-                    '<li class="rounded bg-tk-surface px-2 py-1 ring-1 ring-amber-200">' +
+                    '<li class="rounded bg-tk-surface px-2 py-1 ring-1 ring-tk-busy/30">' +
                     escapeHtml(c) +
                     '</li>',
                 )
@@ -2011,7 +2011,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               mfaRecoveryList.innerHTML = (body.recovery_codes || [])
                 .map(
                   (c) =>
-                    '<li class="rounded bg-tk-surface px-2 py-1 ring-1 ring-amber-200">' +
+                    '<li class="rounded bg-tk-surface px-2 py-1 ring-1 ring-tk-busy/30">' +
                     escapeHtml(c) +
                     '</li>',
                 )

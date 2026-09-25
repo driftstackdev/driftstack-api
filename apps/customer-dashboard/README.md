@@ -5,7 +5,7 @@ The pre-launch customer account portal served at `app.driftstack.io`.
 ## Stack
 
 - Astro 7 static output on Cloudflare Pages
-- Tailwind CSS 3 through PostCSS, with tokens shared with `apps/marketing-site/`
+- Tailwind CSS 3 through PostCSS, on the shared design tokens (`packages/design-tokens`: the desktop app's own light and dark theme, light by default)
 - Geist Sans and JetBrains Mono/Berkeley Mono fallbacks
 - Browser-side API hydration against `api.driftstack.dev`
 - Optional Sentry telemetry when `PUBLIC_SENTRY_DSN_DASHBOARD` is set at build time

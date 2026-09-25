@@ -182,11 +182,11 @@ const FILTER_OPTIONS = [
     >
     </div>
 
-    <header class="mb-10 flex items-start justify-between gap-6">
+    <header class="mb-10 flex flex-wrap items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-tk-ink-3">Permanent record · entries can't be edited or deleted</p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Audit log</h1>
-        <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
+        <p class="page-kicker">Permanent record · entries can't be edited or deleted</p>
+        <h1 class="page-title">Audit log</h1>
+        <p class="page-lede">
           Every action on your account: API key changes, session activity, subscription updates.
           Export the full history at any time — your data, your file.
         </p>
@@ -195,7 +195,7 @@ const FILTER_OPTIONS = [
       <div class="flex shrink-0 gap-2">
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ink hover:bg-tk-bg"
+          class="btn-secondary"
           data-export-csv
         >
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -207,7 +207,7 @@ const FILTER_OPTIONS = [
         </button>
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ink hover:bg-tk-bg"
+          class="btn-secondary"
           data-export-json
         >
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -229,7 +229,7 @@ const FILTER_OPTIONS = [
       <select
         id="audit-filter"
         data-filter
-        class="rounded-md border border-tk-border bg-tk-surface px-3 py-1.5 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
+        class="form-input w-auto max-w-full py-1.5"
       >
         {
           FILTER_OPTIONS.map((opt) => (
@@ -258,7 +258,7 @@ const FILTER_OPTIONS = [
             id="audit-from"
             data-filter-from
             type="datetime-local"
-            class="mt-1 w-full rounded-md border border-tk-border px-2 py-1 text-sm"
+            class="form-input mt-1 py-1.5"
           />
           <p class="mt-1 text-[11px] text-tk-ink-3">Includes this time.</p>
         </div>
@@ -268,7 +268,7 @@ const FILTER_OPTIONS = [
             id="audit-to"
             data-filter-to
             type="datetime-local"
-            class="mt-1 w-full rounded-md border border-tk-border px-2 py-1 text-sm"
+            class="form-input mt-1 py-1.5"
           />
           <p class="mt-1 text-[11px] text-tk-ink-3">Includes this time.</p>
         </div>
@@ -277,7 +277,7 @@ const FILTER_OPTIONS = [
           <select
             id="audit-actor"
             data-filter-actor
-            class="mt-1 w-full rounded-md border border-tk-border bg-tk-surface px-2 py-1 text-sm"
+            class="form-input mt-1 py-1.5"
           >
             <option value="">Any</option>
             <option value="customer">Customer (you)</option>
@@ -303,14 +303,14 @@ const FILTER_OPTIONS = [
         <button
           type="button"
           data-apply-filters
-          class="rounded-md bg-tk-accent px-3 py-1.5 text-xs font-medium text-white"
+          class="btn-primary px-3 py-1.5 text-xs"
         >
           Apply filters
         </button>
         <button
           type="button"
           data-clear-filters
-          class="rounded-md border border-tk-border bg-tk-surface px-3 py-1.5 text-xs font-medium text-tk-ink-2"
+          class="btn-secondary px-3 py-1.5 text-xs"
         >
           Clear
         </button>
@@ -345,7 +345,7 @@ const FILTER_OPTIONS = [
       </ul>
       {/* 2026-05-23 — empty state with icon for visual interest. */}
       <div class="hidden px-6 py-12 text-center text-sm text-tk-ink-3" data-empty>
-        <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <div class="empty-state-icon">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <path d="M14 2v6h6" />
@@ -361,7 +361,7 @@ const FILTER_OPTIONS = [
         <button
           type="button"
           data-load-more
-          class="text-sm font-medium text-tk-accent-text hover:text-tk-accent-2 disabled:text-tk-ink-3"
+          class="text-sm font-medium text-tk-accent-text hover:text-tk-ink disabled:text-tk-ink-3"
         >
           Load more
         </button>
@@ -492,7 +492,7 @@ const FILTER_OPTIONS = [
           escapeHtml(label) +
           payloadHint(entry) +
           '</p>' +
-          '<p class="mt-1 font-mono text-xs text-tk-ink-3">' +
+          '<p class="mt-1 break-all font-mono text-xs text-tk-ink-3">' +
           escapeHtml(entry.action) +
           (entry.target_resource_id ? ' · ' + escapeHtml(entry.target_resource_id) : '') +
           '</p></div>' +

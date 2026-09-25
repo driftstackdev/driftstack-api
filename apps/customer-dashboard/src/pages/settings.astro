@@ -63,11 +63,11 @@ const EMAIL_EVENTS = [
     </div>
 
     <header class="mb-10">
-      <p class="text-sm text-tk-ink-3" data-field="header-account">
+      <p class="page-kicker" data-field="header-account">
         Account
       </p>
-      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Settings</h1>
-      <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
+      <h1 class="page-title">Settings</h1>
+      <p class="page-lede">
         Account profile, email notifications, and your Anthropic API key.
         Changes here affect all sessions, profiles, and webhooks under this
         account. AI billing controls are available below.
@@ -90,7 +90,7 @@ const EMAIL_EVENTS = [
     {/* Profile basics (V-352 — name + timezone) */}
     <section class="dashboard-card mt-6" data-region="profile">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
           </svg>
@@ -170,7 +170,7 @@ const EMAIL_EVENTS = [
             disabled
             title="Sign in and wait for your current profile to load"
             placeholder="Optional — leave blank to use your email"
-            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
+            class="form-input mt-1"
           />
         </div>
         <div>
@@ -184,7 +184,7 @@ const EMAIL_EVENTS = [
             disabled
             title="Sign in and wait for your current profile to load"
             placeholder="Europe/Amsterdam"
-            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
+            class="form-input mt-1"
           />
           <p class="mt-1 text-xs text-tk-ink-3">
             For example <code class="font-mono">Europe/Amsterdam</code> or
@@ -204,7 +204,7 @@ const EMAIL_EVENTS = [
             inputmode="text"
             autocomplete="off"
             placeholder="acme-corp"
-            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 font-mono text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
+            class="form-input mt-1 font-mono"
           />
           <p class="mt-1 text-xs text-tk-ink-3">
             3–32 characters: lowercase letters, numbers and hyphens. A short
@@ -221,7 +221,7 @@ const EMAIL_EVENTS = [
             data-field="profile-region"
             disabled
             title="Sign in and wait for your current profile to load"
-            class="mt-1 w-full rounded-md border border-tk-border bg-tk-surface px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
+            class="form-input mt-1"
           >
             <option value="">— no preference —</option>
             <option value="us">us — Americas</option>
@@ -264,7 +264,7 @@ const EMAIL_EVENTS = [
     <!-- Bundled AI billing — live consent, cap, and month-to-date usage. -->
     <section class="dashboard-card mt-6" data-region="bundled-llm">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
           </svg>
@@ -334,7 +334,7 @@ const EMAIL_EVENTS = [
           <label for="bundled-cap-usd" class="block text-sm font-medium text-tk-ink-2">
             Monthly bundled AI limit (USD)
           </label>
-          <div class="mt-1 flex max-w-xs items-center rounded-md border border-tk-border bg-tk-bg focus-within:border-tk-accent focus-within:ring-1 focus-within:ring-tk-accent/30">
+          <div class="mt-1 flex max-w-xs items-center rounded border border-tk-border bg-tk-inset focus-within:border-tk-accent focus-within:ring-1 focus-within:ring-tk-accent/40">
             <span class="pl-3 text-sm text-tk-ink-3" aria-hidden="true">$</span>
             <input
               id="bundled-cap-usd"
@@ -396,7 +396,7 @@ const EMAIL_EVENTS = [
     */}
     <section class="dashboard-card mt-6" data-region="byok-anthropic">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="9" cy="12" r="7" />
             <path d="M16 12h6M19 9v6" />
@@ -425,7 +425,7 @@ const EMAIL_EVENTS = [
 
       <div data-byok-state="set" class="mt-6 hidden space-y-2">
         <div class="flex items-center gap-3">
-          <span class="rounded-full bg-tk-ready/10 px-2 py-0.5 font-mono text-xs uppercase tracking-wide text-tk-ready-text">
+          <span class="inline-flex items-center rounded-full border border-tk-ready/30 bg-tk-ready/15 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-ready-text">
             Active
           </span>
           <span class="text-sm text-tk-ink-2">
@@ -468,7 +468,7 @@ const EMAIL_EVENTS = [
           placeholder="sk-ant-..."
           autocomplete="off"
           spellcheck="false"
-          class="flex-1 min-w-[260px] rounded-md border border-tk-border bg-tk-bg px-3 py-2 font-mono text-sm text-tk-ink placeholder-ink-muted focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
+          class="form-input w-auto min-w-[240px] flex-1 font-mono"
         />
         <button
           type="submit"
@@ -505,7 +505,7 @@ const EMAIL_EVENTS = [
     {/* Email notifications (V-204 — live-wired) */}
     <section class="dashboard-card mt-6" data-region="email-prefs">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /><polyline points="22,6 12,13 2,6" />
           </svg>

@@ -1,15 +1,24 @@
+/* Shared design tokens (packages/design-tokens): the desktop app's own theme,
+   light and dark, on the data-mode / data-accent axes. tokens.css holds the
+   canonical values (--surface-base-rgb, --ink-primary, --accent-text, the lift
+   and float shadows, --ease, the dark island); web-aliases.css maps the
+   dashboard's tk-* vocabulary (--bg, --ink-2, --accent-soft, --ready-text, …)
+   onto them. This file declares no token value of its own. */
+@import '@driftstack/design-tokens/tokens.css';
+@import '@driftstack/design-tokens/web-aliases.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Fleet two-axis dashboard surface (light+violet default, 2026-06-12 rework).
-   Tokens shared with apps/marketing-
-   site/src/styles/base.css. Keep synchronised — customer experience
-   reads as one product. S21 2026-07-06: the dark surface ladder, the
-   mode-aware ambient shadows and the AA-safe --accent-text pairs are
-   re-synced with marketing's S20 dark-visibility fix, so the shared-token
-   pledge holds again (marketing's temporary "deliberate divergence" on
-   the dark surfaces/ink-3 is resolved by this port). */
+/* Customer dashboard surface (light default, 2026-09-25): one token set with the
+   desktop app, so sign-up → dashboard → app read as one product. Light is the
+   default mode; the Light/Dark toggle stays, and nothing follows the system
+   theme. The component recipes below are the app's own (btn-primary,
+   btn-secondary, btn-danger, form-input, the card, the badge, the empty state —
+   apps/gui-client/src/styles/index.css and its components), sized up a step for
+   the web where they need a larger touch target. The only web-only values are
+   the atmosphere glow (--glow) on the auth pages, kept at a low alpha. */
 
 /* Self-hosted fonts (Fleet v2, 2026-07-02). Geist variable (OFL) +
    JetBrains Mono Regular/Bold (OFL) vendored under public/fonts/ with
@@ -39,19 +48,18 @@
   font-display: swap;
 }
 
-@layer base {
-  :root {
-    /* Fleet rework: color-scheme follows the data-mode axis (token layer below). */
-    /* 2026-09-21 — stage-1 visual upgrade (customer-dashboard re-derivation of
-       the desktop AI view's language into this app's own tk- token system;
-       see docs.internal design brief §4). --tk-ease is the one shared easing
-       curve for every new lift/breathe motion this stage adds — mirrors the
-       AI view's single `--ai-ease` convention (one curve, reused, never a
-       one-off per component). Mode/accent-independent, so it lives here
-       rather than in the [data-mode]/[data-accent] blocks below. */
-    --tk-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  }
+/* The atmosphere glow behind the auth pages and the home header — a web-only
+   extension, derived from the accent token so it can never drift from it.
+   Lower in light than in dark: the app's light theme is calm, and the glow
+   is atmosphere, never a surface text sits on. */
+[data-mode='light'] {
+  --glow: rgb(var(--accent-rgb) / 0.14);
+}
+[data-mode='dark'] {
+  --glow: rgb(var(--accent-rgb) / 0.26);
+}
 
+@layer base {
   /* Fleet v2 — global keyboard-focus ring (GUI a11y parity). Utility
      focus-visible:* classes on individual controls override this. */
   :focus-visible {
@@ -93,80 +101,89 @@
   }
 
   ::selection {
-    @apply bg-tk-accent text-white;
+    @apply bg-tk-accent text-tk-accent-ink;
+  }
+
+  /* Native checkboxes, radios and range thumbs in the brand accent rather
+     than the browser's default blue. */
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='range'] {
+    accent-color: var(--accent);
   }
 }
 
 @layer components {
-  /* Primary CTA — flat accent fill, ambient shadow. Fleet v2 accent
-     discipline: no glow ring / no hover lift on default chrome (the
-     glow-accent shadow is reserved for genuinely "hot" elements). */
+  /* Primary action — the app's .btn-primary: accent fill, on-accent ink. The
+     hover DARKENS (accent-fill-hover, white 7.11:1) and pressed is darker
+     still (accent-active, 8.20:1); the lighter rose accent-hover is for
+     borders and rings only (white on it is 3.9:1). */
   .btn-primary {
-    @apply relative inline-flex items-center justify-center rounded-lg
-           bg-tk-accent px-4 py-2 text-sm font-semibold text-tk-accent-ink
-           shadow-ambient transition-colors duration-150
-           hover:bg-tk-accent-strong
+    @apply relative inline-flex items-center justify-center gap-1.5 rounded
+           bg-tk-accent px-3.5 py-2 text-sm font-medium text-tk-accent-ink
+           transition-colors duration-150
+           hover:bg-tk-accent-fill-hover active:bg-tk-accent-strong
            focus-visible:outline focus-visible:outline-2
            focus-visible:outline-offset-2 focus-visible:outline-tk-accent
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
-  /* Secondary CTA — solid surface + border (no glass). */
+  /* Secondary action — the app's elevated face, with a divider hairline so it
+     still reads as a button on a card. */
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg
-           border border-tk-border bg-tk-surface px-4 py-2 text-sm
-           font-medium text-tk-ink-2
+    @apply inline-flex items-center justify-center gap-1.5 rounded
+           border border-tk-border bg-tk-raised px-3.5 py-2 text-sm
+           font-medium text-tk-ink
            transition-colors duration-150
-           hover:bg-tk-hover hover:text-tk-ink
+           hover:bg-tk-hover
            focus-visible:outline focus-visible:outline-2
-           focus-visible:outline-offset-2 focus-visible:outline-tk-accent;
+           focus-visible:outline-offset-2 focus-visible:outline-tk-accent
+           disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   /* Ghost button — borderless quiet action (page-header "Docs" etc.). */
   .btn-ghost {
-    @apply inline-flex items-center justify-center rounded-lg
-           px-4 py-2 text-sm font-medium text-tk-ink-2
+    @apply inline-flex items-center justify-center gap-1.5 rounded
+           px-3 py-2 text-sm font-medium text-tk-ink-2
            transition-colors duration-150
            hover:bg-tk-hover hover:text-tk-ink
            focus-visible:outline focus-visible:outline-2
            focus-visible:outline-offset-2 focus-visible:outline-tk-accent;
   }
 
-  /* Danger button — destructive actions (revoke / delete / remove).
-     S25 2026-07-06: label text on the AA-safe --err-text tone (raw
-     --err fails 4.5:1 as small text on the light err/10 wash); the
-     wash + focus outline stay on the raw status token. */
+  /* Danger button — destructive actions (revoke / delete / remove). Label on
+     the AA-safe --err-text tone over a light error wash: /10 at rest and /15 on
+     hover, which keep 4.5:1 on the page ground as well as on a card. */
   .btn-danger {
-    @apply inline-flex items-center justify-center rounded-lg
-           bg-tk-err/10 px-4 py-2 text-sm font-medium text-tk-err-text
-           transition-colors duration-150 hover:bg-tk-err/20
+    @apply inline-flex items-center justify-center gap-1.5 rounded
+           bg-tk-err/10 px-3.5 py-2 text-sm font-medium text-tk-err-text
+           transition-colors duration-150 hover:bg-tk-err/15
            focus-visible:outline focus-visible:outline-2
            focus-visible:outline-offset-2 focus-visible:outline-tk-err
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
-  /* Nav link — muted by default, readable accent on hover (S23 2026-07-06:
-     accent-text is the AA-safe text tone; raw --accent is ~3.0:1 on the
-     dark bg — same recipe as marketing). */
+  /* Nav link — secondary ink, accent-text on hover (never the rose
+     accent-2, which is not a text colour). */
   .nav-link {
     @apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent-text;
   }
 
-  /* Dashboard card — solid surface on the page bg, calm ambient shadow
-     (Fleet v2: glass + hover-accent chrome retired). */
+  /* Card — the app's card: 12px radius, divider hairline, raised surface,
+     the app's lift shadow. */
   .dashboard-card {
-    @apply rounded-card border border-tk-border bg-tk-surface p-6 shadow-ambient;
+    @apply rounded-xl border border-tk-border bg-tk-surface p-6 shadow-lift;
   }
 
-  /* Form input — inset on the card surface, clean focus state. */
+  /* Form input — the app's .form-input: an inset well with a divider edge;
+     focus draws the accent edge and a 1px accent ring. */
   .form-input {
-    @apply w-full rounded-lg bg-tk-bg px-3.5 py-2.5 text-sm
+    @apply w-full rounded border border-tk-border bg-tk-inset px-3 py-2 text-sm
            text-tk-ink placeholder:text-tk-ink-3
-           border border-tk-border
            transition-colors duration-150
-           hover:border-tk-ink-3/40
-           focus:border-tk-accent focus:bg-tk-bg focus:outline-none
-           focus:ring-2 focus:ring-tk-accent/20
+           hover:border-tk-ink-3/50
+           focus:border-tk-accent focus:outline-none
+           focus:ring-1 focus:ring-tk-accent/40
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
@@ -180,43 +197,49 @@
     @apply mt-1.5 text-xs text-tk-ink-3;
   }
 
-  /* Banner — used for inline notices on auth pages. Fleet v2: solid
-     surfaces; warn moves off the accent onto the busy status token
-     (accent = actions, never warning semantics). */
+  /* Banners — inline notices. Warn sits on the busy status token, error on
+     the error token (the accent is for actions, never warning semantics). */
   .banner-info {
     @apply rounded-lg border border-tk-border bg-tk-surface px-4 py-3
            text-sm text-tk-ink-2;
   }
   .banner-warn {
     @apply rounded-lg border border-tk-busy/30 bg-tk-busy/10 px-4 py-3
-           text-sm text-tk-ink-2;
+           text-sm text-tk-ink;
   }
   .banner-err {
     @apply rounded-lg border border-tk-err/30 bg-tk-err/10 px-4 py-3
-           text-sm text-tk-ink-2;
+           text-sm text-tk-ink;
   }
 
-  /* Bracketed section label — mono + glow accent (S23 2026-07-06: label is
-     TEXT, so it reads the AA-safe accent-text tone like marketing's). */
+  /* Section label — the app's .section-label: small caps over a group,
+     muted ink. */
   .section-label {
-    @apply inline-flex items-center font-mono text-xs uppercase
-           tracking-[0.2em] text-tk-accent-text;
-  }
-  .section-label::before {
-    content: '// ';
-    @apply text-tk-ink-3;
+    @apply inline-flex items-center text-[11px] font-semibold uppercase
+           tracking-[0.09em] text-tk-ink-3;
   }
 
-  /* Auth-card — the panel that wraps each auth form. Centered, solid
-     surface with a deep ambient shadow (Fleet v2: glass + glow ring
-     retired) and an accent hairline along the top edge. */
+  /* Page header — one recipe for every signed-in page: a quiet kicker line,
+     the title, then the page's one-paragraph description. */
+  .page-kicker {
+    @apply text-sm text-tk-ink-3;
+  }
+  .page-title {
+    @apply mt-1 text-[1.75rem] font-semibold leading-tight tracking-tight text-tk-ink;
+  }
+  .page-lede {
+    @apply mt-2 max-w-prose text-sm leading-relaxed text-tk-ink-2;
+  }
+
+  /* Auth card — the panel that wraps each auth form: the app's card at the
+     float shadow, with a faint accent hairline along the top edge. */
   .auth-card {
-    @apply relative w-full rounded-card border border-tk-border
-           bg-tk-surface shadow-ambient-lg px-7 py-8 sm:px-8 sm:py-10;
+    @apply relative w-full rounded-xl border border-tk-border
+           bg-tk-surface shadow-float px-6 py-8 sm:px-8 sm:py-9;
   }
   .auth-card::before {
     content: '';
-    @apply pointer-events-none absolute inset-x-0 -top-px h-px;
+    @apply pointer-events-none absolute inset-x-6 -top-px h-px;
     background: linear-gradient(to right, transparent 0%, var(--glow) 50%, transparent 100%);
   }
 
@@ -273,36 +296,28 @@
     }
   }
 
-  /* ── Fleet v2 component kit (2026-07-02 dashboard redesign; blueprint:
-     the internal dashboard visual demo + GUI recipe ports). All
-     additive — the recipes above keep their names so existing pages
-     restyle without markup churn. */
+  /* ── Component kit (2026-07-02 dashboard redesign; recipes re-derived from
+     the desktop app on 2026-09-25). */
 
-  /* Panel — the blueprint's content card (tables, charts, plan box).
-     2026-09-21 (stage 2) — promoted from shadow-ambient to shadow-lift
-     (the stage-1 report's own "stage 2 candidate") so the home page's
-     panels read at the same depth as the quick-action + trust cards
-     stage 1 already lifted, instead of one step behind them. Neither
-     class ever nests inside another shadowed surface in this app (both
-     are top-level grid children on index.astro), so this can't out-lift
-     a parent. */
+  /* Panel — the content card (tables, charts, plan box). Same card as
+     .dashboard-card at a tighter padding. 2026-09-21 (stage 2) — lifted with
+     shadow-lift, like the quick-action + trust cards. */
   .panel {
-    @apply rounded-card border border-tk-border bg-tk-surface p-[18px] shadow-lift;
+    @apply rounded-xl border border-tk-border bg-tk-surface p-5 shadow-lift;
   }
   .panel-title {
     @apply mb-3.5 flex items-center gap-2 text-sm font-semibold text-tk-ink;
   }
 
-  /* Stat card — the blueprint's KPI tiles. 2026-09-21 (stage 2) — see the
-     .panel comment above; same promotion, same rationale. */
+  /* Stat card — the KPI tiles. 2026-09-21 (stage 2) — see .panel. */
   .stat-card {
-    @apply rounded-card border border-tk-border bg-tk-surface p-4 shadow-lift;
+    @apply rounded-xl border border-tk-border bg-tk-surface p-4 shadow-lift;
   }
   .stat-label {
     @apply mb-2 flex items-center gap-1.5 text-xs font-semibold text-tk-ink-3;
   }
   .stat-value {
-    @apply text-[26px] font-extrabold leading-tight tracking-[-0.6px] text-tk-ink;
+    @apply text-2xl font-semibold leading-tight tracking-tight text-tk-ink;
   }
   .stat-sub {
     @apply mt-1 text-xs text-tk-ink-3;
@@ -312,16 +327,16 @@
     @apply text-tk-ready-text;
   }
 
-  /* Meter — thin usage/cap progress track (blueprint .bar). */
+  /* Meter — thin usage/cap progress track. */
   .meter {
-    @apply mt-2.5 h-1.5 overflow-hidden rounded-full bg-tk-hover;
+    @apply mt-2.5 h-1.5 overflow-hidden rounded-full bg-tk-inset;
   }
   .meter-fill {
     @apply block h-full rounded-full bg-tk-accent;
   }
 
-  /* Status dot + label (blueprint .dot). --live adds the spec §3
-     breathe animation (neutralised by the global reduced-motion clamp). */
+  /* Status dot + label. --live adds the breathe animation (neutralised by
+     the global reduced-motion clamp). */
   .status-dot {
     @apply inline-flex items-center gap-1.5 text-xs font-semibold;
   }
@@ -329,10 +344,9 @@
     content: '';
     @apply h-[7px] w-[7px] shrink-0 rounded-full bg-current;
   }
-  /* S25 2026-07-06 — label text moved to the AA-safe --*-text tones
-     (raw status tokens fail 4.5:1 as small light-mode text); the dot
-     itself keeps the raw status fill via an explicit ::before
-     override of the bg-current default above. */
+  /* S25 2026-07-06 — label text on the AA-safe --*-text tones; the dot
+     itself keeps the raw status fill via an explicit ::before override of
+     the bg-current default above. */
   .status-dot--ready {
     @apply text-tk-ready-text;
   }
@@ -358,15 +372,39 @@
     @apply animate-livepulse;
   }
 
+  /* Badge — the app's status chip (SessionStatusBadge): a full pill with the
+     status hue as a /15 wash, its text tone and a /30 edge. Badges sit on a
+     card, never on the page ground or the elevated surface. */
+  .badge {
+    @apply inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5
+           text-xs font-medium;
+  }
+  .badge-neutral {
+    @apply border-tk-border bg-tk-inset text-tk-ink-2;
+  }
+  .badge-accent {
+    @apply border-tk-accent/30 bg-tk-accent/10 text-tk-accent-text;
+  }
+  .badge-ready {
+    @apply border-tk-ready/30 bg-tk-ready/15 text-tk-ready-text;
+  }
+  .badge-busy {
+    @apply border-tk-busy/30 bg-tk-busy/15 text-tk-busy-text;
+  }
+  .badge-err {
+    @apply border-tk-err/30 bg-tk-err/15 text-tk-err-text;
+  }
+
   /* Pill — rounded mono chip (ids, plan names, counts). */
   .pill {
     @apply inline-flex items-center gap-1.5 rounded-full border border-tk-border
            bg-tk-surface px-2.5 py-0.5 font-mono text-[11px] text-tk-ink-2;
   }
 
-  /* Count badge — small numeric chip (nav counts, list totals). */
+  /* Count badge — the app's nav count chip. */
   .badge-count {
-    @apply shrink-0 rounded bg-tk-hover px-1.5 py-px font-mono text-[10px] text-tk-ink-3;
+    @apply shrink-0 rounded-full bg-tk-raised px-1.5 py-px text-[10px] font-semibold
+           leading-[14px] text-tk-ink-2;
   }
 
   /* Table kit — container-query responsive (GUI ds-table-shell port):
@@ -374,14 +412,14 @@
      under 720px — the table adapts to its container, not the viewport. */
   .table-shell {
     container-type: inline-size;
-    @apply overflow-x-auto rounded-card border border-tk-border bg-tk-surface shadow-ambient;
+    @apply overflow-x-auto rounded-xl border border-tk-border bg-tk-surface shadow-lift;
   }
   .data-table {
     @apply w-full border-collapse text-left;
   }
   .data-table th {
-    @apply px-3 pb-2.5 pt-3.5 font-mono text-[11px] font-semibold uppercase
-           tracking-[0.4px] text-tk-ink-3;
+    @apply px-3 pb-2.5 pt-3.5 text-[11px] font-semibold uppercase
+           tracking-[0.09em] text-tk-ink-3;
   }
   .data-table td {
     @apply border-t border-tk-border px-3 py-2.5 text-[13px] text-tk-ink;
@@ -397,24 +435,30 @@
     }
   }
 
-  /* Modal kit — shared overlay/card chrome for the branded dialogs. */
+  /* Modal kit — the app's modal (ConfirmProvider): a card over a dark scrim
+     with a light blur. */
   .modal-overlay {
-    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4;
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-[2px];
   }
   .modal-card {
-    @apply w-full max-w-md rounded-card border border-tk-border bg-tk-surface
-           p-6 shadow-ambient-lg;
+    @apply w-full max-w-md rounded-xl border border-tk-border bg-tk-surface
+           p-6 shadow-float;
   }
 
   /* Loading skeleton block. */
   .skeleton {
-    @apply animate-pulse rounded-md bg-tk-hover;
+    @apply animate-pulse rounded bg-tk-hover;
   }
 
-  /* Empty state — dashed placeholder card with centered copy + CTA slot. */
+  /* Empty state — the app's EmptyState: a dashed outline, a quiet icon
+     well, a title and one line of guidance. */
   .empty-state {
-    @apply flex flex-col items-center justify-center gap-2 rounded-card border
-           border-dashed border-tk-border px-6 py-10 text-center text-sm text-tk-ink-3;
+    @apply flex flex-col items-center justify-center gap-2 rounded-xl border
+           border-dashed border-tk-border px-6 py-10 text-center text-sm text-tk-ink-2;
+  }
+  .empty-state-icon {
+    @apply mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg
+           bg-tk-inset text-tk-ink-3;
   }
 
   /* Mono text — session ids, key prefixes, URLs (GUI .mono port). */
@@ -422,27 +466,18 @@
     @apply font-mono text-[0.8125rem] tracking-tight;
   }
 
-  /* Themer — the mode/accent switcher pill (blueprint .themer). Wiring
+  /* Themer — the Light / Dark switch (the app's segmented control). Wiring
      lives in DashboardLayout; active state via aria-pressed. */
   .themer {
-    @apply inline-flex items-center gap-1 rounded-full border border-tk-border
-           bg-tk-surface p-[3px];
+    @apply inline-flex items-center gap-0.5 rounded border border-tk-border
+           bg-tk-inset p-0.5;
   }
   .themer-btn {
-    @apply rounded-full px-2.5 py-1 text-xs font-semibold text-tk-ink-3
+    @apply rounded-[3px] px-2.5 py-1 text-xs font-medium text-tk-ink-2
            transition-colors hover:text-tk-ink;
   }
   .themer-btn[aria-pressed='true'] {
     @apply bg-tk-accent text-tk-accent-ink;
-  }
-  .themer-swatch {
-    @apply h-4 w-4 rounded-full border-2 border-transparent transition-colors;
-  }
-  .themer-swatch[aria-pressed='true'] {
-    @apply border-tk-ink;
-  }
-  .themer-divider {
-    @apply mx-0.5 h-4 w-px bg-tk-border;
   }
 }
 
@@ -461,204 +496,13 @@
   }
 }
 
-/* ── Fleet design-system token layer (2026-06-12 rework; contract:
-   the internal 2026-06-12 design-system spec). Two axes on <html>:
-   data-mode (light|dark) × data-accent (violet|oxblood|teal). Same
-   blocks as marketing-site so the surfaces stay in lockstep. */
-[data-accent='violet'] {
-  --accent-rgb: 109 94 252;
-  --accent-2-rgb: 139 125 255;
-  --accent-strong-rgb: 88 71 224;
-  --accent: #6d5efc;
-  --accent-2: #8b7dff;
-  --accent-strong: #5847e0;
-  --accent-ink: #fff;
-  --accent-soft: rgba(109, 94, 252, 0.13);
-  --glow: rgba(109, 94, 252, 0.32);
-}
-[data-accent='oxblood'] {
-  --accent-rgb: 155 59 70;
-  --accent-2-rgb: 192 75 88;
-  --accent-strong-rgb: 114 47 55;
-  --accent: #9b3b46;
-  --accent-2: #c04b58;
-  --accent-strong: #722f37;
-  --accent-ink: #fff;
-  --accent-soft: rgba(155, 59, 70, 0.13);
-  --glow: rgba(155, 59, 70, 0.32);
-}
-[data-accent='teal'] {
-  --accent-rgb: 16 154 130;
-  --accent-2-rgb: 27 199 168;
-  --accent-strong-rgb: 12 125 105;
-  --accent: #109a82;
-  --accent-2: #1bc7a8;
-  --accent-strong: #0c7d69;
-  --accent-ink: #fff;
-  --accent-soft: rgba(16, 154, 130, 0.13);
-  --glow: rgba(16, 154, 130, 0.28);
-}
-[data-mode='light'] {
-  color-scheme: light;
-  --bg-rgb: 242 243 246;
-  --surface-rgb: 255 255 255;
-  --raised-rgb: 255 255 255;
-  --hover-rgb: 241 242 245;
-  --ink-rgb: 15 16 20;
-  --ink-2-rgb: 71 74 85;
-  --ink-3-rgb: 106 109 122;
-  --border-rgb: 228 230 236;
-  --ready-rgb: 12 154 93;
-  --busy-rgb: 201 138 18;
-  --err-rgb: 216 69 60;
-  --sync-rgb: 37 99 235;
-  --code-bg-rgb: 22 23 28;
-  --bg: #f2f3f6;
-  --surface: #fff;
-  --raised: #fff;
-  --hover: #f1f2f5;
-  --ink: #0f1014;
-  --ink-2: #474a55;
-  /* S23 2026-07-06 — light ink-3 darkened for AA: #8a8d99 measured only
-     2.98:1 on --bg #f2f3f6 / 3.31:1 on #fff / 2.95:1 on --hover #f1f2f5,
-     failing WCAG AA for the small muted print it carries (tree section
-     labels, Copy buttons, footer meta, status lines). #6a6d7a is
-     4.64 / 5.15 / 4.60 on those surfaces (all ≥4.5:1) while staying
-     clearly lighter than ink-2 #474a55 (7.96:1) so hierarchy holds. */
-  --ink-3: #6a6d7a;
-  --border: #e4e6ec;
-  /* S24 2026-07-06 — AA-safe status-toned TEXT (values byte-identical with
-     marketing/docs base.css). The raw status tokens (--*-rgb above) are
-     FILL tones and fail WCAG AA as small light-mode text (err #d8453c
-     3.91/4.34/3.88 on bg/surface/hover; ready #0c9a5d 3.27/3.62/3.24;
-     busy #c98a12 2.66/2.95/2.63). Status-colored TEXT consumes the *-text
-     pair; dots/fills/washes/borders keep the raw tokens. All three
-     verified ≥4.5:1 on --bg #f2f3f6 / --surface #fff / --hover #f1f2f5
-     and over their own 15%-alpha washes: ready-text #097245
-     5.40/5.99/5.35 · busy-text #845a09 5.49/6.09/5.44 · err-text #ad3229
-     5.80/6.43/5.75. */
-  --ready-text: #097245;
-  --busy-text: #845a09;
-  --err-text: #ad3229;
-  --sync: #2563eb;
-  --code-bg: #16171c;
-  /* S20/S21 — mode-aware elevation: the light values are the original v2
-     ambient shadows (they work on light surfaces). */
-  --shadow-ambient: 0 1px 2px rgb(15 16 20 / 0.04), 0 10px 28px -18px rgb(15 16 20 / 0.12);
-  --shadow-ambient-lg: 0 2px 4px rgb(15 16 20 / 0.05), 0 24px 56px -24px rgb(15 16 20 / 0.2);
-  /* 2026-09-21 — stage-1: two derived elevation steps above --shadow-ambient,
-     for cards that had NO shadow at all before this stage (home's quick
-     actions + trust tiles, Team's member/invite lists, Select-a-tier's
-     pricing cards). --shadow-lift is the resting state; --shadow-float is
-     the hover/lifted state — same two-step composition as --shadow-ambient
-     (a hairline + a soft drop), just a little deeper so newly-elevated
-     cards read as intentionally raised rather than a copy of the ambient
-     tier already used everywhere else. */
-  --shadow-lift: 0 1px 2px rgb(15 16 20 / 0.05), 0 14px 32px -16px rgb(15 16 20 / 0.16);
-  --shadow-float: 0 2px 6px rgb(15 16 20 / 0.07), 0 22px 44px -18px rgb(15 16 20 / 0.24);
-}
-[data-mode='dark'] {
-  color-scheme: dark;
-  --bg-rgb: 6 6 8;
-  --surface-rgb: 20 20 26;
-  --raised-rgb: 28 28 36;
-  --hover-rgb: 36 37 47;
-  --ink-rgb: 245 245 247;
-  --ink-2-rgb: 176 176 187;
-  --ink-3-rgb: 140 140 150;
-  --border-rgb: 44 44 56;
-  --ready-rgb: 47 227 154;
-  --busy-rgb: 255 194 77;
-  --err-rgb: 255 107 97;
-  --sync-rgb: 96 165 250;
-  --code-bg-rgb: 12 12 17;
-  --bg: #060608;
-  /* S21 2026-07-06 (port of marketing's S20 fix; founder: "boxes might not
-     even be visible") — the dark surface ladder was compressed ~4x below
-     the GUI's (surface vs bg was 1.05:1, below perceptibility; every layer
-     boundary hung on a 1.16:1 hairline border — cards were invisible
-     boxes). Bumped for SEPARATION while the near-black brand bg stays
-     locked: surface 1.10:1 / raised 1.20:1 vs bg / border 1.47:1. Values
-     byte-identical with marketing base.css — shared-token pledge
-     re-unified. */
-  --surface: #14141a;
-  --raised: #1c1c24;
-  --hover: #24252f;
-  --ink: #f5f5f7;
-  --ink-2: #b0b0bb;
-  /* S21 — ink-3 re-synced to marketing's #8c8c96 (marketing had diverged
-     for AA on small muted print; the surface-ladder bump above makes it
-     necessary here too: the old #73737f sits ~3.9:1 on the NEW --hover
-     #24252f, and ink-3 IS real text on hover surfaces — .badge-count and
-     the sidebar count chips render ink-3 directly on bg-tk-hover). */
-  --ink-3: #8c8c96;
-  --border: #2c2c38;
-  /* S24 2026-07-06 — AA-safe status-toned TEXT (see the light block). The
-     dark raw ready/busy tones already clear AA as text everywhere, so the
-     pairs reuse them (ready-text #2fe39a 12.12/10.99/9.11 on
-     bg/surface/hover; busy-text #ffc24d 12.61/11.42/9.47). Raw err
-     #ff6b61 passes plain surfaces (7.26/6.58/5.45) but measures 4.35:1
-     over its own 15% wash on a hovered row (the S22.4 DELETE-chip
-     finding), so err-text lifts to #ff7d74: 8.13/7.37/6.11 plain,
-     6.91/4.88 over the wash on bg/hover. */
-  --ready-text: #2fe39a;
-  --busy-text: #ffc24d;
-  --err-text: #ff7d74;
-  --sync: #60a5fa;
-  --code-bg: #0c0c11;
-  /* S20 — dark elevation: the light-mode gray shadows composite to
-     EXACTLY the bg on near-black (a mathematical no-op, measured
-     1.0000:1), so dark cards had zero elevation cue. Dark uses the
-     standard dark-UI cue instead: a lit top rim (inset white ~5%)
-     + a true-black drop for overlap depth. */
-  --shadow-ambient: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 10px 28px -18px rgb(0 0 0 / 0.7);
-  --shadow-ambient-lg: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 24px 56px -24px rgb(0 0 0 / 0.85);
-  /* 2026-09-21 — stage-1 (see the light-mode block above for the full
-     rationale). Dark keeps the lit-top-rim + true-black-drop composition
-     --shadow-ambient already uses (flat gray shadows are a no-op on the
-     near-black bg — S20) at two deeper steps. */
-  --shadow-lift: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 14px 32px -16px rgb(0 0 0 / 0.78);
-  --shadow-float: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 22px 44px -18px rgb(0 0 0 / 0.88);
-}
-
-/* ── AA-safe accent-toned TEXT (Fleet v2 2026-07-03; S21 dashboard port
-   2026-07-06 — values byte-identical with marketing base.css). The raw
-   --accent fails WCAG AA as text on the dark bg (oxblood #9b3b46 on #060608
-   ≈ 3.0:1 — fine for button FILLS with white ink, not for colored text), and
-   --accent-soft is a 13%-alpha background WASH (~1.2:1 as text — effectively
-   invisible; the sites that previously misused it as a text color all
-   read through it).
-   --accent-text is the readable tone per mode × accent pair (all ≥4.5:1 on
-   --bg, verified): dark oxblood #d4626e 5.56 / violet #8b7dff 6.24 / teal
-   #1bc7a8 9.43; light oxblood #8d2c3e 7.39 / violet #5847e0 5.58 / teal
-   #0c7d69 4.56. Accent-toned TEXT uses tk-accent-text; fills/borders/washes
-   keep the raw accent + accent-soft tokens. */
-[data-mode='dark'][data-accent='violet'] {
-  --accent-text: #8b7dff;
-}
-[data-mode='dark'][data-accent='oxblood'] {
-  --accent-text: #d4626e;
-}
-[data-mode='dark'][data-accent='teal'] {
-  --accent-text: #1bc7a8;
-}
-[data-mode='light'][data-accent='violet'] {
-  --accent-text: #5847e0;
-}
-[data-mode='light'][data-accent='oxblood'] {
-  --accent-text: #8d2c3e;
-}
-[data-mode='light'][data-accent='teal'] {
-  --accent-text: #0c7d69;
-}
-
 /* ── Stage 1 visual upgrade (2026-09-21) — re-deriving the desktop AI
    view's language (docs.internal design brief §1/§4) inside this app's
    own tk- token system. The dashboard does NOT share the AI view's CSS —
    nothing below imports or references `.ai-*` / `--ai-*`; every device is
-   rebuilt from tk- tokens already defined above. Three pieces, each
-   additive and scoped by class/attribute so nothing here changes any
-   existing selector's behaviour:
+   rebuilt from the tk- tokens. Three pieces, each additive and scoped by
+   class/attribute so nothing here changes any existing selector's
+   behaviour:
      1. .tk-room       — a breathing backdrop wash (the AI view's "room is
                           lit, not just labelled" idea, §1.1).
      2. .tk-liftable    — hover elevation using --shadow-lift/--shadow-float.
@@ -666,7 +510,9 @@
                           --ai-light-rgb idea, §1.1/§1.4): colour is set
                           once per state and re-read by fill + halo + breathe
                           together, and colour is NEVER the only signal — every
-                          call site keeps its existing text/word label. */
+                          call site keeps its existing text/word label.
+   --tk-ease (the one easing curve every motion here reuses) is the shared
+   --ease token, aliased by web-aliases.css. */
 
 /* 1. Room backdrop. Applied to the existing static --accent-soft radial
    gradient behind the home page's header — turns it into a slow, wide
@@ -695,9 +541,8 @@
   }
 }
 
-/* 2. Hover elevation. Resting shadow is set by the call site (either the
-   existing --shadow-ambient or the new --shadow-lift); this class only
-   supplies the hover step + the transition, so it composes with either. */
+/* 2. Hover elevation. Resting shadow is set by the call site (--shadow-lift);
+   this class only supplies the hover step + the transition. */
 .tk-liftable {
   transition:
     transform 220ms var(--tk-ease),
@@ -775,11 +620,10 @@
                                  .auth-card wrapper on the pages a new or
                                  returning customer meets first (login,
                                  signup, verify-email, reset-password) —
-                                 .auth-card's existing shadow-ambient-lg
-                                 (already the deepest shadow token) is
-                                 "the lift", and .auth-card::before already
-                                 supplies the hairline rim; this adds only
-                                 the pooled light, the one piece missing.
+                                 .auth-card's float shadow is "the lift",
+                                 and .auth-card::before already supplies the
+                                 hairline rim; this adds only the pooled
+                                 light, the one piece missing.
      2. [data-tk-state='muted'] — extends stage 1's state-light vocabulary
                                  (§1.1's --ai-light-rgb idea) with the
                                  "absence of light" tone, for a state that

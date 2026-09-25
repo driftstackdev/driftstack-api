@@ -86,14 +86,18 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
   });
 
   it('Role badge styling: admin → bg-tk-accent/10 text-tk-accent-text (S23 2026-07-06 AA text tone) / member → bg-tk-surface text-tk-ink-2 — pinned so admin visually pops over member (admins have write power, customers should be able to tell at a glance who can take destructive actions); drift to identical styling would hide the role distinction. Fleet v2 (2026-07-03) moved admin off the hard-coded blue-50/blue-700 onto the two-axis accent token so the badge renders correctly in light mode.', () => {
+    // 2026-09-25 — the desktop app's badge recipe adds a /30 edge (and centres
+    // the label); the wash and the AA text tone are unchanged.
     expect(body).toMatch(
-      /m\.role === 'admin' \? 'bg-tk-accent\/10 text-tk-accent-text' : 'bg-tk-surface text-tk-ink-2';/,
+      /m\.role === 'admin'\s*\?\s*'border-tk-accent\/30 bg-tk-accent\/10 text-tk-accent-text'\s*:\s*'border-tk-border bg-tk-surface text-tk-ink-2';/,
     );
   });
 
   it("Pending invite badge: bg-tk-accent/10 text-tk-accent-text (S23 2026-07-06 AA text tone) + uppercase 'pending' — pinned so pending invites have visual urgency (glow-red = needs action, distinct from member emerald/slate) so admins can see at a glance who hasn't accepted yet", () => {
+    // 2026-09-25 — the desktop app's badge recipe adds a /30 edge (and centres
+    // the label); the wash and the AA text tone are unchanged.
     expect(body).toMatch(
-      /<span class="inline-flex shrink-0 rounded-full bg-tk-accent\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-accent-text">pending<\/span>/,
+      /<span class="inline-flex shrink-0 items-center rounded-full border border-tk-accent\/30 bg-tk-accent\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-accent-text">pending<\/span>/,
     );
   });
 

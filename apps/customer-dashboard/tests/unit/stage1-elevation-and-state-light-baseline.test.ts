@@ -34,22 +34,38 @@ describe('customer dashboard stage-1 elevation + state-light baseline', () => {
   const tailwind = read(TAILWIND);
   const indexPage = read(INDEX_PAGE);
 
-  it('--tk-ease is defined once, mode/accent-independent (:root, not a [data-mode]/[data-accent] block)', () => {
-    expect(css).toMatch(/:root\s*\{[\s\S]*?--tk-ease:\s*cubic-bezier\([^)]+\);[\s\S]*?\}/);
+  // 2026-09-25 — the easing and the lift/float shadows now come from the shared
+  // design tokens (packages/design-tokens, the desktop app's own --ai-ease,
+  // --ai-lift and --ai-float), which base.css imports; base.css declares no token
+  // value of its own. The arms below follow the values to where they live.
+  const tokensCss = read(resolve(REPO_ROOT, 'packages/design-tokens/dist/tokens.css'));
+  const aliasesCss = read(resolve(REPO_ROOT, 'packages/design-tokens/dist/web-aliases.css'));
+
+  it('--tk-ease is defined once, mode/accent-independent: the shared --ease on :root, aliased as --tk-ease', () => {
+    expect(css).toMatch(/@import '@driftstack\/design-tokens\/tokens\.css';/);
+    expect(css).toMatch(/@import '@driftstack\/design-tokens\/web-aliases\.css';/);
+    expect(tokensCss).toMatch(
+      /:root,\s*\[data-accent='oxblood'\]\s*\{[^}]*--ease:\s*cubic-bezier\([^)]+\);/,
+    );
+    expect(aliasesCss).toMatch(/--tk-ease:\s*var\(--ease\);/);
+    expect(css).not.toMatch(/--tk-ease:/);
   });
 
-  it('--shadow-lift and --shadow-float are defined in BOTH mode blocks (light + dark), alongside --shadow-ambient', () => {
-    const lightBlock = css.match(/\[data-mode='light'\]\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
-    const darkBlock = css.match(/\[data-mode='dark'\]\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
+  it('--shadow-lift and --shadow-float are defined in BOTH mode blocks (light + dark), with --shadow-ambient aliased onto the lift', () => {
+    const lightBlock = tokensCss.match(/\[data-mode='light'\]\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
+    const darkBlock = tokensCss.match(/\[data-mode='dark'\]\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
     for (const block of [lightBlock, darkBlock]) {
       expect(block).toMatch(/--shadow-lift:/);
       expect(block).toMatch(/--shadow-float:/);
     }
+    expect(aliasesCss).toMatch(/--shadow-ambient:\s*var\(--shadow-lift\);/);
   });
 
-  it('tailwind.config.mjs exposes shadow-lift / shadow-float utilities wired to the CSS variables', () => {
-    expect(tailwind).toMatch(/lift:\s*'var\(--shadow-lift\)'/);
-    expect(tailwind).toMatch(/float:\s*'var\(--shadow-float\)'/);
+  it('tailwind.config.mjs exposes shadow-lift / shadow-float utilities wired to the CSS variables (through the shared preset)', () => {
+    const preset = read(resolve(REPO_ROOT, 'packages/design-tokens/dist/tailwind-preset.mjs'));
+    expect(tailwind).toMatch(/presets: \[preset\],/);
+    expect(preset).toMatch(/lift:\s*'var\(--shadow-lift\)'/);
+    expect(preset).toMatch(/float:\s*'var\(--shadow-float\)'/);
   });
 
   it('.tk-room (the home-page header room backdrop) breathes, and has an explicit reduced-motion still — not just the global clamp', () => {

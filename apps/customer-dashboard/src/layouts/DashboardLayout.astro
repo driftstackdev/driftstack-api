@@ -96,11 +96,11 @@ const navSections: NavSection[] = [
 ---
 
 <!doctype html>
-<html lang="en" data-mode="dark" data-accent="oxblood">
+<html lang="en" data-mode="light" data-accent="oxblood">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#060608" />
+    <meta name="theme-color" content="#ebedf2" />
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
     <meta name="robots" content="noindex,nofollow" />
@@ -123,13 +123,16 @@ const navSections: NavSection[] = [
       {
         /*
          * Fleet v2 (2026-07-02) — theme persistence, pre-paint. Applies the
-         * customer's saved mode/accent BEFORE first paint so there is no
-         * flash of the default theme. Values are WHITELISTED — never write
-         * raw localStorage into a DOM attribute. The defaults (dark +
-         * oxblood, founder-locked 2026-07-02) live on the <html> attrs;
-         * the themer pill (wired at body end) writes ds_theme_mode /
-         * ds_theme_accent. Runs on BOTH layout branches so auth pages
-         * honour the saved theme too.
+         * customer's saved mode BEFORE first paint so there is no flash of
+         * the default theme. Values are WHITELISTED — never write raw
+         * localStorage into a DOM attribute. The defaults live on the <html>
+         * attrs: light (2026-09-25 — the desktop app's light theme is the
+         * one design system every surface now shares; a customer who chose
+         * dark keeps it) + oxblood, the only accent (violet and teal are
+         * retired, so a stored ds_theme_accent is no longer read). The
+         * Light/Dark switch (wired at body end) writes ds_theme_mode.
+         * Nothing follows the system theme. Runs on BOTH layout branches so
+         * auth pages honour the saved theme too.
          *
          * NOTE: plain code in a brace-comment block, NOT the {`…`}
          * template-literal wrapper — Astro emits that wrapper literally,
@@ -140,16 +143,13 @@ const navSections: NavSection[] = [
       (function () {
         try {
           var m = localStorage.getItem('ds_theme_mode');
-          var a = localStorage.getItem('ds_theme_accent');
           if (m === 'light' || m === 'dark') {
             document.documentElement.setAttribute('data-mode', m);
           }
-          if (a === 'violet' || a === 'oxblood' || a === 'teal') {
-            document.documentElement.setAttribute('data-accent', a);
-          }
-          if (m === 'light') {
+          if (m === 'dark') {
+            // The browser chrome matches the dark page ground (surface-base).
             var mt = document.querySelector('meta[name="theme-color"]');
-            if (mt) mt.setAttribute('content', '#f2f3f6');
+            if (mt) mt.setAttribute('content', '#0f172a');
           }
         } catch (_) {
           /* default theme */
@@ -211,13 +211,15 @@ const navSections: NavSection[] = [
         display: block;
         visibility: hidden;
       }
-      /* 2026-05-21 — mobile-nav reveal. Default state is `hidden md:block`
+      /* 2026-05-21 — mobile-nav reveal. Default state is `hidden md:flex`
        * (collapsed on mobile, side-rail on tablet+). When the hamburger
        * sets `data-mobile-nav-open` on <html>, the aside drops to
        * fullscreen overlay so the customer can still reach Sign out,
-       * navigation, and the SSO bridge from a phone. */
+       * navigation, and the SSO bridge from a phone. The overlay is opaque
+       * (the rail's own wash is translucent over the page ground). */
       html[data-mobile-nav-open='true'] [data-mobile-nav] {
-        display: block;
+        display: flex;
+        background-color: rgb(var(--surface-raised-rgb));
         position: fixed;
         inset: 56px 0 0 0;
         width: 100%;
@@ -558,7 +560,7 @@ const navSections: NavSection[] = [
     {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR users skip the sidebar nav. */}
     <a
       href="#main-content"
-      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-tk-accent focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-tk-accent focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-tk-accent-ink"
     >
       Skip to main content
     </a>
@@ -587,8 +589,8 @@ const navSections: NavSection[] = [
     <div class="flex min-h-screen flex-col">
       {
         !withSidebar && (
-          <header class="border-b border-tk-border bg-tk-bg">
-            <div class="mx-auto flex max-w-6xl items-center px-6 py-4">
+          <header class="border-b border-tk-border bg-tk-bg/80 backdrop-blur">
+            <div class="mx-auto flex max-w-6xl items-center px-4 py-3.5 sm:px-6">
               <a
                 href="/"
                 class="group flex items-center gap-2.5 font-mono text-base font-semibold text-tk-ink"
@@ -605,36 +607,15 @@ const navSections: NavSection[] = [
               <span class="flex-1" />
               {/* Fleet v2 — theme switcher on auth/onboarding pages (the
                   signed-in shell carries its own instance in the sidebar).
-                  Wired by the [data-themer] script at body end. */}
+                  Wired by the [data-themer] script at body end. Light and
+                  Dark only: violet and teal are retired (2026-09-25). */}
               <div data-themer class="themer" role="group" aria-label="Theme">
-                <button type="button" class="themer-btn" data-set-mode="dark">
-                  Dark
-                </button>
                 <button type="button" class="themer-btn" data-set-mode="light">
                   Light
                 </button>
-                <span class="themer-divider" aria-hidden="true" />
-                <button
-                  type="button"
-                  class="themer-swatch"
-                  data-set-accent="oxblood"
-                  style="background:#9b3b46"
-                  aria-label="Oxblood accent"
-                />
-                <button
-                  type="button"
-                  class="themer-swatch"
-                  data-set-accent="violet"
-                  style="background:#6d5efc"
-                  aria-label="Violet accent"
-                />
-                <button
-                  type="button"
-                  class="themer-swatch"
-                  data-set-accent="teal"
-                  style="background:#109a82"
-                  aria-label="Teal accent"
-                />
+                <button type="button" class="themer-btn" data-set-mode="dark">
+                  Dark
+                </button>
               </div>
             </div>
           </header>
@@ -644,10 +625,11 @@ const navSections: NavSection[] = [
           The sidebar lives on the side at md+; on mobile the
           hamburger toggles `data-mobile-nav-open` on <html>, and a
           companion <style> rule reveals the <aside> (otherwise
-          `hidden md:block` keeps it collapsed).  */}
+          `hidden md:flex` keeps it collapsed). Sticky and 56px tall, so the
+          overlay (inset 56px) always opens right under it.  */}
       {withSidebar && (
         <header
-          class="flex items-center justify-between border-b border-tk-border bg-tk-bg px-4 py-3 md:hidden"
+          class="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-tk-border bg-tk-surface px-4 md:hidden"
         >
           <a
             href="/"
@@ -668,7 +650,7 @@ const navSections: NavSection[] = [
             aria-label="Open navigation"
             aria-controls="customer-mobile-navigation"
             aria-expanded="false"
-            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 hover:text-tk-ink"
+            class="inline-flex h-9 w-9 items-center justify-center rounded border border-tk-border bg-tk-raised text-tk-ink-2 hover:text-tk-ink"
           >
             <svg
               data-mobile-nav-icon="closed"
@@ -700,15 +682,24 @@ const navSections: NavSection[] = [
           </button>
         </header>
       )}
-      <div class="flex flex-1">
+      <div class:list={['flex flex-1', withSidebar && 'md:min-h-screen']}>
         {
           withSidebar && (
             <aside
               id="customer-mobile-navigation"
               data-mobile-nav
-              class="hidden w-[212px] shrink-0 border-r border-tk-border bg-tk-surface md:block"
+              class="hidden w-[224px] shrink-0 flex-col border-r border-tk-border bg-tk-surface/60 md:flex"
             >
-              <div class="flex h-16 items-center px-6 border-b border-tk-border">
+              {/* The rail's contents stay in view while the page scrolls; the
+                  aside itself spans the whole row so its wash and edge run to
+                  the footer. */}
+              <div class="flex min-h-0 flex-1 flex-col md:sticky md:top-0 md:h-screen md:flex-none">
+              {/* 2026-09-25 — the desktop app's sidebar: brand, a search button
+                  that opens the ⌘K palette, grouped nav, and the account block
+                  pinned to the foot (identity, the Light/Dark switch, Sign
+                  out). */}
+              {/* On a phone the sticky header above already carries the mark. */}
+              <div class="hidden h-14 shrink-0 items-center px-4 md:flex">
                 <a
                   href="/"
                   class="group flex items-center gap-2.5 font-mono text-base font-semibold text-tk-ink"
@@ -716,12 +707,35 @@ const navSections: NavSection[] = [
                   <img
                     src="/driftstack-mark.svg?v=4"
                     alt="Driftstack"
-                    width="32"
-                    height="32"
-                    class="inline-block h-8 w-8 transition-transform duration-300 group-hover:scale-110"
+                    width="28"
+                    height="28"
+                    class="inline-block h-7 w-7 transition-transform duration-300 group-hover:scale-110"
                   />
                   <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent-text">STACK</span></span>
                 </a>
+              </div>
+              <div class="shrink-0 px-3 pb-3 pt-3 md:pt-0">
+                <button
+                  type="button"
+                  data-cmdk-open
+                  aria-label="Search and commands"
+                  class="flex h-8 w-full items-center gap-2 rounded-[7px] bg-tk-inset px-2.5 text-xs text-tk-ink-3 shadow-[inset_0_0_0_1px_rgb(var(--border-rgb)/0.7)] transition-colors hover:text-tk-ink"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    width="14"
+                    height="14"
+                    aria-hidden="true"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  >
+                    <path d="M7 12.25a5.25 5.25 0 1 0 0-10.5 5.25 5.25 0 0 0 0 10.5Z M14.25 14.25 10.75 10.75" />
+                  </svg>
+                  <span>Search…</span>
+                  <kbd class="ml-auto font-mono text-[10px]">⌘K</kbd>
+                </button>
               </div>
               {/*
                 V-331 — "Acting as" picker. Hidden until JS confirms the
@@ -742,58 +756,20 @@ const navSections: NavSection[] = [
               >
                 <label
                   for="act-as-picker"
-                  class="block text-[10px] font-mono uppercase tracking-widest text-tk-ink-3"
+                  class="block text-[10px] font-semibold uppercase tracking-[0.09em] text-tk-ink-3"
                 >
                   Acting as
                 </label>
                 <select
                   id="act-as-picker"
                   data-act-as-picker
-                  class="mt-1 w-full rounded-md border border-tk-border bg-tk-bg px-2 py-1.5 text-sm text-tk-ink focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
+                  class="mt-1 w-full rounded border border-tk-border bg-tk-inset px-2 py-1.5 text-sm text-tk-ink focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/40"
                 ></select>
               </div>
-              {/* 2026-05-19 — signed-in identity badge. Avatar (from R2
-                  upload OR OAuth IDP fallback per /account/me) +
-                  display name above the nav. Hidden until JS hydrates
-                  /account/me to avoid empty-state flash. */}
-              <div
-                data-signed-in-as
-                class="invisible border-b border-tk-border px-4 py-4"
-              >
-                <div class="flex items-center gap-3">
-                  <div
-                    data-signed-in-avatar
-                    class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-tk-border bg-tk-surface text-[11px] text-tk-ink-3"
-                  >
-                    —
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <p
-                      data-signed-in-name
-                      class="truncate text-sm font-medium text-tk-ink"
-                    >
-                      —
-                    </p>
-                    <div class="flex items-center gap-2 text-[11px] text-tk-ink-3">
-                      <a href="/settings/" class="hover:text-tk-ink">
-                        Account settings
-                      </a>
-                      <span aria-hidden="true">·</span>
-                      <button
-                        type="button"
-                        data-signout
-                        class="hover:text-tk-ink"
-                      >
-                        Sign out
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <nav class="px-3 py-4">
+              <nav aria-label="Dashboard" class="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-1">
                 {navSections.map((section) => (
                   <div class="mb-3">
-                    <div class="px-3 pb-1 pt-2 text-[10px] font-mono uppercase tracking-widest text-tk-ink-3">
+                    <div class="px-2 pb-1.5 pt-1 text-[10px] font-semibold uppercase leading-3 tracking-[0.09em] text-tk-ink-3">
                       {section.label}
                     </div>
                     <ul class="space-y-px">
@@ -811,29 +787,31 @@ const navSections: NavSection[] = [
                               href={item.href === '/' ? '/' : `${item.href}/`}
                               aria-current={active ? 'page' : undefined}
                               class:list={[
-                                // 2026-05-21 — font-weight stays constant across
-                                // active/inactive (font-medium widens text → other
-                                // items shifted on click). Active state distinguished
-                                // by bg + text color + inset divider only.
-                                'group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150',
+                                // 2026-09-25 — the app's nav item (Sidebar.tsx):
+                                // the active row is the soft accent wash with
+                                // semibold primary ink and an accent icon; the
+                                // rest are secondary ink that lifts on hover.
+                                // Rows are full width, so the heavier active
+                                // weight never moves another item.
+                                'group flex items-center gap-2.5 rounded-[7px] px-2 py-[7px] text-[13px] leading-4 transition-colors duration-150',
                                 active
-                                  ? 'bg-tk-accent/10 text-tk-accent-text shadow-inset-divider'
-                                  : 'text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink',
+                                  ? 'bg-tk-accent-soft font-semibold text-tk-ink'
+                                  : 'font-medium text-tk-ink-2 hover:bg-tk-raised hover:text-tk-ink',
                               ]}
                             >
                               <svg
                                 viewBox="0 0 16 16"
-                                width="14"
-                                height="14"
+                                width="16"
+                                height="16"
                                 aria-hidden="true"
                                 fill="none"
                                 stroke="currentColor"
-                                stroke-width="1.6"
+                                stroke-width="1.5"
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
                                 class:list={[
                                   'shrink-0',
-                                  active ? 'opacity-100' : 'opacity-70',
+                                  active ? 'text-tk-accent' : 'text-tk-ink-3 group-hover:text-tk-ink-2',
                                 ]}
                               >
                                 <path d={item.icon} />
@@ -847,10 +825,10 @@ const navSections: NavSection[] = [
                                     // slot reserves layout space pre-hydration; JS
                                     // sets opacity-100 + textContent in one paint
                                     // → no width jump when the badge appears.
-                                    'shrink-0 rounded px-1.5 py-px font-mono text-[10px] opacity-0 transition-opacity',
+                                    'shrink-0 rounded-full px-1.5 text-[10px] font-semibold leading-[14px] opacity-0 transition-opacity',
                                     active
                                       ? 'bg-tk-accent/20 text-tk-accent-text'
-                                      : 'bg-tk-hover text-tk-ink-3 group-hover:text-tk-ink-2',
+                                      : 'bg-tk-raised text-tk-ink-2',
                                   ]}
                                   >&nbsp;</span>
                               )}
@@ -875,12 +853,12 @@ const navSections: NavSection[] = [
               */}
               <div
                 data-admin-shortcut
-                class="hidden border-t border-tk-border px-4 py-3"
+                class="hidden shrink-0 border-t border-tk-border px-3 py-3"
               >
                 <a
                   href="#"
                   data-admin-shortcut-link
-                  class="flex items-center gap-2 rounded-md bg-tk-accent/5 px-3 py-1.5 text-sm font-medium text-tk-accent-text hover:bg-tk-accent/10"
+                  class="flex items-center gap-2 rounded-[7px] bg-tk-accent/10 px-2 py-1.5 text-sm font-medium text-tk-accent-text hover:bg-tk-accent/15"
                 >
                   <svg
                     viewBox="0 0 16 16"
@@ -899,41 +877,57 @@ const navSections: NavSection[] = [
                   <span class="flex-1">Open admin panel</span>
                 </a>
               </div>
-              {/* Fleet v2 — theme switcher (dark+oxblood default, light
-                  toggle per founder direction 2026-07-02). Second instance
-                  lives in the withSidebar=false auth header; both are
-                  wired by the [data-themer] script at body end. */}
-              <div class="border-t border-tk-border px-4 py-3">
-                <div data-themer class="themer" role="group" aria-label="Theme">
-                  <button type="button" class="themer-btn" data-set-mode="dark">
-                    Dark
-                  </button>
-                  <button type="button" class="themer-btn" data-set-mode="light">
-                    Light
-                  </button>
-                  <span class="themer-divider" aria-hidden="true" />
-                  <button
-                    type="button"
-                    class="themer-swatch"
-                    data-set-accent="oxblood"
-                    style="background:#9b3b46"
-                    aria-label="Oxblood accent"
-                  />
-                  <button
-                    type="button"
-                    class="themer-swatch"
-                    data-set-accent="violet"
-                    style="background:#6d5efc"
-                    aria-label="Violet accent"
-                  />
-                  <button
-                    type="button"
-                    class="themer-swatch"
-                    data-set-accent="teal"
-                    style="background:#109a82"
-                    aria-label="Teal accent"
-                  />
+              {/* 2026-05-19 — signed-in identity badge. Avatar (from R2
+                  upload OR OAuth IDP fallback per /account/me) +
+                  display name. Hidden until JS hydrates /account/me to
+                  avoid empty-state flash. 2026-09-25 — pinned to the foot of
+                  the sidebar with the theme switch and Sign out, as the
+                  desktop app does. */}
+              <div class="mt-auto shrink-0 space-y-2.5 border-t border-tk-border px-3 pb-3 pt-3">
+                <div data-signed-in-as class="invisible">
+                  <div class="flex items-center gap-2.5">
+                    <div
+                      data-signed-in-avatar
+                      class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-tk-border bg-tk-surface text-[11px] text-tk-ink-3"
+                    >
+                      —
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <p
+                        data-signed-in-name
+                        class="truncate text-[13px] font-semibold text-tk-ink"
+                      >
+                        —
+                      </p>
+                      <a href="/settings/" class="text-xs text-tk-ink-3 hover:text-tk-ink">
+                        Account settings
+                      </a>
+                    </div>
+                  </div>
                 </div>
+                {/* Fleet v2 — theme switcher (light default since 2026-09-25;
+                    the dark toggle stays). Second instance lives in the
+                    withSidebar=false auth header; both are wired by the
+                    [data-themer] script at body end. */}
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs text-tk-ink-3">Theme</span>
+                  <div data-themer class="themer" role="group" aria-label="Theme">
+                    <button type="button" class="themer-btn" data-set-mode="light">
+                      Light
+                    </button>
+                    <button type="button" class="themer-btn" data-set-mode="dark">
+                      Dark
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  data-signout
+                  class="flex w-full items-center justify-between rounded bg-tk-err/10 px-2.5 py-1.5 text-left text-xs font-medium text-tk-err-text transition-colors hover:bg-tk-err/15"
+                >
+                  Sign out
+                </button>
+              </div>
               </div>
             </aside>
           )
@@ -945,12 +939,12 @@ const navSections: NavSection[] = [
         {withSidebar && (
           <div
             data-cmdk
-            class="hidden fixed inset-0 z-[60] flex items-start justify-center bg-black/50 px-4 pt-[12vh]"
+            class="hidden fixed inset-0 z-[60] flex items-start justify-center bg-black/40 px-4 pt-[12vh] backdrop-blur-[2px]"
             role="dialog"
             aria-modal="true"
             aria-label="Command palette"
           >
-            <div class="w-full max-w-lg overflow-hidden rounded-card border border-tk-border bg-tk-surface shadow-ambient-lg">
+            <div class="w-full max-w-lg overflow-hidden rounded-xl border border-tk-border bg-tk-surface shadow-float">
               <input
                 type="text"
                 data-cmdk-input
@@ -987,13 +981,13 @@ const navSections: NavSection[] = [
             role="status"
             aria-live="polite"
             aria-atomic="true"
-            class="pointer-events-none fixed bottom-6 left-1/2 z-[70] hidden max-w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-tk-border bg-tk-raised px-4 py-2.5 text-center text-sm text-tk-ink shadow-ambient-lg"
+            class="pointer-events-none fixed bottom-6 left-1/2 z-[70] hidden max-w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-tk-border bg-tk-raised px-4 py-2.5 text-center text-sm text-tk-ink shadow-float"
           ></p>
         )}
         <main
           id="main-content"
           tabindex="-1"
-          class="flex-1"
+          class="min-w-0 flex-1"
           data-hydrate="pending"
           style="opacity: 0; transition: opacity 0.18s ease-out"
         >
@@ -1015,7 +1009,7 @@ const navSections: NavSection[] = [
               <button
                 type="button"
                 data-act-as-clear
-                class="rounded border border-tk-accent/40 bg-tk-surface px-3 py-1 text-xs font-medium text-tk-ink hover:bg-tk-accent/20"
+                class="btn-secondary shrink-0 px-3 py-1 text-xs"
               >
                 Switch back to self
               </button>
@@ -1051,7 +1045,7 @@ const navSections: NavSection[] = [
                 type="button"
                 data-notification-dismiss
                 aria-label="Dismiss notification"
-                class="shrink-0 rounded p-1 text-tk-ink-3 hover:bg-tk-accent/20 hover:text-tk-ink"
+                class="shrink-0 rounded p-1 text-tk-ink-2 hover:bg-tk-accent/15 hover:text-tk-ink"
               >
                 ✕
               </button>
@@ -1079,7 +1073,7 @@ const navSections: NavSection[] = [
                 <button
                   type="button"
                   data-legal-accept-all
-                  class="rounded border border-tk-accent/40 bg-tk-surface px-4 py-1.5 text-sm font-medium text-tk-ink hover:bg-tk-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="btn-primary"
                 >
                   Accept all and continue
                 </button>
@@ -1098,12 +1092,12 @@ const navSections: NavSection[] = [
           Hidden by default; the inline helper below wires show/resolve. */}
       <div
         data-ds-confirm
-        class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+        class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-[2px]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="ds-confirm-message"
       >
-        <div class="w-full max-w-md rounded-xl border border-tk-border bg-tk-surface p-6 shadow-2xl">
+        <div class="w-full max-w-md rounded-xl border border-tk-border bg-tk-surface p-6 shadow-float">
           <p
             data-ds-confirm-message
             id="ds-confirm-message"
@@ -1114,13 +1108,13 @@ const navSections: NavSection[] = [
             <button
               type="button"
               data-ds-confirm-cancel
-              class="rounded-lg border border-tk-border px-4 py-2 text-sm text-tk-ink-2 hover:text-tk-ink"
+              class="btn-secondary"
               >Cancel</button
             >
             <button
               type="button"
               data-ds-confirm-ok
-              class="rounded-lg bg-tk-accent px-4 py-2 text-sm font-medium text-white hover:bg-tk-accent/90"
+              class="btn-primary"
               >Confirm</button
             >
           </div>
@@ -1207,12 +1201,12 @@ const navSections: NavSection[] = [
           defaultValue, placeholder, confirmLabel. Enter submits. */}
       <div
         data-ds-prompt
-        class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+        class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-[2px]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="ds-prompt-message"
       >
-        <div class="w-full max-w-md rounded-xl border border-tk-border bg-tk-surface p-6 shadow-2xl">
+        <div class="w-full max-w-md rounded-xl border border-tk-border bg-tk-surface p-6 shadow-float">
           <p
             data-ds-prompt-message
             id="ds-prompt-message"
@@ -1223,19 +1217,19 @@ const navSections: NavSection[] = [
             type="text"
             data-ds-prompt-input
             aria-label="Response"
-            class="mt-4 w-full rounded-lg border border-tk-border bg-tk-bg px-3 py-2 text-sm text-tk-ink placeholder:text-tk-ink-3 focus:border-tk-accent focus:outline-none"
+            class="form-input mt-4"
           />
           <div class="mt-6 flex justify-end gap-3">
             <button
               type="button"
               data-ds-prompt-cancel
-              class="rounded-lg border border-tk-border px-4 py-2 text-sm text-tk-ink-2 hover:text-tk-ink"
+              class="btn-secondary"
               >Cancel</button
             >
             <button
               type="button"
               data-ds-prompt-ok
-              class="rounded-lg bg-tk-accent px-4 py-2 text-sm font-medium text-white hover:bg-tk-accent/90"
+              class="btn-primary"
               >OK</button
             >
           </div>
@@ -1606,7 +1600,7 @@ const navSections: NavSection[] = [
                       : (parts[0] || '?').slice(0, 2).toUpperCase();
                   saAvatar.textContent = initials;
                   saAvatar.className =
-                    'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-tk-border bg-tk-accent/10 text-xs font-medium text-tk-accent-text';
+                    'flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-tk-accent/30 bg-tk-accent/10 text-xs font-semibold text-tk-accent-text';
                 }
                 // 2026-05-21 — block is rendered `invisible` (CSS
                 // visibility:hidden) in SSR so the sidebar nav below it
@@ -2032,7 +2026,7 @@ const navSections: NavSection[] = [
               a.target = '_blank';
               a.rel = 'noopener noreferrer';
               a.className =
-                'text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2';
+                'text-tk-accent-text underline underline-offset-4 hover:text-tk-ink';
               a.textContent = DOC_LABEL[doc.document_key] || doc.title || doc.document_key;
               const ver = document.createElement('span');
               ver.className = 'text-xs text-tk-ink-3';
@@ -2302,18 +2296,19 @@ const navSections: NavSection[] = [
             window.location.href = href;
           };
         }
-        function setTheme(kind, value) {
+        function setTheme(value) {
           return function () {
-            document.documentElement.setAttribute('data-' + kind, value);
+            document.documentElement.setAttribute('data-mode', value);
             try {
-              localStorage.setItem(kind === 'mode' ? 'ds_theme_mode' : 'ds_theme_accent', value);
+              localStorage.setItem('ds_theme_mode', value);
             } catch (_) {
               /* session-only */
             }
             var meta = document.querySelector('meta[name="theme-color"]');
-            if (meta && kind === 'mode') {
-              meta.setAttribute('content', value === 'light' ? '#f2f3f6' : '#060608');
-            }
+            if (meta) meta.setAttribute('content', value === 'light' ? '#ebedf2' : '#0f172a');
+            document.querySelectorAll('[data-set-mode]').forEach(function (b) {
+              b.setAttribute('aria-pressed', String(b.getAttribute('data-set-mode') === value));
+            });
           };
         }
         var actions = [
@@ -2331,11 +2326,8 @@ const navSections: NavSection[] = [
             label: 'Copy account ID',
             run: copyAccountId,
           },
-          { label: 'Theme: Light', run: setTheme('mode', 'light') },
-          { label: 'Theme: Dark', run: setTheme('mode', 'dark') },
-          { label: 'Accent: Oxblood', run: setTheme('accent', 'oxblood') },
-          { label: 'Accent: Violet', run: setTheme('accent', 'violet') },
-          { label: 'Accent: Teal', run: setTheme('accent', 'teal') },
+          { label: 'Theme: Light', run: setTheme('light') },
+          { label: 'Theme: Dark', run: setTheme('dark') },
           {
             label: 'Sign out',
             run: function () {
@@ -2357,8 +2349,8 @@ const navSections: NavSection[] = [
             li.setAttribute('role', 'option');
             li.setAttribute('aria-selected', i === active ? 'true' : 'false');
             li.className =
-              'cursor-pointer px-4 py-2 text-sm ' +
-              (i === active ? 'bg-tk-accent/10 text-tk-accent-text' : 'text-tk-ink-2');
+              'mx-1 cursor-pointer rounded-[7px] px-3 py-2 text-sm ' +
+              (i === active ? 'bg-tk-accent-soft font-medium text-tk-ink' : 'text-tk-ink-2');
             li.addEventListener('click', function () {
               close();
               a.run();
@@ -2424,6 +2416,12 @@ const navSections: NavSection[] = [
         overlay.addEventListener('click', function (e) {
           if (e.target === overlay) close();
         });
+        // The sidebar's "Search…" button opens the same palette as ⌘K.
+        document.querySelectorAll('[data-cmdk-open]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            if (overlay.classList.contains('hidden')) open();
+          });
+        });
         document.addEventListener('keydown', function (e) {
           if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
             e.preventDefault();
@@ -2438,32 +2436,26 @@ const navSections: NavSection[] = [
         /*
          * Fleet v2 (2026-07-02) — themer wiring. Both [data-themer]
          * instances (sidebar foot + auth header) share this handler.
-         * Click writes the WHITELISTED value to <html> + localStorage
-         * (ds_theme_mode / ds_theme_accent — read back by the pre-paint
-         * script in <head>), syncs aria-pressed on every control, and
-         * keeps the theme-color meta in step so mobile browser chrome
-         * matches the active surface. addEventListener only — inline
-         * on* handlers are banned by the dashboard sweep tests.
+         * Click writes the WHITELISTED mode to <html> + localStorage
+         * (ds_theme_mode — read back by the pre-paint script in <head>),
+         * syncs aria-pressed on every control, and keeps the theme-color
+         * meta on the mode's page ground (#ebedf2 light / #0f172a dark) so
+         * mobile browser chrome matches the active surface. Light and Dark
+         * only since 2026-09-25 (the accent swatches are retired).
+         * addEventListener only — inline on* handlers are banned by the
+         * dashboard sweep tests.
          */
       }
       (function () {
         var MODES = ['light', 'dark'];
-        var ACCENTS = ['violet', 'oxblood', 'teal'];
         var root = document.documentElement;
         var meta = document.querySelector('meta[name="theme-color"]');
         function syncPressed() {
           var mode = root.getAttribute('data-mode');
-          var accent = root.getAttribute('data-accent');
           document.querySelectorAll('[data-set-mode]').forEach(function (b) {
             b.setAttribute('aria-pressed', String(b.getAttribute('data-set-mode') === mode));
           });
-          document.querySelectorAll('[data-set-accent]').forEach(function (b) {
-            b.setAttribute(
-              'aria-pressed',
-              String(b.getAttribute('data-set-accent') === accent),
-            );
-          });
-          if (meta) meta.setAttribute('content', mode === 'light' ? '#f2f3f6' : '#060608');
+          if (meta) meta.setAttribute('content', mode === 'dark' ? '#0f172a' : '#ebedf2');
         }
         document.querySelectorAll('[data-set-mode]').forEach(function (b) {
           b.addEventListener('click', function () {
@@ -2472,19 +2464,6 @@ const navSections: NavSection[] = [
             root.setAttribute('data-mode', m);
             try {
               localStorage.setItem('ds_theme_mode', m);
-            } catch (_) {
-              /* theme stays session-only */
-            }
-            syncPressed();
-          });
-        });
-        document.querySelectorAll('[data-set-accent]').forEach(function (b) {
-          b.addEventListener('click', function () {
-            var a = b.getAttribute('data-set-accent');
-            if (ACCENTS.indexOf(a) === -1) return;
-            root.setAttribute('data-accent', a);
-            try {
-              localStorage.setItem('ds_theme_accent', a);
             } catch (_) {
               /* theme stays session-only */
             }

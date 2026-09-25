@@ -112,9 +112,12 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     expect(l.replace('noindex,nofollow', 'nofollow')).not.toMatch(exactRobotsPolicy);
   });
 
-  it('CRITICAL theme-color #060608 pinned (the token layer dark --bg; Fleet v2 2026-07-02 aligned the meta to the actual dark surface — the old #0b0f14 predated the token layer). The pre-paint theme script + themer rewrite it to #f2f3f6 when light mode is active. Drift to a different color would mismatch the splash screen + browser chrome on mobile.', () => {
+  it('CRITICAL theme-color #ebedf2 pinned: the light page ground (surface-base), because light is the default mode since 2026-09-25 (it was #060608, the retired near-black dark ground). The pre-paint theme script + themer rewrite it to #0f172a (the dark surface-base) when dark mode is active. Drift to a different color would mismatch the page + browser chrome on mobile.', () => {
     const l = read(LAYOUT);
-    expect(l).toMatch(/<meta name="theme-color" content="#060608" \/>/);
+    expect(l).toMatch(/<meta name="theme-color" content="#ebedf2" \/>/);
+    expect(l).toMatch(/<html lang="en" data-mode="light" data-accent="oxblood">/);
+    expect(l).toMatch(/if \(m === 'dark'\) \{[\s\S]*?mt\.setAttribute\('content', '#0f172a'\);/);
+    expect(l).not.toMatch(/#060608|#f2f3f6/);
   });
 
   it('CRITICAL fullTitle pattern `${title} · Driftstack` pinned. The "·" (middle-dot) separator is canonical Driftstack-suffix.', () => {

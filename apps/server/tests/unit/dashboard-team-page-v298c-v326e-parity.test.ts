@@ -143,8 +143,10 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     const p = read(PAGE);
 
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
+    // 2026-09-25 — the desktop app's badge recipe adds a /30 edge (and centres
+    // the label); the wash and the AA text tone are unchanged.
     expect(p).toMatch(
-      /m\.role === 'admin' \? 'bg-tk-accent\/10 text-tk-accent-text' : 'bg-tk-surface text-tk-ink-2'/,
+      /m\.role === 'admin'\s*\?\s*'border-tk-accent\/30 bg-tk-accent\/10 text-tk-accent-text'\s*:\s*'border-tk-border bg-tk-surface text-tk-ink-2'/,
     );
   });
 
@@ -160,8 +162,10 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     const p = read(PAGE);
 
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
+    // 2026-09-25 — the desktop app's badge recipe adds a /30 edge (and centres
+    // the label); the wash and the AA text tone are unchanged.
     expect(p).toMatch(
-      /'<span class="inline-flex shrink-0 rounded-full bg-tk-accent\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-accent-text">pending<\/span>'/,
+      /'<span class="inline-flex shrink-0 items-center rounded-full border border-tk-accent\/30 bg-tk-accent\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-accent-text">pending<\/span>'/,
     );
   });
 

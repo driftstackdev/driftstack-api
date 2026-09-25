@@ -33,9 +33,9 @@ describe('W491.A apps/customer-dashboard/src/pages/404.astro content parity', ()
 
   it("404 eyebrow + 'Page not found.' headline + 'The page you were looking for has moved or doesn't exist.' — pinned so the customer-facing copy stays gentler than the admin-panel version (drift to harsher 'no page at this path' phrasing would mismatch the customer-dashboard voice)", () => {
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
-    expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">404<\/p>/,
-    );
+    // 2026-09-25 — the eyebrow is the desktop app's small-caps section label
+    // (was a mono eyebrow); it keeps the accent-text tone.
+    expect(body).toMatch(/<p class="section-label text-tk-accent-text">404<\/p>/);
     expect(body).toMatch(/Page not found\./);
     expect(body).toMatch(/The page you were looking for has moved or doesn't exist\./);
   });

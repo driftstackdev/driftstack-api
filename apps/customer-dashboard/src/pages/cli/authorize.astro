@@ -27,7 +27,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 <DashboardLayout title="Authorize desktop client" withSidebar={false}>
   <div class="mx-auto max-w-md px-6 py-16" data-page="cli-authorize">
     <header class="text-center">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Desktop client</p>
+      <p class="section-label text-tk-accent-text">Desktop client</p>
       <h1 class="mt-2 text-2xl font-semibold tracking-tight text-tk-ink">
         Authorize this device?
       </h1>
@@ -58,7 +58,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         <a
           data-signup-link
           href="/signup/"
-          class="rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-center text-sm font-medium text-tk-ink-2 hover:bg-tk-bg"
+          class="btn-secondary w-full"
           >Create account</a
         >
         <a data-signin-link href="/login/" class="btn-primary text-center">Sign in</a>
@@ -86,7 +86,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           placeholder="XXXX-XXXX"
           aria-describedby="device-code-help device-code-error"
           aria-invalid="false"
-          class="mt-2 block w-full rounded-md border border-tk-border bg-tk-bg px-3 py-2 text-center font-mono text-lg uppercase tracking-[0.18em] text-tk-ink"
+          class="form-input mt-2 block text-center font-mono text-lg uppercase tracking-[0.18em]"
         />
       </label>
       <p id="device-code-error" data-user-code-error class="mt-2 hidden text-xs text-tk-err-text" role="alert">
@@ -100,7 +100,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         <button
           type="button"
           data-cancel
-          class="rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-bg"
+          class="btn-secondary"
         >
           Cancel
         </button>

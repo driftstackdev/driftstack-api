@@ -278,14 +278,20 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/es\.addEventListener\(kind,/);
   });
 
-  it('active-route highlighting: exact match for "/" (Overview) OR prefix match for the rest → glow-red bg/text + inset-divider shadow. 2026-05-21 — added the "/" exact-match exception so Overview no longer highlights on every nested route. font-medium now applied on BOTH active + inactive (constant width prevents click-induced layout shift); active state distinguished by bg + text color + inset divider only.', () => {
+  it('active-route highlighting: exact match for "/" (Overview) OR prefix match for the rest → the desktop app\'s active nav row (soft accent wash, semibold primary ink, accent icon). 2026-05-21 — added the "/" exact-match exception so Overview no longer highlights on every nested route. 2026-09-25 — the nav item is the app\'s own (Sidebar.tsx): rows are full width, so the semibold active label moves no other item.', () => {
     expect(body).toMatch(
       /item\.href === '\/'\s*\?\s*pathname === '\/'\s*:\s*pathname === item\.href \|\|\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
     );
-    // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
-    expect(body).toMatch(/'bg-tk-accent\/10 text-tk-accent-text shadow-inset-divider'/);
-    // font-medium is now applied unconditionally on the <a> base class.
-    expect(body).toMatch(/text-sm font-medium transition-colors/);
+    // 2026-09-25 — re-pinned from the retired 'bg-tk-accent/10 text-tk-accent-text
+    // shadow-inset-divider' to the desktop app's active row: the soft accent wash
+    // (accent-subtle) with semibold primary ink (13.4:1 light / 11.4:1 dark), the
+    // icon in the accent. Inactive rows are medium-weight secondary ink.
+    expect(body).toMatch(/'bg-tk-accent-soft font-semibold text-tk-ink'/);
+    expect(body).toMatch(/'font-medium text-tk-ink-2 hover:bg-tk-raised hover:text-tk-ink'/);
+    expect(body).toMatch(/active \? 'text-tk-accent' : 'text-tk-ink-3 group-hover:text-tk-ink-2'/);
+    expect(body).toMatch(
+      /rounded-\[7px\] px-2 py-\[7px\] text-\[13px\] leading-4 transition-colors/,
+    );
   });
 
   it('SECURITY — admin SSO bounce validates the redirect origin before attaching the #token= hash (no token exfiltration via ?next-admin=)', () => {

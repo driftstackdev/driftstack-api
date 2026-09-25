@@ -51,56 +51,59 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/admin-panel/src/styles/base.css'))).toBe(true);
   });
 
-  it('customer-dashboard src/styles/base.css (Fleet v2, 2026-07-02 redesign): mode-axis color-scheme + tk token bg + FLAT btn-primary on accent tokens (no glow ring / no hover lift — accent discipline) + solid btn-secondary/dashboard-card/auth-card (glass + glow-on-everything retired; shadow-ambient replaces shadow-glow-accent on default chrome) + form-input/form-label/banner-warn + section-label mono + self-hosted Geist/JetBrains-Mono font faces — tokens-shared-with-marketing-site framing pinned', () => {
+  it('customer-dashboard src/styles/base.css (2026-09-25 re-pin: the shared design tokens + the desktop app recipes): imports tokens.css + web-aliases.css and declares no token value itself; light default; tk token bg; FLAT btn-primary whose hover darkens (accent-fill-hover); btn-secondary/dashboard-card/auth-card on the app card (12px, divider, lift/float); form-input on the inset well; the app small-caps section-label; self-hosted Geist/JetBrains-Mono font faces', () => {
     const body = read('apps/customer-dashboard/src/styles/base.css');
+    // 2026-09-25 — the dashboard moved onto packages/design-tokens (the desktop
+    // app's light theme is the reference for every surface). The old pins held
+    // the "light+violet default" header, the hand-kept [data-mode] value
+    // blocks, text-white selection, shadow-ambient cards and the mono `// `
+    // section label; each is re-pinned below to what replaced it.
+    expect(body).toMatch(/^@import '@driftstack\/design-tokens\/tokens\.css';$/m);
+    expect(body).toMatch(/^@import '@driftstack\/design-tokens\/web-aliases\.css';$/m);
     expect(body).toMatch(/^@tailwind base;$/m);
     expect(body).toMatch(/^@tailwind components;$/m);
     expect(body).toMatch(/^@tailwind utilities;$/m);
-    expect(body).toMatch(
-      /Fleet two-axis dashboard surface \(light\+violet default, 2026-06-12 rework\)\./,
+    expect(body).toMatch(/Customer dashboard surface \(light default, 2026-09-25\)/);
+    // No token value of its own: no triplet or hex declaration for any token.
+    expect(body).not.toMatch(
+      /--(?:bg|surface|raised|hover|ink|ink-2|ink-3|border|accent|accent-2|accent-strong|ready|busy|err)(?:-rgb)?:\s*(?:#|\d)/,
     );
-    expect(body).toMatch(/Tokens shared with apps\/marketing-/);
-    expect(body).toMatch(/color-scheme: light;/);
-    expect(body).toMatch(/\[data-mode='dark'\] \{\s*\n\s*color-scheme: dark;/);
     expect(body).toMatch(/@apply bg-tk-bg text-tk-ink;/);
     expect(body).toMatch(/font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;/);
     expect(body).toMatch(
       /font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;/,
     );
-    expect(body).toMatch(/@apply bg-tk-accent text-white;/);
+    expect(body).toMatch(/@apply bg-tk-accent text-tk-accent-ink;/);
     expect(body).toMatch(/\.btn-primary \{/);
-    expect(body).toMatch(/bg-tk-accent/);
-    expect(body).toMatch(/shadow-ambient/);
-    expect(body).toMatch(/hover:bg-tk-accent-strong/);
-    // Fleet v2 accent discipline: glow ring + hover lift are GONE from
-    // default button/card chrome (glow-accent is reserved for hot elements).
+    expect(body).toMatch(/bg-tk-accent px-3\.5 py-2 text-sm font-medium text-tk-accent-ink/);
+    expect(body).toMatch(/hover:bg-tk-accent-fill-hover active:bg-tk-accent-strong/);
+    // Accent discipline: glow ring + hover lift stay off default chrome.
     expect(body).not.toMatch(/shadow-glow-accent/);
     expect(body).not.toMatch(/hover:-translate-y-0\.5/);
     expect(body).toMatch(/\.btn-secondary \{/);
-    expect(body).toMatch(/border border-tk-border/);
+    expect(body).toMatch(/border border-tk-border bg-tk-raised/);
     expect(body).toMatch(/\.btn-ghost \{/);
     expect(body).toMatch(/\.btn-danger \{/);
     expect(body).toMatch(/\.nav-link \{/);
-    // S23 2026-07-06 — dashboard nav-link hover re-pinned to the AA-safe
-    // tk-accent-text tone (raw --accent is ~3.0:1 on the dark bg), matching
-    // the marketing recipe below.
     expect(body).toMatch(
       /@apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent-text;/,
     );
     expect(body).toMatch(/\.dashboard-card \{/);
-    expect(body).toMatch(/rounded-card border border-tk-border bg-tk-surface p-6 shadow-ambient/);
+    expect(body).toMatch(/rounded-xl border border-tk-border bg-tk-surface p-6 shadow-lift/);
     expect(body).toMatch(/\.form-input \{/);
+    expect(body).toMatch(/w-full rounded border border-tk-border bg-tk-inset/);
     expect(body).toMatch(/\.form-label \{/);
     expect(body).toMatch(/\.form-helper \{/);
     expect(body).toMatch(/\.banner-info \{/);
     expect(body).toMatch(/\.banner-warn \{/);
     expect(body).toMatch(/\.banner-err \{/);
     expect(body).toMatch(/\.section-label \{/);
-    expect(body).toMatch(/font-mono text-xs uppercase/);
-    expect(body).toMatch(/\.section-label::before \{/);
-    expect(body).toMatch(/content: '\/\/ ';/);
+    expect(body).toMatch(
+      /text-\[11px\] font-semibold uppercase\s+tracking-\[0\.09em\] text-tk-ink-3/,
+    );
+    expect(body).not.toMatch(/content: '\/\/ ';/);
     expect(body).toMatch(/\.auth-card \{/);
-    expect(body).toMatch(/bg-tk-surface shadow-ambient-lg/);
+    expect(body).toMatch(/bg-tk-surface shadow-float/);
     // Self-hosted fonts (OFL): Geist variable + JetBrains Mono, vendored
     // under public/fonts/ — Berkeley Mono is licensed and never vendored.
     expect(body).toMatch(/url\('\/fonts\/geist\/GeistVF\.woff2'\)/);

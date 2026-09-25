@@ -48,8 +48,12 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
   it('STATUS_BADGE_CLASS 9-state catalog: active / trialing / past_due / canceled / unpaid / incomplete / incomplete_expired / paused / no_subscription on the two-axis status tokens (Fleet v2 2026-07-02: tk-ready positive, tk-err recovery, tk-accent transient, tk-hover muted — flips with data-mode, unlike the old emerald/red literals) — pinned so the Stripe lifecycle vocabulary stays complete (drift to dropping incomplete_expired would render Stripe-state-incomplete-then-expired with no styling)', () => {
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     // S25 2026-07-06 — status-toned TEXT re-pinned raw tk-ready/tk-err → AA-safe tk-ready-text/tk-err-text (washes stay raw).
+    // 2026-09-25 — each badge is the desktop app's badge (SessionStatusBadge):
+    // a /30 edge, a /15 status wash (accent keeps /10), the AA text tone; the
+    // muted states sit on the inset well with a divider edge. Measured on the
+    // card: ready 5.06/5.59, error 4.98/5.23, accent 6.37/6.63 (light/dark).
     expect(body).toMatch(
-      /const STATUS_BADGE_CLASS: Record<string, string> = \{\s*active: 'bg-tk-ready\/10 text-tk-ready-text',\s*trialing: 'bg-tk-accent\/10 text-tk-accent-text',\s*past_due: 'bg-tk-err\/10 text-tk-err-text',\s*canceled: 'bg-tk-hover text-tk-ink-2',\s*unpaid: 'bg-tk-err\/10 text-tk-err-text',\s*incomplete: 'bg-tk-accent\/10 text-tk-accent-text',\s*incomplete_expired: 'bg-tk-hover text-tk-ink-2',\s*paused: 'bg-tk-hover text-tk-ink-2',\s*no_subscription: 'bg-tk-hover text-tk-ink-2',\s*\};/,
+      /const STATUS_BADGE_CLASS: Record<string, string> = \{\s*active: 'border-tk-ready\/30 bg-tk-ready\/15 text-tk-ready-text',\s*trialing: 'border-tk-accent\/30 bg-tk-accent\/10 text-tk-accent-text',\s*past_due: 'border-tk-err\/30 bg-tk-err\/15 text-tk-err-text',\s*canceled: 'border-tk-border bg-tk-inset text-tk-ink-2',\s*unpaid: 'border-tk-err\/30 bg-tk-err\/15 text-tk-err-text',\s*incomplete: 'border-tk-accent\/30 bg-tk-accent\/10 text-tk-accent-text',\s*incomplete_expired: 'border-tk-border bg-tk-inset text-tk-ink-2',\s*paused: 'border-tk-border bg-tk-inset text-tk-ink-2',\s*no_subscription: 'border-tk-border bg-tk-inset text-tk-ink-2',\s*\};/,
     );
   });
 
@@ -110,8 +114,11 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
   });
 
   it('Cancel-at-period-end visibility: the static shell is hidden+disabled, then an authoritative subscription shows cancel iff it is not already set to cancel', () => {
+    // 2026-09-25 — the cancel control is the app's .btn-danger (error text on a
+    // light error wash, 4.87:1 on the page ground) instead of a secondary button
+    // re-coloured with the raw text-red-700 palette class.
     expect(body).toMatch(
-      /data-action="cancel"\s*disabled\s*aria-disabled="true"[\s\S]*?class:list=\{\[\s*'btn-secondary text-red-700',\s*'hidden',/,
+      /data-action="cancel"\s*disabled\s*aria-disabled="true"[\s\S]*?class:list=\{\[\s*'btn-danger',\s*'hidden',/,
     );
     // Live-billing audit #7 — offered only for a subscription that renews (active /
     // trialing) and is not already set to cancel; every other status hides it.

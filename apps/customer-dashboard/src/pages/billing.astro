@@ -13,15 +13,15 @@ import { TIER_DISPLAY_NAMES } from '../data/tier-display-names.ts';
 // the two-axis status tokens so badges flip with data-mode instead of
 // the old hard-coded emerald/red literals that broke in light mode.
 const STATUS_BADGE_CLASS: Record<string, string> = {
-  active: 'bg-tk-ready/10 text-tk-ready-text',
-  trialing: 'bg-tk-accent/10 text-tk-accent-text',
-  past_due: 'bg-tk-err/10 text-tk-err-text',
-  canceled: 'bg-tk-hover text-tk-ink-2',
-  unpaid: 'bg-tk-err/10 text-tk-err-text',
-  incomplete: 'bg-tk-accent/10 text-tk-accent-text',
-  incomplete_expired: 'bg-tk-hover text-tk-ink-2',
-  paused: 'bg-tk-hover text-tk-ink-2',
-  no_subscription: 'bg-tk-hover text-tk-ink-2',
+  active: 'border-tk-ready/30 bg-tk-ready/15 text-tk-ready-text',
+  trialing: 'border-tk-accent/30 bg-tk-accent/10 text-tk-accent-text',
+  past_due: 'border-tk-err/30 bg-tk-err/15 text-tk-err-text',
+  canceled: 'border-tk-border bg-tk-inset text-tk-ink-2',
+  unpaid: 'border-tk-err/30 bg-tk-err/15 text-tk-err-text',
+  incomplete: 'border-tk-accent/30 bg-tk-accent/10 text-tk-accent-text',
+  incomplete_expired: 'border-tk-border bg-tk-inset text-tk-ink-2',
+  paused: 'border-tk-border bg-tk-inset text-tk-ink-2',
+  no_subscription: 'border-tk-border bg-tk-inset text-tk-ink-2',
 };
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
@@ -38,9 +38,9 @@ const apiBaseUrl = resolveApiBaseUrl();
     </div>
 
     <header class="mb-10">
-      <p class="text-sm text-tk-ink-3" data-field="account-email">Account · —</p>
-      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Billing</h1>
-      <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
+      <p class="page-kicker" data-field="account-email">Account · —</p>
+      <h1 class="page-title">Billing</h1>
+      <p class="page-lede">
         Manage subscription, payment method, and invoices.
         All payment changes redirect to Stripe's secure portal.
       </p>
@@ -52,14 +52,14 @@ const apiBaseUrl = resolveApiBaseUrl();
     <section class="dashboard-card">
       <div class="flex items-start justify-between gap-6">
         <div class="flex items-start gap-4">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
+          <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="2" y="5" width="20" height="14" rx="2" />
               <path d="M2 10h20" />
             </svg>
           </div>
           <div>
-            <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Subscription</p>
+            <p class="section-label">Subscription</p>
             <h2 class="mt-2 text-xl font-semibold text-tk-ink" data-field="sub-tier">
               Billing state unavailable
             </h2>
@@ -72,7 +72,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           data-field="sub-status-badge"
           data-tk-state="muted"
           class:list={[
-            'inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide',
+            'inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide',
             STATUS_BADGE_CLASS.no_subscription,
           ]}
         >
@@ -96,7 +96,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           aria-disabled="true"
           title="Live billing must load before opening Stripe."
           class:list={[
-            'btn-secondary text-red-700',
+            'btn-danger',
             'hidden',
           ]}
         >
@@ -144,7 +144,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     <!-- Invoices placeholder -->
     <section class="dashboard-card mt-6">
       <div class="flex items-start gap-4">
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
+        <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <path d="M14 2v6h6" />
@@ -152,7 +152,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           </svg>
         </div>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Invoices</p>
+          <p class="section-label">Invoices</p>
           <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">Recent invoices</h2>
           <p class="mt-3 text-sm text-tk-ink-3">
             Your invoices and receipts are in the Stripe customer portal —
@@ -170,14 +170,14 @@ const apiBaseUrl = resolveApiBaseUrl();
     <!-- Crypto payments -->
     <section class="dashboard-card mt-6">
       <div class="flex items-start gap-4">
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
+        <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-inset text-tk-ink-2 ring-1 ring-tk-border">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />
             <path d="M9 8h4.5a2 2 0 0 1 0 4H9h5a2 2 0 0 1 0 4H9M12 6v2M12 16v2" />
           </svg>
         </div>
         <div class="min-w-0 flex-1">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Crypto payments</p>
+          <p class="section-label">Crypto payments</p>
           <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">Recent orders</h2>
           <p
             data-crypto-empty
@@ -242,15 +242,15 @@ const apiBaseUrl = resolveApiBaseUrl();
       // BADGE_TONE_CLASSES lists every class any status ever applies, so we
       // can strip them all before adding the new one.
       const STATUS_BADGE_CLASS = {
-        active: 'bg-tk-ready/10 text-tk-ready-text',
-        trialing: 'bg-tk-accent/10 text-tk-accent-text',
-        past_due: 'bg-tk-err/10 text-tk-err-text',
-        canceled: 'bg-tk-hover text-tk-ink-2',
-        unpaid: 'bg-tk-err/10 text-tk-err-text',
-        incomplete: 'bg-tk-accent/10 text-tk-accent-text',
-        incomplete_expired: 'bg-tk-hover text-tk-ink-2',
-        paused: 'bg-tk-hover text-tk-ink-2',
-        no_subscription: 'bg-tk-hover text-tk-ink-2',
+        active: 'border-tk-ready/30 bg-tk-ready/15 text-tk-ready-text',
+        trialing: 'border-tk-accent/30 bg-tk-accent/10 text-tk-accent-text',
+        past_due: 'border-tk-err/30 bg-tk-err/15 text-tk-err-text',
+        canceled: 'border-tk-border bg-tk-inset text-tk-ink-2',
+        unpaid: 'border-tk-err/30 bg-tk-err/15 text-tk-err-text',
+        incomplete: 'border-tk-accent/30 bg-tk-accent/10 text-tk-accent-text',
+        incomplete_expired: 'border-tk-border bg-tk-inset text-tk-ink-2',
+        paused: 'border-tk-border bg-tk-inset text-tk-ink-2',
+        no_subscription: 'border-tk-border bg-tk-inset text-tk-ink-2',
       };
       const BADGE_TONE_CLASSES = Array.from(
         new Set(Object.values(STATUS_BADGE_CLASS).flatMap((c) => c.split(' '))),
@@ -687,12 +687,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       // 6-state CryptoOrderStatus catalog (api-types) — an uncatalogued
       // status renders with the muted fallback, never unstyled.
       const CRYPTO_BADGE = {
-        pending: 'bg-tk-busy/10 text-tk-busy-text',
-        confirming: 'bg-tk-busy/10 text-tk-busy-text',
-        paid: 'bg-tk-ready/10 text-tk-ready-text',
-        failed: 'bg-tk-err/10 text-tk-err-text',
-        partial: 'bg-tk-busy/10 text-tk-busy-text',
-        cancelled: 'bg-tk-hover text-tk-ink-2',
+        pending: 'border-tk-busy/30 bg-tk-busy/15 text-tk-busy-text',
+        confirming: 'border-tk-busy/30 bg-tk-busy/15 text-tk-busy-text',
+        paid: 'border-tk-ready/30 bg-tk-ready/15 text-tk-ready-text',
+        failed: 'border-tk-err/30 bg-tk-err/15 text-tk-err-text',
+        partial: 'border-tk-busy/30 bg-tk-busy/15 text-tk-busy-text',
+        cancelled: 'border-tk-border bg-tk-inset text-tk-ink-2',
       };
       const receiptDownloadsInFlight = new WeakSet();
       function fmtPrice(cents, currency) {
@@ -739,7 +739,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           list.classList.remove('hidden');
           list.innerHTML = orders
             .map(function (o) {
-              const badge = CRYPTO_BADGE[o.status] || 'bg-tk-hover text-tk-ink-2';
+              const badge = CRYPTO_BADGE[o.status] || 'border-tk-border bg-tk-inset text-tk-ink-2';
               const receipt =
                 o.status === 'paid'
                   ? '<button type="button" data-crypto-receipt="' +
@@ -761,7 +761,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 '</p></div>' +
                 '<span class="flex items-center gap-3">' +
                 receipt +
-                '<span class="rounded-full px-2 py-1 text-xs font-medium uppercase tracking-wide ' +
+                '<span class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
                 badge +
                 '">' +
                 escapeHtml(String(o.status || '—')) +

@@ -1,20 +1,18 @@
 // W526.B — drift guard for apps/customer-dashboard/tailwind.config.mjs.
-// Design tokens shared with marketing site — must stay in sync so the
-// customer experience reads as one product, not two. Drift here would
-// create cross-app (marketing↔dashboard) brand-color/typography
-// divergence that breaks visual continuity for customers moving
-// between marketing pages and the dashboard.
 //
-//   • Shared-with-marketing framing comment.
-//   • S24 2026-07-06: legacy oxblood ladder RETIRED (supersession note
-//     pinned; #722F37 lives on as --accent-strong on the oxblood axis).
-//   • Slate 50→950 base palette (no comment header on dashboard variant,
-//     matching marketing values verbatim).
-//   • fontFamily: sans=Geist + system fallback, mono=Berkeley Mono +
-//     ui-monospace fallback.
-//   • maxWidth: prose 65ch.
-//   • plugins: [] (dashboard does NOT use @tailwindcss/typography —
-//     dashboard has no prose-heavy pages, only forms/tables).
+// 2026-09-25 — re-pinned for the shared design tokens. The config used to hold
+// a hand-kept copy of marketing's tokens (a verbatim slate palette, dark-only
+// surface/ink sets, glow reds and a tk table) under a "keep these synchronised"
+// comment that nothing checked. It now takes every colour, radius, font stack,
+// shadow and the easing from the packages/design-tokens preset — the desktop
+// app's own theme — so the pins below hold:
+//   • the preset import + the 8-extension content glob;
+//   • that the retired hand-kept sets (slate, surface, ink, glow reds, the
+//     local tk table and the legacy oxblood ladder) do not come back;
+//   • fontFamily from the preset: sans=Geist + system fallback, mono=Berkeley
+//     Mono → JetBrains Mono → system; maxWidth prose 65ch; plugins: [];
+//   • the AA-safe status TEXT trio (ready-text / busy-text / err-text) in the
+//     preset's tk table, each on its own text token.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +22,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/customer-dashboard/tailwind.config.mjs');
+const PRESET = resolve(REPO_ROOT, 'packages/design-tokens/dist/tailwind-preset.mjs');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -31,55 +30,40 @@ function read(p: string): string {
 
 describe('W526.B apps/customer-dashboard/tailwind.config.mjs content parity', () => {
   const body = read(LIB);
+  const preset = read(PRESET);
 
-  it("Shared-with-marketing-site framing pinned: 'Design tokens shared with the marketing site (apps/marketing-site/tailwind.config.mjs). Keep these synchronised — the customer experience reads as one product, not two.' + @type JSDoc + 8-extension content glob — pinned so the cross-app shared-token + one-product-not-two posture survives (drift here without parallel drift in marketing-site would create marketing↔dashboard brand divergence)", () => {
+  it('shared design-tokens framing pinned: the preset import + presets: [preset] + @type JSDoc + 8-extension content glob — one token set with the desktop app and every web surface, not a copy that drifts', () => {
     expect(body).toMatch(/\/\*\* @type \{import\('tailwindcss'\)\.Config\} \*\//);
     expect(body).toMatch(
-      /\/\/ Design tokens shared with the marketing site \(apps\/marketing-site\/\s*\/\/ tailwind\.config\.mjs\)\. Keep these synchronised — the customer\s*\/\/ experience reads as one product, not two\./,
+      /\/\/ Design tokens shared with every Driftstack surface, from one package:/,
     );
+    expect(body).toMatch(/import preset from '@driftstack\/design-tokens\/tailwind-preset';/);
+    expect(body).toMatch(/presets: \[preset\],/);
     expect(body).toMatch(/content: \['\.\/src\/\*\*\/\*\.\{astro,html,js,jsx,md,mdx,ts,tsx\}'\],/);
   });
 
-  it("S24 2026-07-06 — legacy oxblood ladder RETIRED (supersedes the old verbatim 11-step palette pin; marketing-site applied the same supersession 2026-07-03): the last two utility users (security.astro text-oxblood-900) moved onto the tk-* tokens, and the locked #722F37 accent lives on as --accent-strong in the [data-accent='oxblood'] axis (styles/base.css) per the 2026-06-15 'Fleet Mission Control — Dark + Red' verdict. Pinned so the ladder doesn't silently return and the supersession note keeps the provenance", () => {
-    expect(body).toMatch(/S24 2026-07-06 — legacy oxblood ladder RETIRED/);
-    expect(body).toMatch(/#722F37 accent lives on as/);
-    expect(body).toMatch(/--accent-strong in the \[data-accent='oxblood'\] axis/);
+  it('the retired hand-kept sets stay retired: no local colour table, no slate palette, no dark-only surface/ink sets, no glow reds, no oxblood ladder (S24 2026-07-06 retired the ladder; 2026-09-25 retired the rest onto the preset)', () => {
+    expect(body).not.toMatch(/colors:\s*\{/);
+    expect(body).not.toMatch(/slate: \{/);
     expect(body).not.toMatch(/oxblood: \{/);
     expect(body).not.toMatch(/'#2b0f15'/);
-    expect(body).not.toMatch(/\/\/ base — primary accent, locked/);
+    expect(body).not.toMatch(/#[0-9a-fA-F]{6}/);
+    expect(body).not.toMatch(/glow-red|gradient-accent/);
   });
 
-  it('Slate palette parity-with-marketing framing pinned: 11-step (50→950) palette: 50=#f8fafc / 100=#f1f5f9 / 200=#e2e8f0 / 300=#cbd5e1 / 400=#94a3b8 / 500=#64748b / 600=#475569 / 700=#334155 / 800=#1e293b / 900=#0f172a / 950=#020617 — pinned so the cross-app slate-palette parity (verbatim with marketing-site) commitment survives', () => {
-    expect(body).toMatch(/slate: \{/);
-    expect(body).toMatch(/50: '#f8fafc',/);
-    expect(body).toMatch(/100: '#f1f5f9',/);
-    expect(body).toMatch(/200: '#e2e8f0',/);
-    expect(body).toMatch(/300: '#cbd5e1',/);
-    expect(body).toMatch(/400: '#94a3b8',/);
-    expect(body).toMatch(/500: '#64748b',/);
-    expect(body).toMatch(/600: '#475569',/);
-    expect(body).toMatch(/700: '#334155',/);
-    expect(body).toMatch(/800: '#1e293b',/);
-    expect(body).toMatch(/900: '#0f172a',/);
-    expect(body).toMatch(/950: '#020617',/);
-  });
-
-  it('fontFamily + maxWidth + plugins-empty framing pinned: \'sans: ["Geist", "ui-sans-serif", "system-ui", "sans-serif"]\' + \'mono: ["Berkeley Mono", "ui-monospace", "SFMono-Regular", "monospace"]\' + \'maxWidth: { prose: "65ch" }\' + \'plugins: []\' (no @tailwindcss/typography on dashboard — dashboard has no prose pages, only forms/tables) — pinned so the Geist+system + Berkeley-Mono mono-stack + 65ch-prose + no-typography-plugin commitment survives (drift to adding @tailwindcss/typography would inflate dashboard bundle without need)', () => {
-    expect(body).toMatch(/sans: \['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'\],/);
-    // Fleet v2 (2026-07-02): 'JetBrains Mono' (vendored, OFL) sits between
-    // Berkeley Mono (first — renders for locally-licensed users, never
-    // vendored) and the system fallbacks.
-    expect(body).toMatch(
+  it('fontFamily + maxWidth + plugins-empty framing pinned: the preset carries sans=Geist + system fallback and mono=Berkeley Mono → JetBrains Mono → system; the dashboard keeps maxWidth prose 65ch and plugins: [] (no @tailwindcss/typography — the dashboard has no prose pages, only forms/tables)', () => {
+    expect(preset).toMatch(/sans: \['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'\],/);
+    expect(preset).toMatch(
       /mono: \['Berkeley Mono', 'JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'\],/,
     );
     expect(body).toMatch(/maxWidth: \{\s*prose: '65ch',\s*\},/);
     expect(body).toMatch(/plugins: \[\],/);
   });
 
-  it("S24 2026-07-06 — AA-safe status-toned TEXT trio pinned in the tk table: 'ready-text'/'busy-text'/'err-text' → var(--*-text) (per data-mode values + computed ratios live in styles/base.css; the raw ready/busy/err tokens are FILL tones, 2.7–4.3:1 as small light-mode text). Drift to dropping these would silently revert status-colored text to the failing raw tones", () => {
-    expect(body).toMatch(/'ready-text': 'var\(--ready-text\)',/);
-    expect(body).toMatch(/'busy-text': 'var\(--busy-text\)',/);
-    expect(body).toMatch(/'err-text': 'var\(--err-text\)',/);
+  it("AA-safe status-toned TEXT trio pinned in the preset's tk table: 'ready-text'/'busy-text'/'err-text' each read their own text token (the raw ready/busy/err fills are not text tones). Drift to dropping these would silently revert status-coloured text", () => {
+    expect(preset).toMatch(/'ready-text': 'rgb\(var\(--status-ready-rgb\) \/ <alpha-value>\)',/);
+    expect(preset).toMatch(/'busy-text': 'rgb\(var\(--status-busy-rgb\) \/ <alpha-value>\)',/);
+    expect(preset).toMatch(/'err-text': 'rgb\(var\(--status-error-text-rgb\) \/ <alpha-value>\)',/);
   });
 
   it('file exists at canonical path', () => {
