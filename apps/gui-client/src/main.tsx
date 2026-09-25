@@ -1,5 +1,6 @@
 import { Component, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { bootColours } from './lib/boot-theme';
 import { humanizeError } from './lib/humanize-error';
 import { installLogCapture } from './lib/log-buffer';
 import { isBenignTeardownError } from './lib/livekit-errors';
@@ -59,8 +60,12 @@ function renderFatalError(code: string, err: unknown): void {
     // being stuck with an unmovable box (founder-hit 2026-06-18). The Reload
     // button opts out below so it stays clickable.
     box.setAttribute('data-tauri-drag-region', '');
+    // The mode's own token values (lib/boot-theme.ts), read at paint time: the
+    // pre-paint mode at boot, the live setting afterwards, dark in the pinned-
+    // dark simulator window. Inline, so it still paints when the CSS did not.
+    const c = bootColours();
     box.style.cssText =
-      'position:fixed;inset:0;z-index:2147483647;background:#0b0b0b;color:#eee;' +
+      `position:fixed;inset:0;z-index:2147483647;background:${c.base};color:${c.ink};` +
       'font:13px/1.55 -apple-system,system-ui,sans-serif;padding:28px;overflow:auto;';
     // Friendly-first: lead with plain human copy + a Reload action, and tuck the
     // code/message/stack behind a collapsed "Show technical details" disclosure so
@@ -68,25 +73,25 @@ function renderFatalError(code: string, err: unknown): void {
     // operator's face). The details survive for support — native <details>, no JS.
     box.innerHTML =
       '<div style="max-width:640px;margin:12vh auto 0">' +
-      '<h1 style="font-size:17px;color:#eee;margin:0 0 8px">Driftstack hit a snag</h1>' +
-      '<div style="color:#9a9a9a;margin:0 0 20px">The app needs to reload to recover. ' +
+      `<h1 style="font-size:17px;color:${c.ink};margin:0 0 8px">Driftstack hit a snag</h1>` +
+      `<div style="color:${c.inkSecondary};margin:0 0 20px">The app needs to reload to recover. ` +
       'Your saved profiles and sessions are safe.</div>' +
       '<button id="ds-fatal-reload" data-tauri-drag-region="false" ' +
-      'style="background:#c0392b;color:#fff;border:none;border-radius:7px;padding:9px 18px;' +
+      `style="background:${c.accent};color:${c.onAccent};border:none;border-radius:4px;padding:9px 18px;` +
       'cursor:pointer;font-size:13px;font-weight:600">Reload Driftstack</button>' +
       '<details data-tauri-drag-region="false" style="margin-top:22px">' +
       '<summary data-tauri-drag-region="false" style="cursor:pointer;font-size:12px;' +
-      'color:#888;user-select:none;outline:none">Show technical details</summary>' +
-      '<div style="color:#888;margin:10px 0 0">Error code: <b style="color:#ffb86b">' +
+      `color:${c.inkMuted};user-select:none;outline:none">Show technical details</summary>` +
+      `<div style="color:${c.inkMuted};margin:10px 0 0">Error code: <b style="color:${c.ink}">` +
       escapeHtml(code) +
       '</b></div>' +
-      '<div style="background:#161616;border:1px solid #333;border-radius:8px;padding:10px 12px;' +
-      'margin:8px 0 0;color:#bbb;font-size:12px">' +
+      `<div style="background:${c.raised};border:1px solid ${c.divider};border-radius:6px;padding:10px 12px;` +
+      `margin:8px 0 0;color:${c.inkSecondary};font-size:12px">` +
       escapeHtml(message) +
       '</div>' +
       (stack
-        ? '<pre style="white-space:pre-wrap;word-break:break-word;color:#8a8a8a;background:#111;' +
-          'border:1px solid #2a2a2a;border-radius:8px;padding:10px;font-size:11px;max-height:38vh;' +
+        ? `<pre style="white-space:pre-wrap;word-break:break-word;color:${c.inkMuted};background:${c.inset};` +
+          `border:1px solid ${c.divider};border-radius:6px;padding:10px;font-size:11px;max-height:38vh;` +
           'overflow:auto;margin:8px 0 0">' +
           escapeHtml(stack) +
           '</pre>'

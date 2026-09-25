@@ -101,11 +101,15 @@ export interface DriftstackSettings {
 export const DEFAULT_SETTINGS: DriftstackSettings = {
   apiKey: null,
   baseUrl: 'http://localhost:3000',
-  // 2026-06-15 — founder: the GUI's standard look is Dark + Red (oxblood),
-  // matching the marketing "Fleet Mission Control" brand. New installs land on
-  // it; existing users keep their saved theme. Switch via the title-bar
-  // ThemeSwitcher / ⌘⇧D.
-  themeMode: 'dark',
+  // 2026-09-25 — the owner: the light theme is the one every surface is now
+  // built on, so a NEW install opens in it. Was 'dark' (2026-06-15, "Dark +
+  // Red"). Only the default moves: every install that has run a build with the
+  // settings layout marker already has its mode written into settings.json
+  // (loadSettings stamps the resolved object on first load, and every save
+  // rewrites it), so an existing customer keeps the mode they are on, chosen or
+  // not. Switch via the title-bar ThemeSwitcher / ⌘⇧D. index.html and
+  // visual-harness.html carry the same default on <html data-mode>.
+  themeMode: 'light',
   themeAccent: 'oxblood',
   telemetryOptIn: null,
   startUrl: 'https://driftstack.io/newtab/',

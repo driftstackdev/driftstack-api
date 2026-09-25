@@ -26,6 +26,8 @@
 // scenes render the REAL Sidebar through the real SettingsContext, and its
 // mount effects touch the store / invoke.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode } from 'react';
 import { cleanup, render, waitFor } from '@testing-library/react';
@@ -110,6 +112,7 @@ import {
   ALL_SCENES,
   AUDIT_SCENES,
   FIXTURE_ACCOUNT,
+  FIXTURE_SETTINGS,
   FROZEN_NOW_ISO,
   MARKETING_CARDS,
   MARKETING_PROXIES,
@@ -949,6 +952,21 @@ describe('the harness freezes its own clock at load when a scene is requested', 
 });
 
 describe('scene shapes — what scripts/marketing-screens.mjs guards at capture', () => {
+  it('the fixture settings name the theme the captures are taken in — the title-bar toggle draws its icon from that mode', () => {
+    // 2026-09-25 — new installs open light, and FIXTURE_SETTINGS used to inherit
+    // its mode from DEFAULT_SETTINGS: the committed dark captures would then have
+    // shown the light theme's toggle (a moon on a dark window; 365 pixels of every
+    // window capture). The capture script pins the mode it paints, and the fixture
+    // must name the same one — they change together when the captures are retaken.
+    const script = readFileSync(
+      join(__dirname, '..', '..', '..', '..', 'scripts', 'marketing-screens.mjs'),
+      'utf8',
+    );
+    const captureMode = /const CAPTURE_MODE = '(light|dark)';/.exec(script)?.[1];
+    expect(captureMode, 'scripts/marketing-screens.mjs no longer pins CAPTURE_MODE').toBeDefined();
+    expect(FIXTURE_SETTINGS.themeMode).toBe(captureMode);
+  });
+
   it('profiles-grid: the 8 curated cards, each derived from an existing gallery state', () => {
     expect(MARKETING_CARDS).toHaveLength(8);
     const { container } = render(<MarketingScene name="profiles-grid" />);

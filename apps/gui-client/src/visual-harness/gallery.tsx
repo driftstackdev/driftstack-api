@@ -1091,7 +1091,7 @@ function BillingWrapperShell({ children }: { children: JSX.Element }): JSX.Eleme
         <div className="flex items-center gap-2">
           <label className="text-sm text-ink-secondary">Billing cycle</label>
           <select
-            className="rounded border border-surface-divider bg-surface-input px-2 py-1 text-sm text-ink-primary"
+            className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-sm text-ink-primary"
             defaultValue="2026-06"
           >
             <option>2026-06</option>
@@ -1295,8 +1295,16 @@ export const FIXTURE_ACCOUNT: AccountSelfProfile = {
   teams: [],
 };
 
+/** The fixture's theme mode is the one the committed marketing captures are
+ *  taken in (scripts/marketing-screens.mjs `CAPTURE_MODE`): the title-bar
+ *  toggle draws its icon from it. Named here rather than inherited from
+ *  DEFAULT_SETTINGS, whose mode is a NEW install's (light since 2026-09-25) —
+ *  inheriting put the light theme's toggle on every dark capture. Change the two
+ *  together when the captures are retaken (marketing-scenes.test.tsx holds them
+ *  equal). The render gates set data-mode themselves and are unaffected. */
 export const FIXTURE_SETTINGS: DriftstackSettings = {
   ...DEFAULT_SETTINGS,
+  themeMode: 'dark',
   apiKey: 'ds_live_example',
   baseUrl: 'https://driftstack.io',
 };

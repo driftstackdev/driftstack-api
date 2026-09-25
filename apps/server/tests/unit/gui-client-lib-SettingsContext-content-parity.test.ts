@@ -94,7 +94,14 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
     expect(body).toContain('cancelled = true;');
     // A keychain/store read failure degrades to defaults so the GUI boots
     // instead of blanking via the global unhandledrejection handler.
-    expect(body).toContain('publishSettings(DEFAULT_SETTINGS);');
+    // 2026-09-25 — was `publishSettings(DEFAULT_SETTINGS)`. The fallback is now
+    // `boot`: the defaults with the theme mode this app last painted (mirrored to
+    // localStorage for index.html's pre-paint read), so a locked store no longer
+    // flips a dark customer to the new light default mid-launch.
+    expect(body).toContain('publishSettings(boot);');
+    expect(body).toMatch(
+      /function bootSettings\(\): DriftstackSettings \{\s*const mirrored = readMirroredThemeMode\(\);\s*return mirrored === null \? DEFAULT_SETTINGS : \{ \.\.\.DEFAULT_SETTINGS, themeMode: mirrored \};\s*\}/,
+    );
   });
 
   it('V-242 telemetry re-init effect — dependency array [settings.baseUrl, settings.telemetryOptIn]. initTelemetry is "idempotent + reconfigure-safe; it close()s the existing client when the customer opts out mid-session" — so a customer flipping the opt-in toggle MID-SESSION doesn\'t need to refresh the app for the change to take effect.', () => {
@@ -114,7 +121,12 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
     // already have merged a whole object from a render-stale credential tuple.
     // Pin merge ownership, publication ordering, rejection recovery and the
     // stable callback dependency together.
-    expect(body).toContain('const settingsRef = useRef<DriftstackSettings>(DEFAULT_SETTINGS);');
+    // 2026-09-25 — the state and the ref start from ONE `boot` value (the
+    // defaults plus the mirrored theme mode) instead of DEFAULT_SETTINGS, so the
+    // first frame React paints is the mode index.html already painted.
+    expect(body).toContain('const [boot] = useState(bootSettings);');
+    expect(body).toContain('const [settings, setSettings] = useState<DriftstackSettings>(boot);');
+    expect(body).toContain('const settingsRef = useRef<DriftstackSettings>(boot);');
     expect(body).toContain(
       'const settingsUpdateTailRef = useRef<Promise<void>>(Promise.resolve());',
     );
@@ -146,7 +158,8 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
     expect(body).toContain('const mountedRef = useRef(true);');
     expect(body).toContain('mountedRef.current = true;');
     expect(body).toContain('publishSettings(s);');
-    expect(body).toContain('publishSettings(DEFAULT_SETTINGS);');
+    // 2026-09-25 — the failure fallback is `boot` (see the cancelled-race arm).
+    expect(body).toContain('publishSettings(boot);');
     expect(body).toMatch(
       /return \(\) => \{\s*cancelled = true;\s*mountedRef\.current = false;\s*\};/,
     );

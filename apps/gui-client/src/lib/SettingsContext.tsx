@@ -21,8 +21,21 @@ import {
 import type { ReactNode } from 'react';
 import type { AccountSelfProfile } from '@driftstack/sdk';
 import { buildClient, type DriftstackClient } from './client';
+import { readMirroredThemeMode, writeMirroredThemeMode } from './boot-theme';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type DriftstackSettings } from './settings';
 import { initTelemetry } from './telemetry';
+
+/** What the provider holds before settings.json has been read: the defaults,
+ *  except the theme mode, which is the one this app last painted (mirrored to
+ *  localStorage by the effect below). index.html's pre-paint script has already
+ *  put that mode on <html>; starting React on the plain default would repaint
+ *  the window in the default mode until the store answered — a flash on every
+ *  launch for anyone on the other theme. Also the fallback when the store read
+ *  FAILS, so a locked store degrades to defaults without changing the theme. */
+function bootSettings(): DriftstackSettings {
+  const mirrored = readMirroredThemeMode();
+  return mirrored === null ? DEFAULT_SETTINGS : { ...DEFAULT_SETTINGS, themeMode: mirrored };
+}
 
 /** Stage B — `SimulatorWindow` now self-mounts a real `SettingsProvider`
  *  (see that file's own header), so this provider runs inside the popped-out
@@ -66,13 +79,14 @@ interface SettingsContextValue {
 export const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }): JSX.Element {
-  const [settings, setSettings] = useState<DriftstackSettings>(DEFAULT_SETTINGS);
+  const [boot] = useState(bootSettings);
+  const [settings, setSettings] = useState<DriftstackSettings>(boot);
   const [loading, setLoading] = useState(true);
   // `update()` is callable from independent chrome/view actions. Keep one
   // synchronous authority for the last state accepted by this provider: a
   // render-captured `settings` value is stale until React commits, and merging
   // two whole-setting writes against it can restore an old key/deployment.
-  const settingsRef = useRef<DriftstackSettings>(DEFAULT_SETTINGS);
+  const settingsRef = useRef<DriftstackSettings>(boot);
   const mountedRef = useRef(true);
   // Serialize the MERGE together with persistence. saveSettings() already
   // serializes disk writes, but locking only after the merge is too late: a
@@ -101,7 +115,7 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
         // their key in Settings).
         console.warn('[settings] load failed; using defaults:', err);
         if (!cancelled) {
-          publishSettings(DEFAULT_SETTINGS);
+          publishSettings(boot);
           setLoading(false);
         }
       });
@@ -109,7 +123,7 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
       cancelled = true;
       mountedRef.current = false;
     };
-  }, [publishSettings]);
+  }, [publishSettings, boot]);
 
   // Fleet theme axes (2026-06-12 rework) — apply mode + accent to the
   // document root so the token layer (styles/index.css) flips the whole
@@ -132,6 +146,18 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
     document.documentElement.dataset.mode = settings.themeMode;
     document.documentElement.dataset.accent = settings.themeAccent;
   }, [settings.themeMode, settings.themeAccent]);
+
+  // Mirror the mode to localStorage (boot-theme.ts) so index.html paints the
+  // next launch's splash and window in it before the store is read — but only
+  // once the store HAS been read: while `loading`, `settings` is the boot
+  // fallback, and mirroring it would write a guess over the last known mode.
+  // A separate effect on purpose: it never touches the DOM, so the effect above
+  // still runs only when the mode or accent actually changes (a render gate that
+  // sets data-mode itself is not overridden when loading settles).
+  useEffect(() => {
+    if (loading || isSimulatorWindow()) return;
+    writeMirroredThemeMode(settings.themeMode);
+  }, [settings.themeMode, loading]);
 
   // V-242 — re-init telemetry whenever baseUrl or telemetryOptIn changes.
   // initTelemetry is idempotent + reconfigure-safe; it close()s the

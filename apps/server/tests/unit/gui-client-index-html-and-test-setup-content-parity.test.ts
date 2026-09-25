@@ -26,10 +26,18 @@ describe('W791 gui-client index.html + tests/setup.ts content parity', () => {
 
   // ─── index.html ───────────────────────────────────────────────
 
-  it('CRITICAL <html data-mode/data-accent> Fleet token axes pinned (light+violet default, founder-locked 2026-06-12). dark: variants + the semantic palette key off [data-mode=dark].', () => {
+  it('CRITICAL <html data-mode/data-accent> token axes pinned: light + oxblood, the NEW-install default. dark: variants + the semantic palette key off [data-mode=dark].', () => {
     const p = read(INDEX_HTML);
 
-    expect(p).toMatch(/<html lang="en" data-mode="dark" data-accent="oxblood">/);
+    // 2026-09-25 — was data-mode="dark" (the 2026-06-15 "Dark + Red" default;
+    // this title still said "light+violet", which had been stale since then).
+    // The owner asked for the light theme everywhere, so a NEW install opens
+    // light: settings.ts DEFAULT_SETTINGS.themeMode moved with it. A customer's
+    // saved mode is applied before the first frame by the pre-paint script
+    // (localStorage `ds_theme_mode`, mirrored by SettingsContext), so this
+    // attribute is only what paints when nothing was saved yet.
+    expect(p).toMatch(/<html lang="en" data-mode="light" data-accent="oxblood">/);
+    expect(p).toMatch(/window\.localStorage\.getItem\('ds_theme_mode'\)/);
   });
 
   it('CRITICAL color-scheme meta pinned: "light dark" — the actual scheme is set per data-mode in styles/index.css (light default).', () => {

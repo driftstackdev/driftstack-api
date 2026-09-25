@@ -144,7 +144,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }): JSX.Elem
           }}
         >
           <div
-            className={`w-full max-w-md rounded-xl border border-white/10 bg-surface-raised p-6 shadow-2xl ${
+            className={`w-full max-w-md rounded-xl border border-surface-divider bg-surface-raised p-6 shadow-2xl ${
               isExiting ? 'animate-modal-panel-out' : 'animate-modal-panel-in'
             }`}
           >

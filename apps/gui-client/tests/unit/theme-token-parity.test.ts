@@ -979,3 +979,98 @@ describe('"Bringing The Stage everywhere" stage 1 — the simulator device is to
     expect(CSS).not.toMatch(/@keyframes\s+ds-sim-/);
   });
 });
+
+// ─── 2026-09-25 — the reference cleaned before anything is copied from it ────
+// The light theme is now the source every web surface is rebuilt from, so two
+// defects in it would be copied everywhere: a class that names a colour the
+// palette does not define (Tailwind emits NOTHING for it, so the hover did
+// nothing), and a modal border that was only ever visible on dark.
+
+/** Every .ts/.tsx under a directory, recursively. */
+function sourcesUnder(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) return sourcesUnder(p);
+    return /\.tsx?$/.test(e.name) ? [p] : [];
+  });
+}
+
+/** The keys a tailwind.config.ts colour group defines (`surface: { base: …, … }`). */
+function paletteKeys(group: string): Set<string> {
+  const m = new RegExp(`\\n\\s+${group}: \\{([^}]*)\\}`).exec(TAILWIND);
+  if (m === null) throw new Error(`tailwind.config.ts has no ${group} colour group`);
+  return new Set([...(m[1] ?? '').matchAll(/^\s+'?([a-z-]+)'?:/gm)].map((k) => k[1] ?? ''));
+}
+
+/** Every `<utility>-<group>-<key>` class a source uses, with the file it is in. */
+const COLOUR_UTILITY =
+  /(?<![\w-])(?:[a-z-]+:)*(?:bg|text|border(?:-[trblxy])?|ring|ring-offset|outline|divide|placeholder|from|via|to|fill|stroke|decoration|caret|shadow)-(surface|ink)-([a-z]+(?:-[a-z]+)*)/g;
+function colourClasses(src: string): Array<{ group: string; key: string }> {
+  return [...src.matchAll(COLOUR_UTILITY)].map((m) => ({ group: m[1] ?? '', key: m[2] ?? '' }));
+}
+
+describe('2026-09-25 — the light theme is clean before it becomes the reference', () => {
+  it('every surface-* / ink-* colour class names a key the palette defines — hover:bg-surface-hover styled nothing', () => {
+    const defined: Record<string, Set<string>> = {
+      surface: paletteKeys('surface'),
+      ink: paletteKeys('ink'),
+    };
+    expect([...defined.surface!].sort()).toEqual([
+      'base',
+      'divider',
+      'elevated',
+      'inset',
+      'raised',
+    ]);
+    expect([...defined.ink!].sort()).toEqual(['inverted', 'muted', 'primary', 'secondary']);
+    const files = sourcesUnder(SRC);
+    let seen = 0;
+    const undefinedClasses: string[] = [];
+    for (const file of files) {
+      for (const { group, key } of colourClasses(readFileSync(file, 'utf8'))) {
+        seen += 1;
+        if (!defined[group]!.has(key)) undefinedClasses.push(`${file}: ${group}-${key}`);
+      }
+    }
+    // A negative over a sweep that found nothing is the best-looking failure.
+    expect(files.length, 'the source sweep derived no files').toBeGreaterThan(200);
+    expect(seen, 'the class sweep matched almost nothing — the regex is broken').toBeGreaterThan(
+      1500,
+    );
+    // Reverting ProfilesView's chrome toggle to `hover:bg-surface-hover`, or the
+    // harness Billing replica to `bg-surface-input` (the real BillingCostView
+    // select is bg-surface-inset), reds this with the file named.
+    expect(undefinedClasses).toEqual([]);
+  });
+
+  it('POSITIVE CONTROL — the same sweep flags the two classes it was written for, and passes their fixes', () => {
+    const flagged = (cls: string): boolean =>
+      colourClasses(`className="${cls}"`).some(({ group, key }) => !paletteKeys(group).has(key));
+    expect(flagged('rounded p-1 hover:bg-surface-hover hover:text-ink-primary')).toBe(true);
+    expect(flagged('border border-surface-divider bg-surface-input px-2')).toBe(true);
+    expect(flagged('rounded p-1 hover:bg-surface-inset hover:text-ink-primary')).toBe(false);
+    // …and it does not mistake a status or accent class for a surface one.
+    expect(flagged('bg-status-error/15 text-accent-text border-accent/30')).toBe(false);
+  });
+
+  it('the confirm modal panel is bordered by the divider token — white/10 is invisible on the light card', () => {
+    const src = readSource('components/ConfirmProvider.tsx');
+    const panel = /className=\{`(w-full max-w-md rounded-xl [^`$]*)/.exec(src)?.[1] ?? '';
+    expect(panel, 'the modal panel class string was not found').toContain('bg-surface-raised');
+    expect(panel).toContain('border-surface-divider');
+    expect(panel).not.toMatch(/border-white\//);
+    // Measured: white at /10 over the light card (#f8f9fb) is 1.01:1 against it —
+    // no edge at all; the divider is 1.43 in light and 1.99 in dark, the same
+    // hairline every other card in the app wears.
+    for (const mode of [LIGHT, DARK]) {
+      const raised = token(mode, 'surface-raised-rgb');
+      expect(contrast(token(mode, 'surface-divider-rgb'), raised)).toBeGreaterThan(1.4);
+    }
+    expect(
+      contrast(
+        wash(WHITE, 0.1, token(LIGHT, 'surface-raised-rgb')),
+        token(LIGHT, 'surface-raised-rgb'),
+      ),
+    ).toBeLessThan(1.02);
+  });
+});

@@ -4255,7 +4255,7 @@ export function ProfilesView({
           aria-label={chromeCollapsed ? 'Show storage and workspace' : 'Hide storage and workspace'}
           title={chromeCollapsed ? 'Show storage and workspace' : 'Hide storage and workspace'}
           onClick={toggleChrome}
-          className="mt-1 shrink-0 rounded p-1 text-ink-muted transition hover:bg-surface-hover hover:text-ink-primary"
+          className="mt-1 shrink-0 rounded p-1 text-ink-muted transition hover:bg-surface-inset hover:text-ink-primary"
         >
           <svg
             width="14"

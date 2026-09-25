@@ -289,6 +289,13 @@ const SCENES = [
   },
 ];
 
+/** The theme the committed captures were taken in. visual-harness.html opens
+ *  LIGHT since 2026-09-25 (a new install's mode), so the mode is pinned here
+ *  rather than inherited — a change to the harness default must not change what
+ *  `--verify` compares. Set on <html> after the scene is ready, the way
+ *  scripts/gui-visual-check.mjs sets each theme it measures. */
+const CAPTURE_MODE = 'dark';
+
 const args = process.argv.slice(2);
 const VERIFY = args.includes('--verify');
 const only = args.find((a) => a.startsWith('--scenes='))?.slice('--scenes='.length);
@@ -537,6 +544,13 @@ async function renderScene(context, scene) {
     await page.goto(`${URL}?scene=${scene.name}`, { waitUntil: 'networkidle' });
     const stage = page.locator(`[data-scene="${scene.name}"][data-ready="1"]`);
     await stage.waitFor({ state: 'visible', timeout: 30_000 });
+    await page.evaluate((mode) => {
+      document.documentElement.dataset.mode = mode;
+    }, CAPTURE_MODE);
+    const applied = await page.evaluate(() => document.documentElement.dataset.mode);
+    if (applied !== CAPTURE_MODE) {
+      throw new Error(`${scene.name}: data-mode is ${applied}, wanted ${CAPTURE_MODE}`);
+    }
     await page.evaluate(() => document.fonts.ready);
     // Let the Sidebar's mount effects (proxy count / recordings index, both
     // no-ops headless) settle before the frame is read.

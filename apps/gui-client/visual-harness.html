@@ -1,9 +1,11 @@
 <!doctype html>
 <!-- Dev-time visual-check page (not a build input — vite/Tauri bundle index.html
      only). Served by `vite` dev at /visual-harness.html; screenshotted by
-     scripts/gui-visual-check.mjs (repo root). The data-mode/data-accent default matches the app
-     (dark + oxblood); the screenshot script flips data-mode to also capture light. -->
-<html lang="en" data-mode="dark" data-accent="oxblood">
+     scripts/gui-visual-check.mjs (repo root). The data-mode/data-accent default matches a NEW
+     install of the app (light + oxblood since 2026-09-25, settings.ts DEFAULT_SETTINGS); the gate
+     scripts set data-mode themselves to capture each theme, and scripts/marketing-screens.mjs pins
+     the mode its committed captures were taken in. -->
+<html lang="en" data-mode="light" data-accent="oxblood">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
