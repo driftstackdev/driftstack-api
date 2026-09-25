@@ -226,7 +226,7 @@ export const LiveAutomationPanel = memo(function LiveAutomationPanel({
           (typeof s.closed_reason === 'string' && s.closed_reason.length > 0);
         // The fine typed reason beats the coarse code (it is emitted alongside
         // it and would otherwise be shadowed — see preferTypedEndReason), and
-        // A3's host-free sentence rides through verbatim. No phase polling
+        // the harness's host-free sentence rides through verbatim. No phase polling
         // here, so lastPhase is honestly null: the chat's embedded panel
         // renders the routeless timeout sentence rather than a guessed route.
         if (ended)

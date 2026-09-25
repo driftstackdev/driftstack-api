@@ -1,5 +1,5 @@
 // ⌘K command palette — the demo-concepts arc's navigation accelerator
-// (mocked first in docs/internal/visual-demos/gui-profiles-hub.html per the
+// (mocked first in an internal HTML visual demo per the
 // demo-first workflow; founder previewed the overlay there).
 //
 // Deliberately dependency-free and data-agnostic: the caller passes a flat

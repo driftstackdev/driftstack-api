@@ -26,6 +26,7 @@ import { type JSX } from 'react';
 
 import type { AgentSessionCapabilityReport } from '../lib/agent-session-control';
 import { h3ReadoutState } from '../lib/session-h3-observation';
+import { NO_HTTP3_TEXT, noHttp3Reason } from '../lib/simulator-network-readouts';
 
 export function QuicReadout({
   report,
@@ -33,6 +34,22 @@ export function QuicReadout({
   report: AgentSessionCapabilityReport | null;
 }): JSX.Element {
   const state = h3ReadoutState(report);
+  // Owner item 9 — the measured NO the card and the grid show: no UDP (so HTTP/3
+  // cannot work) or a session set to HTTP/2 only. A real HTTP/3 connection
+  // outranks it (`noHttp3Reason` is null once one is observed).
+  const noHttp3 = noHttp3Reason(report);
+  if (state !== 'observed' && noHttp3 !== null) {
+    return (
+      <div
+        data-component="sim-quic-readout"
+        data-state="no-http3"
+        title={noHttp3}
+        className="mt-1 text-[10px] leading-snug text-white/50"
+      >
+        {NO_HTTP3_TEXT}
+      </div>
+    );
+  }
   if (state === 'not-observed') {
     return (
       <div

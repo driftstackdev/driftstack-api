@@ -9,7 +9,7 @@
 // component other tests replace.
 
 /**
- * A3's typed VPN bring-up reasons (closed_reason), and the ONE thing each is
+ * The harness's typed VPN bring-up reasons (closed_reason), and the ONE thing each is
  * for: telling the customer WHERE to go. A tunnel that never came up sends them
  * to their provider, to their own config, or nowhere — and those are different
  * errands. Before this, every one of them reached the same sentence.
@@ -22,9 +22,9 @@
  * pair collapses to one sentence at the only place a customer reads it. The
  * fine reason is where the distinction survives.
  *
- * ⚠️ MATCHED AS WHOLE TOKENS, never by prefix or substring. A3 owns this enum
+ * ⚠️ MATCHED AS WHOLE TOKENS, never by prefix or substring. The harness owns this enum
  * and will not reuse a value for a different meaning; matching loosely would
- * re-route on a value they add later that merely starts the same way.
+ * re-route on a value it adds later that merely starts the same way.
  *
  * ⛔ `tunnel_setup_timeout` deliberately has NO destination HERE. "We cannot
  * tell whether this is you or them" is a real state, and a product that guesses
@@ -82,7 +82,7 @@ export const VPN_BRINGUP_END_COPY: Readonly<
   },
 };
 
-/** True when this reason is one of A3's typed bring-up codes — i.e. the value
+/** True when this reason is one of the harness's typed bring-up codes — i.e. the value
  *  that actually carries an errand. Exported for the CALLER that chooses which
  *  of two reasons to hand in; see `preferTypedEndReason`. */
 export function isTypedBringupReason(reason: string | null | undefined): boolean {
@@ -94,20 +94,20 @@ export function isTypedBringupReason(reason: string | null | undefined): boolean
 export type VpnBringupRoute = 'provider' | 'config' | 'ours';
 
 /**
- * A3's bring-up PHASES (the `provisioning_detail` frame, emitted each time it
+ * The harness's bring-up PHASES (the `provisioning_detail` frame, emitted each time it
  * changes) and whose side each one is on. A `tunnel_setup_timeout` on its own
  * says nothing about who stalled; the phase it stalled IN does — the endpoint
  * had not answered yet (provider), the handshake hung (config), or the
  * handshake was done and OUR side did not finish bringing the session up
  * (ours).
  *
- * ⚠️ MATCHED AS WHOLE TOKENS, EXACTLY AS A3 SPELLS THEM: bare, lowercase, no
+ * ⚠️ MATCHED AS WHOLE TOKENS, EXACTLY AS THE HARNESS SPELLS THEM: bare, lowercase, no
  * `vpn_` prefix, no case-folding, no hyphen aliasing — stricter than the reason
  * normalisation above, on purpose, because the failure direction of a miss is
  * the routeless sentence, which is the honest one. A phase this build does not
  * know routes NOWHERE.
  *
- * `up` is CONCEPTUAL, never an emitted token (settled with A3 2026-09-14), so
+ * `up` is CONCEPTUAL, never an emitted token (settled with the harness 2026-09-14), so
  * it is deliberately absent — routing on it would be aliasing. The token a
  * tunnel-up session actually leaves in `provisioning_detail` is the existing
  * `vpn_egress_active` frame, and a timeout whose last detail is THAT one means
@@ -142,14 +142,14 @@ export function vpnBringupPhaseRoute(lastPhase: string | null | undefined): VpnB
  * phase is known. Same outcome label as the routeless entry — what changed is
  * not what happened but whose errand it is, and that lives in the explanation.
  * Each names only what its phase supports: before `handshaking` the endpoint
- * had not answered; past `handshaking` the handshake was done (A3 emits the
+ * had not answered; past `handshaking` the handshake was done (the harness emits the
  * phases in order, so `assigning_address` and later imply it), and the tunnel
  * itself may have been up (`vpn_egress_active`) — so "ours" says the SESSION
  * did not come up, not the tunnel. `handshaking` claims nothing about an
  * answer: over UDP (WireGuard always, OpenVPN usually) a dead endpoint and a
- * key the server drops are the same silence, and nothing in A3's contract
+ * key the server drops are the same silence, and nothing in the harness contract
  * says the phase waits for a reply before it is emitted. The route (config)
- * is A3's; the sentence only stops asserting a fact the phase cannot carry.
+ * is the harness's; the sentence only stops asserting a fact the phase cannot carry.
  */
 export const TUNNEL_SETUP_TIMEOUT_ROUTED_COPY: Readonly<
   Record<VpnBringupRoute, { outcome: string; explanation: string }>
@@ -173,7 +173,7 @@ export const TUNNEL_SETUP_TIMEOUT_ROUTED_COPY: Readonly<
 
 /**
  * The typed bring-up sentence for a reason, or undefined when the reason is not
- * one of A3's codes (the caller falls through to its coarse branches). Own-key
+ * one of the harness's codes (the caller falls through to its coarse branches). Own-key
  * lookup: a reason spelled like a prototype member (`constructor`) is unknown,
  * not Object.prototype's function.
  *
@@ -183,7 +183,7 @@ export const TUNNEL_SETUP_TIMEOUT_ROUTED_COPY: Readonly<
  * provider's errand. Absent or unknown phase → today's routeless sentence,
  * unchanged.
  *
- * `lastPhase` is DERIVED by the caller, not a wire field: A3 sends no
+ * `lastPhase` is DERIVED by the caller, not a wire field: the harness sends no
  * `last_phase` (`ApiSession` and the server's session serialisation have none),
  * so the window hands over the last `provisioning_detail` its status polls
  * observed (`derivedLastPhase`, SimulatorWindow). A poll can lag the daemon, so

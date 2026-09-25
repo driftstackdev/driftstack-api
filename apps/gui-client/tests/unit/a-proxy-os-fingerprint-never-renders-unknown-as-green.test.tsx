@@ -30,6 +30,17 @@
 // record, an older server and a tampered response all read `undefined` here and
 // are indistinguishable from one another; none may promote itself into a
 // confident claim by omission. Only an explicit `true` unlocks a colour.
+//
+// ⛔⛔ OWNER, 2026-09-24 (item 9), verbatim: "And if it's a Apple, it should be
+// green status, which we don't always have". The GREEN arm is no longer gated on
+// the vantage: a reading of Apple is the device's own family and reads green from
+// every vantage, with what the vantage cannot rule out said in its hint. The RED
+// arm is unchanged — a mismatch still needs the vantage that supports it, and
+// absence still fails closed for it. This is a deliberate asymmetry the owner
+// chose; the argument against it (a false green is the costlier error) is kept
+// in lib/os-fingerprint-verdict.ts and in the arms below that used to pin the
+// symmetry, so the decision can be revisited with its reasons in front of it.
+// What this file is NAMED for is untouched: an UNKNOWN stack is never green.
 
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
@@ -98,17 +109,14 @@ describe('the colour rule', () => {
 // file pinned before — the same fixtures, the opposite verdict — and the reason
 // is in each name, so a future reader can tell them from a regression.
 describe('a trustworthy-LOOKING reading from an untrustworthy vantage', () => {
-  it('INVERTED (V-219) a Darwin stack read through a multi-machine proxy is NOT green — this is the exact failure the file is named for', () => {
+  it('OWNER 2026-09-24 — a Darwin stack read through a multi-machine proxy IS green; what the vantage cannot rule out moves into the hint (V-219 pinned this as withheld)', () => {
     const v = osFingerprintVerdict(fp('macos-or-ios'));
-    expect(v.tone, 'a reading of a path no website touches cannot pass one').toBe('unknown');
-    expect(v.glyph).toBe('?');
-    // The measurement is still shown: the chip names what was read, so the
-    // operator sees the fact and only the CLAIM about it is withheld.
+    expect(v.tone).toBe('match');
+    expect(v.glyph).toBe('✓');
     expect(v.label).toBe('iOS/macOS');
+    expect(v.hint).toContain('matches the iOS device');
     expect(v.hint).toMatch(/forwards through more than one machine/i);
-    expect(v.hint).toContain('a website may reach a different one');
-    // ⛔ and the reassurance must not leak back in through the prose.
-    expect(v.hint).not.toContain('matches the iOS device');
+    expect(v.hint).toContain('some websites may reach a different one');
   });
 
   it('INVERTED (V-219) a Linux stack read the same way is NOT red either — the gate is symmetric, which is the point', () => {
@@ -120,7 +128,7 @@ describe('a trustworthy-LOOKING reading from an untrustworthy vantage', () => {
     expect(v.hint).not.toContain('detectable mismatch');
   });
 
-  it('CRITICAL withholds the green exactly as hard as the red, and the vantage is the ONLY difference between withheld and stated', () => {
+  it('CRITICAL the RED is still withheld on this vantage, and the vantage is still the ONLY difference between withheld and stated for it — the green is not (owner 2026-09-24)', () => {
     // Both tones are minted from the identical SYN over the identical path, so a
     // vantage that cannot support "detectable mismatch" cannot support "matches
     // the iOS device it fronts" either. Silencing only the red — the arm that
@@ -130,7 +138,9 @@ describe('a trustworthy-LOOKING reading from an untrustworthy vantage', () => {
     // errors the false green is far worse; a false red is an irritant somebody
     // reports, a false green costs a customer their account and nobody ever
     // files a bug about a reassuring badge.
-    expect(osFingerprintVerdict(fp('macos-or-ios')).tone).toBe('unknown');
+    // ⛔ OWNER 2026-09-24 — the green half of this argument was overruled for
+    // Apple (see the header); the red half stands and is what this arm now pins.
+    expect(osFingerprintVerdict(fp('macos-or-ios')).tone).toBe('match');
     expect(osFingerprintVerdict(fp('linux')).tone).toBe('unknown');
     // Positive control in the same breath — the feature is WITHHELD, not
     // deleted, and without these two lines the arm above would also pass on a
@@ -154,13 +164,17 @@ describe('a trustworthy-LOOKING reading from an untrustworthy vantage', () => {
       // reason to pin it here, where the type cannot.
       { singleHostVantage: 'true' as unknown as boolean },
     ];
+    // ⛔ OWNER 2026-09-24 — pinned on the RED arm now: absence may not mint a
+    // mismatch. (An Apple reading is green from every one of these shapes.)
     for (const vantage of notSingleHost) {
-      const reading = { ...fp('macos-or-ios'), observedVia: 'exit_ip' as const, ...vantage };
+      const reading = { ...fp('windows'), observedVia: 'exit_ip' as const, ...vantage };
       expect(osFingerprintVerdict(reading).tone, JSON.stringify(vantage)).toBe('unknown');
+      const apple = { ...fp('macos-or-ios'), observedVia: 'exit_ip' as const, ...vantage };
+      expect(osFingerprintVerdict(apple).tone, `apple ${JSON.stringify(vantage)}`).toBe('match');
     }
   });
 
-  it('the front door is not a way in either — a proxy_host reading of a Darwin stack is still colourless', () => {
+  it('the front door is not a way into the RED — a proxy_host reading of a Windows stack is still colourless (a Darwin one is green: owner 2026-09-24)', () => {
     // `proxy_host` says the SYN came from the address we DIALLED, not the exit;
     // it resolves one branch ABOVE the vantage gate, with its own wording. It is
     // pinned here because this file's subject is every path to a green, and that
@@ -168,9 +182,14 @@ describe('a trustworthy-LOOKING reading from an untrustworthy vantage', () => {
     // ⚠️ It never carries `singleHostVantage: true`: single-host means the
     // dialled address IS the exit, so the server labels such a reading
     // 'exit_ip'. The pair cannot co-occur and is not fixtured.
+    // ⛔ OWNER 2026-09-24 — a Darwin entry point is green now, and its hint says
+    // only the entry point was read; a Windows entry point is still colourless.
     const frontDoor: OsFingerprint = { ...fp('macos-or-ios'), observedVia: 'proxy_host' };
-    expect(osFingerprintVerdict(frontDoor).tone).toBe('unknown');
-    expect(osFingerprintVerdict(frontDoor).glyph).toBe('?');
+    expect(osFingerprintVerdict(frontDoor).tone).toBe('match');
+    expect(osFingerprintVerdict(frontDoor).hint).toMatch(/entry point/);
+    const winDoor: OsFingerprint = { ...fp('windows'), observedVia: 'proxy_host' };
+    expect(osFingerprintVerdict(winDoor).tone).toBe('unknown');
+    expect(osFingerprintVerdict(winDoor).glyph).toBe('?');
   });
 });
 
@@ -188,16 +207,15 @@ describe('the chip', () => {
     };
   };
 
-  it('is green ONLY for a match — and a match now needs the vantage as well as the stack', () => {
+  it('is green ONLY for a match — and an Apple reading is a match from every vantage (owner 2026-09-24)', () => {
     expect(tones(singleHost('macos-or-ios'))).toEqual({
       verdict: 'match',
       green: true,
       red: false,
     });
-    // INVERTED (V-219): the IDENTICAL Darwin stack, read through a proxy that
-    // answers from more than one machine, no longer paints green. Pinned beside
-    // the pass so the two cannot drift apart.
-    expect(tones(fp('macos-or-ios'))).toEqual({ verdict: 'unknown', green: false, red: false });
+    // OWNER 2026-09-24 (was INVERTED by V-219): the IDENTICAL Darwin stack, read
+    // through a proxy that answers from more than one machine, paints green too.
+    expect(tones(fp('macos-or-ios'))).toEqual({ verdict: 'match', green: true, red: false });
   });
 
   it('is red for a mismatch — and withholds that red from the very same untrusted vantage', () => {
@@ -212,13 +230,15 @@ describe('the chip', () => {
     expect(tones(undefined)).toEqual({ verdict: 'unknown', green: false, red: false });
   });
 
-  it('CRITICAL renders green for NOTHING that lacks an explicit single-host vantage — the file name as one assertion', () => {
+  it('CRITICAL renders green for NOTHING but Apple without an explicit single-host vantage — and never for an unknown stack — the file name as one assertion', () => {
     // Swept from the exported list rather than a hand-written one, so an OS
     // added to FINGERPRINTED_OS lands here automatically instead of quietly
     // sitting outside a denominator this arm would still report as complete.
+    // OWNER 2026-09-24 — Apple is the one green without the vantage.
     for (const os of FINGERPRINTED_OS) {
-      expect(tones(fp(os)).green, os).toBe(false);
+      expect(tones(fp(os)).green, os).toBe(os === 'macos-or-ios');
     }
+    expect(tones(fp('unknown')).green).toBe(false);
     expect(tones(undefined).green).toBe(false);
     // Vacuity control: the sweep above must be failing for the RIGHT reason, not
     // because the helper stopped finding the green class at all.

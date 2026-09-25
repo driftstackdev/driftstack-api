@@ -73,6 +73,15 @@ export interface AvailableUpdate {
   /** Where to send a `downloadOnly` customer. */
   downloadUrl?: string;
   /**
+   * Set when THIS copy of the app cannot replace itself because of where it is
+   * running from — a mounted disk image, or the temporary read-only copy macOS
+   * makes of an app opened straight from Downloads. `install()` then rejects
+   * with an {@link UpdateLocationError} without downloading anything, and every
+   * surface says the one thing that works instead of offering an Install that
+   * cannot.
+   */
+  installBlocked?: InstallLocationProblem;
+  /**
    * The rejection from an install that HAS ALREADY FAILED, when this update is
    * being handed to the banner because of it.
    *
@@ -310,6 +319,104 @@ function rejectionText(error: unknown): string {
  * degrading to the generic fallback), and existing assertions phrased as
  * `rejects.toThrow(/signature/)` keep meaning what they said.
  */
+// ─── Where the app is running from ──────────────────────────────────────────
+//
+// Owner's developer log, 2026-09-23: `[updater] install failed — stage=download
+// attempt=1 0.1.68 → 0.1.70 platform=MacIntel retrying=no reason: Read-only file
+// system (os error 30)`, twice, 18 s apart. The app was running from somewhere it
+// cannot write: the mounted disk image it was opened from, or the temporary
+// read-only copy macOS makes of an app opened straight from Downloads (App
+// Translocation). No install can succeed there, so each attempt downloaded the
+// whole bundle, failed the same way, logged an ERROR and raised a telemetry
+// event, and the banner offered "Retry".
+//
+// Now the location is checked BEFORE anything is downloaded, the customer is
+// told the one thing that works, and the log says so ONCE, as a warning about
+// where the app runs rather than as an install failure. An install that still
+// fails with a read-only error (a location the path check cannot recognise)
+// ends the same way.
+
+/** Why this copy of the app cannot replace itself. */
+export type InstallLocationProblem = 'disk-image' | 'translocated' | 'read-only';
+
+/** What every surface tells the customer, whatever the exact problem. */
+export const MOVE_TO_APPLICATIONS_SENTENCE =
+  'Move Driftstack to your Applications folder, then open it again to update.';
+
+/**
+ * Classify the app's own bundle path (the resource directory, which lives inside
+ * the bundle). PURE. `null` means nothing is known to be wrong.
+ *
+ *   • `…/AppTranslocation/…` — macOS runs apps opened from a quarantined
+ *     download from a randomised read-only mount. Unambiguous.
+ *   • `/Volumes/<volume>/<App>.app/…` — the app sits at the ROOT of a mounted
+ *     volume, which is how a disk image presents it. An app installed on an
+ *     external drive normally lives in a folder there (`/Volumes/X/Applications/`),
+ *     so it is not matched.
+ */
+export function installLocationProblem(bundlePath: string | null): InstallLocationProblem | null {
+  if (bundlePath === null || bundlePath === '') return null;
+  const p = bundlePath.replace(/\\/g, '/');
+  if (p.includes('/AppTranslocation/')) return 'translocated';
+  if (/^\/Volumes\/[^/]+\/[^/]+\.app(?:\/|$)/.test(p)) return 'disk-image';
+  return null;
+}
+
+/** An install that failed because the app's folder cannot be written. */
+export function isReadOnlyLocationFailure(reason: string): boolean {
+  return /read-only file system|os error 30\b|\berofs\b/i.test(reason);
+}
+
+/** The rejection of an install that was never going to work from here. */
+export class UpdateLocationError extends Error {
+  readonly problem: InstallLocationProblem;
+  constructor(problem: InstallLocationProblem) {
+    super(MOVE_TO_APPLICATIONS_SENTENCE);
+    this.name = 'UpdateLocationError';
+    this.problem = problem;
+  }
+}
+
+const LOCATION_WORDS: Record<InstallLocationProblem, string> = {
+  'disk-image': 'a mounted disk image',
+  translocated: 'the temporary read-only copy macOS makes of an app opened from Downloads',
+  'read-only': 'a folder it cannot write to',
+};
+
+const locationProblemsLogged = new Set<string>();
+/** Set once an install has failed on a read-only folder: later checks in the
+ *  same run treat the location as blocked instead of downloading again. */
+let readOnlyLocationSeen = false;
+
+/**
+ * Log a location problem ONCE per version per run, as a WARN: it is a fact
+ * about where the app runs, not a failed install, and the 6-hourly re-check
+ * would otherwise repeat it. Never throws.
+ */
+export function noteInstallLocationProblem(
+  problem: InstallLocationProblem,
+  toVersion: string,
+  detail: string,
+): void {
+  if (problem === 'read-only') readOnlyLocationSeen = true;
+  const key = `${problem}:${toVersion}`;
+  if (locationProblemsLogged.has(key)) return;
+  locationProblemsLogged.add(key);
+  void importLogBuffer()
+    .then(({ record }) => {
+      record('warn', [
+        `[updater] ${toVersion} can't be installed: Driftstack is running from ${LOCATION_WORDS[problem]} (${detail}) — not downloading; the customer is asked to move it to Applications`,
+      ]);
+    })
+    .catch(() => undefined);
+}
+
+/** Test seam: forget which problems were logged. */
+export function resetInstallLocationLogForTests(): void {
+  locationProblemsLogged.clear();
+  readOnlyLocationSeen = false;
+}
+
 export class UpdateInstallError extends Error {
   readonly stage: UpdateInstallStage;
   readonly reason: string;
@@ -605,6 +712,12 @@ export interface UpdaterDeps {
    * does NOT inject and asserts against the real dev log.
    */
   onInstallFailure?: (diagnostic: UpdateInstallDiagnostic) => void;
+  /**
+   * The app's own bundle path (its resource directory), for
+   * {@link installLocationProblem}. Optional: without it nothing is known to be
+   * wrong, which is the old behaviour. `null` when it cannot be read.
+   */
+  bundlePath?: () => Promise<string | null>;
 }
 
 /**
@@ -673,6 +786,14 @@ export const defaultDeps: UpdaterDeps = {
   relaunch: async () => {
     const { relaunch } = await import('@tauri-apps/plugin-process');
     return relaunch();
+  },
+  bundlePath: async () => {
+    try {
+      const { resourceDir } = await import('@tauri-apps/api/path');
+      return await resourceDir();
+    } catch {
+      return null;
+    }
   },
 };
 
@@ -782,6 +903,27 @@ export async function checkForUpdateVerbose(
     return { status: 'found', update: downloadOnlyUpdate };
   }
 
+  // Before anything is downloaded: can this copy of the app replace itself?
+  let bundlePath: string | null = null;
+  try {
+    bundlePath = (await deps.bundlePath?.()) ?? null;
+  } catch {
+    bundlePath = null;
+  }
+  const blocked = installLocationProblem(bundlePath) ?? (readOnlyLocationSeen ? 'read-only' : null);
+  if (blocked !== null) {
+    noteInstallLocationProblem(blocked, offered.version, bundlePath ?? '');
+    const blockedUpdate: AvailableUpdate = {
+      version: offered.version,
+      currentVersion: offered.currentVersion,
+      notes: offered.body ?? null,
+      installBlocked: blocked,
+      // Never silently no-op, and never download: this location cannot take it.
+      install: () => Promise.reject(new UpdateLocationError(blocked)),
+    };
+    return { status: 'found', update: blockedUpdate };
+  }
+
   const installableUpdate: AvailableUpdate = {
     version: offered.version,
     currentVersion: offered.currentVersion,
@@ -846,6 +988,13 @@ export async function checkForUpdateVerbose(
           return null;
         } catch (e) {
           const reason = rawUpdateFailureReason(e);
+          // A read-only folder the path check could not recognise: the same
+          // ending as a blocked location — told once, not reported as a
+          // failure, and never retried (it cannot clear).
+          if (isReadOnlyLocationFailure(reason)) {
+            noteInstallLocationProblem('read-only', identity.toVersion, reason);
+            throw new UpdateLocationError('read-only');
+          }
           const diagnostic: UpdateInstallDiagnostic = {
             ...identity,
             stage: 'download',
@@ -1062,6 +1211,11 @@ export async function runUpdateCycle(deps: UpdateCycleDeps): Promise<UpdateOutco
   // is reached exactly when the plugin is unavailable, i.e. on the machines most
   // likely to be there.
   if (update.downloadOnly === true) {
+    deps.onOffered(update);
+    return 'banner';
+  }
+  // Nothing to attempt from here: the banner says what to do instead.
+  if (update.installBlocked !== undefined) {
     deps.onOffered(update);
     return 'banner';
   }

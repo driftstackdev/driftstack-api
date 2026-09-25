@@ -15,6 +15,7 @@ import {
   agedChipAge,
   agedQuicReading,
   ProxyCapabilityChips,
+  serverReadingCapabilities,
   ProxyOsChip,
   proxyCapabilities,
 } from '../components/ProxyCapabilities';
@@ -75,7 +76,6 @@ import {
   buildWireGuardProxyInput,
   buildOpenVpnProxyInput,
   deleteProxy as deleteAccountProxy,
-  planExcludesVpnEgress,
   updateProxy as updateAccountProxy,
   type AccountProxyScheme,
   type AccountProxyTestNotRun,
@@ -105,6 +105,7 @@ import {
 } from '../lib/proxy-server-test';
 import { useSettings } from '../lib/SettingsContext';
 import { useConfirm } from '../components/ConfirmProvider';
+import { planExcludesFleetTest, planExcludesVpnEgress } from '../lib/plan-features';
 import { humanizeError } from '../lib/humanize-error';
 import { vantageLabel, type ServerVantage } from '../lib/proxy-vantage';
 import {
@@ -113,6 +114,8 @@ import {
   CHECK_VPN_ACTION,
   CHECK_VPN_TITLE,
   DESKTOP_CREDENTIAL_TALLY_REASON,
+  FLEET_TEST_NOT_ON_PLAN_WORD,
+  FREE_PLAN_FLEET_TEST_SENTENCE,
   EXIT_GEO_UNAVAILABLE,
   ENDPOINT_OK_PILL,
   ENDPOINT_OK_TITLE,
@@ -281,6 +284,10 @@ function notRunPhrase(why: AccountProxyTestNotRun): string {
       return 'the check could not complete; try again shortly';
     case 'no_node':
       return 'Driftstack could not run this test right now; try again shortly';
+    case 'config_unresolvable':
+      // Owner item 9 — nothing was dialled: the saved configuration could not be
+      // turned into a connection. A not-run, never "tunnel down".
+      return 'its saved configuration could not be used; add it again';
     case 'plan_excluded':
       return 'not included in your plan';
     case 'desktop_credential':
@@ -517,6 +524,36 @@ const EMPTY_DRAFT: ProxyDraft = {
   password: null,
 };
 
+/** The header's "UDP + QUIC" tally label — one constant for the hero line and the
+ *  pool stat (and the visual harness's mirror of both). */
+export const UDP_AND_QUIC_TALLY_LABEL = 'UDP + QUIC';
+
+/**
+ * Owner item 9 — does this row's Network cell read ✓ UDP AND ✓ QUIC right now?
+ * The chips' own rules, restated once so the header counts exactly the rows that
+ * show both ticks:
+ *   UDP  — a VPN row: Driftstack's MEASURED relay verdict; a SOCKS5 row this Mac
+ *          tested: its handshake reached, authenticated, routed and was granted
+ *          UDP; a SOCKS5 row only Driftstack measured: Driftstack's verdict.
+ *   QUIC — a live session's HTTP/3, else the relay verdict (a live h2-only
+ *          outranks a relay tick, as the chip does). An inference is not a tick.
+ * Aged readings do not count: they are "when last checked", not now.
+ */
+export function rowShowsUdpAndQuic(
+  p: Pick<ProxyConfig, 'scheme'>,
+  result: ProxyTestResult | undefined,
+  udpProbe: boolean | undefined,
+  quicMeasured: MeasuredQuic | undefined,
+  quicProbe: boolean | undefined,
+): boolean {
+  const udp =
+    isVpnScheme(p.scheme) || result === undefined
+      ? udpProbe === true
+      : isProxyUsable(result) && result.udp_associate;
+  const quic = quicMeasured === 'h3' || (quicMeasured !== 'h2-only' && quicProbe === true);
+  return udp && quic;
+}
+
 export function ProxiesView(): JSX.Element {
   const { settings, client, activeWorkspace, accountMe } = useSettings();
   const confirm = useConfirm();
@@ -724,6 +761,17 @@ export function ProxiesView(): JSX.Element {
   // In memory only, like `vpnNotices`: a remount has not seen the reply, and the
   // chip then says "not measured yet" — which is what is true of what it knows.
   const [noFleetMac, setNoFleetMac] = useState<Record<string, true>>({});
+  // Follow-up A (2026-09-24) — the rows whose last server test was REFUSED BY
+  // THE PLAN (`not_run: 'desktop_credential' | 'plan_excluded'`), keyed to the
+  // plan sentence the refusal carried. A SOCKS5 row applied that reply as
+  // "nothing changes", so its missing Driftstack side fell through to "not
+  // tested" — a promise of a measurement the plan will never take, with no
+  // reason. In memory like `noFleetMac`; the account-level fallback below covers
+  // a remount that has not seen the reply.
+  const [fleetPlanRefusals, setFleetPlanRefusals] = useState<Record<string, string>>({});
+  // …and the same fact from the ACCOUNT, for a mount that has not run a Test:
+  // a Free plan never runs the full check (see `planExcludesFleetTest`).
+  const planExcludesFleetCheck = planExcludesFleetTest(accountMe);
   // ⛔ (2026-09-17) The account's plan has no VPN egress, so NO check of a VPN row
   // can ever run — the store is refused and the free-desktop route policy carries
   // no test route at all. It is an ACCOUNT fact, not a row fact, which is why it
@@ -1538,7 +1586,9 @@ export function ProxiesView(): JSX.Element {
         // tunnel up), not a refusal: the row was never in anyone's hands.
         // (j) J4 — `desktop_credential` too: the credential cannot reach the
         // route, the same "not tested" a row with no API key gets above.
-        return outcome.why === 'no_node' || outcome.why === 'desktop_credential'
+        return outcome.why === 'no_node' ||
+          outcome.why === 'desktop_credential' ||
+          outcome.why === 'config_unresolvable'
           ? { resolved: true, tunnelOk: null, notTested: notRunPhrase(outcome.why) }
           : { resolved: true, tunnelOk: null, skipped: notRunPhrase(outcome.why) };
       }
@@ -1595,6 +1645,7 @@ export function ProxiesView(): JSX.Element {
     // server test, and this drop is taken where that test's answer no longer
     // stands (an endpoint that stopped resolving, an edit).
     setNoFleetMac((m) => dropKey(m, id));
+    setFleetPlanRefusals((m) => dropKey(m, id));
   }
 
   /**
@@ -1604,6 +1655,17 @@ export function ProxiesView(): JSX.Element {
    * VPN row never showed a fleet number.
    */
   function applyServerProbeOutcome(id: string, outcome: ServerProbeOutcome): void {
+    // Follow-up A — a refusal BY THE PLAN is recorded with its sentence; any other
+    // answer (a verdict, another kind of not-run) retires it. `unavailable` learned
+    // nothing and moves nothing, exactly as `noFleetMac` below.
+    setFleetPlanRefusals((m) =>
+      outcome.kind === 'not_run' &&
+      (outcome.why === 'desktop_credential' || outcome.why === 'plan_excluded')
+        ? { ...m, [id]: outcome.reason }
+        : outcome.kind === 'unavailable'
+          ? m
+          : dropKey(m, id),
+    );
     // (o) O5 — a test that DID reach a Mac (ok or a failed verdict) clears the
     // "no Mac was free" state; a `no_node` sets it. Written here rather than at
     // the call sites so the grid's Check and the sweep cannot drift.
@@ -2009,13 +2071,15 @@ export function ProxiesView(): JSX.Element {
   const vpnVerdictState: VpnVerdictState = { vpnFailures, endpointResults, serverVantage };
   const tested = state.proxies.filter((p) => isRowTested(p, testResults, vpnVerdictState));
   const healthy = tested.filter((p) => isRowHealthy(p, testResults, vpnVerdictState));
-  // ⛔ NOT VPN-aware on purpose: `udp_associate` is a MEASURED capability of the native
-  // SOCKS5 probe. A tunnel carries UDP by construction, but no probe measured it here,
-  // and the row's own "UDP via tunnel" chip is where that belongs.
-  const udpCapable = tested.filter((p) => {
-    const r = testResults[p.id];
-    return r !== undefined && r.udp_associate;
-  });
+  // ⛔ Owner item 9 (2026-09-24) — "UDP + QUIC" counts what it says: the rows whose
+  // own chips read ✓ UDP AND ✓ QUIC right now. It was "WebRTC + QUIC" over the
+  // native UDP grant alone, so a proxy whose QUIC chip said ⤵ or ~ was counted as
+  // carrying QUIC. The two predicates are the chips' own rules (below), so the
+  // header and the rows cannot disagree; a VPN row counts only on MEASURED
+  // readings, never on "a tunnel carries UDP by construction".
+  const udpAndQuic = state.proxies.filter((p) =>
+    rowShowsUdpAndQuic(p, testResults[p.id], udpProbe[p.id], quicMeasured[p.id], quicProbe[p.id]),
+  );
 
   const editing =
     editor.kind === 'edit' ? (state.proxies.find((p) => p.id === editor.id) ?? null) : null;
@@ -2046,8 +2110,8 @@ export function ProxiesView(): JSX.Element {
                 <>
                   <b className="font-semibold text-status-ready">{healthy.length}</b> healthy
                   <span className="text-surface-divider">·</span>
-                  <b className="font-semibold text-ink-primary">{udpCapable.length}</b> WebRTC +
-                  QUIC
+                  <b className="font-semibold text-ink-primary">{udpAndQuic.length}</b>{' '}
+                  {UDP_AND_QUIC_TALLY_LABEL}
                   <span className="text-surface-divider">·</span>
                   {/* ⛔ (2026-09-17) THESE THREE SENTENCES WERE ALREADY FALSE, before
                       any of today's changes. "When a session starts" describes a
@@ -2139,7 +2203,7 @@ export function ProxiesView(): JSX.Element {
         >
           <PoolStat k="Tested" v={`${String(tested.length)} / ${String(state.proxies.length)}`} />
           <PoolStat k="Healthy" v={String(healthy.length)} tone="ok" />
-          <PoolStat k="WebRTC + QUIC" v={String(udpCapable.length)} tone="ok" />
+          <PoolStat k={UDP_AND_QUIC_TALLY_LABEL} v={String(udpAndQuic.length)} tone="ok" />
         </div>
       )}
 
@@ -2213,6 +2277,8 @@ export function ProxiesView(): JSX.Element {
           vpnFailures={vpnFailures}
           vpnNotices={vpnNotices}
           noFleetMac={noFleetMac}
+          fleetPlanRefusals={fleetPlanRefusals}
+          planExcludesFleetCheck={planExcludesFleetCheck}
           planExcludesVpn={planExcludesVpn}
           onEdit={(id) => setEditor({ kind: 'edit', id })}
           onRemove={(id) => void handleRemove(id)}
@@ -2507,6 +2573,8 @@ function ProxyTable({
   vpnFailures,
   vpnNotices,
   noFleetMac,
+  fleetPlanRefusals,
+  planExcludesFleetCheck,
   planExcludesVpn,
   endpointResults,
   onEdit,
@@ -2549,6 +2617,12 @@ function ProxyTable({
   /** (o) O5 — the rows whose last server test reached NO fleet Mac (`not_run:
    *  'no_node'`). Absent = a Mac answered, or no server test has landed yet. */
   noFleetMac: Record<string, true>;
+  /** Follow-up A — the rows whose last server test the PLAN refused, keyed to the
+   *  plan sentence it carried (see `fleetPlanRefusals` where it is kept). */
+  fleetPlanRefusals: Record<string, string>;
+  /** Follow-up A — the account's plan never runs the full check (an ACCOUNT fact;
+   *  see `planExcludesFleetTest`). */
+  planExcludesFleetCheck: boolean;
   /** The account's plan has no VPN egress — an ACCOUNT fact, so one boolean for
    *  every row rather than a map. See `planExcludesVpn` where it is computed. */
   planExcludesVpn: boolean;
@@ -2820,6 +2894,10 @@ function ProxyTable({
                 vpnFailure={vpnFailures[p.id]}
                 vpnNotice={vpnNotices[p.id]}
                 noFleetMac={noFleetMac[p.id] === true}
+                fleetNotOnPlan={
+                  fleetPlanRefusals[p.id] ??
+                  (planExcludesFleetCheck ? FREE_PLAN_FLEET_TEST_SENTENCE : undefined)
+                }
                 planExcludesVpn={planExcludesVpn}
                 onEdit={() => onEdit(p.id)}
                 onRemove={() => onRemove(p.id)}
@@ -2911,6 +2989,7 @@ function ProxyRow({
   vpnFailure,
   vpnNotice,
   noFleetMac,
+  fleetNotOnPlan,
   planExcludesVpn = false,
   endpointResult,
   onEdit,
@@ -2973,6 +3052,10 @@ function ProxyRow({
    *  (`not_run: 'no_node'`). The QUIC absence it leaves behind is about the
    *  FLEET, not about this tunnel, and the chip says which. */
   noFleetMac: boolean;
+  /** Follow-up A — the plan is WHY Driftstack has not tested this row: the plan
+   *  sentence (the refusal's own, or the Free-plan sentence from the account).
+   *  Absent = the plan is not the reason. */
+  fleetNotOnPlan?: string;
   /** The account's plan has no VPN egress, so "not measured YET" is the wrong
    *  word for this row's server-only readings — nothing will ever measure them.
    *  Defaults to false so a caller that does not know promises nothing about the
@@ -3036,16 +3119,22 @@ function ProxyRow({
   // (P2) — WHY a side has no number, from state this row already holds. The
   // single "has not measured this proxy yet" sentence was FALSE for two of the
   // four states it covered (see the constants).
-  const serverMissing: { word: string; title: string } | null =
+  const serverMissing: { word: string; title: string; why?: 'plan' } | null =
     serverLatencyMs !== undefined
       ? null
       : vpnFailure !== undefined
         ? { word: SERVER_FAILED_WORD, title: `${SERVER_FAILED_TITLE_PREFIX} ${vpnFailure}` }
         : serverVantage !== undefined
           ? { word: SERVER_NO_TIMING_WORD, title: SERVER_NO_TIMING_TITLE }
-          : noFleetMac
-            ? { word: NO_TEST_MAC_WORD, title: NO_TEST_MAC_LATENCY_TITLE }
-            : { word: NO_SERVER_NUMBER_WORD, title: NO_SERVER_NUMBER_TITLE };
+          : fleetNotOnPlan !== undefined
+            ? // Follow-up A — the plan is the reason, so the word says so and the
+              // hover is the plan sentence. It outranks "busy" (a refusal by the
+              // plan is an answer; no retry changes it) and replaces "not tested",
+              // which promised a measurement nothing will take.
+              { word: FLEET_TEST_NOT_ON_PLAN_WORD, title: fleetNotOnPlan, why: 'plan' as const }
+            : noFleetMac
+              ? { word: NO_TEST_MAC_WORD, title: NO_TEST_MAC_LATENCY_TITLE }
+              : { word: NO_SERVER_NUMBER_WORD, title: NO_SERVER_NUMBER_TITLE };
   // …and nothing at all when the row's own notice already names the absent
   // vantage (no API key, not storable): SOCKS5_TEST_NO_API_KEY_NOTICE says
   // "Tested from this Mac only… from the test Mac too — that is where … the
@@ -3115,10 +3204,30 @@ function ProxyRow({
           word: 'not verified',
           title: 'This proxy was down on the last test — no protocols could be checked.',
         }
-      : {
-          word: 'untested',
-          title: 'Not tested yet — click Test to check which protocols work.',
-        };
+      : testing
+        ? // Owner item 9 (2026-09-24) — "measuring" while THIS client's Test is in
+          // flight, the state the OS chip beside it already says ('… OS'); the
+          // chip read "untested" beside it for the whole test.
+          {
+            word: 'testing…',
+            title: 'Testing now — which protocols work will show here when the test finishes.',
+          }
+        : {
+            word: 'untested',
+            title: 'Not tested yet — click Test to check which protocols work.',
+          };
+  // Owner item 9 (2026-09-24) — a SOCKS5 row this Mac has not tested itself can
+  // still hold DRIFTSTACK's readings (another Mac, a reinstall, the automatic
+  // capability check). It showed "untested" beside the OS reading the same check
+  // took; its UDP / QUIC readings are chips now, like a tested row's.
+  const agedQuicForRow = agedQuicReading(aged);
+  const hasServerReadings =
+    result === undefined &&
+    (udpProbe !== undefined ||
+      quicProbe !== undefined ||
+      quicMeasured !== undefined ||
+      aged?.udpProbe !== undefined ||
+      agedQuicForRow !== undefined);
   // Each capability as label + the sentence its chip keeps in a hover, for the
   // detail row. Same three-way branch as the chips themselves, and the same
   // sources (`proxyCapabilities`, the VPN chips' own helpers) — never retyped.
@@ -3147,7 +3256,12 @@ function ProxyRow({
           label: c.label,
           hint: c.hint,
         }))
-      : [{ label: capsFallback.word, hint: capsFallback.title }];
+      : hasServerReadings
+        ? serverReadingCapabilities(udpProbe, quicMeasured, quicProbe, aged, {
+            nowMs: agedNowMs,
+            autoRecheck,
+          }).map((c) => ({ label: c.label, hint: c.hint }))
+        : [{ label: capsFallback.word, hint: capsFallback.title }];
 
   // ⚠️ V-857 — THREE states, not two. `undefined` = never probed; `null` =
   // probed and the echo round-trip did not complete through this proxy; an ip =
@@ -3424,6 +3538,17 @@ function ProxyRow({
                 nowMs={agedNowMs}
                 size="xs"
               />
+            ) : hasServerReadings ? (
+              <ProxyCapabilityChips
+                result={undefined}
+                udpProbe={udpProbe}
+                quicMeasured={quicMeasured}
+                quicProbe={quicProbe}
+                aged={aged}
+                autoRecheck={autoRecheck}
+                nowMs={agedNowMs}
+                size="xs"
+              />
             ) : (
               <span className={UNMEASURED_CHIP_CLS} title={capsFallback.title}>
                 {capsFallback.word}
@@ -3538,6 +3663,9 @@ function ProxyRow({
                         className={READING_CLS}
                         title={serverMissingShown.title}
                         data-latency-missing="server"
+                        {...(serverMissingShown.why !== undefined
+                          ? { 'data-missing-why': serverMissingShown.why }
+                          : {})}
                       >
                         {/* The state word sits where the NUMBER would — readable,
                             and narrower than a measured entry, so a missing side

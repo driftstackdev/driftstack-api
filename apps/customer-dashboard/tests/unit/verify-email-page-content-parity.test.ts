@@ -36,8 +36,8 @@ function read(p: string): string {
 describe('W371.B customer-dashboard /verify-email page content parity', () => {
   const body = read(PAGE);
 
-  it('Issue 3 wave 1085+ URL-token pre-fill + auto-submit pinned (mail-client link short-circuit) — form is HIDDEN by default and a spinner shows during auto-verify; the form is revealed via showFallback() only when auto-verify fails OR no ?token= URL param is present', () => {
-    expect(body).toMatch(/Issue 3 wave 1085\+|V-184a\.B/);
+  it('Issue 3 URL-token pre-fill + auto-submit pinned (mail-client link short-circuit) — form is HIDDEN by default and a spinner shows during auto-verify; the form is revealed via showFallback() only when auto-verify fails OR no ?token= URL param is present', () => {
+    expect(body).toMatch(/Issue 3 —|V-184a\.B/);
     expect(body).toMatch(/const linkToken = params\.get\('token'\);/);
     expect(body).toMatch(
       /if \(linkToken && linkToken\.length > 0\) \{\s*submitToken\(linkToken\);/,
@@ -151,7 +151,7 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
     expect(body).toMatch(/const prefill = linkToken \?\? debugToken/);
   });
 
-  it('Issue 3 wave 1085+ — "Verifying your account…" intro swap + spinner-shown when auto-submitting (replaces the prior "Verifying your email — one moment…" intro-only swap; full visual surface is the spinner now)', () => {
+  it('Issue 3 — "Verifying your account…" intro swap + spinner-shown when auto-submitting (replaces the prior "Verifying your email — one moment…" intro-only swap; full visual surface is the spinner now)', () => {
     expect(body).toMatch(/introEl\.textContent = 'Verifying your account…'/);
     expect(body).toMatch(/spinnerEl\.hidden = false/);
     expect(body).toMatch(/data-field="auto-verify-spinner"/);

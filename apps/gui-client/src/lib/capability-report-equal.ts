@@ -48,12 +48,20 @@ function candidateIpsEqual(
  *  and "windows, measured a minute ago", which is exactly what the readout shows.
  *  Leave it out and the first reading's age sticks to the row for ever. */
 function osFingerprintEqual(
-  a: { os: string; confidence: string; at?: string } | undefined,
-  b: { os: string; confidence: string; at?: string } | undefined,
+  a: AgentSessionCapabilityReport['os_fingerprint'],
+  b: AgentSessionCapabilityReport['os_fingerprint'],
 ): boolean {
   if (a === b) return true;
   if (a === undefined || b === undefined) return false;
-  return a.os === b.os && a.confidence === b.confidence && a.at === b.at;
+  return (
+    a.os === b.os &&
+    a.confidence === b.confidence &&
+    a.at === b.at &&
+    // Owner item 9 — how it was taken decides the colour, so it is part of it.
+    a.observed_via === b.observed_via &&
+    a.single_host_vantage === b.single_host_vantage &&
+    a.web_port_vantage === b.web_port_vantage
+  );
 }
 
 /**
@@ -81,6 +89,10 @@ export function capabilityReportsEqual(
     a.h3_connection_count === b.h3_connection_count &&
     a.reported_at === b.reported_at &&
     candidateIpsEqual(a.webrtc_candidate_ips, b.webrtc_candidate_ips) &&
-    osFingerprintEqual(a.os_fingerprint, b.os_fingerprint)
+    osFingerprintEqual(a.os_fingerprint, b.os_fingerprint) &&
+    // Owner item 9 — the UDP and HTTP/3 lines read these three.
+    a.proxy_kind === b.proxy_kind &&
+    a.proxy_udp_supported === b.proxy_udp_supported &&
+    a.transport_mode_active === b.transport_mode_active
   );
 }

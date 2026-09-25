@@ -279,7 +279,10 @@ describe('adding a VPN row on the Proxies tab runs the WHOLE check', () => {
     // table does not yet hold, which is precisely the day it matters and the day
     // nobody is looking. So the instrument is the one that can discriminate: the
     // function must CONSULT the table, and must not decide on a tier's name.
-    const src = readFileSync(resolve(__dirname, '../../src/lib/account-proxies.ts'), 'utf8');
+    // (2026-09-24) The helper moved to lib/plan-features.ts so a view can ask it
+    // while rendering; account-proxies re-exports it. The pin follows the body.
+    const src = readFileSync(resolve(__dirname, '../../src/lib/plan-features.ts'), 'utf8');
+    expect(src.indexOf('export function planExcludesVpnEgress')).toBeGreaterThan(-1);
     const body = src.slice(src.indexOf('export function planExcludesVpnEgress'));
     const fn = body.slice(0, body.indexOf('\n}') + 2);
     expect(fn, 'the plan question is asked of TIER_FEATURES').toContain('TIER_FEATURES');

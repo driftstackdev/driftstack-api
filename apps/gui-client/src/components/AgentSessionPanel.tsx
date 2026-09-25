@@ -41,7 +41,7 @@ export interface AgentSessionPanelProps {
   info: LiveKitInfo;
   /** Optional: archetype-driven aspect ratio. Defaults to iPhone 16
    *  Pro (1206×2622 px) since that's the locked archetype
-   *  (iphone17_ios18_7_safari26_4) for v1.0 per the orchestrator brief. */
+   *  (iphone17_ios18_7_safari26_4) for v1.0 per the launch scope. */
   aspectRatio?: number;
   /** Callback fired on every connection-state transition. LK.6.c
    *  wires the chrome badge to this. The originating Room is mandatory so an
@@ -92,14 +92,14 @@ export interface AgentSessionPanelProps {
   /** Legacy no-op (kept for prop-plumbing compatibility). It USED to mask the freed
    *  iOS-Safari chrome bands (a ~110px bottom + ~50px top band the old fork baked
    *  into the capture when it hid the URL bar but kept the 714px web-view inside an
-   *  838px window). The content-only per-archetype fork (A3 84de32ad4d, box
+   *  838px window). The content-only per-archetype fork (commit 84de32ad4d, box
    *  mac-macstadium-us-001) drops those bands entirely — the captured video == the
    *  web content edge-to-edge — so masking now covers REAL content (founder's "black
    *  space at the bottom + content cut off at the top"). The masks are removed; this
    *  prop is retained as an inert flag so existing callers don't break. */
   coverChromeBand?: boolean;
   /** The live captured-frame logical device-CSS-px dims the Mac touch injector
-   *  addresses (per-archetype, A3 84de32ad4d). Forwarded to the input-capture hook
+   *  addresses (per-archetype, fork 84de32ad4d). Forwarded to the input-capture hook
    *  so the coordinate mapping adapts to the dispatched device. The simulator
    *  computes it from the <video>'s first full-res natural size ÷ dpr; undefined
    *  falls back to the launch archetype (402×874) inside the hook. */
@@ -120,11 +120,11 @@ export interface AgentSessionPanelProps {
    *  machinery (those would loop "reconnecting" against a session that's gone) and
    *  shows a clear "Session ended" terminal overlay with a Close action instead.
    *  `reason` is the server close-reason for honest copy (null when unknown).
-   *  `summary` is A3's host-free `ErrorEvent.summary`, rendered VERBATIM as a
+   *  `summary` is the harness's host-free `ErrorEvent.summary`, rendered VERBATIM as a
    *  quieter second line under the explanation — it never carries the customer's
    *  proxy host (W2679 doctrine), and this window cannot fill one in (it holds a
    *  per-session control key, not the account's proxy list). `lastPhase` is
-   *  DERIVED by the caller, not a wire field — A3 sends no `last_phase`; the
+   *  DERIVED by the caller, not a wire field — the harness sends no `last_phase`; the
    *  simulator hands over the last `provisioning_detail` its status polls
    *  observed before the terminal frame (`derivedLastPhase`, SimulatorWindow),
    *  which can lag the daemon by a poll. It refines the `tunnel_setup_timeout`
@@ -172,7 +172,7 @@ export interface AgentSessionPanelProps {
 
 /** #1 — grace window after the SFU drops the video track (TrackUnsubscribed /
  *  ParticipantDisconnected) before the panel declares the publisher gone and shows
- *  the scary launch-failed overlay. A3's idle frame-pump down-clock (W2952) +
+ *  the scary launch-failed overlay. The harness's idle frame-pump down-clock (W2952) +
  *  routine encoder restarts / brief SFU re-negotiations momentarily drop and
  *  re-add the track; flipping to 'none' instantly slammed the full-screen
  *  "Couldn't start the session…" alarm over the last good frame for a stream that
@@ -597,7 +597,7 @@ export function AgentSessionPanel({
   onVideoEl,
   onPublishError,
   onInputCongestionChange,
-  // Legacy no-op — the content-only fork (A3 84de32ad4d) emits NO chrome bands, so
+  // Legacy no-op — the content-only fork (84de32ad4d) emits NO chrome bands, so
   // the old bezel-black masks are gone (they covered real content otherwise). The
   // prop is destructured (default off) only to keep the call-site shape stable.
   coverChromeBand: _coverChromeBand = false,
@@ -609,7 +609,7 @@ export function AgentSessionPanel({
   gallery,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  // Wave 2 recap — the terminal poll currently exposes only the close reason (no
+  // Session-end recap — the terminal poll currently exposes only the close reason (no
   // billing/cost metadata), while tab count belongs to the parent simulator. Track
   // this panel's live-view lifetime locally and latch the end timestamp so the recap
   // stays stable across any final transport/cleanup re-renders.
@@ -640,7 +640,7 @@ export function AgentSessionPanel({
     sessionEnded?.reason ?? null,
     sessionEnded?.lastPhase ?? null,
   );
-  // A3's host-free detail, verbatim. Whitespace-only counts as absent so the
+  // The harness's host-free detail, verbatim. Whitespace-only counts as absent so the
   // quieter line never renders empty.
   const sessionEndDetail =
     typeof sessionEnded?.summary === 'string' && sessionEnded.summary.trim() !== ''
@@ -670,12 +670,12 @@ export function AgentSessionPanel({
   // size the screen-host (P1b). So box == host == <video>, and the video fills the
   // box edge-to-edge with NO letterbox band. This REPLACES the old "lock to the
   // canonical 402:874" behavior: that was right when the box published the FULL
-  // device (402×874), but the content-only per-archetype fork (A3 84de32ad4d)
+  // device (402×874), but the content-only per-archetype fork (84de32ad4d)
   // publishes the web content edge-to-edge (e.g. 402×714), so a 402:874 box
   // letterboxed the wider content top+bottom inside it → the founder's persistent
   // bottom-black gap. The default (402:874) still applies until the first frame
   // reports. Any sub-pixel SFU-downscale drift (videoW/videoH ≈ but ≠ the exact
-  // content aspect, A3 W2840) is absorbed by the <video>'s own object-contain.
+  // content aspect, W2840) is absorbed by the <video>'s own object-contain.
   const effectiveAspectRatio = aspectRatio;
   // Simulator control: the live LiveKit room is lifted to state so the
   // input-capture hook can publish on its DataChannel. In `interactive` mode
@@ -710,7 +710,7 @@ export function AgentSessionPanel({
       onInputCongestionChange?.(congested, ownerRoom);
     },
     // Per-archetype captured-frame logical dims so the tap/scroll mapping matches the
-    // dispatched device's content-only frame (A3 84de32ad4d); undefined → 402×874.
+    // dispatched device's content-only frame (fork 84de32ad4d); undefined → 402×874.
     logical: inputLogical,
   });
   // W617 — track whether a video track ever arrived; 'waiting' →
@@ -721,7 +721,7 @@ export function AgentSessionPanel({
   );
   const publisherRef = useRef(publisher);
   publisherRef.current = publisher;
-  // A3 UX audit ww5k0xkmx (cold-start blank pane) — 'publishing' flips on
+  // UX audit ww5k0xkmx (cold-start blank pane) — 'publishing' flips on
   // TrackSubscribed, but on a cold start the first DECODED frame can lag the
   // subscription by seconds (box encoder ramping to the first keyframe). If the
   // waiting overlay dropped at TrackSubscribed the pane would sit pure black with
@@ -777,7 +777,7 @@ export function AgentSessionPanel({
   // "reconnects happen too often", task #70). Reset to 0 only on a GENUINELY
   // healthy session (a video track actually arrives — TrackSubscribed), so a
   // link that flaps without ever delivering a frame escalates to the manual
-  // overlay instead of thrashing. (Fable GUI re-audit 2026-07-02.)
+  // overlay instead of thrashing. (GUI re-audit 2026-07-02.)
   const autoReconnectAttemptRef = useRef(0);
 
   // #59 / Item 2 — the ONE customer-initiated relaunch of the live view, shared by the
@@ -982,7 +982,7 @@ export function AgentSessionPanel({
     // RoomEvent.Disconnected never fires. Without this the last frame freezes with no overlay
     // and no recovery path (founder-hit class). (#145)
     //
-    // #1 DEBOUNCE: do NOT flip to 'none' instantly — A3's idle frame-pump down-clock
+    // #1 DEBOUNCE: do NOT flip to 'none' instantly — the harness's idle frame-pump down-clock
     // (W2952) + routine encoder restarts / short SFU re-negotiations drop and re-add
     // the track within ~1-2s, and an instant flip slammed the scary "Couldn't start
     // the session…" alarm over the last good frame ("reconnecting, happens too often").
@@ -1256,7 +1256,7 @@ export function AgentSessionPanel({
       // LIVE stream's once metadata arrives (effectiveAspectRatio), so the box
       // tracks the real archetype.
       // No white border (founder 2026-06-23 "white border around the view, looks
-      // bad" + A3 W2827): when the live aspect makes the <video> object-contain
+      // bad" + W2827): when the live aspect makes the <video> object-contain
       // SMALLER than this box, a white rim outlined the shrunken view. bg-black +
       // no border → the iPhone view sits flush in bezel-black; any object-contain
       // margin reads as bezel, not a light frame.
@@ -1345,7 +1345,7 @@ export function AgentSessionPanel({
         .map((r) => (
           <TapRipple key={r.id} x={r.x} y={r.y} />
         ))}
-      {/* Chrome-band masks REMOVED (A3 84de32ad4d content-only per-archetype fork on
+      {/* Chrome-band masks REMOVED (84de32ad4d content-only per-archetype fork on
           box mac-macstadium-us-001): the old fork baked a ~110px bottom + ~50px top
           bezel-black band into the capture (it hid the iOS-Safari URL bar but kept the
           714px web-view inside an 838px window → scalesToFit letterbox + freed-chrome
@@ -1418,7 +1418,7 @@ export function AgentSessionPanel({
           </div>
           <span className="max-w-xs text-xs text-ink-secondary">
             {sessionEndCopy.explanation}
-            {/* A3's host-free detail, as sent: it is better than anything generated
+            {/* The harness's host-free detail, as sent: it is better than anything generated
                 from a code, so it is never paraphrased; it never names the customer's
                 proxy host (W2679), and the exit IP is not a stand-in for one. Absent
                 → nothing rendered, so the no-detail DOM is byte-identical to before. */}
@@ -1475,7 +1475,7 @@ export function AgentSessionPanel({
         </div>
       )}
       {/* #1 — CALM reconnecting pill during the post-track-drop grace window. The
-          track briefly dropped (A3 idle frame-pump down-clock / encoder restart /
+          track briefly dropped (harness idle frame-pump down-clock / encoder restart /
           short SFU re-negotiation); the last good frame is still visible underneath,
           so we show a small unobtrusive pill — NOT the full-screen launch-failed
           alarm — until either the track re-arrives (cleared) or the grace expires

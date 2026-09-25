@@ -234,7 +234,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       <!-- One-shot recovery-codes reveal. Hidden until /verify (enroll
            flow) or /recovery-codes/regenerate (enrolled flow) returns 10
-           fresh codes. S35 2026-07-07 (fable-frontend-audit): this panel
+           fresh codes. S35 2026-07-07 (frontend audit): this panel
            MUST stay a direct child of the mfa region — it used to live
            inside data-section="mfa-enroll", which setMfaState() hides for
            enrolled users, so regenerated codes (old ones already
@@ -1671,7 +1671,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function startEnrollment() {
-        // S35 2026-07-07 (fable-frontend-audit) — in-flight + shown-QR
+        // S35 2026-07-07 (frontend audit) — in-flight + shown-QR
         // guard. Every unguarded click fired a fresh POST /enroll, and
         // each call mints a NEW pending secret server-side (last write
         // wins), so a double-click with out-of-order responses could
@@ -2017,7 +2017,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 )
                 .join('');
             }
-            // S35 2026-07-07 (fable-frontend-audit) — the panel is a
+            // S35 2026-07-07 (frontend audit) — the panel is a
             // direct child of the mfa region (NOT the enrolled-hidden
             // mfa-enroll subtree), so this reveal is actually visible to
             // an enrolled customer. The old codes are already invalidated

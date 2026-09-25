@@ -24,8 +24,10 @@ import { useState } from 'react';
 import { humanizeError } from '../lib/humanize-error';
 import { writeClipboardText } from '../lib/clipboard';
 import {
+  MOVE_TO_APPLICATIONS_SENTENCE,
   RELEASES_URL,
   UpdateInstallError,
+  UpdateLocationError,
   rawUpdateFailureReason,
   recordUpdateFailure,
   updatePlatformLabel,
@@ -183,8 +185,15 @@ export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Elem
   // value. Read in the lazy initializers rather than in an effect so the failure
   // is on screen in the FIRST paint: a frame of "Update 0.1.52 available ·
   // Install & restart" is the exact claim this seeding exists to stop making.
+  // Where the app runs from cannot take an update at all (a disk image, the
+  // read-only copy macOS runs from Downloads): no failure to show and no
+  // Install to offer — just the one thing that works. See updater.ts.
+  const [locationBlocked, setLocationBlocked] = useState(
+    update.installBlocked !== undefined || update.lastInstallFailure instanceof UpdateLocationError,
+  );
   const seeded =
-    update.lastInstallFailure === undefined
+    update.lastInstallFailure === undefined ||
+    update.lastInstallFailure instanceof UpdateLocationError
       ? null
       : failureState(update.lastInstallFailure, update.version);
   const [phase, setPhase] = useState<'idle' | 'installing' | 'error'>(
@@ -259,6 +268,13 @@ export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Elem
       // reach here. If a platform returns instead of relaunching, the
       // banner simply stays in the (completed) installing state.
     } catch (e) {
+      if (e instanceof UpdateLocationError) {
+        // Not a failed install: nothing was downloaded, and updater.ts has
+        // already logged it once. Say what to do instead.
+        setPhase('idle');
+        setLocationBlocked(true);
+        return;
+      }
       const failure = failureState(e, update.version);
       setPhase('error');
       setStage(failure.stage);
@@ -335,7 +351,12 @@ export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Elem
       }`}
     >
       <div className="min-w-0">
-        {phase === 'error' ? (
+        {locationBlocked ? (
+          <span className="text-ink-secondary" data-testid="update-location-blocked">
+            Update <span className="font-medium text-ink-primary">{update.version}</span> is ready.{' '}
+            {MOVE_TO_APPLICATIONS_SENTENCE}
+          </span>
+        ) : phase === 'error' ? (
           <>
             <span className="text-ink-secondary" data-testid="update-error-headline">
               {stage === 'relaunch' ? (
@@ -425,7 +446,7 @@ export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Elem
           </span>
         ) : (
           <>
-            {update.downloadOnly === true ? (
+            {locationBlocked ? null : update.downloadOnly === true ? (
               // This platform cannot install for itself (kept live for the day a
               // platform is granted check-without-install again). Offering
               // "Install & restart" here would be a button that cannot do what

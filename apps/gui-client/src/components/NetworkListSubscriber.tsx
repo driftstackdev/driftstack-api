@@ -20,7 +20,7 @@ import {
 //
 // ⛔ THE EMPTY STATE USED TO SAY "No requests captured yet", AND THAT WAS NOT
 // HONEST. The word "yet" tells a customer to keep browsing and the requests will
-// arrive. They never will: measured 2026-09-06 by A3, case-insensitively across
+// arrive. They never will: measured 2026-09-06 on the harness, case-insensitively across
 // all of `harness/Sources`, `networkRequests` does not exist in the harness under
 // any spelling, and its outbound frame enum (`ControlClient.swift` `HarnessOutbound`,
 // counted brace-by-brace) is exhaustively NINETEEN types with no request log among
@@ -34,7 +34,7 @@ import {
 // rather than claiming this session had none. When the harness ships the frame,
 // change this string in the same commit that consumes it; a capability flag on
 // capabilityReport would let the pane tell the two apart properly, and that is
-// proposed to A3 rather than guessed at here.
+// proposed to the harness side rather than guessed at here.
 //
 // 2026-09-16 — the surrounding drawer no longer OFFERS this section until the
 // session has actually reported a request (SimulatorWindow visibleSimDrawerPanes),

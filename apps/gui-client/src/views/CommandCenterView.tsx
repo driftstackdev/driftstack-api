@@ -1,6 +1,6 @@
 // Command Center home — the overview the app leads with. Redesigned 2026-06-15
-// (founder: the old version "looks cheap/ugly"), then tightened under ledger
-// row T-18 (founder: the page "looks boring/cluttered", the Plan label overflows
+// (founder: the old version "looks cheap/ugly"), then tightened under
+// item T-18 (founder: the page "looks boring/cluttered", the Plan label overflows
 // its box). The layout now leads with a compact HEADER BAND — greeting eyebrow,
 // the Automate prompt, a one-line status summary built from the live counts, and
 // the two primary actions — with the icon-led KPI strip (the fleet stats that

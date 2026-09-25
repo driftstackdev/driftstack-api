@@ -1,7 +1,7 @@
 # Cloudflare Pages security headers for the admin panel.
 #
-# Audit context: docs/internal/2026-05-20-csp-header-audit.md
-# (TIER 5 security pass per FULL AUTOPILOT directive 2026-05-20).
+# Audit context: the 2026-05-20 CSP header audit (internal notes)
+# (TIER 5 security pass, 2026-05-20).
 #
 # The admin panel is gated behind Cloudflare Access (per V-135) but
 # defense-in-depth still applies: even authenticated staff sessions
@@ -9,7 +9,7 @@
 #
 # CSP is enforced after the family-wide runtime-origin audit. Inline
 # application code remains allowed; remote scripts and unlisted network
-# destinations are blocked. See docs/internal/2026-05-20-csp-header-audit.md.
+# destinations are blocked. See the 2026-05-20 CSP header audit notes.
 
 /_astro/*
   Cache-Control: public, max-age=31536000, immutable

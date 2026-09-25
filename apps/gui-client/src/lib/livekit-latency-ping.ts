@@ -1,6 +1,6 @@
 // LK.6.e — synthetic-ping RTT measurement over the LiveKit
 // DataChannel. The gui-client sends a `ping` InputEvent at
-// LIVEKIT_PING_INTERVAL_MS cadence; Agent 1's harness-side
+// LIVEKIT_PING_INTERVAL_MS cadence; the harness-side
 // RoomDataDispatcher + LatencyCollector echoes it back as a
 // `ping` DataReceived event. gui-client measures the round-trip
 // and exposes it via a React hook.

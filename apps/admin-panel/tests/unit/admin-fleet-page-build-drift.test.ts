@@ -1,6 +1,6 @@
-// The Fleet page's declared-vs-measured build columns (A3 2026-09-19).
+// The Fleet page's declared-vs-measured build columns (2026-09-19).
 //
-// The page has shown `harnessVersion` since W2189. A3 then observed that value
+// The page has shown `harnessVersion` since W2189. The device team then observed that value
 // naming a commit the running binary was not built from, and `webkitForkBuild`
 // naming a checkout 20 commits behind the real build — so what this page rendered
 // with complete confidence was, on at least two occasions, wrong. The measured

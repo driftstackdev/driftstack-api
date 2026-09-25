@@ -27,12 +27,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Fragment } from 'react';
+import { AuthError } from '@driftstack/sdk';
 import { useSettings } from '../../lib/SettingsContext';
 import { useAgentChatSession } from '../../lib/AgentChatProvider';
+import { interruptedTurnReason, type ChatTurn } from '../../lib/use-agent-chat';
+import { SESSION_ACCESS_EXPIRED_NOTICE } from '../../lib/simulator-session-access';
 import type { SessionMode } from '../../lib/agent-session-control';
 import { ApprovalDock, confirmationHost, gatedStepTaps } from '../agent-chat/ApprovalDock';
 import { Composer, growComposerToFit } from '../agent-chat/Composer';
-import { REATTACHING_NOTICE } from '../agent-chat/notices';
 import {
   LiveTurnRow,
   RestoredHistoryDivider,
@@ -41,6 +43,62 @@ import {
   type TurnActions,
 } from '../agent-chat/Turn';
 import { simulatorMissionLine } from './mission-line';
+import {
+  useSimulatorChatAccess,
+  useSimulatorChatCredential,
+  useSimulatorChatKeyRefused,
+} from './simulator-chat-access';
+
+/** Owner item 5 — what the panel says when this window holds no control key for
+ *  its session, IN PLACE of the composer. The composer's own "not connected"
+ *  caption tells the customer to add an API key in Settings, which is wrong
+ *  here twice over: this window never uses the account key, and no key a
+ *  customer could add would reach it. Reopening the profile hands the window a
+ *  fresh key. */
+export const SIMULATOR_CHAT_UNAVAILABLE_NOTICE =
+  "Chat isn't available in this window. Close it and open the profile again.";
+
+/** Owner item 5 — the panel's own typing row while it attaches to the session
+ *  this window shows. Not the AI view's "Reattaching to the previous session":
+ *  nothing here is previous — it is the session on screen. */
+export const SIMULATOR_CHAT_ATTACHING_NOTICE = 'Connecting to this session…';
+
+/** Owner item 5 — the same panel when that attach could not be answered (the
+ *  AI view's "Couldn't reattach to the previous session" is about a reopened
+ *  chat; this is the session on screen). The composer offers Try again. */
+export const SIMULATOR_CHAT_ATTACH_FAILED_NOTICE =
+  'Couldn’t connect to this session — check your connection and try again.';
+
+const SIMULATOR_ATTACH_NOTICES = {
+  pending: SIMULATOR_CHAT_ATTACHING_NOTICE,
+  failed: SIMULATOR_CHAT_ATTACH_FAILED_NOTICE,
+};
+
+/** The same panel when the attach failed because the server refused this
+ *  window's session key: "check your connection" would be a wrong instruction. */
+const SIMULATOR_ATTACH_NOTICES_KEY_REFUSED = {
+  pending: SIMULATOR_CHAT_ATTACHING_NOTICE,
+  failed: SESSION_ACCESS_EXPIRED_NOTICE,
+};
+
+/** What the chat writes on a turn stopped by a refused credential ("Your
+ *  Driftstack API key was rejected. Check it in Settings…"), derived from the
+ *  chat's own mapping so a rewording there cannot silently unhook this. In this
+ *  window the only credential is the session key, so that sentence names the
+ *  wrong key and a place the customer cannot fix it from. */
+const KEY_REJECTED_TURN_REASON = interruptedTurnReason(
+  new AuthError({
+    type: 'https://errors.driftstack.dev/unauthorized',
+    title: 'Unauthorized',
+    status: 401,
+  }),
+);
+
+/** The turn as this window shows it: a refused-key stop says what fixes it. */
+export function simulatorTurn(turn: ChatTurn): ChatTurn {
+  if (turn.interrupted?.reason !== KEY_REJECTED_TURN_REASON) return turn;
+  return { ...turn, interrupted: { ...turn.interrupted, reason: SESSION_ACCESS_EXPIRED_NOTICE } };
+}
 
 const TONE_CLASS: Record<'live' | 'hold' | 'ready' | 'quiet', string> = {
   live: 'ai-chip-live',
@@ -60,8 +118,21 @@ export function SimulatorAgentChat({
   mode: Extract<SessionMode, 'ai' | 'pair'>;
 }): JSX.Element {
   const { chat, captureSrc } = useAgentChatSession();
-  const { settings } = useSettings();
-  const aiReady = settings.apiKey !== null;
+  // ⛔ Owner item 5 — readiness is THIS SESSION's control key, never
+  // `settings.apiKey`. A Simulator window cannot read the account key (the OS
+  // credential store refuses every window but the main one), so gating on it
+  // said "Not connected" to every customer. `client` here is the scoped
+  // control-key client `SimulatorChatSettings` publishes, not the account one.
+  const { settings, client } = useSettings();
+  const access = useSimulatorChatAccess();
+  // Item 5 — the capture thumbnails fetch with the session's control key, from
+  // the same API origin the chat's client uses.
+  const credential = useSimulatorChatCredential();
+  const keyRefused = useSimulatorChatKeyRefused();
+  const captureBaseUrl = credential.baseUrl ?? settings.baseUrl;
+  // 'pending' counts as ready for the composer (the key is a native read away);
+  // a send made in that instant is held, never dropped — see `submit`.
+  const aiReady = access !== 'unavailable';
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [draft, setDraft] = useState('');
   // (l) #8's own held-send caption, mirrored from AgentChatView: the reattach
@@ -76,20 +147,56 @@ export function SimulatorAgentChat({
   // that session is still `active` (adoptionOutcome), and safe to call again
   // on every sessionId change (the standalone Simulator swaps sessionId IN
   // PLACE on a `ds-session` relaunch, without remounting this component).
+  //
+  // Owner item 5 — also re-run when the CLIENT arrives or changes. The control
+  // key is loaded after mount (a native read on macOS), and `adopt` with no
+  // client is a silent no-op, so an effect keyed on `sessionId` alone attached
+  // to nothing and the first send had no session to go to. Deferred one tick:
+  // a client change also runs the hook's own auth-boundary teardown (in the
+  // provider ABOVE this component, whose effects run AFTER this one), and that
+  // teardown bumps the chat's generation — an adopt started in the same commit
+  // would be discarded as stale.
   useEffect(() => {
-    if (sessionId === '') return;
-    chat.adopt(sessionId);
+    // 'ready' is a client in the app; a gallery fixture's chat is 'ready' with
+    // none, and its own `adopt` is what the scene observes.
+    if (sessionId === '' || access !== 'ready') return undefined;
+    const timer = setTimeout(() => chat.adopt(sessionId), 0);
+    return () => clearTimeout(timer);
     // ⚠️ `chat.adopt` deliberately not in the deps array: it is a stable
     // `useCallback` ([] deps in use-agent-chat.ts), so only `sessionId`
-    // should ever re-trigger the reattach. (No eslint-disable: this repo does
-    // not load the react-hooks plugin, and a disable for a rule that is not
-    // configured is itself an error — use-stick-to-bottom.ts's own note.)
-  }, [sessionId]);
+    // and the client should ever re-trigger the reattach. (No eslint-disable:
+    // this repo does not load the react-hooks plugin, and a disable for a rule
+    // that is not configured is itself an error — use-stick-to-bottom.ts's own
+    // note.)
+  }, [sessionId, client, access]);
+
+  // A FRESH key for the same session (reopened from the main window after the
+  // old key was refused) keeps the same client — and so the conversation — but
+  // an attach that failed on the refused key must be tried again with it. An
+  // attached chat is left alone: the new key changes nothing it holds.
+  const adoptKeyRef = useRef(credential.controlKey);
+  useEffect(() => {
+    if (adoptKeyRef.current === credential.controlKey) return;
+    adoptKeyRef.current = credential.controlKey;
+    if (credential.controlKey === null || sessionId === '' || access !== 'ready') return;
+    if (chat.session !== null && chat.adoptError === null) return;
+    setTimeout(() => chat.adopt(sessionId), 0);
+    // ⚠️ Keyed on the key alone, on purpose (see the adopt effect above).
+  }, [credential.controlKey]);
 
   function submit(): void {
     const text = draft.trim();
     if (text.length === 0 || chat.sending || !aiReady) return;
     if (chat.adopting) {
+      setSendHeldByAdopt(true);
+      return;
+    }
+    // Owner item 5 — this panel only ever CONTINUES the session on screen. With
+    // no attached session a send would make the chat start a new one (a second
+    // phone), which the scoped client refuses anyway; attach first and keep the
+    // draft. A key still loading is the same wait.
+    if (access === 'pending' || chat.session === null) {
+      if (client !== null && sessionId !== '') chat.adopt(sessionId);
       setSendHeldByAdopt(true);
       return;
     }
@@ -118,6 +225,7 @@ export function SimulatorAgentChat({
 
   function continueFromHere(): void {
     if (chat.sending || !aiReady || chat.adopting || chat.stoppedTurnStillRunning) return;
+    if (chat.session === null) return;
     void chat.send('continue');
   }
 
@@ -183,12 +291,16 @@ export function SimulatorAgentChat({
           {chat.turns.map((turn, i) => (
             <Fragment key={turn.id}>
               <TurnRow
-                turn={turn}
+                turn={simulatorTurn(turn)}
                 denied={chat.deniedTurnIds.has(turn.id)}
                 approved={chat.approvedTurnIds?.has(turn.id) ?? false}
                 sessionId={chat.session?.id ?? chat.restoredSessionId ?? null}
-                baseUrl={settings.baseUrl}
-                apiKey={settings.apiKey}
+                baseUrl={captureBaseUrl}
+                // ⛔ Owner item 5 — never the account key in this window (it
+                // is unreadable here anyway): screenshots are fetched with
+                // the session's control key.
+                apiKey={null}
+                controlKey={credential.controlKey}
                 captureSrc={captureSrc}
                 first={i === 0}
                 past={i < chat.turns.length - 2}
@@ -212,8 +324,9 @@ export function SimulatorAgentChat({
                 liveStepMs={chat.liveStepMs}
                 liveNotice={chat.liveNotice}
                 sessionId={chat.session?.id ?? null}
-                baseUrl={settings.baseUrl}
-                apiKey={settings.apiKey}
+                baseUrl={captureBaseUrl}
+                apiKey={null}
+                controlKey={credential.controlKey}
                 captureSrc={captureSrc}
               />
             ) : (
@@ -222,7 +335,7 @@ export function SimulatorAgentChat({
               />
             ))}
           {chat.adopting && !chat.sending && chat.adoptError === null && (
-            <TypingRow label={REATTACHING_NOTICE} />
+            <TypingRow label={SIMULATOR_CHAT_ATTACHING_NOTICE} />
           )}
         </ol>
       )}
@@ -253,17 +366,30 @@ export function SimulatorAgentChat({
           "Tell the agent…" box; same placeholder intent (a plain-English
           task), same Send/Stop slot, same optimistic clear-and-rollback
           (`submit` above mirrors AgentChatView's own). */}
-      <Composer
-        chat={chat}
-        draft={draft}
-        onDraftChange={setDraft}
-        onSubmit={submit}
-        composerRef={composerRef}
-        aiReady={aiReady}
-        proxyState={{ kind: 'none' }}
-        sendHeldByAdopt={sendHeldByAdopt}
-        onRetryAdopt={() => chat.adopt(sessionId)}
-      />
+      {access === 'unavailable' ? (
+        <p
+          data-component="simulator-chat-unavailable"
+          role="status"
+          className="text-[11.5px] text-white/70"
+        >
+          {SIMULATOR_CHAT_UNAVAILABLE_NOTICE}
+        </p>
+      ) : (
+        <Composer
+          chat={chat}
+          draft={draft}
+          onDraftChange={setDraft}
+          onSubmit={submit}
+          composerRef={composerRef}
+          aiReady={aiReady}
+          proxyState={{ kind: 'none' }}
+          sendHeldByAdopt={sendHeldByAdopt}
+          onRetryAdopt={() => chat.adopt(sessionId)}
+          attachNotices={
+            keyRefused ? SIMULATOR_ATTACH_NOTICES_KEY_REFUSED : SIMULATOR_ATTACH_NOTICES
+          }
+        />
+      )}
     </div>
   );
 }

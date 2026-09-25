@@ -51,7 +51,7 @@ const ACTION_LABEL: Record<string, string> = {
   'team.updated': 'Team renamed',
   'admin.refund_recorded': 'Refund recorded by support',
   'admin.support_note': 'Support note added',
-  // Arc 4 Wave 2.B sub-slice 8.20 (v2-#8) — pair-mode state-machine
+  // Arc 4 phase 2.B, slice 8.20 (v2-#8) — pair-mode state-machine
   // transitions surfaced on the customer audit log.
   'agent_session.pair_mode.takeover': 'Pair-mode takeover requested',
   'agent_session.pair_mode.handback': 'Pair-mode handback requested',
@@ -144,7 +144,7 @@ const FILTER_OPTIONS = [
   // V-398 — staff-touched events surfaced for transparency.
   { value: 'admin.refund_recorded', label: 'Refund recorded by support' },
   { value: 'admin.support_note', label: 'Support note added' },
-  // Arc 4 Wave 2.B sub-slice 8.20 (v2-#8) — pair-mode state-machine
+  // Arc 4 phase 2.B, slice 8.20 (v2-#8) — pair-mode state-machine
   // transitions. Surfaces every takeover / handback / heartbeat-
   // timeout transition the customer's pair-mode session ran through.
   { value: 'agent_session.pair_mode.takeover', label: 'Pair-mode takeover requested' },

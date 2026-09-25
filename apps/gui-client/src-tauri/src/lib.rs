@@ -321,7 +321,7 @@ pub fn run() {
         // event; dev-mode hot-reloads mask it. Force ONE compositing pass at
         // startup by nudging the window size by 1px and immediately back. Benign
         // no-op if the quirk differs; compiled only on macOS. Highest-confidence /
-        // lowest-risk fix from docs/internal/2026-06-10-gui-release-paint-bug-diagnosis.md
+        // lowest-risk fix from the internal 2026-06-10 release-paint bug diagnosis
         // (#2). Needs the release `.app` observed to confirm it composites.
         .setup(|app| {
             use tauri::Manager;
@@ -430,6 +430,13 @@ pub fn run() {
             // doesn't match we attach nothing and behaviour is unchanged.
             if app.config().identifier == "dev.driftstack.simulator" {
                 if let Some(win) = app.get_webview_window("main") {
+                    // Owner item 3 — the config-created first window moves to where
+                    // the customer last left the phone before its page first sizes
+                    // itself, rather than appearing at the default spot and jumping.
+                    if let Some(p) = remembered_sim_window_placement(app.handle()) {
+                        let _ = win.set_size(tauri::LogicalSize::new(p.width, p.height));
+                        let _ = win.set_position(tauri::LogicalPosition::new(p.x, p.y));
+                    }
                     // Multi-window: quit only when the LAST simulator window closes (not
                     // on `main`'s close), so closing one iPhone doesn't kill the others.
                     attach_quit_when_last_window_closes(app.handle().clone(), &win);
@@ -958,6 +965,154 @@ fn prepare_simulator_payload(
     )
 }
 
+/// Owner item 3 — where a NEW Simulator window opens. The window remembers
+/// where the customer left it (position, size and screen) in its own store file
+/// (`lib/simulator-window-placement.ts` writes it); building the window there
+/// means it does not open at the default spot and jump on its first sizing
+/// pass. Read-only here: the WebView is the only writer.
+const SIM_PLACEMENT_STORE_FILE: &str = "simulator-window.json";
+/// The always-docked side rail beside the phone (`RAIL_W` in SimulatorWindow).
+/// The remembered width is the phone's alone.
+const SIM_RAIL_W: f64 = 48.0;
+/// Room kept below the window on every screen (`SCREEN_EDGE_MARGIN`).
+const SIM_SCREEN_EDGE_MARGIN: f64 = 24.0;
+
+/// A connected screen, as the placement names it: PHYSICAL desktop px.
+#[derive(Debug, Clone, PartialEq)]
+struct SimMonitorRect {
+    name: Option<String>,
+    x: i64,
+    y: i64,
+    width: i64,
+    height: i64,
+    work_x: i64,
+    work_y: i64,
+    work_width: i64,
+    work_height: i64,
+    scale: f64,
+}
+
+/// Where to build the window: LOGICAL position and inner size.
+#[derive(Debug, Clone, PartialEq)]
+struct SimWindowPlacement {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+/// The placement to build a new Simulator window at, from the stored record
+/// and the screens connected now — or None (nothing remembered, a malformed
+/// record, or the remembered screen is not connected). Pure; mirrors
+/// `planPlacementRestore` in lib/simulator-window-placement.ts, including the
+/// clamp that keeps the whole window on that screen's work area.
+fn plan_sim_window_placement(
+    record: &serde_json::Value,
+    monitors: &[SimMonitorRect],
+) -> Option<SimWindowPlacement> {
+    let p = record.get("placement")?;
+    if p.get("v")?.as_i64()? != 1 {
+        return None;
+    }
+    let num = |v: &serde_json::Value, k: &str| v.get(k)?.as_f64().filter(|n| n.is_finite());
+    let (rx, ry, rw, rh) = (
+        num(p, "x")?,
+        num(p, "y")?,
+        num(p, "width")?,
+        num(p, "height")?,
+    );
+    if rw <= 0.0 || rh <= 0.0 {
+        return None;
+    }
+    let m = p.get("monitor")?;
+    let name = match m.get("name") {
+        Some(serde_json::Value::String(s)) => Some(s.clone()),
+        Some(serde_json::Value::Null) => None,
+        _ => return None,
+    };
+    let (mx, my, mw, mh) = (
+        num(m, "x")?.round() as i64,
+        num(m, "y")?.round() as i64,
+        num(m, "width")?.round() as i64,
+        num(m, "height")?.round() as i64,
+    );
+    let monitor = monitors
+        .iter()
+        .find(|c| c.name == name && c.x == mx && c.y == my && c.width == mw && c.height == mh)?;
+    let sf = if monitor.scale > 0.0 {
+        monitor.scale
+    } else {
+        1.0
+    };
+    let avail_height = (monitor.work_height as f64 / sf).round();
+    let height = rh
+        .round()
+        .min(avail_height - SIM_SCREEN_EDGE_MARGIN)
+        .max(1.0);
+    let width = rw.round() + SIM_RAIL_W;
+    let outer_w = (width * sf).round();
+    let outer_h = (height * sf).round();
+    let clamp = |v: f64, lo: f64, hi: f64| v.min(hi).max(lo);
+    let x = clamp(
+        rx.round(),
+        monitor.work_x as f64,
+        (monitor.work_x + monitor.work_width) as f64 - outer_w,
+    );
+    let y = clamp(
+        ry.round(),
+        monitor.work_y as f64,
+        (monitor.work_y + monitor.work_height) as f64 - outer_h,
+    );
+    Some(SimWindowPlacement {
+        x: (x / sf).round(),
+        y: (y / sf).round(),
+        width,
+        height,
+    })
+}
+
+/// The remembered placement for a new Simulator window, read from the store
+/// file the WebView keeps, against the screens connected now. Best-effort:
+/// any failure is "nothing remembered", and the window opens where it always has.
+fn remembered_sim_window_placement(app: &tauri::AppHandle) -> Option<SimWindowPlacement> {
+    use tauri::path::BaseDirectory;
+    use tauri::Manager;
+    let path = app
+        .path()
+        .resolve(SIM_PLACEMENT_STORE_FILE, BaseDirectory::AppData)
+        .ok()?;
+    let record: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+    let monitors: Vec<SimMonitorRect> = app
+        .available_monitors()
+        .ok()?
+        .iter()
+        .map(|m| {
+            let work = m.work_area();
+            SimMonitorRect {
+                name: m.name().cloned(),
+                x: i64::from(m.position().x),
+                y: i64::from(m.position().y),
+                width: i64::from(m.size().width),
+                height: i64::from(m.size().height),
+                work_x: i64::from(work.position.x),
+                work_y: i64::from(work.position.y),
+                work_width: i64::from(work.size.width),
+                work_height: i64::from(work.size.height),
+                scale: m.scale_factor(),
+            }
+        })
+        .collect();
+    plan_sim_window_placement(&record, &monitors)
+}
+
+/// Where a session handoff (`ds-session`: a fresh join token and control-key
+/// generation) is delivered: the ONE window it is for. `emit` reaches every
+/// window's listeners, so with several phones open a relaunch of one session
+/// re-pointed all of them; the WebView listens on its own window to match.
+fn sim_session_handoff_target(window_label: &str) -> tauri::EventTarget {
+    tauri::EventTarget::webview_window(window_label)
+}
+
 /// Multi-window simulator: open a NEW per-session iPhone window for `label`, or focus the
 /// existing one (`main` for the first session, else `sim-<label>`). The b64 query was consumed
 /// from the single-use handoff file and is decoded HERE into the new window's internal URL —
@@ -999,7 +1154,11 @@ fn open_or_focus_sim_window(app: &tauri::AppHandle, label: &str, b64: &str) {
             };
             use tauri::Emitter;
             attach_control_key_cleanup(app.clone(), &win, label, prepared.control_generation);
-            if let Err(error) = win.emit("ds-session", &prepared.sanitized_b64) {
+            if let Err(error) = app.emit_to(
+                sim_session_handoff_target("main"),
+                "ds-session",
+                &prepared.sanitized_b64,
+            ) {
                 let _ = app.state::<SimulatorControlKeyStore>().delete(
                     "main",
                     label,
@@ -1042,7 +1201,11 @@ fn open_or_focus_sim_window(app: &tauri::AppHandle, label: &str, b64: &str) {
         };
         use tauri::Emitter;
         attach_control_key_cleanup(app.clone(), &win, label, prepared.control_generation);
-        if let Err(error) = win.emit("ds-session", &prepared.sanitized_b64) {
+        if let Err(error) = app.emit_to(
+            sim_session_handoff_target(&win_label),
+            "ds-session",
+            &prepared.sanitized_b64,
+        ) {
             let _ = app.state::<SimulatorControlKeyStore>().delete(
                 &win_label,
                 label,
@@ -1074,20 +1237,35 @@ fn open_or_focus_sim_window(app: &tauri::AppHandle, label: &str, b64: &str) {
         .unwrap_or_else(|| "window=simulator".to_string());
     let count = app.webview_windows().len() as f64;
     let off = 30.0 * count;
+    // Owner item 3 — the FIRST phone on screen opens where the customer last
+    // left one; a second keeps the cascade so two phones never stack exactly.
+    let other_phone_open = app
+        .webview_windows()
+        .keys()
+        .any(|l| l == "main" || l.starts_with("sim-"));
+    let placement = if other_phone_open {
+        None
+    } else {
+        remembered_sim_window_placement(app)
+    };
+    let (x, y, width, height) = match &placement {
+        Some(p) => (p.x, p.y, p.width, p.height),
+        None => (120.0 + off, 120.0 + off, 330.0, 718.0),
+    };
     match WebviewWindowBuilder::new(
         app,
         &win_label,
         WebviewUrl::App(format!("index.html?{query}").into()),
     )
     .title("Driftstack Simulator")
-    .inner_size(330.0, 718.0)
+    .inner_size(width, height)
     .min_inner_size(280.0, 560.0)
     .resizable(true)
     .maximizable(false)
     .decorations(false)
     .transparent(true)
     .shadow(false)
-    .position(120.0 + off, 120.0 + off)
+    .position(x, y)
     .build()
     {
         Ok(win) => {
@@ -3968,6 +4146,160 @@ mod tests {
     // simulator status-bar clock renders whatever lands in `timezone`. The
     // parser is pinned on both sides: a real zone comes through under its own
     // key, and nothing else — absent, null, blank, malformed — ever does.
+    // Owner item 3 — a new Simulator window is BUILT where the customer last
+    // left one (the placement the window itself remembers in
+    // simulator-window.json), so it does not open at the cascade spot and jump
+    // on its first sizing pass. Mirrors lib/simulator-window-placement.ts.
+    fn studio_display() -> SimMonitorRect {
+        SimMonitorRect {
+            name: Some("Studio Display".to_string()),
+            x: 2560,
+            y: 0,
+            width: 2560,
+            height: 1440,
+            work_x: 2560,
+            work_y: 0,
+            work_width: 2560,
+            work_height: 1440,
+            scale: 1.0,
+        }
+    }
+
+    fn retina() -> SimMonitorRect {
+        SimMonitorRect {
+            name: Some("Built-in Retina Display".to_string()),
+            x: 0,
+            y: 0,
+            width: 3024,
+            height: 1964,
+            work_x: 0,
+            work_y: 74,
+            work_width: 3024,
+            work_height: 1890,
+            scale: 2.0,
+        }
+    }
+
+    fn remembered(x: f64, y: f64, height: f64, monitor: &SimMonitorRect) -> serde_json::Value {
+        serde_json::json!({
+            "placement": {
+                "v": 1,
+                "x": x,
+                "y": y,
+                "width": 520,
+                "height": height,
+                "monitor": {
+                    "name": monitor.name,
+                    "x": monitor.x,
+                    "y": monitor.y,
+                    "width": monitor.width,
+                    "height": monitor.height,
+                }
+            }
+        })
+    }
+
+    #[test]
+    fn a_new_simulator_window_is_built_where_it_was_left_on_that_screen() {
+        let plan = plan_sim_window_placement(
+            &remembered(3100.0, 140.0, 1150.0, &studio_display()),
+            &[retina(), studio_display()],
+        )
+        .expect("the remembered screen is connected");
+        assert_eq!(
+            plan,
+            SimWindowPlacement {
+                x: 3100.0,
+                y: 140.0,
+                width: 520.0 + 48.0,
+                height: 1150.0
+            }
+        );
+    }
+
+    #[test]
+    fn a_remembered_screen_that_is_not_connected_keeps_the_default_spot() {
+        assert_eq!(
+            plan_sim_window_placement(
+                &remembered(3100.0, 140.0, 1150.0, &studio_display()),
+                &[retina()]
+            ),
+            None
+        );
+        // Same name, different size: not the same screen.
+        let mut resized = studio_display();
+        resized.width = 1920;
+        resized.height = 1080;
+        assert_eq!(
+            plan_sim_window_placement(
+                &remembered(3100.0, 140.0, 1150.0, &studio_display()),
+                &[resized]
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_remembered_spot_hanging_off_its_screen_is_pulled_back_onto_it() {
+        let plan = plan_sim_window_placement(
+            &remembered(5000.0, 900.0, 2000.0, &studio_display()),
+            &[studio_display()],
+        )
+        .expect("connected");
+        // Taller than the work area: brought within it, keeping the edge margin.
+        assert_eq!(plan.height, 1440.0 - 24.0);
+        assert!(plan.x + plan.width <= 2560.0 + 2560.0);
+        assert!(plan.y + plan.height <= 1440.0);
+    }
+
+    #[test]
+    fn on_a_2x_screen_the_physical_record_becomes_a_logical_position() {
+        let plan =
+            plan_sim_window_placement(&remembered(600.0, 200.0, 800.0, &retina()), &[retina()])
+                .expect("connected");
+        // 600 x 200 physical px on a 2x screen, fully on it: 300 x 100 logical.
+        assert_eq!((plan.x, plan.y), (300.0, 100.0));
+        assert_eq!(plan.height, 800.0);
+    }
+
+    #[test]
+    fn a_malformed_or_absent_record_is_nothing_remembered() {
+        for bad in [
+            serde_json::json!({}),
+            serde_json::json!({ "placement": null }),
+            serde_json::json!({ "placement": { "v": 2 } }),
+            serde_json::json!({ "placement": { "v": 1, "x": 1, "y": 1, "width": 0, "height": 700,
+                "monitor": { "name": "Studio Display", "x": 2560, "y": 0, "width": 2560, "height": 1440 } } }),
+            serde_json::json!({ "placement": { "v": 1, "x": "a", "y": 1, "width": 500, "height": 700,
+                "monitor": { "name": "Studio Display", "x": 2560, "y": 0, "width": 2560, "height": 1440 } } }),
+        ] {
+            assert_eq!(
+                plan_sim_window_placement(&bad, &[studio_display()]),
+                None,
+                "{bad}"
+            );
+        }
+    }
+
+    // A relaunch hands the new session details (join token, control-key
+    // generation) to ONE window. `emit` reaches every window's listeners — in a
+    // Simulator app with several phones open that re-pointed all of them.
+    #[test]
+    fn a_session_handoff_is_addressed_to_its_own_window_only() {
+        assert_eq!(
+            sim_session_handoff_target("sim-agt_1"),
+            tauri::EventTarget::WebviewWindow {
+                label: "sim-agt_1".to_string()
+            }
+        );
+        assert_eq!(
+            sim_session_handoff_target("main"),
+            tauri::EventTarget::WebviewWindow {
+                label: "main".to_string()
+            }
+        );
+    }
+
     fn echo_body(json: &str) -> serde_json::Value {
         serde_json::from_str(json).expect("test fixture is valid JSON")
     }

@@ -104,7 +104,7 @@ describe('W599.A /use-cases/multi-account (operators + account teams)', () => {
 
   it('answer stays inside the approved claim register: own-physical-phone persistent profiles + 10-to-200 browser-tabs desktop app (pricing Manual card claims)', () => {
     expect(body).toMatch(/look like its own physical phone/);
-    // S31 2026-07-07 (fable-truth-audit) — 'open at once' conflated the stored-profile cap
+    // S31 2026-07-07 (truth audit) — 'open at once' conflated the stored-profile cap
     // with concurrent sessions (manual tiers cap at 1/3/8 concurrent).
     expect(body).toMatch(/keep 10 to 200\s*logged-in profiles saved and ready/);
     expect(body).not.toMatch(/profiles open at once/);
@@ -129,7 +129,7 @@ describe('W599.A /use-cases/multi-account (operators + account teams)', () => {
     expect(body).toMatch(/\['Architecture \+ sessions', 'Acceptable use'\]\.includes\(g\.title\)/);
   });
 
-  // 2026-09-15 truth pass (product-truth sheets: repo §10.A.5, A1 §2, A3 §3/§4).
+  // 2026-09-15 truth pass (product-truth sheets: repo §10.A.5, fingerprint §2, harness §3/§4).
   it('fingerprint / locale / motion claims are scoped: checked against real iPhones (not a blanket "match millions"), clock + time zone follow the exit (language is not claimed), motion is a per-profile MODE ("can follow"), and the free-tier device entitlement is data-bound from pricing.ts', () => {
     expect(body).toMatch(/checked against real devices, check by check/);
     expect(body).not.toMatch(/'device photos'/);
@@ -283,7 +283,7 @@ describe('W599.A /use-cases/web-scraping (data teams)', () => {
     );
   });
 
-  // 2026-09-15 truth pass (A1 §2: "population-stable" is false as a blanket; repo §10.A.5).
+  // 2026-09-15 truth pass (fingerprint sheet §2: "population-stable" is false as a blanket; repo §10.A.5).
   it('engine + identity claims scoped: a build of Apple\'s own WebKit (never "the browser Apple ships"), checked against real devices signal by signal (never "the real iPhone value on every one of them"), fixed-vs-deliberately-varied answers, clock + time zone (not language) follow the exit, AI agent + webhooks named for the API plans', () => {
     expect(body).toMatch(
       /Every session runs a build of\s*Apple's own WebKit — the engine family behind iPhone Safari/,
@@ -665,7 +665,7 @@ describe('W599.A /glossary (quiet reference page)', () => {
       [...selectableModels].some((d) => /^iPhone (SE|16e|Air)\b/.test(d)),
       'an iPhone SE / 16e / Air row landed — retype the glossary count and drop the gap wording',
     ).toBe(false);
-    // Language/locale following the exit is unverified (A3 sheet); clock + time zone is the homepage claim.
+    // Language/locale following the exit is unverified (harness sheet); clock + time zone is the homepage claim.
     expect(body).not.toMatch(/language and clock|locale and timezone/);
     expect(body).toMatch(/clock and time zone follow the exit/);
     expect(body).toMatch(

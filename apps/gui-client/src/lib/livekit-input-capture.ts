@@ -1,14 +1,14 @@
 // LK.6.d — input capture on the simulator's video element. Translates the
 // user's mouse/trackpad gestures into iPhone-COHERENT TOUCH InputEvents and
-// ships them over the LiveKit DataChannel to Agent-1's Mac-side W3C touch
+// ships them over the LiveKit DataChannel to the harness's Mac-side W3C touch
 // injector (WebDriverManualTouchInjector → genuine pointerType:touch events).
 //
-// WHY touch, not mouse (A3 W198/W1249): a real iPhone NEVER fires mouse
+// WHY touch, not mouse (W198/W1249): a real iPhone NEVER fires mouse
 // events, so emitting mouseMove/mouseDown/mouseUp is (a) a detectable
 // fingerprint tell and (b) dropped by the harness decoder (touch-only). The
 // user drives with a mouse/trackpad locally; we translate to touch on the wire.
 //
-// Gesture → touch mapping (A3 W207/W1249):
+// Gesture → touch mapping (W207/W1249):
 //   - press (mousedown, left button)   → touchStart{x,y,touchId}
 //   - drag  (mousemove while pressed)  → touchMove{x,y,touchId}  (lossy ok; locked
 //     to the gesture's dominant axis like a real iPhone scroll — see projectDrag)
@@ -17,7 +17,7 @@
 //   - wheel / trackpad scroll          → swipe{x1,y1,x2,y2,durationMs}
 //     (scrolling content DOWN = a finger swiping UP, so y decreases)
 //   - keydown / keyup                  → keyDown/keyUp (iPhone Safari fires
-//     these; A3's genuine-WebKit-key injector accepts them). Modifier set
+//     these; the harness's genuine-WebKit-key injector accepts them). Modifier set
 //     captured from event.shiftKey/ctrlKey/altKey/metaKey.
 //
 // Coordinate translation:
@@ -83,13 +83,13 @@ export interface UseInputCaptureOpts {
    * paused until LiveKit reports the ordered buffer low again. */
   onCongestionChange?: (congested: boolean, room: Room) => void;
   /** The live captured-frame logical device-CSS-px dims the Mac touch injector
-   *  addresses (per-archetype, A3 84de32ad4d). The parent computes this from the
+   *  addresses (per-archetype, fork 84de32ad4d). The parent computes this from the
    *  <video> element's FIRST full-res natural size ÷ dpr (= screen_width ×
    *  inner_height per archetype) and threads it here so the coordinate mapping +
    *  the scroll/glide clamps adapt to the dispatched device. Undefined until the
    *  first frame reports → the 402×874 fallback default is used (a harmless
    *  pre-stream value; capture is a no-op until a track arrives anyway). NOT a
-   *  live read of video.videoWidth/Height — that downscales (A3 W2811). */
+   *  live read of video.videoWidth/Height — that downscales (W2811). */
   logical?: { width: number; height: number };
 }
 
@@ -97,7 +97,7 @@ export interface UseInputCaptureOpts {
  *  no live frame has reported its size yet (iphone16pro content-only = 402×714 web
  *  viewport; the historical 402×874 screen is the safe default before metadata).
  *
- *  Per-archetype dispatch (A3 84de32ad4d, fork content-only window sizing on box
+ *  Per-archetype dispatch (84de32ad4d, fork content-only window sizing on box
  *  mac-macstadium-us-001) sizes the captured video PER archetype — the captured
  *  frame == the web content edge-to-edge (NO chrome bands), so the touch injector
  *  addresses that captured-frame logical space (= screen_width × inner_height per
@@ -105,7 +105,7 @@ export interface UseInputCaptureOpts {
  *  dims are threaded through `logical` (on UseInputCaptureOpts + pointerToViewport)
  *  from the <video> element's first-reported natural size ÷ dpr.
  *
- *  A3 W2811 (downscale invariance) still holds: the source of `logical` is the
+ *  W2811 (downscale invariance) still holds: the source of `logical` is the
  *  FIRST full-res metadata (captured once parent-side), NOT a live read of
  *  video.videoWidth/Height — the SFU REMB-downscales the track under bandwidth
  *  pressure (e.g. to ~200×436), so reading it per-event would halve every
@@ -115,7 +115,7 @@ const DEVICE_LOGICAL_WIDTH = 402;
 const DEVICE_LOGICAL_HEIGHT = 874;
 
 /** Map a browser pointer event to the logical device-CSS-px frame the Mac touch
- *  injector expects (per-archetype captured-frame space — A3 84de32ad4d; defaults
+ *  injector expects (per-archetype captured-frame space — fork 84de32ad4d; defaults
  *  to 402×874 until the live frame size is known), object-contain-aware. Returns
  *  null when the element isn't sized yet (race on first mount) or the pointer is in
  *  a letterbox/pillarbox bar (off-surface).
@@ -127,7 +127,7 @@ const DEVICE_LOGICAL_HEIGHT = 874;
  *  NOT read video.videoWidth/Height for the scale: the SFU downscales the track, and
  *  pre-2026-06-23 that made a tap land high-and-left ("above where I tap") whenever
  *  the track was throttled, snapping back when it recovered (founder 2026-06-23;
- *  root-caused A3 W2811). The caller threads `logical` from the FIRST full-res
+ *  root-caused in W2811). The caller threads `logical` from the FIRST full-res
  *  metadata, which is stable across SFU downscale.
  *
  *  Exported (alongside `modifiersFromEvent` and `mouseButton`) so pure-function
@@ -152,7 +152,7 @@ export function pointerToViewport(
     !Number.isFinite(event.clientY)
   )
     return null;
-  // FIXED logical frame, not the (SFU-downscaled) track px — see above + A3 W2811.
+  // FIXED logical frame, not the (SFU-downscaled) track px — see above + W2811.
   const nw = logical.width;
   const nh = logical.height;
   if (!Number.isFinite(nw) || !Number.isFinite(nh) || nw <= 0 || nh <= 0) return null;
@@ -210,7 +210,7 @@ export function mouseButton(raw: number): 0 | 1 | 2 | null {
   return null;
 }
 
-/** Move-deadzone (video-px) for the scroll-vs-tap fix (A3 W2668, founder's
+/** Move-deadzone (video-px) for the scroll-vs-tap fix (W2668, founder's
  *  "sometimes a tap also scrolls"). The GUI streams a click as
  *  touchStart → touchMove* → touchEnd; every sub-slop cursor drift between
  *  mousedown and mouseup fires its OWN touchMove (no debounce). In the fork the
@@ -220,7 +220,7 @@ export function mouseButton(raw: number): 0 | 1 | 2 | null {
  *  jiggle emits no move (touchEnd synthesizes the click), a real drag (>6px)
  *  scrolls exactly as before.
  *
- *  14 video-px (was 6): A3's deep tap-path investigation (wpiyo8v6x, 2026-06-21)
+ *  14 video-px (was 6): a deep harness tap-path investigation (wpiyo8v6x, 2026-06-21)
  *  found the founder STILL hit "tap scrolls" at 6 — a real mouse/trackpad click
  *  easily drifts >6 video-px between down and up, so the move leaked through and
  *  the fork scrolled. There is NO ÷devicePixelRatio here (the video track is the
@@ -248,12 +248,12 @@ const DRAG_HOLD_MS = 140;
 const DRAG_HARD_PX = 44;
 
 /** Tap-landing Y compensation. ZEROED 2026-06-28 — the content-only "(B)" stream
- *  has shipped (A1 fork 84de32ad4d, deployed on mac-macstadium-us-001 with
- *  MULTI_ARCHETYPE_DISPATCH=1; A3 confirmed via the bus 2026-06-27 W2993): in
+ *  has shipped (fork 84de32ad4d, deployed on mac-macstadium-us-001 with
+ *  MULTI_ARCHETYPE_DISPATCH=1; confirmed on the harness 2026-06-27, W2993): in
  *  content-only mode the 92px hidden-bar reserve AND the 32px macOS title band are
  *  DROPPED, so the captured frame is the web content edge-to-edge (screen_width ×
  *  inner_height) and the injector addresses that web-content space (origin:viewport;
- *  A3 confirmed W2976-Q1). There is NO LONGER a title band to compensate for, so the
+ *  confirmed against the harness, W2976-Q1). There is NO LONGER a title band to compensate for, so the
  *  old +32 subtraction now lands every tap ~32px TOO HIGH — directly the founder's
  *  "taps do nothing on gmail" (the tap hits the element 32px above the target).
  *
@@ -262,7 +262,7 @@ const DRAG_HARD_PX = 44;
  *  mapping did not subtract, so the GUI subtracted it here (probe-measured +32, X
  *  exact). The original comment said "set TAP_Y_OFFSET=0 when (B) ships" — (B) has
  *  shipped, so it is now 0. The harness does NOT re-subtract a devY (it injects the
- *  GUI's wire Y verbatim — A3 W2940 box-trace `wire-y=218 (devY 250−32)` showed the
+ *  GUI's wire Y verbatim — the W2940 box-trace `wire-y=218 (devY 250−32)` showed the
  *  injected value == the GUI-sent value), so there is no double-count risk; the GUI
  *  was the sole applier and is now the sole zeroer. Kept as a named constant (not
  *  inlined) so a future archetype that re-introduces a title band can re-set it.
@@ -274,7 +274,7 @@ const devY = (y: number): number => Math.max(0, y - TAP_Y_OFFSET);
  *  fast drag-release the touch keeps GLIDING and decelerates to a stop. ⚠️ DISABLED
  *  2026-06-21 (FLING_ENABLED=false): once it actually fired (the B1 pointerup-race
  *  fix), the founder hit "awful latency, much scrolling AFTER i'm done" — the glide
- *  over-drove the fork's per-move scroll (A3 W2736 warned of this), so a click-drag
+ *  over-drove the fork's per-move scroll (W2736 warned of this), so a click-drag
  *  scroll kept moving after release. A click-drag scroll now stops dead on release
  *  (reliable > over-scroll). The pure computeFlingPath + the cancellable runtime are
  *  kept for a future box-smoked re-enable. Its dormant safety envelope is deliberately
@@ -513,7 +513,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
   // so the matching move/end reuse it. null = no finger down → no move is sent (a real
   // iPhone has no hover/pointer-move without a touch). `startX/startY` (the press
   // point in video-px) + `moved` drive the MOVE_DEADZONE scroll-vs-tap gate: no
-  // touchMove is emitted until the cursor leaves the deadzone (A3 W2668).
+  // touchMove is emitted until the cursor leaves the deadzone (W2668).
   const active = useRef<ActiveGesture | null>(null);
   // The in-flight inertial glide (null = none). Holds the held touchId + current
   // glide position + the step timer so a new press / teardown can halt it cleanly.
@@ -716,7 +716,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // device frame (the live `logical` dims, default 402×874), NOT
     // video.videoWidth/Height — the SFU downscales the track, so clamping to the
     // track px would shrink the usable surface on a throttle (same root cause as
-    // the pointerToViewport fix, A3 W2811). A flick path extends past where the
+    // the pointerToViewport fix, W2811). A flick path extends past where the
     // finger lifted, so this keeps us from sending a wild off-surface touch.
     const clampX = (v: number): number => Math.max(0, Math.min(logical.width, v));
     const clampY = (v: number): number => Math.max(0, Math.min(logical.height, v));
@@ -980,7 +980,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     };
     // Wheel/trackpad scroll → a CONTINUOUS touch drag on ONE virtual finger, NOT a
     // per-event `swipe` (the fork momentum-glides every `swipe` → overlapping glides =
-    // jumpy/overshoot, W2736). The founder scrolls with a MacBook TRACKPAD (A3 W2764):
+    // jumpy/overshoot, W2736). The founder scrolls with a MacBook TRACKPAD (W2764):
     // two-finger scroll fires HIGH-FREQUENCY `wheel` events INCLUDING the OS inertial
     // momentum stream after the fingers lift ("not even moving my finger and it scrolls").
     //
@@ -988,7 +988,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // `ny = w.y - dy` reproduced EVERY spurious opposite-sign frame, so the page bounced
     // back UP mid-scroll (founder's "scrolls me back up", PROVEN by the agt_07aaeccf box
     // trace: one continuous scroll arrived as 9 centre-re-anchored, oscillating gestures).
-    // Instead we accumulate the wheel deltas into ONE monotonic drag (A3 W2768):
+    // Instead we accumulate the wheel deltas into ONE monotonic drag (W2768):
     //   1. rAF-COALESCE: ≤1 touchMove per animation frame; per-frame delta capped at
     //      WHEEL_MAX_FRAME_DELTA, the remainder CARRIES so a fast flick scrolls its FULL
     //      distance smoothly (no per-event ±120 clamp = "big scroll only moves a bit").
@@ -1003,7 +1003,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     //   4. Re-centre at a true edge CARRYING the locked direction (never a fresh-sign
     //      reset), so a long scroll never pins and a re-centre never reverses the scroll.
     //   5. The OS momentum is ALREADY in the wheel stream → the fork must NOT add its own
-    //      touchEnd momentum on THIS path (would double it — A3 keeps Step-B fork momentum
+    //      touchEnd momentum on THIS path (would double it — the harness keeps Step-B fork momentum
     //      to genuine finger-touch only).
     // Content DOWN (deltaY>0) = finger swipes UP (y↓).
     type WheelDrag = { touchId: number; x: number; y: number; hasReliableMove: boolean };
@@ -1118,7 +1118,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         return;
       }
       // Per-archetype captured-frame logical device frame (NOT the SFU-downscaled
-      // track px — A3 W2811).
+      // track px — W2811).
       const vw = logical.width;
       const vh = logical.height;
       const margin = 48;
@@ -1287,7 +1287,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // moves GUI focus INTO an input (Tab / Shift+Tab into the address bar or the
     // "Tell the agent" composer) fires its keyUp while editingLocally() is now
     // true, so re-checking there would forward keyDown but drop keyUp → a stuck
-    // key (or stuck Shift corrupting every later key) on the remote device (Fable
+    // key (or stuck Shift corrupting every later key) on the remote device (the
     // GUI LiveKit re-audit). Always forward the keyUp iff we forwarded its keyDown.
     const forwardedKeys = new Map<string, string>();
     const keyId = (e: KeyboardEvent): string => (e.code !== '' ? e.code : e.key);

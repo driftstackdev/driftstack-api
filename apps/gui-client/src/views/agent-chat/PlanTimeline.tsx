@@ -385,6 +385,7 @@ export function PlanStep({
   sessionId,
   baseUrl,
   apiKey,
+  controlKey,
   captureSrc,
   hoistedCaptureId,
   index = 0,
@@ -403,6 +404,9 @@ export function PlanStep({
   sessionId: string | null;
   baseUrl: string;
   apiKey: string | null;
+  /** The session's control key, for the capture fetch in a window with no
+   *  account key (the Simulator). Undefined in the main window. */
+  controlKey?: string | null;
   /** GALLERY SEAM (spec §8) — undefined in the app; a harness scene passes a
    *  drawn image so a finished step's screenshot renders with no server. */
   captureSrc?: string;
@@ -476,6 +480,7 @@ export function PlanStep({
           <CaptureThumbnail
             baseUrl={baseUrl}
             apiKey={apiKey}
+            controlKey={controlKey}
             sessionId={sessionId}
             captureId={captureId}
             src={captureSrc}
@@ -608,6 +613,7 @@ export function PlanStepList({
   sessionId,
   baseUrl,
   apiKey,
+  controlKey,
   captureSrc,
   hoistedCaptureId,
   settled = true,
@@ -627,6 +633,9 @@ export function PlanStepList({
   sessionId: string | null;
   baseUrl: string;
   apiKey: string | null;
+  /** The session's control key, for the capture fetch in a window with no
+   *  account key (the Simulator). Undefined in the main window. */
+  controlKey?: string | null;
   captureSrc?: string;
   hoistedCaptureId?: string;
   /** A settled plan is set tighter than a live one — there is no running row
@@ -658,6 +667,7 @@ export function PlanStepList({
       sessionId={sessionId}
       baseUrl={baseUrl}
       apiKey={apiKey}
+      controlKey={controlKey}
       captureSrc={captureSrc}
       hoistedCaptureId={hoistedCaptureId}
       // ⛔ The index stays TURN-WIDE across every segment: it is the reveal

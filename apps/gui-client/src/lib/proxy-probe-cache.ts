@@ -685,6 +685,16 @@ export function deriveProbeViewState(
   const serverMeasuredAt: Record<string, number> = {};
   const aged = emptyAgedReadings();
   for (const [id, c] of Object.entries(cache)) {
+    // ⛔ Owner item 9 (2026-09-24) — ONE gate for every Driftstack reading. A
+    // SERVER-SEEDED entry (a proxy this Mac never tested: its readings came from
+    // the account list or the automatic capability check) has no local verdict,
+    // so it has no red "unreachable" pill for a reading to sit beside — which is
+    // why the OS reading below already passed it. The QUIC and UDP readings were
+    // held behind `isProxyUsable` alone, which a seeded placeholder can never
+    // pass, so the same automatic check that measured all three showed "✓ Apple"
+    // beside an untested QUIC and UDP ("has not been measured, but QUIC did").
+    // Freshness is unchanged: each reading still ages by its own rule below.
+    const readingsShowable = isProxyUsable(c.result) || c.serverSeeded === true;
     // (p) — a SERVER-SEEDED entry holds no local verdict and no local check: it
     // keys neither map, so the row reads as untested everywhere (no red pill from
     // a placeholder, no "Tested …" stamp for a check that never ran) while still
@@ -704,7 +714,7 @@ export function deriveProbeViewState(
     // The AGED arm of each reading sits directly under its fresh one and repeats
     // its gate word for word, so the two cannot drift: a reading lands in the
     // fresh map, or (datable, under the cap) in `aged`, or nowhere.
-    if (c.osFingerprint !== undefined && (isProxyUsable(c.result) || c.serverSeeded === true)) {
+    if (c.osFingerprint !== undefined && readingsShowable) {
       if (isOsFingerprintFresh(c.osFingerprint, nowMs)) osFingerprints[id] = c.osFingerprint;
       else if (isAgedReadingShowable(c.osFingerprint.at, nowMs))
         aged.osFingerprints[id] = { value: c.osFingerprint, atMs: c.osFingerprint.at };
@@ -720,7 +730,7 @@ export function deriveProbeViewState(
     // so every consumer ages identically: the Proxies grid, the profile card, and
     // anything added later. Falling out of this map is exactly "never measured",
     // which the chip already renders as the inferred `~`.
-    if (c.quicMeasured !== undefined && isProxyUsable(c.result)) {
+    if (c.quicMeasured !== undefined && readingsShowable) {
       if (isQuicVerdictFresh(c.quicMeasuredAt, nowMs)) quicMeasured[id] = c.quicMeasured;
       else if (c.quicMeasuredAt !== undefined && isAgedReadingShowable(c.quicMeasuredAt, nowMs))
         aged.quicMeasured[id] = { value: c.quicMeasured, atMs: c.quicMeasuredAt };
@@ -734,7 +744,7 @@ export function deriveProbeViewState(
       };
     // The relay verdict is aged like the UDP one below it — see `isQuicProbeFresh`
     // for why it no longer speaks in the present tense for ever.
-    if (c.quicProbe !== undefined && isProxyUsable(c.result)) {
+    if (c.quicProbe !== undefined && readingsShowable) {
       if (isQuicProbeFresh(c.quicProbeAt, nowMs)) quicProbe[id] = c.quicProbe;
       else if (c.quicProbeAt !== undefined && isAgedReadingShowable(c.quicProbeAt, nowMs))
         aged.quicProbe[id] = { value: c.quicProbe, atMs: c.quicProbeAt };
@@ -748,7 +758,7 @@ export function deriveProbeViewState(
     // subsequent check indefinitely while the "Tested" stamp beside it moves. Aged
     // HERE, beside its neighbours, so every consumer ages identically and dropping
     // out of this map means exactly what it already means downstream: not measured.
-    if (c.udpProbe !== undefined && isProxyUsable(c.result)) {
+    if (c.udpProbe !== undefined && readingsShowable) {
       if (isUdpVerdictFresh(c.udpProbeAt, nowMs)) udpProbe[id] = c.udpProbe;
       else if (c.udpProbeAt !== undefined && isAgedReadingShowable(c.udpProbeAt, nowMs))
         aged.udpProbe[id] = { value: c.udpProbe, atMs: c.udpProbeAt };
@@ -2197,8 +2207,17 @@ export function saveObservedQuic(
 ): Promise<ProbeCacheMap> {
   return writeLock(async () => {
     const all = await loadProbeCache();
-    const prior = all[proxyId];
-    if (prior === undefined) return all;
+    // ⛔ Owner item 9 (2026-09-24) — a proxy this Mac holds no entry for (never
+    // tested here: a second Mac, a reinstall, a proxy created by a launch) used to
+    // DROP the live observation, so the Simulator said "HTTP/3 ✓ live" while the
+    // card and the grid said nothing about the same proxy. It lands on the same
+    // fail-closed `serverSeeded` placeholder the account-list adoption invents:
+    // it carries the reading and asserts nothing about reachability.
+    const prior: CachedProbe = all[proxyId] ?? {
+      result: SERVER_SEEDED_PLACEHOLDER_RESULT,
+      at,
+      serverSeeded: true,
+    };
     if (prior.quicMeasuredAt !== undefined && prior.quicMeasuredAt > at) return all;
     // ⛔⛔ (V-219) A LIVE MEASUREMENT RETIRES A RELAY VERDICT IT CONTRADICTS.
     //

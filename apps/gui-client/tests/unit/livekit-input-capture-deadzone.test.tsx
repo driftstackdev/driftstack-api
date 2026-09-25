@@ -393,7 +393,7 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     expect(eventsOfType('touchEnd').length).toBeGreaterThanOrEqual(1);
   });
 
-  // ───── W2768: trackpad wheel→touch = ONE monotonic drag (A3 box-trace agt_07aaeccf) ─────
+  // ───── W2768: trackpad wheel→touch = ONE monotonic drag (box-trace agt_07aaeccf) ─────
   it('MONOTONIC RATCHET: a single opposite-sign wheel frame mid-scroll does NOT bounce the page back up (the founder fix)', () => {
     const video = mountCapture();
     fireWheel(video, 0, 150); // scroll down

@@ -1,4 +1,4 @@
-// SimulatorWindow — the 'stalled' frozen-renderer badge (A3 W2845). When the box
+// SimulatorWindow — the 'stalled' frozen-renderer badge (W2845). When the box
 // reports pageState{state:'stalled'} (the renderer hung — hung JS / compositor
 // deadlock — so the LiveKit pump just repeats the last frame and the stream still
 // looks "live"), the GUI overlays a calm, NON-black "Reconnecting — page
@@ -137,7 +137,7 @@ async function fireUntilRendered(
   });
 }
 
-describe('SimulatorWindow — stalled (frozen-renderer) badge (A3 W2845)', () => {
+describe('SimulatorWindow — stalled (frozen-renderer) badge (W2845)', () => {
   beforeEach(() => {
     fakeRoom.on.mockClear();
     activeDataReceivedHandlers.clear();

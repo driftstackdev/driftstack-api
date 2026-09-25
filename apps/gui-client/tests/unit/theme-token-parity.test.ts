@@ -264,11 +264,14 @@ describe('T2 — the accent AS TEXT (--accent-text-rgb) clears 4.5 on every surf
     expect(t).toEqual([232, 160, 171]);
     expect(contrast(t, darkRaised)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(t, darkBase)).toBeGreaterThanOrEqual(4.5);
-    // The "8/10" badge: bg-accent/20 over the bg-accent-subtle row (alpha .25
-    // in dark) over raised — the surface the darkest raised-only tint (#c47a86,
-    // 4.51 on raised) failed at 3.42. Reverting to the accent itself (2.37 on
+    // The "8/10" badge: bg-accent/[.18] over the bg-accent-subtle row (alpha
+    // .25 in dark) over the sidebar — raised at .55 over base since the
+    // 2026-09-24 port of the owner's sidebar mockup (it was raised at .95, and
+    // the wash /20). The darkest raised-only tint (#c47a86, 4.51 on raised)
+    // failed the old surface at 3.42. Reverting to the accent itself (2.37 on
     // raised) or to that tint reds this arm.
-    const badge = wash(ACCENT, 0.2, wash(ACCENT, 0.25, darkRaised));
+    const sidebar = wash(darkRaised, 0.55, darkBase);
+    const badge = wash(ACCENT, 0.18, wash(ACCENT, 0.25, sidebar));
     expect(contrast(t, badge)).toBeGreaterThanOrEqual(4.5);
     // still oxblood: red channel leads, hue unchanged (r > b > g, as the accent)
     expect(t[0]).toBeGreaterThan(t[2]);
@@ -286,7 +289,14 @@ describe('T2 — the accent AS TEXT (--accent-text-rgb) clears 4.5 on every surf
     for (const s of [lightRaised, lightBase, lightInset]) {
       expect(contrast(t, s)).toBeGreaterThanOrEqual(4.5);
     }
-    const badge = wash(ACCENT, 0.2, wash(ACCENT, 0.12, lightRaised));
+    // The active sidebar badge (see the dark arm): .18 over the .12 row over
+    // raised-at-.55-over-base. At the old /20 wash on this surface the text
+    // measured 4.49 — the text-quality gate caught it — and the mockup's own
+    // .18 is what clears it.
+    const badge = wash(ACCENT, 0.18, wash(ACCENT, 0.12, wash(lightRaised, 0.55, lightBase)));
+    expect(
+      contrast(t, wash(ACCENT, 0.2, wash(ACCENT, 0.12, wash(lightRaised, 0.55, lightBase)))),
+    ).toBeLessThan(4.5);
     expect(contrast(ACCENT, badge), 'the accent itself fails the badge wash').toBeLessThan(4.5);
     expect(contrast(t, badge)).toBeGreaterThanOrEqual(4.5);
     // darkest-necessary: one scale step lighter (148 52 68) already fails there
@@ -381,7 +391,7 @@ describe('T2 sweep — accent on a TEXT leaf wears text-accent-text; fills, glyp
     expect(read('visual-harness/gallery.tsx')).toContain(
       'section-label text-accent-text">Good morning',
     );
-    expect(read('components/Sidebar.tsx')).toContain("'bg-accent/20 text-accent-text'");
+    expect(read('components/Sidebar.tsx')).toContain("'bg-accent/[.18] text-accent-text'");
     expect(read('components/TierBadge.tsx')).toContain(
       "enterprise: 'bg-accent/15 text-accent-text border-accent/30'",
     );

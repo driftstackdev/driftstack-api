@@ -29,7 +29,12 @@
 import { type JSX } from 'react';
 
 import type { AgentSessionCapabilityReport } from '../lib/agent-session-control';
-import { OS_FINGERPRINT_TTL_MS } from '../lib/os-fingerprint-verdict';
+import {
+  OS_FINGERPRINT_TTL_MS,
+  isFingerprintConfidence,
+  isFingerprintedOs,
+  osFingerprintVerdict,
+} from '../lib/os-fingerprint-verdict';
 import { formatRelativeNarrow } from './RelativeTime';
 
 export function OsReadout({
@@ -80,21 +85,68 @@ export function OsReadout({
   // A stamp in the FUTURE (clock skew) reads as current rather than as a
   // negative age — we cannot say it is old, so we do not say anything.
   const aged = ageMs !== null && ageMs >= OS_FINGERPRINT_TTL_MS;
+  // ⛔ Owner item 9 (2026-09-24): "And if it's a Apple, it should be green status,
+  // which we don't always have". This line printed the raw wire value —
+  // `OS: macos-or-ios · high` — in the neutral tint, so the one surface a customer
+  // watches during a session was the one that never showed Apple as the match the
+  // grid, the card and the list all show. It now reads the SAME verdict those
+  // surfaces read (`osFingerprintVerdict`), in the customer's words: an Apple
+  // reading is `OS: ✓ iOS/macOS`, green (the HTTP/3 line's own status-ready, which
+  // this dark drawer scope clears AA with — see QuicReadout), at any age.
+  //
+  // A different OS is red ONLY from a vantage that describes the path a website
+  // sees — the grid's rule, from the same fields: the report now carries how the
+  // reading was taken (`observed_via` and the two vantage flags; an absent flag
+  // reads as false). From any other vantage it stays neutral, naming the OS and
+  // asserting nothing about it.
+  const os = fingerprint.os;
+  const confidence = fingerprint.confidence;
+  const verdict =
+    isFingerprintedOs(os) && isFingerprintConfidence(confidence)
+      ? osFingerprintVerdict({
+          os,
+          confidence,
+          reason: '',
+          ...(fingerprint.observed_via !== undefined
+            ? { observedVia: fingerprint.observed_via }
+            : {}),
+          ...(fingerprint.single_host_vantage === true ? { singleHostVantage: true } : {}),
+          ...(fingerprint.web_port_vantage === true ? { webPortVantage: true } : {}),
+        })
+      : null;
+  const match = verdict?.tone === 'match';
+  const mismatch = verdict?.tone === 'mismatch';
+  // The customer's word for the OS ('iOS/macOS', 'Windows', …), never the wire id.
+  const label = verdict !== null && verdict.label !== 'OS' ? verdict.label : 'unknown';
+  const ageText =
+    aged && measuredAt !== undefined ? ` · ${formatRelativeNarrow(measuredAt, nowMs)}` : '';
   return (
     <div
       data-component="sim-os-readout"
       data-state="observed"
+      data-os-tone={match ? 'match' : mismatch ? 'mismatch' : 'unknown'}
       data-age={ageMs === null ? 'undated' : aged ? 'aged' : 'fresh'}
       title={
         aged && measuredAt !== undefined
           ? `Measured ${new Date(measuredAt).toLocaleString()}, when this proxy was last tested. ` +
+            `${match ? 'It matches the iOS device. ' : ''}` +
             'Press Test on the Proxies screen for a current reading.'
-          : 'The operating system this proxy presents to websites, measured when it was last tested.'
+          : match
+            ? 'This proxy presents as iOS/macOS — it matches the iOS device. Measured when the proxy was last tested.'
+            : mismatch && verdict !== null
+              ? verdict.hint
+              : 'The operating system this proxy presents to websites, measured when it was last tested.'
       }
-      className="mt-1 text-[10px] leading-snug text-white/70"
+      className={`mt-1 text-[10px] leading-snug ${
+        match ? 'text-status-ready' : mismatch ? 'text-status-error' : 'text-white/70'
+      }`}
     >
-      OS: {fingerprint.os} · {fingerprint.confidence}
-      {aged && measuredAt !== undefined ? ` · ${formatRelativeNarrow(measuredAt, nowMs)}` : ''}
+      {match
+        ? `OS: ✓ ${label} · ${fingerprint.confidence}`
+        : mismatch
+          ? `OS: ✗ ${label} · ${fingerprint.confidence}`
+          : `OS: ${label} · ${fingerprint.confidence}`}
+      {ageText}
     </div>
   );
 }

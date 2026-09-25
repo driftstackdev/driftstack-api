@@ -1,4 +1,4 @@
-// SimulatorWindow — the file-download "Downloads" drawer section (A3 W2856 / founder
+// SimulatorWindow — the file-download "Downloads" drawer section (W2856 / founder
 // "control files"). Polls the session's download jail, lists the files, and Save
 // fetches the bytes. Own file (the AgentSessionPanel→room mock pattern) so it doesn't
 // leak into the base suite. Mirrors simulator-window-files.test.tsx.
@@ -80,7 +80,7 @@ function openDrawer(c: HTMLElement): void {
   if (dlRail) fireEvent.click(dlRail);
 }
 
-describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () => {
+describe('SimulatorWindow — file-download Downloads section (W2856)', () => {
   beforeEach(() => {
     listMock.mockReset();
     fetchMock.mockReset();

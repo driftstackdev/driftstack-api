@@ -451,13 +451,14 @@ describe('a front-door reading is not a verdict about the exit', () => {
     expect(v.hint).toContain('Windows');
   });
 
-  it('CRITICAL the GREEN arm is withheld on exactly the same evidence as the red — the symmetry is the fix', () => {
+  // ⛔ OWNER 2026-09-24 (item 9), verbatim: "if it's a Apple, it should be green
+  // status". The symmetry this arm pinned was overruled for the GREEN arm: an
+  // Apple reading is a match from this vantage too, with the vantage's caveat in
+  // its hint. The RED arm keeps the gate (the arm above).
+  it('CRITICAL OWNER 2026-09-24 — the GREEN arm is no longer withheld on this evidence: Apple reads as a match and SAYS what the vantage cannot rule out; the red stays withheld (above)', () => {
     const darwin = osFingerprintVerdict(front({ observedVia: 'exit_ip', os: 'macos-or-ios' }));
-    expect(
-      darwin.tone,
-      'a vantage that cannot support "detectable mismatch" cannot support "matches" either',
-    ).toBe('unknown');
-    expect(darwin.tone).not.toBe('match');
+    expect(darwin.tone).toBe('match');
+    expect(darwin.hint).toMatch(/some websites may reach a different one/);
   });
 
   it('CRITICAL a single-host proxy DOES fire the full verdict, both ways — the feature is withheld, not deleted', () => {
@@ -474,15 +475,16 @@ describe('a front-door reading is not a verdict about the exit', () => {
     expect(osFingerprintVerdict(front({ ...single, os: 'macos-or-ios' })).tone).toBe('match');
   });
 
-  it('CRITICAL a reading with NO stated vantage asserts NOTHING. Absence must fail closed: a legacy cached record, an older server and a tampered response all look identical here, and none of them may promote itself into a confident claim by omission.', () => {
+  it('CRITICAL a reading with NO stated vantage asserts no MISMATCH. Absence must fail closed for the red: a legacy cached record, an older server and a tampered response all look identical here, and none of them may promote itself into a confident claim of detection by omission (Apple is green: owner 2026-09-24).', () => {
     const legacy = front();
     delete (legacy as { observedVia?: unknown }).observedVia;
     expect(osFingerprintVerdict(legacy).tone).toBe('unknown');
     expect(osFingerprintVerdict(legacy).tone).not.toBe('mismatch');
-    // And the same for the flattering direction.
+    // ⛔ OWNER 2026-09-24 — the flattering direction is the one exception: a
+    // legacy Apple reading is still a reading of Apple, and reads green.
     const legacyDarwin = front({ os: 'macos-or-ios' });
     delete (legacyDarwin as { observedVia?: unknown }).observedVia;
-    expect(osFingerprintVerdict(legacyDarwin).tone).not.toBe('match');
+    expect(osFingerprintVerdict(legacyDarwin).tone).toBe('match');
   });
 
   it('a front-door reading the classifier could not identify says so without inventing a stack', () => {

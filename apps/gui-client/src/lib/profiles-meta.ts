@@ -25,7 +25,7 @@ export interface ProfileMeta {
   /** Optional chosen icon (a short emoji); empty string = use the monogram. */
   icon: string;
   /** Optional explicit geolocation override for launches of this profile
-   *  (A3-approved per-session contract 2026-07-01). Absent/undefined = the
+   *  (harness-approved per-session contract 2026-07-01). Absent/undefined = the
    *  default: the remote device's navigator.geolocation derives from the proxy
    *  exit IP (coherent with the session's apparent network location). When set,
    *  it's passed as `geolocation` on session create so the device reports these

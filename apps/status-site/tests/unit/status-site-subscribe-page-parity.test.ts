@@ -52,7 +52,7 @@ describe('W353.B status-site /subscribe parity', () => {
     // Double-opt-in means the server returns 202 on a queued email,
     // not 200. Pin so a future server flip to 200 forces the page
     // copy to update.
-    // Wave 1119 / Slice 1119.3 C1 — the 202 branch now swaps the form
+    // Slice 1119.3 C1 — the 202 branch now swaps the form
     // for a dedicated confirm pane (see status-site-subscribe-page-
     // content-parity.test.ts for the full pane assertions); the
     // "confirmation email" + "Confirmation email sent" strings still

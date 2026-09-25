@@ -134,6 +134,7 @@ import {
 } from '../../src/visual-harness/audit-scenes';
 import { deriveProbeViewState } from '../../src/lib/proxy-probe-cache';
 import { osFingerprintVerdict } from '../../src/lib/os-fingerprint-verdict';
+import { UDP_AND_QUIC_TALLY_LABEL } from '../../src/views/ProxiesView';
 
 afterEach(() => {
   cleanup();
@@ -254,7 +255,10 @@ describe('sceneFromSearch — the only door into a scene, marketing or audit', (
     // mockup) — the drawer's real Agent/Pair conversation panel, one fixture
     // scene per mockup `?state=`: agent-running, agent-approval, agent-done,
     // pair (simulator-scenes.tsx's mission-axis seam).
-    expect(AUDIT_SCENES).toHaveLength(30);
+    // 30 → 31: `audit-signed-out` — the first-run screen under the notice a
+    // customer sees after the server refused the app's key (2026-09-24), so the
+    // gates measure the notice in both themes like every other surface.
+    expect(AUDIT_SCENES).toHaveLength(31);
     for (const name of ALL_SCENES) {
       expect(isAuditScene(name)).toBe(name.startsWith('audit-'));
       const size = sceneSize(name);
@@ -338,8 +342,10 @@ describe('audit-proxies probe fixtures — every reading reaches the view state'
       expect(past[key][AGED], `fresh ${key}`).toBeUndefined();
       expect(past.aged[key][AGED], `aged ${key}`).toMatchObject({ atMs: agedAt });
     }
-    // No vantage on this one: the hedged "?" arm, so the scene holds both.
-    expect(osFingerprintVerdict(past.aged.osFingerprints[AGED]?.value).tone).toBe('unknown');
+    // No vantage on this one. ⛔ OWNER 2026-09-24 (item 9): an Apple reading is a
+    // match from every vantage ("if it's a Apple, it should be green status"), so
+    // this aged Apple reading is the green one now (it was the hedged "?" arm).
+    expect(osFingerprintVerdict(past.aged.osFingerprints[AGED]?.value).tone).toBe('match');
   });
 
   it('⛔ REPORTED, NOT FIXED — at the scene’s own frozen clock row (b) now demonstrates only ONE aged reading, because its fixture is five hours old and three of the four windows are eight', () => {
@@ -574,6 +580,7 @@ const AUDIT_COPY_LITERALS: ReadonlyArray<string> = [
  *  not a host. */
 const AUDIT_NO_HOST_SCENES: ReadonlyArray<string> = [
   'audit-first-run',
+  'audit-signed-out',
   'audit-simulator-connecting',
   'audit-simulator-live',
   'audit-simulator-degraded',
@@ -1018,16 +1025,24 @@ describe('scene shapes — what scripts/marketing-screens.mjs guards at capture'
       ),
     ).toBe(true);
     // Header tallies: derived, and in ProxiesView's terms — a tunnel is healthy
-    // when the fleet brought it up, and the WebRTC + QUIC tally counts only
-    // SOCKS5 rows with a measured UDP associate (never VPN rows).
+    // when the fleet brought it up, and the "UDP + QUIC" tally counts the rows
+    // whose chips read ✓ UDP AND ✓ QUIC (owner item 9, 2026-09-24: it was
+    // "WebRTC + QUIC" over the UDP grant alone, and counted this scene's NL #3 —
+    // whose QUIC is only inferred on its grid card — as carrying QUIC).
     const tally = container.querySelector('[data-component="scene-proxies-tally"]');
     expect(tally?.getAttribute('data-healthy')).toBe(String(MARKETING_PROXY_TALLY.healthy));
     expect(tally?.getAttribute('data-udp')).toBe(String(MARKETING_PROXY_TALLY.udpCapable));
     expect(tally?.textContent).toContain(`${String(MARKETING_PROXY_TALLY.healthy)} healthy`);
     expect(tally?.textContent).toContain(
-      `${String(MARKETING_PROXY_TALLY.udpCapable)} WebRTC + QUIC`,
+      `${String(MARKETING_PROXY_TALLY.udpCapable)} ${UDP_AND_QUIC_TALLY_LABEL}`,
     );
-    expect(MARKETING_PROXY_TALLY).toEqual({ total: 3, healthy: 3, udpCapable: 1 });
+    expect(UDP_AND_QUIC_TALLY_LABEL).toBe('UDP + QUIC');
+    expect(MARKETING_PROXY_TALLY).toEqual({ total: 3, healthy: 3, udpCapable: 0 });
+    expect(proxyTally([{ verdict: 'socks5_ok_udp_quic' }, { verdict: 'socks5_ok_udp' }])).toEqual({
+      total: 2,
+      healthy: 2,
+      udpCapable: 1,
+    });
     expect(proxyTally([{ verdict: 'vpn_up' }, { verdict: 'vpn_up' }])).toEqual({
       total: 2,
       healthy: 2,

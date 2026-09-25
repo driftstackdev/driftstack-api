@@ -1,6 +1,6 @@
 // P-26 (2026-09-05) — a tab switch must leave its latency in the dev-log.
 //
-// The ledger asked A2 for THE NUMBER a tab switch costs against the warm-tabs
+// The open item asked for THE NUMBER a tab switch costs against the warm-tabs
 // box, and the GUI kept none: `switchingTabId` is set on the optimistic switch
 // and cleared on the ack or the target's loaded frame, but nothing durable
 // recorded how long that took or whether the harness claimed a WARM swap. This
@@ -86,7 +86,7 @@ describe('P-26 — a tab switch leaves its latency in the dev-log', () => {
   });
 
   it('the hold expiry records [tab-switch] hold-expired with kind no-ack / no-loaded-frame — a reload-path switch is a number, not an absence', () => {
-    // A3's canary (2026-09-05) hit a switch that never acked within its 45 s wait: the
+    // The harness canary (2026-09-05) hit a switch that never acked within its 45 s wait: the
     // daemon took the cold reload path. The ack instrument writes nothing for that
     // case, so the affordance's own expiry must.
     const begin = body.indexOf('const beginSwitchAffordance = useCallback(');

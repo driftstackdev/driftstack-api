@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { useConnectionStatus } from '../../src/lib/use-connection-status';
 import { ConnectionPill } from '../../src/components/ConnectionPill';
+import { RIDE_OUT_BUDGET_MS, resetApiReachabilityForTests } from '../../src/lib/client';
 
 /**
  * GUI audit #20 — the title-bar pill said "Offline" for ANY non-OK /version
@@ -12,6 +13,8 @@ import { ConnectionPill } from '../../src/components/ConnectionPill';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
+  resetApiReachabilityForTests();
 });
 
 function answer(status: number): void {
@@ -36,12 +39,17 @@ describe('the connection pill when the server answers but is busy', () => {
     },
   );
 
-  it('CONTROL — no answer at all is still offline', async () => {
+  it('CONTROL — no answer at all is still offline once it LASTS (2026-09-24: a restart of a few seconds reads as busy first)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.stubGlobal(
       'fetch',
       vi.fn(() => Promise.reject(new TypeError('Load failed'))),
     );
     const { result } = renderHook(() => useConnectionStatus('https://api.driftstack.dev'));
+    await waitFor(() => expect(result.current.state).toBe('degraded'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RIDE_OUT_BUDGET_MS + 4_000);
+    });
     await waitFor(() => expect(result.current.state).toBe('offline'));
   });
 });

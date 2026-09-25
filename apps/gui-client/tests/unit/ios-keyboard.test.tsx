@@ -990,7 +990,7 @@ describe('IOSKeyboard — width-derived geometry (K3)', () => {
     expect(planKey(narrow, 'q').width / REF_GEOMETRY.keyH).toBeLessThan(0.6);
     // …and the rotated pair is the one that lands ON the scale floor: square-ish
     // keys at a 212px board showing an 874pt page. It is inside the band, and it
-    // is the number to hand A3 if the box ever reports a rotated
+    // is the number to hand the harness if the box ever reports a rotated
     // logicalContentWidth (the floor is a legibility contract — below it the font
     // floors would sink under the text-quality gate).
     const rotated = keyboardPlan({ layer: 'letters', width: 212, device: 874 });

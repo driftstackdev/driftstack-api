@@ -94,6 +94,7 @@ export const TurnRow = memo(function TurnRow({
   sessionId,
   baseUrl,
   apiKey,
+  controlKey,
   captureSrc,
   first = false,
   past = false,
@@ -105,6 +106,9 @@ export const TurnRow = memo(function TurnRow({
   sessionId: string | null;
   baseUrl: string;
   apiKey: string | null;
+  /** The session's control key, for the capture fetch in a window with no
+   *  account key (the Simulator). Undefined in the main window. */
+  controlKey?: string | null;
   /** GALLERY SEAM (spec §8) — undefined in the app; a harness scene passes a
    *  drawn image so a captured screenshot renders with no server behind it. */
   captureSrc?: string;
@@ -133,6 +137,7 @@ export const TurnRow = memo(function TurnRow({
           sessionId={sessionId}
           baseUrl={baseUrl}
           apiKey={apiKey}
+          controlKey={controlKey}
           captureSrc={captureSrc}
           actions={actions}
           // ⛔ §7's two fields are read OFF THE TURN, never threaded in as new
@@ -152,6 +157,7 @@ export const TurnRow = memo(function TurnRow({
           sessionId={sessionId}
           baseUrl={baseUrl}
           apiKey={apiKey}
+          controlKey={controlKey}
           captureSrc={captureSrc}
           actions={actions}
           plan={turn.plan}
@@ -355,6 +361,7 @@ export function LiveTurnRow({
   sessionId,
   baseUrl,
   apiKey,
+  controlKey,
   captureSrc,
 }: {
   livePhase: string | null;
@@ -372,6 +379,9 @@ export function LiveTurnRow({
   sessionId: string | null;
   baseUrl: string;
   apiKey: string | null;
+  /** The session's control key, for the capture fetch in a window with no
+   *  account key (the Simulator). Undefined in the main window. */
+  controlKey?: string | null;
   captureSrc?: string;
 }): JSX.Element {
   // 10 · the tense shift. A step that has just landed replaces the running row,
@@ -464,6 +474,7 @@ export function LiveTurnRow({
             sessionId={sessionId}
             baseUrl={baseUrl}
             apiKey={apiKey}
+            controlKey={controlKey}
             captureSrc={captureSrc}
             settled={false}
             lastRow={livePlan === null || liveSteps.length >= livePlan.labels.length}
@@ -500,6 +511,7 @@ export function InterruptedTurnBody({
   sessionId,
   baseUrl,
   apiKey,
+  controlKey,
   captureSrc,
   actions,
   plan,
@@ -509,6 +521,9 @@ export function InterruptedTurnBody({
   sessionId: string | null;
   baseUrl: string;
   apiKey: string | null;
+  /** The session's control key, for the capture fetch in a window with no
+   *  account key (the Simulator). Undefined in the main window. */
+  controlKey?: string | null;
   captureSrc?: string;
   actions?: TurnActions;
   /** §7, optional — the captions/kinds/re-plans the live turn announced. */
@@ -540,6 +555,7 @@ export function InterruptedTurnBody({
             sessionId={sessionId}
             baseUrl={baseUrl}
             apiKey={apiKey}
+            controlKey={controlKey}
             captureSrc={captureSrc}
             stagger
             planLabels={plan?.labels}
@@ -611,6 +627,7 @@ export function AgentResponseBody({
   sessionId,
   baseUrl,
   apiKey,
+  controlKey,
   captureSrc,
   actions,
   plan,
@@ -622,6 +639,9 @@ export function AgentResponseBody({
   sessionId: string | null;
   baseUrl: string;
   apiKey: string | null;
+  /** The session's control key, for the capture fetch in a window with no
+   *  account key (the Simulator). Undefined in the main window. */
+  controlKey?: string | null;
   captureSrc?: string;
   actions?: TurnActions;
   /** §7, optional — the live plan's captions/kinds/re-plans, kept at settle. */
@@ -639,6 +659,7 @@ export function AgentResponseBody({
           sessionId={sessionId}
           baseUrl={baseUrl}
           apiKey={apiKey}
+          controlKey={controlKey}
           captureSrc={captureSrc}
           actions={actions}
           plan={plan}
@@ -702,6 +723,7 @@ export function AgentResponseBody({
                 sessionId={sessionId}
                 baseUrl={baseUrl}
                 apiKey={apiKey}
+                controlKey={controlKey}
                 captureSrc={captureSrc}
                 stagger
                 planLabels={plan?.labels}
@@ -733,6 +755,7 @@ function PlanExecutedBody({
   sessionId,
   baseUrl,
   apiKey,
+  controlKey,
   captureSrc,
   actions,
   plan,
@@ -744,6 +767,9 @@ function PlanExecutedBody({
   sessionId: string | null;
   baseUrl: string;
   apiKey: string | null;
+  /** The session's control key, for the capture fetch in a window with no
+   *  account key (the Simulator). Undefined in the main window. */
+  controlKey?: string | null;
   captureSrc?: string;
   actions?: TurnActions;
   plan?: TurnPlan;
@@ -800,6 +826,7 @@ function PlanExecutedBody({
           sessionId={sessionId}
           baseUrl={baseUrl}
           apiKey={apiKey}
+          controlKey={controlKey}
           captureSrc={captureSrc}
         />
       )}
@@ -852,6 +879,7 @@ function PlanExecutedBody({
               sessionId={sessionId}
               baseUrl={baseUrl}
               apiKey={apiKey}
+              controlKey={controlKey}
               captureSrc={captureSrc}
               hoistedCaptureId={capture?.id}
               stagger

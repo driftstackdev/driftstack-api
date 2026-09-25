@@ -1,11 +1,11 @@
-// Wave 29-400 §1+§2 telemetry consumer — fork-side WTFLogAlways events
+// Plan 29-400 §1+§2 telemetry consumer — fork-side WTFLogAlways events
 // parser + per-session aggregator. Per Tier-2 verdict 2026-05-19 (Option
 // A locked), the GUI status panel lives in the Tauri shell window
 // chrome and shows "spoofing was/wasn't applied" without injecting any
 // DOM into the rendered page.
 //
-// Source schema: docs/internal/driftstack-telemetry-event-schema-for-
-// gui-panel.md (Agent 1 → Agent 2 handoff). Reads WTFLogAlways stderr
+// Source schema: the internal telemetry event schema for the GUI panel
+// (handed over by the fork side). Reads WTFLogAlways stderr
 // lines from the WebContent process tree, parses each per the documented
 // regexes, and reduces them to a per-session status snapshot the GUI
 // status panel renders.
@@ -19,10 +19,10 @@
  *  segments. Priority = auto-learn-pre-seeded; main = the base atlas. */
 export type AtlasSlot = 'main' | 'priority';
 
-/** Per-context AFP fallback fire site (Wave 29-399 §1). */
+/** Per-context AFP fallback fire site (Plan 29-399 §1). */
 export type AfpContext = 'toDataURL' | 'toBlob' | 'Worker';
 
-/** Per-context probe-signature emission (Wave 29-399 §2). */
+/** Per-context probe-signature emission (Plan 29-399 §2). */
 export type ProbeSigContext = 'toDataURL' | 'toBlob' | 'Worker';
 
 /** Hook identifiers for the per-WebKit-hook fire counters. Mirrors the

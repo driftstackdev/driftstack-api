@@ -52,6 +52,7 @@ import {
   parseH3Observation,
 } from '../../src/lib/session-h3-observation';
 import {
+  deriveProbeViewState,
   loadProbeCache,
   recordLiveH3Observations,
   saveProbeResult,
@@ -255,15 +256,27 @@ describe('recordLiveH3Observations — the hub poll writes the verdict', () => {
     expect((await loadProbeCache())['p1']?.quicMeasuredAt).toBe(TS_MS + 250_000);
   });
 
-  it('a proxy with no cache entry gets nothing invented, and is retried once it has one', async () => {
+  // ⛔ Owner item 9 (2026-09-24) — this arm read "gets nothing invented", and that
+  // was the defect: the Simulator said "HTTP/3 ✓ live" about a session while the
+  // card and the grid said nothing about the very proxy it ran through, because
+  // this Mac had never tested that proxy itself. The observation now lands on the
+  // same fail-closed `serverSeeded` placeholder the account-list adoption invents
+  // — it carries the reading and asserts NOTHING about reachability (no result a
+  // pill can read, no "Tested" stamp) — and a later native test keeps it.
+  it('a proxy with no cache entry gets the reading on a SEEDED entry that asserts nothing about reachability; a later native test keeps it', async () => {
     const b = [{ ...bindings[0]!, currentSessionId: 'agt_retry' }];
     const sessions = [
       { id: 'agt_retry', capability_report: { h3_connection_observed: true, timestamp: TS } },
     ];
-    expect(await recordLiveH3Observations(sessions, b, proxies, NOW)).toEqual([]);
-    expect((await loadProbeCache())['p1']).toBeUndefined();
-    await saveProbeResult('p1', OK, 1);
     expect(await recordLiveH3Observations(sessions, b, proxies, NOW)).toEqual(['p1']);
+    const seededEntry = (await loadProbeCache())['p1'];
+    expect(seededEntry?.serverSeeded).toBe(true);
+    expect(seededEntry?.quicMeasured).toBe('h3');
+    const view = deriveProbeViewState(await loadProbeCache(), NOW);
+    expect(view.testResults['p1']).toBeUndefined();
+    expect(view.testedAt['p1']).toBeUndefined();
+    await saveProbeResult('p1', OK, NOW);
+    expect((await loadProbeCache())['p1']?.quicMeasured).toBe('h3');
   });
 
   it('VACUITY CONTROL — a session with no h3 signal writes nothing', async () => {

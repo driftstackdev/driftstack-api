@@ -172,7 +172,7 @@ export function parseConnectionStats(report: RTCStatsReport): ConnectionStats {
     // (corporate / hotel / VPN networks), and exactly the head-of-line-blocking,
     // worse-than-RDP path this badge exists to surface. Without mapping it, `proto`
     // was 'tls' → failed the udp/tcp guard → transport stayed null → the pill read
-    // 'unknown' and the slow-relay warning never showed. (Fable GUI re-audit.)
+    // 'unknown' and the slow-relay warning never showed. (GUI re-audit.)
     const proto = rawProto === 'tls' ? 'tcp' : rawProto;
     if (proto === 'udp' || proto === 'tcp') out.transport = proto;
   }
@@ -206,7 +206,7 @@ export function parseConnectionStats(report: RTCStatsReport): ConnectionStats {
       // legitimately goes negative early in a relayed SFU stream (RTX /
       // duplicates / reorder counted as "negative loss"). Clamp so the
       // founder-facing diagnostics pill + Copy-diagnostics never show a
-      // nonsensical negative loss % (Fable GUI LiveKit re-audit).
+      // nonsensical negative loss % (GUI LiveKit re-audit).
       out.packetLossPct = Math.max(0, Math.round((lost / (lost + recv)) * 1000) / 10);
     }
   });

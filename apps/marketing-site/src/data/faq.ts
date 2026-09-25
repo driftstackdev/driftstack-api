@@ -164,7 +164,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'What if I cancel?',
-        // S31 2026-07-07 (fable-truth-audit) — the old answer described a
+        // S31 2026-07-07 (truth audit) — the old answer described a
         // suspended-state + 90-day-purge flow that does not exist:
         // Stripe cancellation downgrades the account to the perpetual
         // free tier (services/stripe-webhooks.ts), nothing is deleted,

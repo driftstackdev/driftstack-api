@@ -1,8 +1,8 @@
 // parseWireGuardConfig (2026-06-17) — paste a wg-quick(8) `wg0.conf` and get the
 // structured WireGuard fields back, so the (forthcoming) add-proxy WireGuard
 // editor can auto-fill from a single paste instead of five manual fields. This
-// is the client-side parser the OVPN/WG storage design (docs/internal/
-// 2026-06-17-account-proxies-vpn-storage-design.md §5) calls for — keeping the
+// is the client-side parser the OVPN/WG storage design (internal design
+// notes, 2026-06-17, §5) calls for — keeping the
 // wg0.conf → structured-fields mapping entirely GUI-side so the API/harness
 // schema stays the structured `WireGuardProxyConfig` (packages/api-types egress.ts),
 // no verbatim-blob round-trip.
@@ -56,7 +56,7 @@ export interface ParsedWireGuard {
   endpoint: string;
   allowed_ips: string;
   /** [Interface] Address (e.g. 10.7.0.2/32) — the userspace WG ifconfig needs
-   *  it; the harness dispatch parses it (A3 W2109). Required for a usable WG. */
+   *  it; the harness dispatch parses it (W2109). Required for a usable WG. */
   address: string;
   dns?: string;
   /** [Peer] PresharedKey — the optional symmetric key layered onto the

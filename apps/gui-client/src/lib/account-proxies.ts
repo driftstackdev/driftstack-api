@@ -9,18 +9,14 @@
 // widening for a GUI feature. The local Tauri proxy store stays as the OFFLINE
 // cache; ProfilesView/ProxiesView reconcile (server wins on a successful load).
 
-import {
-  FREE_DESKTOP_ROUTE_DENIED_DETAIL,
-  TIER_FEATURES,
-  type AccountTier,
-} from '@driftstack/api-types';
+import { FREE_DESKTOP_ROUTE_DENIED_DETAIL } from '@driftstack/api-types';
 import { disposeResponseBody } from './dispose-response-body';
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { readBoundedApiJson } from './read-bounded-json';
 import {
   isFingerprintConfidence,
   isFingerprintedOs,
-  isOsFingerprintUnavailable,
+  cleanOsFingerprintUnavailable,
   unavailableOsFingerprint,
   type OsFingerprint,
   type OsFingerprintUnavailable,
@@ -28,33 +24,7 @@ import {
 import { cleanWireProxyVantage, type ProxyVantage } from './proxy-vantage';
 import { FREE_PLAN_FLEET_TEST_SENTENCE } from './proxy-check-copy';
 
-/**
- * Whether this account's plan carries no VPN egress — so no check of a VPN row
- * can run, and no VPN credential may be uploaded to be refused.
- *
- * ⛔ (2026-09-17 review) IT READS THE FEATURE, NOT THE TIER NAME. This shipped as
- * `accountMe?.tier === 'free'` in ProxiesView, which re-derives by hand a matrix
- * the repo already publishes and the server itself enforces from
- * (`requireTierFeature(tier, 'vpnEgress')`). `free` is merely the only tier whose
- * `vpnEgress` is false TODAY — and the failure mode of guessing is the expensive
- * direction: a future tier without VPN egress would silently upload the
- * customer's OpenVPN config or WireGuard private key to be refused on arrival.
- * This is the same defect the display-window work was written to remove — a
- * hand-typed value that cannot follow the number it depends on.
- *
- * ⚠️ AN UNKNOWN OR ABSENT TIER IS NOT EXCLUDED. `null` is "still loading, or no
- * API key", and a tier this build has never heard of is a NEWER server: refusing
- * on either would quietly stop checking VPN rows for a paying customer during
- * every /me round trip, and the server's own refusal is the honest backstop.
- * Optional chaining, not `!== null`: a view double (and every suite that
- * hand-mocks the settings context) hands over an object with no `tier` key at
- * all, and `undefined !== null` is TRUE.
- */
-export function planExcludesVpnEgress(account: { tier?: AccountTier | null } | null): boolean {
-  const tier = account?.tier;
-  if (tier === undefined || tier === null) return false;
-  return TIER_FEATURES[tier]?.vpnEgress === false;
-}
+export { planExcludesFleetTest, planExcludesVpnEgress } from './plan-features';
 
 export type AccountProxyScheme = 'socks5' | 'http' | 'openvpn' | 'wireguard';
 
@@ -643,6 +613,7 @@ export type AccountProxyTestNotRun =
   | 'node_busy'
   | 'node_error'
   | 'no_node'
+  | 'config_unresolvable'
   | 'plan_excluded'
   | 'desktop_credential';
 
@@ -655,9 +626,25 @@ export function cleanTestNotRun(
   // (h) `no_node` — no fleet Mac was free to bring a VPN tunnel up, and the
   // control plane cannot measure a tunnel itself (it never falls back to a
   // TCP connect for a VPN row). Not a verdict; the row is "not tested".
-  return raw === 'live_session' || raw === 'node_busy' || raw === 'node_error' || raw === 'no_node'
-    ? raw
-    : undefined;
+  if (raw === 'live_session' || raw === 'node_busy' || raw === 'node_error' || raw === 'no_node')
+    return raw;
+  // ⛔ Owner item 9 (2026-09-24) — the server PUBLISHES this field in customer
+  // words since 2026-09-21 (customer-safe-proxy-test-vocabulary.ts): `node_busy`,
+  // `node_error` and `no_node` all go out as `check_unavailable`, and
+  // `unresolvable` as `config_unresolvable`. This function admitted only the
+  // internal words, so every one of those replies lost its `not_run`, read as a
+  // FAILED proxy, and `saveFleetFailure` dropped the row's OS / QUIC / UDP
+  // readings — during the automatic capability check, for a check that never ran.
+  // `check_unavailable` is the server's merged word for the three places OUR side
+  // fell short; `no_node`'s handling (a notice, "try again shortly", the QUIC chip
+  // naming the busy check) is exactly that meaning, so it lands there.
+  if (raw === 'check_unavailable') return 'no_node';
+  // The row's stored configuration could not be turned into anything to dial —
+  // nothing ran. Its own member: the sentence names the configuration, never a
+  // busy check. (`unresolvable` is the internal word a server between the V4
+  // follow-up and the rename sent.)
+  if (raw === 'config_unresolvable' || raw === 'unresolvable') return 'config_unresolvable';
+  return undefined;
 }
 
 /** The fleet-observed exit on a /test reply. Field names match the wire. */
@@ -927,9 +914,9 @@ export async function testAccountProxy(
     // (o) O3 — a reported cause is kept only when it is IN the closed set; a value
     // from a newer server is dropped, and the row then reads as today's plain "not
     // measured" rather than under a cause this build cannot state truthfully.
-    const fpUnavailable = isOsFingerprintUnavailable(body.os_fingerprint_unavailable)
-      ? body.os_fingerprint_unavailable
-      : undefined;
+    // Owner item 9 — the published words (`not_captured`, …) map back to the cause
+    // too; only a word this build cannot state is dropped.
+    const fpUnavailable = cleanOsFingerprintUnavailable(body.os_fingerprint_unavailable);
     // ⛔ A real reading always wins: a server that sent BOTH measured something, and the
     // measurement is the answer. The placeholder is minted ONLY in the absence branch.
     const measured = cleanWireFingerprint(body.os_fingerprint);
@@ -1018,7 +1005,7 @@ export async function testAccountProxy(
     // documented case); on any other failure an exit_observed is not a claim
     // this reply can make, and it is dropped. Malformed → dropped, never thrown.
     const refusedExit =
-      notRun === 'live_session' || notRun === 'no_node'
+      notRun === 'live_session' || notRun === 'no_node' || notRun === 'config_unresolvable'
         ? cleanExitObserved(body.exit_observed)
         : undefined;
     return {

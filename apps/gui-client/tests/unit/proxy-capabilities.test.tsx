@@ -54,7 +54,7 @@ describe('proxyCapabilities()', () => {
 describe('<ProxyCapabilityChips>', () => {
   it('renders a labelled chip per protocol with the ok state in data-ok', () => {
     const { container } = render(<ProxyCapabilityChips result={probe({ udp_associate: false })} />);
-    expect(screen.getByText('WebRTC')).toBeTruthy();
+    expect(screen.getByText('UDP')).toBeTruthy();
     expect(screen.getByText('QUIC')).toBeTruthy();
     expect(screen.getByText('HTTP/2')).toBeTruthy();
     const webrtc = container.querySelector('[data-capability="webrtc"]');

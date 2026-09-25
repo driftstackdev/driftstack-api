@@ -6,7 +6,7 @@
 // activation record. Everything the instruments need — when the switch began,
 // how many attempts it took, whether any ack was ever seen — lived on that
 // record, so the switches worth measuring were exactly the ones that left
-// nothing behind. A3's fleet-box canary acked at 102,431 ms and the dev-log has
+// nothing behind. The harness's fleet-box canary acked at 102,431 ms and the dev-log has
 // no line for it.
 //
 // A tombstone keeps that handful of fields after the record is gone. It is

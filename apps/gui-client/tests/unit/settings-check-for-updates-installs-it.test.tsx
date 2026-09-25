@@ -112,6 +112,8 @@ vi.mock('../../src/lib/SettingsContext', () => ({
 const install = vi.fn(() => Promise.resolve());
 let available: unknown = null;
 vi.mock('../../src/lib/updater', () => ({
+  MOVE_TO_APPLICATIONS_SENTENCE:
+    'Move Driftstack to your Applications folder, then open it again to update.',
   checkForUpdate: () => Promise.resolve(available),
   // #6 — Settings now calls the VERBOSE variant; mirror it so `available` still drives
   // the found/none case (a real result carries the same install()-bearing update).
@@ -229,5 +231,41 @@ describe('Settings offers to install the update it just found (N-8)', () => {
     fireEvent.click(b);
     await waitFor(() => expect(statusText()).toContain("Couldn't install"));
     expect(installBtn()?.textContent).toContain('Retry');
+  });
+
+  it('2026-09-24 — running from a disk image or the read-only copy macOS makes: no Install, just what to do', async () => {
+    available = {
+      version: '0.1.13',
+      currentVersion: '0.1.12',
+      notes: null,
+      install,
+      installBlocked: 'translocated',
+    };
+    renderWithToasts();
+    fireEvent.click(checkBtn());
+    await waitFor(() =>
+      expect(statusText()).toContain(
+        'Move Driftstack to your Applications folder, then open it again to update.',
+      ),
+    );
+    expect(installBtn()).toBeNull();
+    expect(install).not.toHaveBeenCalled();
+  });
+
+  it('2026-09-24 — an install that meets a read-only folder says what to do, not "Couldn\'t install"', async () => {
+    const located = new Error(
+      'Move Driftstack to your Applications folder, then open it again to update.',
+    );
+    located.name = 'UpdateLocationError';
+    install.mockImplementation(() => Promise.reject(located));
+    renderWithToasts();
+    fireEvent.click(checkBtn());
+    await waitFor(() => expect(installBtn()).not.toBeNull());
+    fireEvent.click(installBtn() as HTMLElement);
+    await waitFor(() =>
+      expect(statusText()).toContain('Move Driftstack to your Applications folder'),
+    );
+    expect(statusText()).not.toContain("Couldn't install");
+    expect(installBtn()).toBeNull();
   });
 });

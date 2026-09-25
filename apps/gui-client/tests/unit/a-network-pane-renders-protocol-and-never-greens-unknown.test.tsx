@@ -10,7 +10,7 @@
 // (emerald) color class; h1/h2/unknown carry non-green classes. The pane also
 // The pane's empty state is pinned too, and its copy CHANGED 2026-09-06 for cause:
 // it used to say "No requests captured yet", which this file called honest. It was
-// not. A3 measured, case-insensitively across all of `harness/Sources`, that no
+// not. It was measured, case-insensitively across all of `harness/Sources`, that no
 // `networkRequests` frame exists under any spelling — the outbound enum is
 // exhaustively NINETEEN types with no request log among them. So "yet" told the
 // customer to keep browsing for data that no device will ever send, and the owner

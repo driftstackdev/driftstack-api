@@ -25,9 +25,9 @@
       "scene": "profiles-grid-hero",
       "png": "profiles-grid-hero.png",
       "webp": "profiles-grid-hero.webp",
-      "width": 2064,
+      "width": 2080,
       "height": 1010,
-      "cssWidth": 1032,
+      "cssWidth": 1040,
       "cssHeight": 505
     },
     {
@@ -88,9 +88,9 @@
       "scene": "ai-running-hero",
       "png": "ai-running-hero.png",
       "webp": "ai-running-hero.webp",
-      "width": 1768,
+      "width": 1784,
       "height": 1448,
-      "cssWidth": 884,
+      "cssWidth": 892,
       "cssHeight": 724
     }
   ]

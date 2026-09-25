@@ -14,7 +14,14 @@
 // dense ops tool, not a marketing surface; the glanceable density here
 // is functional, not a stylistic borrow.
 
-import { useEffect, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { useSettings } from '../lib/SettingsContext';
 import { useRecordings } from '../lib/recordings';
 import { isCloudBaseUrl } from '../lib/telemetry';
@@ -46,6 +53,36 @@ interface SidebarProps {
    *  anywhere a palette isn't wired (audit #42 — teaches the shortcut + gives
    *  mouse users a click path to the otherwise-hidden palette). */
   onOpenPalette?: () => void;
+}
+
+/**
+ * The narrow tier of the redesign's sidebar (redesign round 1, 2026-09-21): in
+ * a window 1060px wide or less it becomes a 56px icon rail. MEASURED on the
+ * sidebar's own row with one ResizeObserver, not queried — the AI view's
+ * reasoning (`views/agent-chat/use-view-width.ts`): `container-type` would make
+ * the row a containing block for every `position: fixed` dialog below it, and
+ * the harness renders the app in a fixed stage, not a window.
+ */
+export const SIDEBAR_RAIL_MAX_PX = 1060;
+
+/** A row width of 0 is "not laid out yet" (and jsdom's only answer), never the
+ *  narrowest window: an unmeasured sidebar keeps the full layout. */
+export function sidebarIsRail(rowWidth: number): boolean {
+  return rowWidth > 0 && rowWidth <= SIDEBAR_RAIL_MAX_PX;
+}
+
+function useRailTier(ref: RefObject<HTMLElement>): boolean {
+  const [rail, setRail] = useState(false);
+  useLayoutEffect(() => {
+    const row = ref.current?.parentElement;
+    if (row === null || row === undefined || typeof ResizeObserver === 'undefined') return;
+    const measure = (): void => setRail(sidebarIsRail(row.clientWidth));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [ref]);
+  return rail;
 }
 
 export function Sidebar({
@@ -122,32 +159,56 @@ export function Sidebar({
   const showTeam = teamCount > 0 || teamCapableTier;
   const planLabel = accountMe?.tier != null ? tierLabelFor(accountMe.tier) : null;
   const recordingsCount = recordings.size;
+  const asideRef = useRef<HTMLElement>(null);
+  const rail = useRailTier(asideRef);
+  const workspaceName =
+    activeWorkspace === null
+      ? 'Personal'
+      : (() => {
+          const team = (accountMe?.teams ?? []).find((t) => t.owner_account_id === activeWorkspace);
+          return team === undefined ? 'Team' : teamWorkspaceLabel(team);
+        })();
 
   return (
     <aside
-      className="flex w-56 flex-col border-r border-surface-divider
-                 bg-surface-raised/95 backdrop-blur-sm"
+      ref={asideRef}
+      data-sidebar-tier={rail ? 'rail' : 'full'}
+      className={
+        'flex shrink-0 flex-col overflow-hidden border-r border-surface-divider bg-surface-raised/55 py-3 ' +
+        (rail ? 'w-[60px] items-center px-2' : 'w-[216px] px-2.5')
+      }
     >
       {onOpenPalette !== undefined && (
         <button
           type="button"
+          data-tauri-no-drag
           onClick={onOpenPalette}
-          className="mx-2 mt-2 flex items-center justify-between rounded-md border border-surface-divider bg-surface-inset px-2.5 py-1.5 text-xs text-ink-secondary transition-colors hover:bg-surface-divider hover:text-ink-primary"
+          title={rail ? 'Search (⌘K)' : undefined}
+          className={
+            'mb-3.5 flex h-[30px] shrink-0 items-center gap-2 rounded-[7px] bg-surface-inset text-xs text-ink-muted shadow-[inset_0_0_0_1px_rgb(var(--surface-divider-rgb)/0.7)] transition-colors hover:text-ink-primary ' +
+            (rail ? 'w-[34px] justify-center' : 'w-full px-[9px]')
+          }
         >
-          <span className="flex items-center gap-2">
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">
             <IconSearch />
-            Search…
           </span>
-          <span className="font-mono text-2xs text-ink-muted">⌘K</span>
+          <span className={rail ? 'sr-only' : undefined}>Search…</span>
+          {!rail && <span className="ml-auto font-mono text-[10px]">⌘K</span>}
         </button>
       )}
-      {/* Scroll the nav sections when the window is short so the mt-auto
-          account footer below stays pinned. min-h-0 is load-bearing: without
-          it this flex child keeps min-height:auto and refuses to shrink,
-          pushing the footer off-screen instead of letting the nav scroll. */}
-      <nav aria-label="Primary" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <SidebarSection label="Home">
+      {/* Scroll the nav sections when the window is short so the account
+          footer below stays pinned. min-h-0 is load-bearing: without it this
+          flex child keeps min-height:auto and refuses to shrink, pushing the
+          footer off-screen instead of letting the nav scroll. */}
+      <nav
+        aria-label="Primary"
+        className={
+          'flex min-h-0 flex-1 flex-col overflow-y-auto ' + (rail ? 'w-full items-center' : '')
+        }
+      >
+        <SidebarSection label="Home" rail={rail}>
           <SidebarItem
+            rail={rail}
             icon={<IconHome />}
             active={current === 'home'}
             onClick={() => onNavigate('home')}
@@ -159,8 +220,9 @@ export function Sidebar({
         {/* 2026-06-15 — founder reversed the earlier "Automate above Browse"
           call: Profiles is the core surface, so Browse sits directly under
           Home and Automate moves below it. */}
-        <SidebarSection label="Browse">
+        <SidebarSection label="Browse" rail={rail}>
           <SidebarItem
+            rail={rail}
             icon={<IconLayers />}
             active={current === 'profiles'}
             onClick={() => onNavigate('profiles')}
@@ -169,6 +231,7 @@ export function Sidebar({
             Profiles
           </SidebarItem>
           <SidebarItem
+            rail={rail}
             icon={<IconGlobe />}
             active={current === 'proxies'}
             onClick={() => onNavigate('proxies')}
@@ -178,8 +241,9 @@ export function Sidebar({
           </SidebarItem>
         </SidebarSection>
 
-        <SidebarSection label="Automate">
+        <SidebarSection label="Automate" rail={rail}>
           <SidebarItem
+            rail={rail}
             icon={<IconSparkle />}
             active={current === 'ai'}
             onClick={() => onNavigate('ai')}
@@ -187,6 +251,7 @@ export function Sidebar({
             AI Browser Automation
           </SidebarItem>
           <SidebarItem
+            rail={rail}
             icon={<IconBook />}
             active={current === 'recipes'}
             onClick={() => onNavigate('recipes')}
@@ -195,8 +260,9 @@ export function Sidebar({
           </SidebarItem>
         </SidebarSection>
 
-        <SidebarSection label="History">
+        <SidebarSection label="History" rail={rail}>
           <SidebarItem
+            rail={rail}
             icon={<IconList />}
             active={current === 'sessions-history'}
             onClick={() => onNavigate('sessions-history')}
@@ -204,6 +270,7 @@ export function Sidebar({
             Session log
           </SidebarItem>
           <SidebarItem
+            rail={rail}
             icon={<IconFilm />}
             active={current === 'recordings'}
             onClick={() => onNavigate('recordings')}
@@ -218,8 +285,9 @@ export function Sidebar({
           only showed captured console output + errors. The floating DevLogPanel
           still exposes it for dev triage. 2026-06-19. */}
         {!isCloudBaseUrl(settings.baseUrl) && (
-          <SidebarSection label="Self-hosted">
+          <SidebarSection label="Self-hosted" rail={rail}>
             <SidebarItem
+              rail={rail}
               icon={<IconServer />}
               active={current === 'fleet'}
               onClick={() => onNavigate('fleet')}
@@ -229,9 +297,10 @@ export function Sidebar({
           </SidebarSection>
         )}
 
-        <SidebarSection label="Account">
+        <SidebarSection label="Account" rail={rail}>
           {showTeam && (
             <SidebarItem
+              rail={rail}
               icon={<IconUsers />}
               badge={teamCount > 0 ? String(teamCount) : null}
               active={current === 'team'}
@@ -243,6 +312,7 @@ export function Sidebar({
           {/* Billing is the revenue / upgrade path — always on, no
               cloud/tier gate (a self-hosted customer pays + tops up too). */}
           <SidebarItem
+            rail={rail}
             icon={<IconBilling />}
             active={current === 'billing'}
             onClick={() => onNavigate('billing')}
@@ -250,6 +320,7 @@ export function Sidebar({
             Billing
           </SidebarItem>
           <SidebarItem
+            rail={rail}
             icon={<IconCog />}
             active={current === 'settings'}
             onClick={() => onNavigate('settings')}
@@ -260,31 +331,65 @@ export function Sidebar({
       </nav>
 
       {signedIn && (
-        <div className="mt-auto flex flex-col gap-2 border-t border-surface-divider px-3 py-3">
-          {/* Account: email + plan (no raw API key / base URL — kept friendly). */}
-          <div className="flex items-center gap-2 px-1">
-            <TierDot tier={accountMe?.tier ?? null} />
-            <div className="flex min-w-0 flex-col">
-              <span className="truncate text-xs text-ink-secondary">{accountMe?.email ?? '—'}</span>
-              {planLabel !== null && (
-                <span className="text-2xs text-ink-muted">{planLabel} plan</span>
-              )}
-            </div>
-          </div>
+        <div
+          className={
+            'mt-auto flex shrink-0 flex-col border-t border-surface-divider/80 ' +
+            (rail
+              ? 'w-full items-center gap-1.5 pt-2.5'
+              : 'gap-2 pt-2.5 text-[11.5px] text-ink-muted')
+          }
+        >
+          {!rail && (
+            <>
+              {/* Account: email + plan (no raw API key / base URL — kept friendly). */}
+              <div className="flex min-w-0 flex-col">
+                <span
+                  className="truncate text-xs font-semibold text-ink-primary"
+                  title={accountMe?.email ?? undefined}
+                >
+                  {accountMe?.email ?? '—'}
+                </span>
+                {planLabel !== null && <span>{planLabel} plan</span>}
+              </div>
+            </>
+          )}
           {/* Workspace switcher — only for members of >=1 team. Switching sets
               the SDK effectiveAccount (SettingsContext.activeWorkspace), which
               re-scopes every read/write to that team's workspace; Personal =
               null. account.me() ignores the effective-account header, so this
-              list (the caller's own memberships) stays stable across switches. */}
+              list (the caller's own memberships) stays stable across switches.
+              In the rail it is the same native select laid over a team icon:
+              the menu it opens still names every workspace in full. */}
           {accountMe !== null && (accountMe.teams?.length ?? 0) > 0 && (
-            <label className="flex flex-col gap-1 px-1">
-              <span className="text-2xs text-ink-muted">Workspace</span>
+            <label
+              className={
+                rail
+                  ? 'relative flex h-8 w-11 cursor-pointer items-center justify-center rounded-[7px] text-ink-secondary hover:bg-surface-elevated'
+                  : 'flex flex-col gap-1'
+              }
+              title={rail ? `Workspace: ${workspaceName}` : undefined}
+            >
+              {rail ? (
+                <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
+                  <IconUsers />
+                </span>
+              ) : (
+                <span className="text-2xs text-ink-muted">Workspace</span>
+              )}
               <select
                 data-tauri-no-drag
                 aria-label="Active workspace"
                 value={activeWorkspace ?? ''}
                 onChange={(e) => setActiveWorkspace(e.target.value === '' ? null : e.target.value)}
-                className="rounded border border-surface-divider bg-surface-inset px-1.5 py-1 text-xs text-ink-secondary"
+                // In the rail the select is the click target and its text is
+                // deliberately invisible (the icon is what shows); the
+                // contrast gate is told so rather than measuring a 1:1 run.
+                {...(rail ? { 'data-contrast-decorative': 'true' } : {})}
+                className={
+                  rail
+                    ? 'absolute inset-0 cursor-pointer opacity-0'
+                    : 'rounded border border-surface-divider bg-surface-inset px-1.5 py-1 text-xs text-ink-secondary'
+                }
               >
                 <option value="">Personal</option>
                 {(accountMe.teams ?? []).map((t) => (
@@ -295,26 +400,43 @@ export function Sidebar({
               </select>
             </label>
           )}
-          {/* Usage at a glance — what's left, not jargon. */}
-          <div className="flex flex-col gap-1 rounded-md bg-surface-inset px-2 py-1.5">
-            <UsageRow label="Profiles" value={profileCount} cap={profileCap} />
-            <UsageRow label="Active sessions" value={sessionsActive} cap={sessionsCap} />
-          </div>
+          {!rail && (
+            /* Usage at a glance — what's left, not jargon. */
+            <div className="flex justify-between gap-2">
+              <UsageStat label="Profiles" value={profileCount} cap={profileCap} />
+              <UsageStat label="Sessions" value={sessionsActive} cap={sessionsCap} />
+            </div>
+          )}
           <button
             type="button"
+            data-tauri-no-drag
             onClick={onSignOut}
-            className="flex w-full items-center justify-between rounded
+            aria-label={rail ? 'Sign out' : undefined}
+            title={rail ? 'Sign out (⌘⇧L)' : undefined}
+            className={
+              rail
+                ? 'flex h-8 w-11 items-center justify-center rounded-[7px] text-status-error transition hover:bg-status-error/10'
+                : `flex w-full items-center justify-between rounded
                        bg-status-error/10 px-2 py-1.5 text-left text-xs
                        font-medium text-status-error transition
-                       hover:bg-status-error/10"
+                       hover:bg-status-error/10`
+            }
           >
-            <span>Sign out</span>
-            {/* 2026-09-12 (review) — no opacity on the hint: `opacity-70` faded the
-                10px shortcut to 3.02:1 (dark) / 3.16 (light) on the sign-out wash,
-                under the 4.5 it needs, and the text-quality gate only learned to
-                see opacity in the same change. At the button's own status-error
-                ink it reads 4.66 / 5.37. */}
-            <span className="text-2xs">⌘⇧L</span>
+            {rail ? (
+              <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
+                <IconSignOut />
+              </span>
+            ) : (
+              <>
+                <span>Sign out</span>
+                {/* 2026-09-12 (review) — no opacity on the hint: `opacity-70` faded the
+                    10px shortcut to 3.02:1 (dark) / 3.16 (light) on the sign-out wash,
+                    under the 4.5 it needs, and the text-quality gate only learned to
+                    see opacity in the same change. At the button's own status-error
+                    ink it reads 4.66 / 5.37. */}
+                <span className="text-2xs">⌘⇧L</span>
+              </>
+            )}
           </button>
         </div>
       )}
@@ -322,27 +444,48 @@ export function Sidebar({
   );
 }
 
-function SidebarSection({ label, children }: { label: string; children: ReactNode }): JSX.Element {
+function SidebarSection({
+  label,
+  rail,
+  children,
+}: {
+  label: string;
+  rail: boolean;
+  children: ReactNode;
+}): JSX.Element {
   return (
-    <div className="flex flex-col gap-px py-2">
-      <div className="px-3 py-1">
-        <span className="section-label">{label}</span>
-      </div>
-      <div className="flex flex-col">{children}</div>
+    <div className={'mb-3 flex flex-col gap-px ' + (rail ? 'w-full items-center' : '')}>
+      {!rail && (
+        <span className="block px-2 pb-1.5 text-[10px] font-semibold uppercase leading-3 tracking-[0.09em] text-ink-muted">
+          {label}
+        </span>
+      )}
+      {children}
     </div>
   );
 }
 
 interface SidebarItemProps {
-  children: ReactNode;
+  children: string;
   icon?: ReactNode;
   badge?: string | null;
   active?: boolean;
   onClick?: () => void;
+  /** The narrow tier: icon only, the label kept for screen readers and as a
+   *  tooltip, the count pinned to the icon's corner. */
+  rail?: boolean;
 }
 
-function SidebarItem({ children, icon, badge, active, onClick }: SidebarItemProps): JSX.Element {
+function SidebarItem({
+  children,
+  icon,
+  badge,
+  active,
+  onClick,
+  rail = false,
+}: SidebarItemProps): JSX.Element {
   const isInteractive = onClick !== undefined;
+  const hasBadge = badge !== null && badge !== undefined && badge.length > 0;
   return (
     <button
       type="button"
@@ -350,10 +493,15 @@ function SidebarItem({ children, icon, badge, active, onClick }: SidebarItemProp
       onClick={onClick}
       disabled={!isInteractive}
       aria-current={active === true ? 'page' : undefined}
+      title={rail ? (hasBadge ? `${children} (${badge})` : children) : undefined}
+      // In the rail the pinned count is the first figure only, so the button
+      // names the whole badge itself.
+      aria-label={rail && hasBadge ? `${children} ${badge}` : undefined}
       className={
-        'group flex items-center gap-2 px-3 py-1 text-sm text-left transition-colors ' +
+        'group relative flex items-center rounded-[7px] text-left text-[12.5px] leading-4 transition-colors ' +
+        (rail ? 'h-8 w-11 justify-center ' : 'w-full gap-2.5 whitespace-nowrap px-2 py-[7px] ') +
         (active === true
-          ? 'bg-accent-subtle text-ink-primary'
+          ? 'bg-accent-subtle font-semibold text-ink-primary'
           : 'text-ink-secondary hover:bg-surface-elevated hover:text-ink-primary ' +
             'disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-ink-secondary')
       }
@@ -362,28 +510,42 @@ function SidebarItem({ children, icon, badge, active, onClick }: SidebarItemProp
         <span
           className={
             'flex h-4 w-4 shrink-0 items-center justify-center ' +
-            (active === true ? 'text-accent' : 'text-ink-muted group-hover:text-ink-secondary')
+            (active === true
+              ? 'text-accent'
+              : 'text-ink-muted opacity-[.85] group-hover:text-ink-secondary')
           }
           aria-hidden="true"
         >
           {icon}
         </span>
       )}
-      <span className="flex-1 truncate">{children}</span>
-      {badge !== null && badge !== undefined && badge.length > 0 && (
+      <span className={rail ? 'sr-only' : 'flex-1 truncate'}>{children}</span>
+      {hasBadge && (
         <span
+          aria-hidden={rail ? 'true' : undefined}
           className={
-            'shrink-0 rounded px-1.5 py-px font-mono text-2xs ' +
+            'shrink-0 rounded-full py-px font-semibold ' +
+            // In the rail the count sits on the icon's top-right corner, as the
+            // mockup's narrow tier draws it, and stays inside the 56px rail.
+            (rail
+              ? 'pointer-events-none absolute right-0 top-0 px-1 text-[9px] leading-[12px] '
+              : 'ml-auto px-1.5 text-[10px] leading-[14px] ') +
             (active === true
-              ? 'bg-accent/20 text-accent-text'
+              ? 'bg-accent/[.18] text-accent-text'
               : 'bg-surface-elevated text-ink-secondary')
           }
         >
-          {badge}
+          {rail ? railFigure(badge) : badge}
         </span>
       )}
     </button>
   );
+}
+
+/** The rail has room on the icon's corner for one figure: the count, not the
+ *  cap ("8/10" → "8"). The whole badge stays in the title and the name. */
+function railFigure(badge: string): string {
+  return badge.split('/')[0] ?? badge;
 }
 
 function fmtRatio(value: number | null, cap: number | null): string | null {
@@ -392,7 +554,7 @@ function fmtRatio(value: number | null, cap: number | null): string | null {
   return `${value}/${cap}`;
 }
 
-function UsageRow({
+function UsageStat({
   label,
   value,
   cap,
@@ -401,33 +563,14 @@ function UsageRow({
   value: number | null;
   cap: number | null;
 }): JSX.Element {
-  // null cap = no fixed limit (enterprise) → show the count + "unlimited".
-  const text = value === null ? '—' : cap === null ? `${value} · unlimited` : `${value} / ${cap}`;
+  // null cap = no fixed limit (enterprise) → the count + "unlimited".
+  // The figure is spaced ("8 / 10") so it never reads as the nav badge's.
+  const figure = value === null ? '—' : cap === null ? `${value} · unlimited` : `${value} / ${cap}`;
   return (
-    <div className="flex items-center justify-between text-2xs">
-      <span className="text-ink-muted">{label}</span>
-      <span className="mono text-ink-secondary">{text}</span>
-    </div>
-  );
-}
-
-function TierDot({ tier }: { tier: string | null }): JSX.Element {
-  // Tier → dot color. starter=idle, builder=ready, scale=busy.
-  // Defensive default for unknown tiers (forwards-compat with future tiers).
-  const cls =
-    tier === 'scale' || tier === 'enterprise'
-      ? 'bg-accent'
-      : tier === 'builder'
-        ? 'bg-status-ready'
-        : tier === 'starter'
-          ? 'bg-status-busy'
-          : 'bg-status-idle';
-  // The tooltip carries the plan's customer label, never the raw tier id.
-  return (
-    <span
-      className={`status-pip h-2 w-2 ${cls}`}
-      title={tier === null ? 'Plan unknown' : `${tierLabelFor(tier)} plan`}
-    />
+    <span className="flex min-w-0 items-baseline gap-1">
+      <b className="text-[12.5px] font-bold text-ink-primary">{figure}</b>
+      <span>{label}</span>
+    </span>
   );
 }
 
@@ -553,6 +696,15 @@ function IconBilling(): JSX.Element {
       <rect x="2" y="3.5" width="12" height="9" rx="1.25" />
       <path d="M2 6.5h12" />
       <path d="M4.5 10h3" />
+    </svg>
+  );
+}
+
+function IconSignOut(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <path d="M6.5 2.75H3.75a1 1 0 0 0-1 1v8.5a1 1 0 0 0 1 1H6.5" />
+      <path d="M10.5 5.25 13.25 8l-2.75 2.75M13.25 8H6.25" />
     </svg>
   );
 }

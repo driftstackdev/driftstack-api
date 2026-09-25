@@ -189,6 +189,11 @@ export const VPN_CHECK_IN_PROGRESS = 'Testing through Driftstack — up to 90 s'
 export const FREE_PLAN_FLEET_TEST_SENTENCE =
   "The full check through Driftstack isn't included on the Free plan. Upgrade your plan to run it.";
 export const DESKTOP_CREDENTIAL_TALLY_REASON = 'not included on the Free plan';
+/** Follow-up A (2026-09-24) — the WORD a SOCKS5 row's missing Driftstack side
+ *  shows when the plan is why it is missing (it sits where the number would, so
+ *  it is short; the hover is the plan sentence). It replaced "not tested", which
+ *  promised a measurement the plan will never take. */
+export const FLEET_TEST_NOT_ON_PLAN_WORD = 'not on plan'; // = NOT_ON_THIS_PLAN_LABEL
 
 /** (p) D1 — the ONE word for re-running a SOCKS5 test once a row holds a
  *  result, on the Proxies grid's row button AND the profile card's repair row
@@ -274,7 +279,16 @@ export const NO_TEST_MAC_QUIC_HINT = `Not measured yet — Driftstack was busy. 
  * check to run and no amount of pressing produces one. The label says what is
  * true of the reading and the hint says what would change it.
  */
-export const NOT_ON_THIS_PLAN_LABEL = 'not included on this plan';
+//
+// ⛔ 2026-09-24 (owner item 9) — SHORTENED to the word every surface can fit.
+// The Proxies tab printed "UDP — not included on this plan"; the profile card's
+// 144px caps row has no room for that and printed "⇢ UDP" (NOT MEASURED) for the
+// same tunnel instead — one state, two claims. The card, the list and the grid
+// now print the same "UDP — not on plan"; the whole sentence is the hover.
+export const NOT_ON_THIS_PLAN_LABEL = 'not on plan';
+/** The UDP chip's text for a reading the plan will never produce — grid, card
+ *  and list. */
+export const UDP_NOT_ON_PLAN_CHIP = `UDP — ${NOT_ON_THIS_PLAN_LABEL}`;
 export const VPN_QUIC_NOT_ON_PLAN_HINT =
   'VPN proxies are on paid plans, so this tunnel is not tested and QUIC through it is not measured. Upgrade to use OpenVPN or WireGuard.';
 export const VPN_UDP_NOT_ON_PLAN_HINT =

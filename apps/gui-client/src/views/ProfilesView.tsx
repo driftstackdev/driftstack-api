@@ -80,7 +80,11 @@ import {
   type ProfileStatusFilter,
 } from '../components/ProfilesActionBar';
 import { agedQuicReading, proxyCapabilities } from '../components/ProxyCapabilities';
-import { ProfilePhoneCard, shownAgedReadings } from '../components/ProfilePhoneCard';
+import {
+  ProfilePhoneCard,
+  capabilityChips,
+  shownAgedReadings,
+} from '../components/ProfilePhoneCard';
 import { tierLabelFor } from '../components/TierBadge';
 import { DevicePicker, type PickerDevice } from '../components/DevicePicker';
 import { RelativeTime } from '../components/RelativeTime';
@@ -161,7 +165,8 @@ import {
   unansweredCheckNotice,
   vpnStoreRefusal,
 } from '../lib/proxy-server-test';
-import { planExcludesVpnEgress, type AccountProxyScheme } from '../lib/account-proxies';
+import { type AccountProxyScheme } from '../lib/account-proxies';
+import { planExcludesVpnEgress } from '../lib/plan-features';
 import { teamWorkspaceLabel, teamWorkspaceTitle } from '../lib/team-label';
 
 /** Which proxy a freshly created profile should be auto-probed through.
@@ -296,7 +301,7 @@ const MAX_TAG_NAME_CHARS = 24;
 // reference) + `available` (fingerprint-atlas-ready). `reference` and
 // `planned` (e.g. iPhone 17, still per-value verified vs real-device per
 // the "100% verified profiles" rule) are intentionally EXCLUDED — they
-// light up automatically the moment A1 flips their status, with zero GUI
+// light up automatically the moment their registry status flips, with zero GUI
 // change. The locked launch archetype is preselected; the select enables
 // once 2+ verified options exist.
 const SELECTABLE_STATUSES = new Set<ArchetypeStatus>(['launch', 'available']);
@@ -5017,6 +5022,7 @@ export function ProfilesView({
                             px !== null ? probeView.serverMeasuredAt[px.id] : undefined
                           }
                           vpn={px !== null && isVpnScheme(px.scheme)}
+                          planExcludesVpn={planExcludesVpnEgress(accountMe)}
                           vpnFailure={px !== null ? vpnFailures[px.id] : undefined}
                           vpnNotice={px !== null ? vpnNotices[px.id] : undefined}
                           // (o) — the row's endpoint pre-flight, from the SAME
@@ -5217,6 +5223,34 @@ export function ProfilesView({
                     const rowLat =
                       rowServerLat ??
                       (exitOk ? (probe?.result.latency_ms ?? undefined) : undefined);
+                    // Owner item 9 (2026-09-24) — the QUIC chip the grid card draws
+                    // for this proxy, from the card's OWN chip builder and inputs, so
+                    // the list's Network cell and the card cannot draw one reading
+                    // two ways (the list used to keep QUIC in a tooltip).
+                    const quicChip =
+                      px !== null
+                        ? capabilityChips({
+                            hasProxy: true,
+                            capabilities:
+                              probe !== undefined && probe.endpoint === undefined
+                                ? probe.result
+                                : null,
+                            quicMeasured: probeView.quicMeasured[px.id],
+                            quicProbe: probeView.quicProbe[px.id],
+                            udpProbe: probeView.udpProbe[px.id],
+                            osFingerprint: probeView.osFingerprints[px.id],
+                            aged: agedReadingsFor(probeView.aged, px.id),
+                            autoRecheck: rowAutoRecheck,
+                            nowMs: Date.now(),
+                            vpn: isVpnScheme(px.scheme),
+                            planExcludesVpn: planExcludesVpnEgress(accountMe),
+                            vpnFailure: vpnFailures[px.id],
+                            endpoint: probeView.endpointResults[px.id] ?? null,
+                            testing: testingProxyId === px.id,
+                            latencyMs: rowLat ?? null,
+                            latencyVantage: probeView.serverVantage[px.id],
+                          }).eligible.find((c) => c.key === 'quic')
+                        : undefined;
                     return {
                       id: profile.id,
                       name: profile.name,
@@ -5246,6 +5280,16 @@ export function ProfilesView({
                       osFingerprint: px !== null ? probeView.osFingerprints[px.id] : undefined,
                       udp,
                       quic,
+                      ...(quicChip !== undefined
+                        ? {
+                            quicChip: {
+                              text: quicChip.text,
+                              className: quicChip.className,
+                              title: quicChip.title,
+                              attrs: quicChip.attrs,
+                            },
+                          }
+                        : {}),
                       // The aged sentence comes from whichever of the two readings
                       // produced this row's `quic`, so the list never prints one
                       // surface's words beside the other's verdict.
@@ -5294,6 +5338,7 @@ export function ProfilesView({
                       // the red sentence. The click was always routed right;
                       // only the rendering diverged.
                       vpn: px !== null && isVpnScheme(px.scheme),
+                      planExcludesVpn: planExcludesVpnEgress(accountMe),
                       ...(px !== null && vpnFailures[px.id] !== undefined
                         ? { vpnFailure: vpnFailures[px.id] }
                         : {}),
@@ -6276,7 +6321,7 @@ function EditProfileModal({
     setProxyChoice(created.id);
     onProxyMinted?.(created);
   }
-  // Advanced geolocation override (A3-approved per-session contract 2026-07-01).
+  // Advanced geolocation override (harness-approved per-session contract 2026-07-01).
   // Held as strings so a partially-typed value doesn't fight a numeric input;
   // parsed + range-validated on submit. Empty lat AND lon = "no override" (clear
   // → the device auto-derives its location from the proxy exit IP, the default).
@@ -6615,7 +6660,7 @@ function EditProfileModal({
             className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
           />
         </label>
-        {/* Advanced — explicit location override (A3-approved per-session
+        {/* Advanced — explicit location override (harness-approved per-session
             geolocation contract). Collapsed by default (<details>) because the
             RIGHT choice for almost everyone is to leave it blank: the device's
             reported location then derives from the proxy's exit IP, so it stays

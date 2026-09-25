@@ -1,7 +1,7 @@
 // SimulatorWindow — the client-side VIDEO-FREEZE detector ("Video frozen — …").
 //
 // #3/#6 — the detector keys on the <video> ELEMENT's OWN frame progress (rVFC
-// last-frame time + currentTime advancement), NOT decodeFps. A3's idle frame-pump
+// last-frame time + currentTime advancement), NOT decodeFps. The harness's idle frame-pump
 // down-clock (W2952) drives the publish FPS to ~0 on a static/idle page, so a
 // decodeFps===0 heuristic FALSE-FIRES "Video frozen" on a perfectly healthy idle
 // stream (the reported "reconnecting, happens too often"). An idle-but-LIVE stream
@@ -380,7 +380,7 @@ describe('SimulatorWindow — client video-freeze detector', () => {
     expect(panelCbs.recoverActions.map((r) => r.mode)).toEqual(['resubscribe', 'rebuild']);
   });
 
-  // A3 freeze-recovery cross-cycle cap (2026-07-11): a stage-2 rebuild churns connState
+  // Freeze-recovery cross-cycle cap (2026-07-11): a stage-2 rebuild churns connState
   // (reconnecting→connected), which the detector force-clears `videoFrozen` on — so a
   // budget keyed on `!videoFrozen` would reset on the rebuild's OWN blip → the ladder
   // re-escalates → infinite ~16s rebuild thrash. The budget must reset ONLY on SUSTAINED
@@ -467,7 +467,7 @@ describe('SimulatorWindow — client video-freeze detector', () => {
     expect(panelCbs.recoverActions.filter((r) => r.mode === 'rebuild').length).toBe(before + 1);
   });
 
-  // GUI UX pass (Wave 1) — the founder must not be stranded through the multi-cycle
+  // GUI UX pass — the founder must not be stranded through the multi-cycle
   // ~16s auto-recovery ladder with no action. The manual "Reconnect now" affordance
   // appears as soon as a recovery is actually IN FLIGHT (recovering) — not only after
   // the whole ladder exhausts — and firing it drives a fresh full rebuild immediately.
@@ -696,7 +696,7 @@ describe('SimulatorWindow — gui_control_key expiry surfaces controlUnreachable
     expect(badge(container)).not.toBeNull();
   });
 
-  // GUI UX pass (Wave 1) — the badge was an informational dead-end ("control may not be
+  // GUI UX pass — the badge was an informational dead-end ("control may not be
   // reaching the device" with nothing to do). It now carries a working Reconnect that
   // fires a full Room rebuild (re-establishing the data channel control rides on).
   it('offers a working Reconnect on the controlUnreachable badge (no longer a dead-end)', async () => {

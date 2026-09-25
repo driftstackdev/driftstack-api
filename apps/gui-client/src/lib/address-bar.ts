@@ -7,7 +7,7 @@
  *  navigates to https://example.com). Only http/https pass; anything else
  *  (file:/javascript:/data:/about:) returns null so the GUI never even emits it
  *  — the harness re-validates with the same allowlist + SSRF rejection as a
- *  defense in depth (A3 W2668). */
+ *  defense in depth (W2668). */
 export function normalizeNavigateUrl(raw: string): string | null {
   const trimmed = raw.trim();
   if (trimmed === '') return null;

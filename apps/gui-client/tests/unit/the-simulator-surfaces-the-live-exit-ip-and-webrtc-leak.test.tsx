@@ -8,7 +8,7 @@
 //       • exit IP + a MATCHING WebRTC candidate → no warning (the vacuity control
 //         for the warning arm: the same shape with coherent IPs must NOT warn),
 //       • absent fields → the muted "measuring…" state, no crash (the live state
-//         today, until the harness/A3 emits the fields).
+//         today, until the harness emits the fields).
 //
 //  2. stopOnExitIpChangeCreateFields — the create-body fragment. The flag is
 //     present iff the profile opted in; a default profile yields nothing (the

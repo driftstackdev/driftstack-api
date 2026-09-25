@@ -30,6 +30,11 @@ import {
   MANUAL_INPUT_UNREPORTED_TOOLTIP,
   manualInputCapabilityFromFlag,
 } from './manual-input-capability';
+import {
+  SESSION_ACCESS_EXPIRED_CHIP,
+  SESSION_ACCESS_EXPIRED_NOTICE,
+  SESSION_ACCESS_EXPIRED_PLACEHOLDER,
+} from './simulator-session-access';
 
 /**
  * Which group of conjuncts is unmet. The three producers behind the predicate
@@ -45,6 +50,8 @@ import {
  *  - `screen-failed`         (b) the device reported its video FAILED to start.
  *  - `local`                 (f) a control action / mutation of our own is in flight.
  *  - `session-unreadable`    (c) the read of this session's state FAILED.
+ *  - `session-access-expired` (c) it failed because the server refused this
+ *                            window's session key — no retry clears that.
  *  - `session-unconfirmed`   (c) we have not read this session's state yet.
  *  - `session-paused`        (c) read, and it is paused — a person has to resume it.
  *  - `session-inactive`      (c) read, and it has not started.
@@ -73,6 +80,7 @@ export type ManualInputWaitGroup =
   | 'screen-capture-blocked'
   | 'local'
   | 'session-unreadable'
+  | 'session-access-expired'
   | 'session-unconfirmed'
   | 'session-paused'
   | 'session-inactive'
@@ -113,6 +121,10 @@ export interface ManualInputWaitInputs {
    *  read it yet" unless the failure itself is passed in — and the failing path
    *  does not retry, so "checking…" would be a check that is not happening. */
   controlReadFailed: boolean;
+  /** The failed read was the server REFUSING this window's session key. A retry
+   *  presents the same key, so "try again" is a wrong instruction; the remedy is
+   *  reopening the session from the main window. Absent = false. */
+  controlAccessExpired?: boolean;
   /** The session reached a terminal lifecycle state. */
   lifecycleTerminal: boolean;
   /** The session's lifecycle status; 'active' is the one that unlocks. */
@@ -235,6 +247,14 @@ export const MANUAL_INPUT_WAIT_COPY: Readonly<
     placeholder: 'can’t reach this session — try again, or reopen it',
     awaitingScreen: false,
   },
+  // ⚠️ NOT a flavour of `session-unreadable`: that one may clear on its own and
+  // says try again; this one cannot, and says the one thing that fixes it.
+  'session-access-expired': {
+    sentence: SESSION_ACCESS_EXPIRED_NOTICE,
+    chip: SESSION_ACCESS_EXPIRED_CHIP,
+    placeholder: SESSION_ACCESS_EXPIRED_PLACEHOLDER,
+    awaitingScreen: false,
+  },
   'session-unconfirmed': {
     sentence: 'Checking this session’s status…',
     chip: 'checking the session…',
@@ -321,7 +341,11 @@ export function manualInputWaitGroup(i: ManualInputWaitInputs): ManualInputWaitG
     // Same unmet conjunct, two different facts: nobody has answered yet, or the
     // answer came back an error. Only the second is something the customer can act
     // on, and only the second is a state that does not clear itself.
-    return i.controlReadFailed ? 'session-unreadable' : 'session-unconfirmed';
+    return i.controlReadFailed
+      ? i.controlAccessExpired === true
+        ? 'session-access-expired'
+        : 'session-unreadable'
+      : 'session-unconfirmed';
   if (i.lifecycleStatus === 'paused') return 'session-paused';
   if (i.lifecycleStatus !== 'active') return 'session-inactive';
   // Mirrors `isHumanControlMode`: manual is the only mode that hands the customer

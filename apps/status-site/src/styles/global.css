@@ -126,7 +126,7 @@
 }
 
 /* ── Fleet two-axis token values (2026-06-12 rework; contract:
-   docs/internal/2026-06-12-design-system-spec.md). Tailwind v4 utilities
+   the internal 2026-06-12 design-system spec). Tailwind v4 utilities
    resolve --color-* at use-time, so redefining them per axis flips the
    whole site with ZERO markup changes. Defaults (on :root) = light. */
 :root,

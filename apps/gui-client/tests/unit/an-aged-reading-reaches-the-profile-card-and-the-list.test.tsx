@@ -331,7 +331,8 @@ describe('the profile CARD shows a reading that has aged out of the present tens
       '[data-region="caps"] [data-component="proxy-os-fingerprint"]',
     );
     expect(os?.getAttribute('data-ok')).toBe('aged');
-    expect(os?.getAttribute('data-os-tone')).toBe('unknown');
+    // OWNER 2026-09-24 — an aged APPLE reading keeps its green (aged chrome).
+    expect(os?.getAttribute('data-os-tone')).toBe('match');
     expect(os?.getAttribute('title')).toMatch(/^Last checked 9 hours ago\./);
     // Same width story as the QUIC chip above: printed rather than hidden, and at
     // the card's default width the OS chip takes its SHORT label beside the age.
@@ -542,7 +543,8 @@ describe('the profiles LIST shows a reading that has aged out of the present ten
     expect(os?.getAttribute('title')).toMatch(/^Last checked 9 hours ago\. It will be rechecked/);
     expect(os?.className).toContain('outline-dashed');
     expect(os?.className).not.toContain('border');
-    expect(os?.className).not.toContain('status-ready');
+    // OWNER 2026-09-24 — Apple keeps its green in the aged chrome.
+    expect(os?.className).toContain('text-status-ready');
   });
 
   it('(a) ⛔ a row the automatic check will never take names its button in the list too', async () => {
@@ -596,9 +598,13 @@ describe('the profiles LIST shows a reading that has aged out of the present ten
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
     const udp = await listUdpChip(container);
     expect(udp.outerHTML).toBe(
-      '<span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold bg-status-ready/20 text-status-ready" ' +
-        'title="UDP works — WebRTC ✓; QUIC ✓">✓</span>',
+      '<span class="inline-block whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold bg-status-ready/10 text-status-ready" ' +
+        'title="UDP works — WebRTC ✓; QUIC ✓">UDP ✓</span>',
     );
+    // (2026-09-24, owner item 9) "UDP ✓" — the card's text AND the card's tone for
+    // this reading (ready/10; ready/20 measured 3.98:1 on the selected row in the
+    // light theme once the chip carried a word the WCAG gate reads). It was a bare
+    // "✓" under a column named UDP, which now holds QUIC and OS.
     const os = listOsChip(container) as HTMLElement;
     expect(os.getAttribute('data-ok')).toBeNull();
     expect(os.getAttribute('data-os-tone')).toBe('match');
@@ -615,12 +621,18 @@ describe('the profiles LIST shows a reading that has aged out of the present ten
     expect(container.querySelector('[data-component="aged-reading-age"]')).toBeNull();
   });
 
-  it('(d) CONTROL never measured: "not yet measured", and no OS chip at all', async () => {
+  // ⛔ 2026-09-24 (owner item 9) — "and no OS chip at all" was the rule; the list
+  // now states the card's absence instead: '— OS', "OS not measured yet", never an
+  // empty cell. Still no age line, and still no reading claimed.
+  it('(d) CONTROL never measured: "not yet measured", and the OS cell says not measured — never a reading', async () => {
     seed({});
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
     const udp = await listUdpChip(container);
     expect(udp.getAttribute('title')).toBe('UDP works — WebRTC ✓; QUIC likely (not yet measured)');
-    expect(listOsChip(container)).toBeNull();
+    const os = listOsChip(container) as HTMLElement;
+    expect(os.textContent).toBe('—OS');
+    expect(os.getAttribute('data-os-tone')).toBe('unknown');
+    expect(os.getAttribute('title')).toBe('OS not measured yet. Run Test on this proxy.');
     expect(container.querySelector('[data-component="aged-reading-age"]')).toBeNull();
   });
 });
@@ -831,9 +843,9 @@ describe('a VPN row: an aged reading outranks "not measured", and is suppressed 
     expect(lines[0]?.textContent).toBe('as of 4 h ago');
   });
 
-  it('CONTROL the list: with nothing aged the row still says "UDP via tunnel"', () => {
+  it('CONTROL the list: with nothing aged the row still says "⇢ UDP" (not measured)', () => {
     const { container } = render(<ProfilesTable {...tableProps(tableRow({}))} />);
-    expect(container.querySelector('[data-udp]')?.textContent).toBe('UDP via tunnel');
+    expect(container.querySelector('[data-udp]')?.textContent).toBe('⇢ UDP');
   });
 
   it('⛔ the list: no aged chip while the row is testing', () => {

@@ -274,7 +274,7 @@
   }
 
   /* ── Fleet v2 component kit (2026-07-02 dashboard redesign; blueprint:
-     docs/internal/visual-demos/dashboard.html + GUI recipe ports). All
+     the internal dashboard visual demo + GUI recipe ports). All
      additive — the recipes above keep their names so existing pages
      restyle without markup churn. */
 
@@ -462,7 +462,7 @@
 }
 
 /* ── Fleet design-system token layer (2026-06-12 rework; contract:
-   docs/internal/2026-06-12-design-system-spec.md). Two axes on <html>:
+   the internal 2026-06-12 design-system spec). Two axes on <html>:
    data-mode (light|dark) × data-accent (violet|oxblood|teal). Same
    blocks as marketing-site so the surfaces stay in lockstep. */
 [data-accent='violet'] {

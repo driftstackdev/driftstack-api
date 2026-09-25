@@ -50,6 +50,7 @@
 //   audit-settings      SettingsView     loaded — bundled-LLM settings/status + BYOK metadata from the client;
 //                                         account card = unreachable branch; self-hosted mode (example.com URL)
 //   audit-first-run     FirstRunWizard   welcome step (the wizard's first screen; later steps need a live key check)
+//   audit-signed-out    FirstRunWizard   the same welcome step under the notice shown after the server refused the key
 //   audit-recipes       RecipesView      loaded — 3 saved tasks, none selected (detail loads on click)
 //   audit-agent-chat    AgentChatView    idle composer — 3 profiles in the picker, 2 saved chats, no turns
 //   audit-agent-chat-<kind>              the SAME view in each state a customer can be in — nokey,
@@ -109,6 +110,7 @@ import { RecordingsView } from '../views/RecordingsView';
 import { ConnectivityView } from '../views/ConnectivityView';
 import { SettingsView } from '../views/SettingsView';
 import { FirstRunWizard } from '../views/FirstRunWizard';
+import { KeyRefusedNotice } from '../App';
 import { RecipesView } from '../views/RecipesView';
 import { AgentChatView } from '../views/AgentChatView';
 import { AgentChatProvider, type AgentChatContextValue } from '../lib/AgentChatProvider';
@@ -199,6 +201,7 @@ function auditDefaultSizes(stage: {
     // danger zone) measures 1684 CSS px; 1720 fits it without a scrollbar.
     'audit-settings': { width: SCENE_WIDTH, height: 1720 },
     'audit-first-run': stage,
+    'audit-signed-out': stage,
     'audit-recipes': stage,
     'audit-agent-chat': stage,
     // The AI-view states share the default stage: they are compared with each
@@ -869,6 +872,8 @@ export function auditLoadedMarkers(name: AuditSceneName): ReadonlyArray<string> 
       return [AUDIT_BASE_URL, (auditAccountAi().bundled.monthly_cap_usd_cents / 100).toFixed(2)];
     case 'audit-first-run':
       return ['Welcome to Driftstack'];
+    case 'audit-signed-out':
+      return ['Your sign-in was revoked — sign in again', 'Welcome to Driftstack'];
     case 'audit-recipes':
       return auditRecipes().map((r) => r.label);
     case 'audit-agent-chat':
@@ -1414,8 +1419,12 @@ function StubbedAuditWindow(props: {
  *  no Sidebar), so its stage is the bare one — the same data-* contract the
  *  gate and the scene test read, without AppWindow's chrome. The wizard sizes
  *  itself `h-screen w-screen`; the wrapper pins it to the stage instead. */
-function FirstRunScene(): JSX.Element {
-  const size = auditSceneSizes()['audit-first-run'];
+function FirstRunScene({
+  name = 'audit-first-run',
+}: {
+  name?: 'audit-first-run' | 'audit-signed-out';
+}): JSX.Element {
+  const size = auditSceneSizes()[name];
   const settingsValue = useMemo<HarnessSettingsValue>(
     () => ({
       settings: { ...auditSettings(), apiKey: null },
@@ -1434,14 +1443,23 @@ function FirstRunScene(): JSX.Element {
   return (
     <SettingsContext.Provider value={settingsValue}>
       <div
-        data-scene="audit-first-run"
+        data-scene={name}
         data-ready="1"
         data-frozen-now={FROZEN_NOW_ISO}
         data-stage-width={size.width}
         data-stage-height={size.height}
         style={{ width: size.width, height: size.height }}
-        className="relative shrink-0 overflow-hidden bg-surface-base font-sans text-ink-primary antialiased [&>div]:!h-full [&>div]:!w-full"
+        // `transform` makes the stage the containing block for the notice's
+        // `position: fixed`, so it sits in the stage as it sits in the window.
+        className="relative shrink-0 overflow-hidden bg-surface-base font-sans text-ink-primary antialiased [transform:translateZ(0)] [&>div]:!h-full [&>div]:!w-full"
       >
+        {name === 'audit-signed-out' ? (
+          // Wrapped so the stage's `[&>div]` full-size rule reaches only the
+          // wizard, not the notice.
+          <section>
+            <KeyRefusedNotice reason="revoked" onDismiss={noop} />
+          </section>
+        ) : null}
         <FirstRunWizard onComplete={noop} />
       </div>
     </SettingsContext.Provider>
@@ -1633,6 +1651,8 @@ export function AuditScene({ name }: { name: AuditSceneName }): JSX.Element {
       );
     case 'audit-first-run':
       return <FirstRunScene />;
+    case 'audit-signed-out':
+      return <FirstRunScene name="audit-signed-out" />;
     case 'audit-recipes':
       return (
         <AuditWindow scene={name} current="recipes">

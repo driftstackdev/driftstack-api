@@ -21,8 +21,8 @@ export default {
         // ladder was byte-identical to Tailwind 3's built-in slate, so stock
         // slate-* utilities in legacy markup render unchanged.
         //
-        // Fleet token namespace (2026-06-12 rework — see
-        // docs/internal/2026-06-12-design-system-spec.md). Resolves to the
+        // Fleet token namespace (2026-06-12 rework — see the internal
+        // 2026-06-12 design-system spec). Resolves to the
         // two-axis CSS custom properties in styles/base.css, so tk-* classes
         // flip with <html data-mode>/<html data-accent>.
         tk: {

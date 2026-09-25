@@ -182,7 +182,11 @@
 //   HARNESS_URL  default http://127.0.0.1:5199/visual-harness.html — when it
 //                does not answer, this script starts `vite --port 5199` from
 //                apps/gui-client itself and stops it when done.
-//   OUT_DIR      default <tmpdir>/driftstack-visual-check
+//   OUT_DIR      default <tmpdir>/driftstack-visual-check/run-<time>-<pid> — a
+//                directory of THIS run's own. ⛔ It used to be the shared
+//                <tmpdir>/driftstack-visual-check, and two runs on one machine
+//                wrote into each other's report.json and screenshots — one of
+//                them died reading back a report the other had replaced.
 //   WIDTHS       default 178,240,260
 //
 // Playwright is a repo-root devDependency; run from the repo root.
@@ -197,7 +201,13 @@ import { tmpdir } from 'node:os';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.HARNESS_PORT ?? 5199);
 const URL = process.env.HARNESS_URL ?? `http://127.0.0.1:${PORT}/visual-harness.html`;
-const OUT = process.env.OUT_DIR ?? resolve(tmpdir(), 'driftstack-visual-check');
+const OUT =
+  process.env.OUT_DIR ??
+  resolve(
+    tmpdir(),
+    'driftstack-visual-check',
+    `run-${new Date().toISOString().replace(/[:.]/g, '-')}-${String(process.pid)}`,
+  );
 const WIDTHS = (process.env.WIDTHS ?? '178,240,260')
   .split(',')
   .map((w) => Number(w.trim()))
@@ -321,6 +331,34 @@ const SIMULATOR_THEMES = (process.env.SIMULATOR_THEMES ?? 'dark,light')
 const MIN_SIMULATOR_TEXT_LEAVES = 15;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Wait until `predicate(article)` holds in the page — up to `timeoutMs` — and
+ * return whether it did. It NEVER throws: the measurement that follows reports
+ * what is true either way. This replaces a fixed 150 ms sleep after the sheet's
+ * open click and its Escape, which under a loaded machine read a frame that had
+ * not landed yet as a defect ("sheet-did-not-close-on-escape",
+ * "sheet-focus-not-returned") on a different card each run.
+ */
+async function settle(page, card, predicate, extra = {}, timeoutMs = 3000) {
+  const handle = await card.elementHandle();
+  if (handle === null) return false;
+  try {
+    await page.waitForFunction(
+      predicate,
+      { el: handle, ...extra },
+      {
+        timeout: timeoutMs,
+        polling: 'raf',
+      },
+    );
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await handle.dispose();
+  }
+}
 
 async function harnessUp(url) {
   try {
@@ -1429,7 +1467,10 @@ async function main() {
             };
           } else {
             await opener.click();
-            await page.waitForTimeout(150);
+            await settle(page, card, ({ el }) => {
+              const sh = el.querySelector('[data-component="card-details-sheet"]');
+              return sh !== null && sh.contains(document.activeElement);
+            });
             sheet = await card.evaluate(measureCard, opts);
             if (sheet.sheet === null) sheet.violations.push({ kind: 'sheet-did-not-open' });
             if (!sheet.focusInSheet) sheet.violations.push({ kind: 'sheet-focus-not-inside' });
@@ -1512,7 +1553,19 @@ async function main() {
           }
           sheet.keyboardScroll = { before: beforeKey.scrollTop, after: afterKey.scrollTop };
           await page.keyboard.press('Escape');
-          await page.waitForTimeout(150);
+          await settle(
+            page,
+            card,
+            ({ el, needFocus }) =>
+              el.querySelector('[data-component="card-details-sheet"]') === null &&
+              el.querySelector('[data-action="open-details"]')?.getAttribute('aria-expanded') ===
+                'false' &&
+              (!needFocus ||
+                (document.activeElement !== null &&
+                  document.activeElement.getAttribute('data-action') === 'open-details' &&
+                  el.contains(document.activeElement))),
+            { needFocus: !mountedOpen },
+          );
           const after = await card.evaluate((el) => ({
             sheetOpen: el.querySelector('[data-component="card-details-sheet"]') !== null,
             focusOnOpener:

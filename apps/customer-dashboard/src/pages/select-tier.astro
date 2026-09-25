@@ -667,7 +667,7 @@ function aiLabel(tier: AccountTier): string {
                 // An HTTP response settles this attempt. Only a transport
                 // failure keeps the key so a retry replays Stripe's result.
                 checkoutKeysByTier.delete(tier);
-                // Wave 1086+ B1 client-side leg: 404/503 on /v1/billing/*
+                // B1 client-side leg: 404/503 on /v1/billing/*
                 // means billing isn't wired (DRIFTSTACK_TIER_PRICE_IDS
                 // env var missing). Surface a customer-friendly message
                 // instead of "HTTP 404", which reads as a broken site.

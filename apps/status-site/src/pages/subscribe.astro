@@ -60,7 +60,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       <p id="subscribe-status" class="mt-3 hidden text-sm" role="status"></p>
     </form>
 
-    <!-- Wave 1119 / Slice 1119.3 C1 — dedicated confirm pane that replaces
+    <!-- Slice 1119.3 C1 — dedicated confirm pane that replaces
          the form when the 202 fires. The previous UX was a single status
          line which buried the next action ("check inbox + click link")
          in a small italic line below the form. Customers told us they
@@ -139,7 +139,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   const status = document.getElementById('subscribe-status');
   const submitBtn = document.getElementById('submit-btn');
   const emailInput = document.getElementById('email-input');
-  // Wave 1119 / Slice 1119.3 C1 — dedicated confirm pane elements.
+  // Slice 1119.3 C1 — dedicated confirm pane elements.
   const confirmPane = document.getElementById('subscribe-confirm');
   const confirmEmail = document.getElementById('confirm-email');
   const subscribeAnotherBtn = document.getElementById('subscribe-another-btn');
@@ -195,7 +195,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
         body: JSON.stringify({ email }),
       });
       if (res.status === 202) {
-        // Wave 1119 / Slice 1119.3 C1 — swap form for confirm pane so
+        // Slice 1119.3 C1 — swap form for confirm pane so
         // the next action is unmissable + state the sender to look for.
         if (confirmEmail) confirmEmail.textContent = email;
         if (confirmPane) confirmPane.classList.remove('hidden');
@@ -252,7 +252,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     }
   });
 
-  // Wave 1119 / Slice 1119.3 C1 — "subscribe another address" reverts
+  // Slice 1119.3 C1 — "subscribe another address" reverts
   // the confirm pane to the empty form so the customer can add a
   // teammate without a page reload.
   subscribeAnotherBtn?.addEventListener('click', () => {

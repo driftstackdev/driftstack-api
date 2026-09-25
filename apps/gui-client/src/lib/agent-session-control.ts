@@ -82,7 +82,7 @@ export interface AgentSessionCapabilityReport {
    *  capabilityReport carries and the server projects onto `capability_report`
    *  (exit_ip / exit_country / exit_timezone / webrtc_candidate_ips /
    *  observed_at). Each is present ONLY when the report carried a well-typed
-   *  value: they are INERT until the harness (A3) emits them, so an absent
+   *  value: they are INERT until the harness emits them, so an absent
    *  field must render as "measuring…", never a crash or a false leak claim.
    *  Parsed defensively — wrong type / empty → omitted, never coerced. */
   exit_ip?: string;
@@ -107,7 +107,17 @@ export interface AgentSessionCapabilityReport {
    *  render it in bare present tense however old it was. Optional because a
    *  server that predates it omits the field — that build's readout keeps the
    *  old undated line rather than blanking a value it cannot date. */
-  os_fingerprint?: { os: string; confidence: string; at?: string };
+  os_fingerprint?: {
+    os: string;
+    confidence: string;
+    at?: string;
+    /** HOW the reading was taken (owner item 9): whose stack it describes, and
+     *  whether it describes the path a website sees. Present only when the
+     *  server sent them; an absent flag reads as FALSE (it cannot vouch). */
+    observed_via?: 'proxy_host' | 'exit_ip';
+    single_host_vantage?: boolean;
+    web_port_vantage?: boolean;
+  };
   /** VPN exit parity (b) — WHAT KIND of egress the harness brought up for this
    *  session, when the report said: a SOCKS5 proxy, or an OpenVPN/WireGuard
    *  tunnel. Present ONLY for one of those three values; anything else (a newer
@@ -115,6 +125,13 @@ export interface AgentSessionCapabilityReport {
    *  byte-identical to before. The cockpit reads it beside `exit_ip` to tell
    *  "the tunnel is up, the browser has not attached" from a generic connect. */
   proxy_kind?: AgentSessionProxyKind;
+  /** Owner item 9 — does this session's egress relay UDP, as the phone measured
+   *  it when the egress came up (WebRTC and HTTP/3 need it). Present ONLY when
+   *  the report carried a boolean; absent = not reported, never "no UDP". */
+  proxy_udp_supported?: boolean;
+  /** Owner item 9 — the transport the session runs: 'h2-only' means HTTP/3 is
+   *  off for it. Present only for one of the two known values. */
+  transport_mode_active?: 'h2-only' | 'h2-and-h3';
 }
 
 /** The closed set of egress kinds a capability report can name. */
@@ -243,9 +260,7 @@ function optionalReportString(v: unknown): string | undefined {
  *  empty field → undefined, so an unmeasured exit renders as "measuring…" rather
  *  than a coerced placeholder OS. Same defensive rule as the exit-identity fields:
  *  wrong type → omitted, never coerced, never throws. */
-function parseOsFingerprint(
-  v: unknown,
-): { os: string; confidence: string; at?: string } | undefined {
+function parseOsFingerprint(v: unknown): AgentSessionCapabilityReport['os_fingerprint'] {
   if (v === null || typeof v !== 'object' || Array.isArray(v)) return undefined;
   const rec = v as Record<string, unknown>;
   const os = optionalReportString(rec.os);
@@ -257,7 +272,25 @@ function parseOsFingerprint(
   // only the age line; the reading itself still shows.
   const at = optionalReportString(rec.at);
   const dated = at !== undefined && Number.isFinite(Date.parse(at));
-  return { os, confidence, ...(dated ? { at } : {}) };
+  // Owner item 9 — how it was taken. `direct_reading` / `website_like_reading`
+  // are the customer names of the two flags and always agree with them; either
+  // spelling counts. A non-boolean is dropped (reads as false: it cannot vouch).
+  const via =
+    rec.observed_via === 'proxy_host' || rec.observed_via === 'exit_ip'
+      ? rec.observed_via
+      : undefined;
+  const flag = (a: unknown, b: unknown): boolean | undefined =>
+    typeof a === 'boolean' ? a : typeof b === 'boolean' ? b : undefined;
+  const singleHost = flag(rec.single_host_vantage, rec.direct_reading);
+  const webPort = flag(rec.web_port_vantage, rec.website_like_reading);
+  return {
+    os,
+    confidence,
+    ...(dated ? { at } : {}),
+    ...(via !== undefined ? { observed_via: via } : {}),
+    ...(singleHost !== undefined ? { single_host_vantage: singleHost } : {}),
+    ...(webPort !== undefined ? { web_port_vantage: webPort } : {}),
+  };
 }
 
 function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | undefined {
@@ -294,6 +327,13 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
   // closed set, so a report without it (or with a kind this build does not
   // know) is byte-identical to before.
   const proxyKind = parseProxyKind(report.proxy_kind);
+  // Owner item 9 — the UDP and transport readings, same additive rule.
+  const udpSupported =
+    typeof report.proxy_udp_supported === 'boolean' ? report.proxy_udp_supported : undefined;
+  const transportMode =
+    report.transport_mode_active === 'h2-only' || report.transport_mode_active === 'h2-and-h3'
+      ? report.transport_mode_active
+      : undefined;
   const webrtcIps = Array.isArray(report.webrtc_candidate_ips)
     ? report.webrtc_candidate_ips.filter((v): v is string => typeof v === 'string' && v.length > 0)
     : undefined;
@@ -318,6 +358,8 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
     ...(observedAt !== undefined ? { observed_at: observedAt } : {}),
     ...(osFingerprint !== undefined ? { os_fingerprint: osFingerprint } : {}),
     ...(proxyKind !== undefined ? { proxy_kind: proxyKind } : {}),
+    ...(udpSupported !== undefined ? { proxy_udp_supported: udpSupported } : {}),
+    ...(transportMode !== undefined ? { transport_mode_active: transportMode } : {}),
   };
 }
 
@@ -539,10 +581,10 @@ export async function getAgentSession(
  *  address bar. Served by GET /v1/agent-sessions/:id/page-state, populated by the
  *  fleet control plane's pageState frames (box → control plane → store). It is the
  *  source for the live URL — the box reports pageState over the control plane, NOT
- *  the LiveKit data channel (A3 W2730), so the GUI POLLS this. null when nothing
+ *  the LiveKit data channel (W2730), so the GUI POLLS this. null when nothing
  *  has been reported yet (or the control plane is absent). */
 export interface AgentPageState {
-  // 'stalled' (A3 W2845): the device's renderer froze (hung JS / compositor
+  // 'stalled' (W2845): the device's renderer froze (hung JS / compositor
   // deadlock) — the stream still flows (last frame repeating) but the page is
   // unresponsive. The GUI shows a "reconnecting — page unresponsive" indicator
   // over the (still-visible) last frame, NOT a black screen.
@@ -683,8 +725,22 @@ export async function fetchAgentCapture(
   apiKey: string | null,
   sessionId: string,
   captureId: string,
+  /**
+   * The session's own control key, for a window that has no account key (the
+   * Simulator: the OS credential store refuses it every window but the main
+   * one). The captures route accepts it for its own session. When present it
+   * is the ONLY credential sent — the account key is never added beside it.
+   * Omitted everywhere the account key is the right credential (the main
+   * window), so that path is unchanged.
+   */
+  controlKey?: string | null,
 ): Promise<Blob | null> {
-  if (apiKey === null || apiKey.length === 0 || sessionId.length === 0 || captureId.length === 0) {
+  const useControlKey = typeof controlKey === 'string' && controlKey.length > 0;
+  if (
+    (!useControlKey && (apiKey === null || apiKey.length === 0)) ||
+    sessionId.length === 0 ||
+    captureId.length === 0
+  ) {
     return null;
   }
   try {
@@ -693,7 +749,9 @@ export async function fetchAgentCapture(
     )}/captures/${encodeURIComponent(captureId)}`;
     const res = await fetchWithDeadline(url, {
       method: 'GET',
-      headers: { authorization: `Bearer ${apiKey}`, accept: 'image/png,image/jpeg' },
+      headers: useControlKey
+        ? { 'x-driftstack-gui-control-key': controlKey, accept: 'image/png,image/jpeg' }
+        : { authorization: `Bearer ${apiKey ?? ''}`, accept: 'image/png,image/jpeg' },
     });
     if (!res.ok) {
       await disposeResponseBody(res);
@@ -740,14 +798,14 @@ export async function setAgentSessionCookies(
 /** Discriminated result of POST /v1/agent-sessions/:id/history (sim back/forward —
  *  the sibling of setAgentSessionCookies). `ok` → the step was applied; every other
  *  status is an inert/failure state the back/forward buttons surface calmly
- *  ('unavailable' → "not available on this session right now"). A3 W2870. */
+ *  ('unavailable' → "not available on this session right now"). W2870. */
 export interface NavigateHistoryResult {
   status: 'ok' | 'unavailable' | 'timeout' | 'error';
   reason?: string;
 }
 
 /** Step the running session's browser history one entry in `direction` (the sibling
- *  of setAgentSessionCookies; A3 W2870). Throws (via authedFetch) on a non-2xx — the
+ *  of setAgentSessionCookies; W2870). Throws (via authedFetch) on a non-2xx — the
  *  gated 503 / a 404 / a 422 (bad direction) — so the caller surfaces those; a 200
  *  always carries a discriminated body. */
 export async function navigateAgentSessionHistory(
@@ -769,7 +827,7 @@ export async function navigateAgentSessionHistory(
 /** The OPAQUE handle the server returns for an uploaded file (matches the server
  *  UploadHandleSchema). `id` is a server/harness-internal ref — NEVER a disk path;
  *  the GUI lists files by this + hands it to a page's file-chooser. Founder
- *  "control files" / A3 W2851. */
+ *  "control files" / W2851. */
 export interface SessionFileHandle {
   id: string;
   name: string;
@@ -787,7 +845,7 @@ export interface UploadFileResult {
 }
 
 /** Upload a file's bytes (base64) into the running session's isolated upload jail
- *  and get back an opaque handle to drive a page's <input type=file> (A3 W2851).
+ *  and get back an opaque handle to drive a page's <input type=file> (W2851).
  *  Throws (via authedFetch) on a non-2xx — the gated 503 / a 404 / a 400 (empty or
  *  >64 MiB) — so the caller surfaces those; a 200 always carries a discriminated body.
  *  Pre-validate size client-side to avoid the 64 MiB 400. */
@@ -809,7 +867,7 @@ export async function uploadAgentSessionFile(
 }
 
 /** A file a page wrote into the running session's download jail (matches the server
- *  DownloadEntry). `name` is a bare basename — never a path. A3 W2856 / "control files". */
+ *  DownloadEntry). `name` is a bare basename — never a path. W2856 / "control files". */
 export interface SessionDownloadEntry {
   name: string;
   size: number;
@@ -839,7 +897,7 @@ export interface FetchDownloadResult {
   reason?: string;
 }
 
-/** List the files a page wrote into the running session's download jail (A3 W2856).
+/** List the files a page wrote into the running session's download jail (W2856).
  *  Throws (via authedFetch) on a non-2xx (the gated 503 / a 404) so the caller's poll
  *  `.catch()` maps that to the calm pending state, like the cookies poll. A 200
  *  always carries a discriminated body; `ok` with an empty list = "no downloads yet". */
@@ -1000,6 +1058,45 @@ export async function sendAgentMessage(
     { method: 'POST', body: JSON.stringify({ user_message: userMessage }) },
     auth,
   );
+}
+
+/** A fresh LiveKit join token for this session. */
+export interface LivekitJoin {
+  ws_url: string;
+  token: string;
+  room: string;
+  expires_at: string;
+}
+
+/**
+ * Mint a fresh LiveKit join token for a session the Simulator is showing —
+ * POST /v1/agent-sessions/:id/livekit-token, with the session's control key
+ * (the route accepts it for its own session). A token is checked only when a
+ * connection JOINS, and the ones this path mints live ten minutes, so a window
+ * that re-joins after a drop must ask for a new one rather than present the
+ * token it was opened with. Throws (via authedFetch) on a refusal; a malformed
+ * body is an error, never a half-filled token.
+ */
+export async function mintLivekitToken(id: string, auth: ControlAuth = null): Promise<LivekitJoin> {
+  const body = (await authedFetch(
+    `/v1/agent-sessions/${encodeURIComponent(id)}/livekit-token`,
+    { method: 'POST', body: '{}' },
+    auth,
+  )) as Partial<Record<keyof LivekitJoin, unknown>>;
+  if (
+    typeof body.ws_url !== 'string' ||
+    body.ws_url === '' ||
+    typeof body.token !== 'string' ||
+    body.token === ''
+  ) {
+    throw new AgentSessionControlError('The session did not return a join token', 0, 'unknown');
+  }
+  return {
+    ws_url: body.ws_url,
+    token: body.token,
+    room: typeof body.room === 'string' ? body.room : id,
+    expires_at: typeof body.expires_at === 'string' ? body.expires_at : '',
+  };
 }
 
 /** End (delete) the agent session so the worker tears down the browser/fork.

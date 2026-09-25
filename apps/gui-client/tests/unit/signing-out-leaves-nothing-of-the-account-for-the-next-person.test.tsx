@@ -177,11 +177,19 @@ describe('signing out leaves nothing of the account for the next person', () => 
     expect(keychain.has('proxy_vault_key')).toBe(true);
 
     const { App } = await import('../../src/App');
-    render(<App />);
+    // As main.tsx mounts it: since 2026-09-24 the sidebar's sign-out asks first.
+    const { ConfirmProvider } = await import('../../src/components/ConfirmProvider');
+    render(
+      <ConfirmProvider>
+        <App />
+      </ConfirmProvider>,
+    );
     await waitFor(() =>
       expect(screen.queryByText('Welcome to Driftstack')).not.toBeInTheDocument(),
     );
     fireEvent.click(await screen.findByRole('button', { name: /Sign out/ }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Sign out' }));
     await waitFor(() => expect(screen.getByText('Welcome to Driftstack')).toBeInTheDocument(), {
       timeout: 3000,
     });

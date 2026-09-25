@@ -294,7 +294,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       // `extensions.issues` (shape: { formErrors: string[],
       // fieldErrors: Record<string, string[]> }). Surface those
       // per-field instead of the generic "One or more fields failed
-      // validation" detail (Issue 2 — wave 1085+).
+      // validation" detail (Issue 2).
       function formatValidationIssues(issues) {
         if (!issues || typeof issues !== 'object') return null;
         const fieldErrors = issues.fieldErrors || {};
@@ -459,7 +459,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               .catch(() => ({}))
               .then((b) => {
                 // Per-field validation errors take precedence over the
-                // generic detail string (Issue 2 wave 1085+).
+                // generic detail string (Issue 2).
                 const specific = formatValidationIssues(b.extensions && b.extensions.issues);
                 const err = specific
                   ? Object.assign(new Error(specific), { customerSafe: true })

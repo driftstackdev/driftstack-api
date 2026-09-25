@@ -65,6 +65,7 @@ import {
   agedChipAge,
   agedQuicReading,
   proxyCapabilities,
+  serverReadingCapabilities,
   type ProxyCapability,
 } from './ProxyCapabilities';
 import { agedOsVerdictFor, formatRunningFor } from './ProfilesTable';
@@ -97,16 +98,22 @@ const OPEN_SESSION_TITLE = 'Open the running session';
 const LAUNCHING_TITLE = 'Launching — the proxy is checked before the session starts';
 const LAUNCH_CHECK_TITLE = 'Checking the proxy before the session starts';
 const NEVER_LAUNCHED_TITLE = 'This profile has never been launched';
+/** Owner item 9 — the health pill of a proxy only Driftstack has checked. */
+export const NOT_TESTED_HERE_PILL = 'not tested here';
+export const NOT_TESTED_HERE_TITLE =
+  'Driftstack has checked this proxy — its UDP, QUIC and OS readings are shown. Run Test to check it from this computer too.';
 /** Polish — what the VPN tag MEANS (the Check VPN sentence belongs to the button
  *  and the menu row, not to a label that performs nothing). */
 const VPN_TAG_TITLE =
   'OpenVPN / WireGuard tunnel — the whole session, UDP included, travels inside it';
 /** Polish — soft inks for coloured text on its own tint. The red-400 and
  *  oxblood-500 TOKENS measure 3.3–3.8:1 and 1.9:1 at 9–10px on their 15–25%
- *  tints; one step lighter (red-300 / oxblood-300) passes 4.5 (measured on the
- *  rendered tile). The error ink is a literal, because the token file is
- *  outside this component. */
-const SOFT_ERROR_INK = 'text-[#fca5a5]';
+ *  tints; one step lighter passes 4.5 (measured on the rendered tile).
+ *  ⛔ 2026-09-24 (owner item 1) — this was the literal red-300 `#fca5a5`, which
+ *  is a DARK-glass ink: on the light theme's card it measured under 2:1. It is
+ *  now the error-as-text token (`--status-error-text-rgb`), which is exactly
+ *  that job on the mode axis: the soft red in dark, the deep red in light. */
+const SOFT_ERROR_INK = 'text-status-error-text';
 /** Contrast (2026-09-12) — the accent AS TEXT is now a mode-aware token
  *  (`--accent-text-rgb`: the rose tint in dark, the accent itself in light).
  *  The dark-only literal #e8a0ab this replaced measured 1.66:1 on the light
@@ -145,6 +152,8 @@ import {
   VPN_UDP_MEASURED_NONE_TITLE,
   VPN_UDP_MEASURED_OK_TITLE,
   VPN_UDP_NOT_MEASURED_TITLE,
+  UDP_NOT_ON_PLAN_CHIP,
+  VPN_UDP_NOT_ON_PLAN_HINT,
 } from '../lib/proxy-check-copy';
 
 /** (o) — the pre-flight of a VPN/HTTP row: a DNS resolve of the configured
@@ -282,8 +291,10 @@ export interface ProfilePhoneCardProps {
    *  a TUNNEL. ⛔ `undefined` is NOT MEASURED, never "no UDP": on the VPN path the
    *  node ASSERTS `udp_associate: true` about the tunnel's nature without probing
    *  it, and the control plane drops the assertion rather than let it light a chip
-   *  that means "we measured this". A SOCKS5 row does not read this — its UDP chip
-   *  comes from the native probe's own `udp_associate`. */
+   *  that means "we measured this". A SOCKS5 row reads this ONLY when this Mac
+   *  has not tested it (no `capabilities`): its UDP chip is the native probe's own
+   *  `udp_associate` otherwise. Owner item 9 — an automatic check's reading of a
+   *  proxy this Mac never tested used to show "✓ Apple" and nothing else. */
   udpProbe?: boolean;
   /** N-2 — passive OS fingerprint of the proxy's own stack, when the control
    *  plane observed one. Undefined = never measured. */
@@ -306,6 +317,11 @@ export interface ProfilePhoneCardProps {
    *  resolve + a fleet tunnel test (never a SOCKS5 probe), UDP is carried by the
    *  tunnel rather than probed, and the menu row says so. */
   vpn?: boolean;
+  /** Owner item 9 (2026-09-24) — the ACCOUNT's plan has no VPN egress, so a VPN
+   *  row's Driftstack readings will never be taken: its UDP chip says "not on
+   *  plan", the Proxies tab's state for the same row, instead of "⇢ UDP" (not
+   *  measured YET). Absent = the plan is not known to exclude it. */
+  planExcludesVpn?: boolean;
   /** (h) — the fleet's sentence when the last tunnel test FAILED to bring this
    *  VPN up. Renders the broken-proxy banner (a VPN row has no SOCKS5 caps to
    *  trip it); cleared by the next check. */
@@ -470,6 +486,10 @@ const CHIP_WIDTH: Readonly<Record<string, number>> = {
   '… OS': 33.41,
   '? OS': 29.97, // measured, undetermined: a COMPLETED classification
   '— OS': 33.33, // no reading at all; see the eligibility rule below
+  // Owner item 9 (2026-09-24) — a VPN row on a plan without VPN. MEASURED the
+  // table's way (a CHIP_BASE probe inside a card body at ?w=178, 2x, fonts.size
+  // 0), with '? OS' 29.97 and '✓ Apple' 47.16 reproduced in the same run.
+  'UDP — not on plan': 96.5,
   // ⛔ V-219 (2026-09-14) — the '?' glyph now pairs with a NAMED OS, not only
   // with the bare 'OS' label. A reading taken through a multi-machine proxy is
   // withheld as neutral while still showing the stack it read, so every
@@ -680,6 +700,18 @@ export function healthPill(p: HealthPillInput): HealthPill {
     };
   }
   if (!p.probed && p.capabilities === null) {
+    // Owner item 9 (2026-09-24) — a SOCKS5 proxy only Driftstack has checked
+    // shows Driftstack's UDP / QUIC readings in the caps row; a bare "untested"
+    // beside them read as "has not been measured, but QUIC did". It is untested
+    // HERE, on this computer, and the pill says exactly that.
+    if (p.vpn !== true && hasServerCapabilityReading(p)) {
+      return {
+        text: NOT_TESTED_HERE_PILL,
+        state: 'untested',
+        tone: 'muted',
+        title: NOT_TESTED_HERE_TITLE,
+      };
+    }
     return {
       text: 'untested',
       state: 'untested',
@@ -762,6 +794,14 @@ const CHIP_READY_CLASS = 'bg-status-ready/10 text-status-ready';
  *  outline is paint only, so every CHIP_WIDTH entry holds for an aged chip too. */
 const CHIP_AGED_CLASS =
   'bg-surface-inset text-ink-muted outline-dashed outline-1 -outline-offset-1 outline-ink-muted/60';
+/** Owner item 9 (2026-09-24) — the one aged chip that keeps its colour: an OS
+ *  reading of Apple matches the device however old it is ("if it's a Apple, it
+ *  should be green status"). The aged chrome (a dashed outline, the age in its
+ *  title and, where the row has room, beside it) still says "when last checked";
+ *  the fill and ink are the ready chip's. Paint only, like CHIP_AGED_CLASS, so
+ *  every CHIP_WIDTH entry holds for it too. */
+const CHIP_AGED_MATCH_CLASS =
+  'bg-status-ready/10 text-status-ready outline-dashed outline-1 -outline-offset-1 outline-status-ready/60';
 
 export type CapsMode = 'none' | 'repair' | 'measured' | 'first';
 export type CapsInput = Pick<
@@ -776,6 +816,7 @@ export type CapsInput = Pick<
   | 'autoRecheck'
   | 'nowMs'
   | 'vpn'
+  | 'planExcludesVpn'
   | 'vpnFailure'
   | 'endpoint'
   | 'testing'
@@ -803,7 +844,37 @@ export function capsMode(p: CapsInput): CapsMode {
   // is a tunnel the test Mac brought up without reporting one (o): its QUIC
   // relay probe and the tunnel's UDP hint are what that reply measured.
   if (p.vpn === true && (p.latencyMs !== null || tunnelUpNoLatency(p))) return 'measured';
+  // Owner item 9 — a tunnel the plan will never check: there is no inline Check
+  // to offer (it cannot run on this plan; the ⋯ menu's Check VPN says why), and
+  // the row states the plan fact at full width ("UDP — not on plan" · "— OS",
+  // 96.5 + 4 + 33.33 + the 3px floor = 136.83 of 144).
+  if (p.vpn === true && p.planExcludesVpn === true) return 'measured';
+  // Owner item 9 (2026-09-24) — a SOCKS5 proxy this Mac has not tested but
+  // Driftstack has: its UDP / QUIC readings ARE a measurement, so the row shows
+  // them in the full measured width. In 'first' the Test button takes 40 of the
+  // row's 144px and the trio (UDP ✓ · QUIC ✓ · ✓ Apple, 142.68 reserved) would
+  // ride a '+2' — the pill the owner asked us never to hide a reading behind.
+  // The Test action stays one click away in the ⋯ menu ("Test proxy").
+  if (p.vpn !== true && p.capabilities === null && hasServerCapabilityReading(p)) {
+    return 'measured';
+  }
   return 'first';
+}
+
+/** Owner item 9 — does Driftstack hold a UDP or QUIC reading (current, or aged
+ *  and still shown) for this proxy? Read only for a SOCKS5 row with no local
+ *  verdict; the OS reading alone keeps today's 'first' row ("Test ✓ Apple"). */
+function hasServerCapabilityReading(p: CapsInput): boolean {
+  const aged = shownAgedReadings(p);
+  return (
+    typeof p.udpProbe === 'boolean' ||
+    typeof p.quicProbe === 'boolean' ||
+    p.quicMeasured === 'h3' ||
+    p.quicMeasured === 'h2-only' ||
+    aged?.udpProbe !== undefined ||
+    aged?.quicProbe !== undefined ||
+    aged?.quicMeasured !== undefined
+  );
 }
 
 export interface CapChip {
@@ -1020,9 +1091,21 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
     p.capabilities !== null
       ? proxyCapabilities(p.capabilities, p.quicMeasured, p.quicProbe, aged, past)
       : null;
+  // Owner item 9 (2026-09-24) — a SOCKS5 proxy this Mac has not tested itself, but
+  // Driftstack has (another Mac, a reinstall, the automatic capability check): its
+  // UDP and QUIC readings are chips, exactly like a tested row's — the Proxies
+  // tab's rule (`serverReadingCapabilities`), so the two cannot disagree. A chip
+  // those readings do not cover is simply not drawn here, the card's one way of
+  // saying "not measured" beside its Test button.
+  const serverCaps =
+    !vpn && caps === null
+      ? serverReadingCapabilities(p.udpProbe, p.quicMeasured, p.quicProbe, aged, past).filter(
+          (c) => c.unmeasured !== true,
+        )
+      : null;
   const quicCap = vpn
     ? vpnQuicCap(p.quicMeasured, p.quicProbe, aged, past)
-    : caps?.find((c) => c.key === 'quic');
+    : (caps ?? serverCaps)?.find((c) => c.key === 'quic');
   const eligible: CapChip[] = [];
   const hidden: string[] = [];
 
@@ -1052,7 +1135,16 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
     const measured = typeof p.udpProbe === 'boolean';
     const agedUdp = measured ? undefined : aged?.udpProbe;
     const udpOk = agedUdp !== undefined ? agedUdp.value : p.udpProbe === true;
-    const udpText = !measured && agedUdp === undefined ? '⇢ UDP' : udpOk ? 'UDP ✓' : '⤵ UDP';
+    // Owner item 9 — nothing measured, and the plan means nothing ever will be:
+    // the Proxies tab's "not on plan", not "⇢ UDP" (not measured YET).
+    const planExcluded = !measured && agedUdp === undefined && p.planExcludesVpn === true;
+    const udpText = planExcluded
+      ? UDP_NOT_ON_PLAN_CHIP
+      : !measured && agedUdp === undefined
+        ? '⇢ UDP'
+        : udpOk
+          ? 'UDP ✓'
+          : '⤵ UDP';
     eligible.push({
       key: 'udp',
       text: udpText,
@@ -1063,8 +1155,9 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
           : p.udpProbe === true
             ? CHIP_READY_CLASS
             : CHIP_MUTED_CLASS,
-      title:
-        agedUdp !== undefined
+      title: planExcluded
+        ? VPN_UDP_NOT_ON_PLAN_HINT
+        : agedUdp !== undefined
           ? `${agedReadingHint(agedUdp.atMs, past.nowMs, past.autoRecheck, CHECK_VPN_ACTION)} ${
               agedUdp.value
                 ? 'UDP worked through this VPN then.'
@@ -1081,10 +1174,11 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
       // column would put a real reading behind the '+N' the owner complained
       // about, which is the defect this chip was promoted out of.
       // An aged reading differs per proxy exactly as a current one does.
-      ...(measured || agedUdp !== undefined ? {} : { dropFirst: true as const }),
+      ...(measured || agedUdp !== undefined || planExcluded ? {} : { dropFirst: true as const }),
       ...(agedUdp !== undefined ? { agedAtMs: agedUdp.atMs } : {}),
-      attrs:
-        agedUdp !== undefined
+      attrs: planExcluded
+        ? { 'data-udp': 'tunnel', 'data-unmeasured': 'plan_excluded' }
+        : agedUdp !== undefined
           ? { 'data-udp': 'aged', ...agedAttrs(agedUdp.value) }
           : { 'data-udp': !measured ? 'tunnel' : p.udpProbe === true ? 'true' : 'false' },
     });
@@ -1099,6 +1193,27 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
       title: udpTitle(false, caps, quicCap),
       attrs: { 'data-udp': udpOk ? 'true' : 'false' },
     });
+  } else {
+    // Owner item 9 — Driftstack's UDP reading of a proxy this Mac never tested.
+    const udp = serverCaps?.find((c) => c.key === 'webrtc');
+    if (udp !== undefined) {
+      const agedUdp = udp.aged;
+      const udpOk = agedUdp !== undefined ? agedUdp.value : udp.ok;
+      const text = udpOk ? 'UDP ✓' : '⤵ UDP';
+      eligible.push({
+        key: 'udp',
+        text,
+        width: chipWidth(text),
+        className:
+          agedUdp !== undefined ? CHIP_AGED_CLASS : udpOk ? CHIP_READY_CLASS : CHIP_MUTED_CLASS,
+        title: udp.hint,
+        ...(agedUdp !== undefined ? { agedAtMs: agedUdp.atMs } : {}),
+        attrs:
+          agedUdp !== undefined
+            ? { 'data-udp': 'aged', ...agedAttrs(agedUdp.value) }
+            : { 'data-udp': udpOk ? 'true' : 'false' },
+      });
+    }
   }
 
   if (quicCap !== undefined) {
@@ -1228,7 +1343,9 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
       // defect red, measuring muted) — only the chip chrome is the card's.
       className:
         os.aged === true
-          ? CHIP_AGED_CLASS
+          ? os.tone === 'match'
+            ? CHIP_AGED_MATCH_CLASS
+            : CHIP_AGED_CLASS
           : os.tone === 'match'
             ? CHIP_READY_CLASS
             : os.tone === 'mismatch'
@@ -2416,12 +2533,12 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       // composes with every shadow utility; running = a mint frame visible
       // from across the grid. Focus: a solid ring at 2px offset (the global
       // 40%-alpha outline composited to 1.4:1 — invisible).
-      className={`pf-card group relative cursor-pointer rounded-[24px] border p-1.5 transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_18px_40px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base ${
+      className={`pf-card group relative cursor-pointer rounded-[24px] border p-1.5 transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base ${
         p.selected
           ? 'border-accent-hover ring-2 ring-accent-hover/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_30px_rgba(0,0,0,0.35)]'
           : p.running
             ? 'border-status-ready/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_30px_rgba(0,0,0,0.35)]'
-            : 'border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_30px_rgba(0,0,0,0.35)]'
+            : 'border-ink-primary/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_30px_rgba(0,0,0,0.35)]'
       }`}
       // Round 2 — the card's state as ONE light (see `.pf-card` in index.css):
       // the rim, the pool under the glass and the floor read this attribute.
@@ -2531,7 +2648,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               }
             }}
           >
-            <div className="flex h-7 shrink-0 items-center gap-1.5 border-b border-white/[0.06] pl-2.5 pr-1.5">
+            <div className="flex h-7 shrink-0 items-center gap-1.5 border-b border-ink-primary/[0.06] pl-2.5 pr-1.5">
               <span
                 id={sheetTitleId}
                 className="min-w-0 flex-1 truncate text-[11px] font-semibold leading-4 text-ink-primary"
@@ -2545,7 +2662,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 aria-label="Close details"
                 title="Close (Esc)"
                 onClick={closeDetails}
-                className="grid h-5 w-5 shrink-0 place-items-center rounded text-[13px] leading-none text-ink-secondary transition-colors hover:bg-white/10 hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover"
+                className="grid h-5 w-5 shrink-0 place-items-center rounded text-[13px] leading-none text-ink-secondary transition-colors hover:bg-ink-primary/10 hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover"
               >
                 ×
               </button>
@@ -2632,6 +2749,19 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                       {!vpn && p.capabilities !== null ? (
                         <ProxyCapabilityChips
                           result={p.capabilities}
+                          quicMeasured={p.quicMeasured}
+                          quicProbe={p.quicProbe}
+                          aged={sheetAged}
+                          autoRecheck={p.autoRecheck === true}
+                          nowMs={nowMs}
+                          size="xs"
+                        />
+                      ) : !vpn && hasServerCapabilityReading(p) ? (
+                        // Owner item 9 — Driftstack's readings of a proxy this Mac
+                        // never tested: the SAME chips the Proxies tab draws for it.
+                        <ProxyCapabilityChips
+                          result={undefined}
+                          udpProbe={p.udpProbe}
                           quicMeasured={p.quicMeasured}
                           quicProbe={p.quicProbe}
                           aged={sheetAged}
@@ -2789,7 +2919,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                         hasNote ? `Note on ${p.name} — click to edit` : `Add a note to ${p.name}`
                       }
                       onClick={() => openNoteEditor(detailsOpenerRef.current)}
-                      className="w-full whitespace-pre-wrap break-words rounded-md border border-surface-divider bg-white/[0.03] px-1.5 py-1 text-left text-ink-secondary transition-colors hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover"
+                      className="w-full whitespace-pre-wrap break-words rounded-md border border-surface-divider bg-ink-primary/[0.03] px-1.5 py-1 text-left text-ink-secondary transition-colors hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover"
                     >
                       {hasNote ? p.note : 'Add note…'}
                     </button>
@@ -2821,7 +2951,8 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
         {/* top gloss */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-1/3 bg-gradient-to-b from-white/[0.07] to-transparent"
+          data-component="screen-gloss"
+          className="pf-gloss pointer-events-none absolute inset-x-0 top-0 z-[5] h-1/3"
         />
 
         {/* T-19 — selection marker. The whole card toggles selection on click
@@ -2844,8 +2975,8 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           title={p.selected ? 'Selected — click to deselect' : 'Click to select'}
           className={`absolute left-1.5 top-[7px] z-[15] grid h-4 w-4 place-items-center rounded-full text-[9px] font-bold transition-all ${
             p.selected
-              ? 'bg-accent text-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)] group-hover:bg-accent-hover'
-              : 'border-[1.5px] border-white/35 bg-transparent text-transparent group-hover:border-white/70'
+              ? 'bg-accent text-accent-on shadow-[0_0_0_1px_rgba(0,0,0,0.35)] group-hover:bg-accent-hover'
+              : 'border-[1.5px] border-ink-primary/35 bg-transparent text-transparent group-hover:border-ink-primary/70'
           }`}
         >
           ✓
@@ -2882,7 +3013,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             <span
               data-component="identity-thumb"
               data-ink={thumb.ink}
-              className={`relative grid h-[38px] w-[22px] shrink-0 place-items-center rounded-[5px] font-bold ring-1 ring-white/25 ${
+              className={`relative grid h-[38px] w-[22px] shrink-0 place-items-center rounded-[5px] font-bold ring-1 ring-ink-primary/25 ${
                 thumb.inkClass
               } ${p.icon ? 'text-[12px]' : 'text-[9px]'}`}
               style={{
@@ -3111,7 +3242,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                       e.stopPropagation();
                       p.onEdit?.();
                     }}
-                    className="shrink-0 whitespace-nowrap rounded-md border border-surface-divider bg-white/[0.04] px-2 py-px text-[10px] font-semibold leading-4 text-ink-secondary transition-colors enabled:hover:bg-surface-divider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover disabled:opacity-50"
+                    className="shrink-0 whitespace-nowrap rounded-md border border-surface-divider bg-ink-primary/[0.04] px-2 py-px text-[10px] font-semibold leading-4 text-ink-secondary transition-colors enabled:hover:bg-surface-divider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover disabled:opacity-50"
                   >
                     Change
                   </button>
@@ -3134,7 +3265,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 className={`shrink-0 whitespace-nowrap rounded-md border border-surface-divider px-2 py-px text-[10px] font-semibold leading-4 text-ink-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover ${
                   p.testing
                     ? 'cursor-progress bg-surface-elevated'
-                    : 'bg-white/[0.04] enabled:hover:bg-surface-divider enabled:hover:text-ink-primary disabled:opacity-50'
+                    : 'bg-ink-primary/[0.04] enabled:hover:bg-surface-divider enabled:hover:text-ink-primary disabled:opacity-50'
                 }`}
               >
                 {mode === 'first' ? action.label : vpn ? CHECK_VPN_ACTION : 'Test'}
@@ -3354,7 +3485,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
         <div
           ref={footerRef}
           data-component="card-dock"
-          className="relative z-10 flex h-[47px] shrink-0 items-center gap-1.5 border-t border-white/[0.06] bg-white/[0.03] px-2.5"
+          className="relative z-10 flex h-[47px] shrink-0 items-center gap-1.5 border-t border-ink-primary/[0.06] bg-ink-primary/[0.03] px-2.5"
         >
           <button
             type="button"
@@ -3363,7 +3494,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 ? 'bg-status-ready text-surface-base enabled:hover:brightness-110 disabled:opacity-50'
                 : p.launching
                   ? 'cursor-progress bg-ink-muted/15 text-ink-secondary'
-                  : 'bg-accent text-white shadow-[0_3px_10px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.18)] enabled:hover:bg-accent-fill-hover disabled:opacity-50'
+                  : 'bg-accent text-accent-on shadow-[0_3px_10px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.18)] enabled:hover:bg-accent-fill-hover disabled:opacity-50'
             }`}
             disabled={p.busy || (!p.running && p.launchDisabled)}
             aria-busy={!p.running && p.launching}
@@ -3423,7 +3554,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             className={`flex h-[30px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-[15px] leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised ${
               actionsOpen
                 ? 'border border-accent bg-accent-subtle text-ink-primary'
-                : 'bg-white/[0.06] text-ink-primary hover:bg-white/10'
+                : 'bg-ink-primary/[0.06] text-ink-primary hover:bg-ink-primary/10'
             }`}
             onClick={(e) => {
               e.stopPropagation();

@@ -328,7 +328,9 @@ describe('(n) N18 — the Profiles LIST view carries the VPN check, verdict and 
     ).toBe(new Date(FAILED_AT).toISOString());
 
     // UDP is not measurable on a tunnel; the dash read as "not measured".
-    expect(q.getByText('UDP via tunnel')).toBeTruthy();
+    // (2026-09-24, owner item 9: the chip reads "⇢ UDP" — the card's and the
+    // Proxies tab's word for this state; it read "UDP via tunnel".)
+    expect(q.getByText('⇢ UDP')).toBeTruthy();
     expect(row.querySelector('[data-udp="tunnel"]')).not.toBeNull();
     expect(q.queryByText('–')).toBeNull();
   });
@@ -359,13 +361,13 @@ describe('(n) N18 — the Profiles LIST view carries the VPN check, verdict and 
     fireEvent.click(within(row).getByRole('button', { name: CHECK_VPN_ACTION }));
 
     const chip = await waitFor(() => {
-      const el = within(rowFor('London tunnel')).queryByText('⤵');
+      const el = within(rowFor('London tunnel')).queryByText('⤵ UDP');
       expect(el, 'the measured verdict reached the list cell').not.toBeNull();
       return el as HTMLElement;
     });
     expect(chip.getAttribute('title')).toBe(VPN_UDP_MEASURED_NONE_TITLE);
     // …and the pill that means "nothing measured this" is gone from the row.
-    expect(within(rowFor('London tunnel')).queryByText('UDP via tunnel')).toBeNull();
+    expect(within(rowFor('London tunnel')).queryByText('⇢ UDP')).toBeNull();
   });
 
   it('CONTROL (V6) today\'s node asserts UDP and the cell still reads NOT MEASURED — the arm above is not "any reply lights the chip"', async () => {
@@ -385,9 +387,9 @@ describe('(n) N18 — the Profiles LIST view carries the VPN check, verdict and 
     await waitFor(() => {
       expect(within(rowFor('London tunnel')).queryByText('61ms')).not.toBeNull();
     });
-    const pill = within(rowFor('London tunnel')).getByText('UDP via tunnel');
+    const pill = within(rowFor('London tunnel')).getByText('⇢ UDP');
     expect(pill.getAttribute('title')).toBe(VPN_UDP_NOT_MEASURED_TITLE);
-    expect(within(rowFor('London tunnel')).queryByText('⤵')).toBeNull();
+    expect(within(rowFor('London tunnel')).queryByText('⤵ UDP')).toBeNull();
   });
 
   it('CONTROL — the SOCKS5-bound row in the SAME table keeps "Test" and "no exit IP" (the cells were scoped, not rewritten)', async () => {

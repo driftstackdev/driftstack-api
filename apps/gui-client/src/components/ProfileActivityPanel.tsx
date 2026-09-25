@@ -24,6 +24,16 @@ interface ProfileActivityPanelProps {
   onClose: () => void;
 }
 
+/** Follow-up B (2026-09-24) — what the panel says when the server answers
+ *  `pages_withheld: true`: the pages exist in session records this caller may
+ *  not read (the key lacks access to session records, or it is a teammate's
+ *  workspace and the caller is not an admin there). The server sends `data: []`
+ *  then, documented so it "never reads as no activity" — and the panel used to
+ *  read exactly that into it: "No pages recorded yet". Says WHAT is hidden and
+ *  for whom; never the mechanism. */
+export const PAGES_WITHHELD_SENTENCE =
+  'The pages are hidden for you. They come from session records your access does not include; in a teammate’s workspace, only admins can see them.';
+
 type PanelState =
   | { kind: 'loading' }
   | { kind: 'ready'; activity: ProfileActivityResponse }
@@ -118,6 +128,14 @@ export function ProfileActivityPanel(props: ProfileActivityPanelProps): JSX.Elem
           ) : state.kind === 'error' ? (
             <p className="py-6 text-center text-sm text-danger" role="alert">
               {state.message}
+            </p>
+          ) : state.activity.pages_withheld === true ? (
+            <p
+              role="status"
+              className="py-6 text-center text-sm text-ink-secondary"
+              data-component="profile-activity-withheld"
+            >
+              {PAGES_WITHHELD_SENTENCE}
             </p>
           ) : state.activity.data.length === 0 ? (
             <p

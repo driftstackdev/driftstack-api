@@ -249,7 +249,7 @@ describe('agent-session-control transport', () => {
     expect((await getAgentSession('agt_1')).capabilityReport).toBeUndefined();
 
     // Vacuity 2 — a report carrying ONLY the h3 signal: h3 is present, and every
-    // exit field is absent (the live state today, until A3 emits them). This is
+    // exit field is absent (the live state today, until the harness emits them). This is
     // the control that proves the "parses exit_ip" arm above is not vacuous — a
     // report without exit_ip must NOT grow one.
     mockFetch.mockResolvedValue(

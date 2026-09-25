@@ -175,7 +175,7 @@ describe('deriveProbeViewState — the aged maps', () => {
     expect(view.aged.quicMeasured).toEqual({});
   });
 
-  it('CRITICAL the aged arm obeys the SAME gate as its fresh sibling: nothing aged beside a red "unreachable" pill — except the OS reading of a server-seeded row, which has no pill to sit beside. MUTATION: drop `isProxyUsable(c.result)` from an aged arm’s enclosing `if` and the first block reds', () => {
+  it('CRITICAL the aged arm obeys the SAME gate as its fresh sibling: nothing aged beside a red "unreachable" pill — except the readings of a server-seeded row, which has no pill to sit beside. MUTATION: drop `isProxyUsable(c.result)` from an aged arm’s enclosing `if` and the first block reds', () => {
     let view = deriveProbeViewState({ p: entry(AGED_AT, { result: DOWN }) }, NOW);
     expect(view.aged).toEqual({
       osFingerprints: {},
@@ -186,8 +186,12 @@ describe('deriveProbeViewState — the aged maps', () => {
 
     view = deriveProbeViewState({ p: entry(AGED_AT, { result: DOWN, serverSeeded: true }) }, NOW);
     expect(view.aged.osFingerprints.p?.atMs).toBe(NOW - AGED_AT);
-    expect(view.aged.quicProbe).toEqual({});
-    expect(view.aged.udpProbe).toEqual({});
+    // Owner item 9 (2026-09-24) — ALL of a seeded row's readings, not the OS one
+    // alone: the automatic check that measured the OS measured these too, and
+    // showing "Apple" beside an untested QUIC and UDP was the owner's "has not
+    // been measured, but QUIC did". (This arm pinned `{}` here until then.)
+    expect(view.aged.quicProbe.p?.atMs).toBe(NOW - AGED_AT);
+    expect(view.aged.udpProbe.p?.atMs).toBe(NOW - AGED_AT);
   });
 
   it('a CAUSE does not age: "the OS check is not available for VPN connections" is as true next month as today, and stays in the current map', () => {
@@ -302,12 +306,16 @@ describe('CONTROL — FROZEN: the fresh maps of a fixed cache, as the commit bef
   };
   const AT = NOW - MIN;
 
-  it('CRITICAL deriveProbeViewState — a DOWN row shows no Driftstack reading, a server-seeded row shows its OS reading and nothing else, a tunnel’s placeholder shows nothing. MUTATION: drop `isProxyUsable(c.result)` from a fresh arm’s gate and `down` joins a map', () => {
+  // ⛔ Owner item 9 (2026-09-24) — the SECOND deliberate difference from the
+  // recording: a server-seeded row now shows ALL its Driftstack readings, not the
+  // OS one alone (`seeded` joins quicMeasured / udpProbe / quicProbe). The DOWN
+  // row still joins nothing — the gate the seed exception must not open.
+  it('CRITICAL deriveProbeViewState — a DOWN row shows no Driftstack reading, a server-seeded row shows its readings (OS, QUIC and UDP alike), a tunnel’s placeholder shows nothing. MUTATION: drop `isProxyUsable(c.result)` from a fresh arm’s gate and `down` joins a map', () => {
     const view = deriveProbeViewState(cache, NOW);
     expect(Object.keys(view.osFingerprints)).toEqual(['fresh', 'seeded']);
-    expect(view.quicMeasured).toEqual({ fresh: 'h3' });
-    expect(view.udpProbe).toEqual({ fresh: false });
-    expect(view.quicProbe).toEqual({ fresh: true }); // HEAD: + old (never aged) — the one change
+    expect(view.quicMeasured).toEqual({ fresh: 'h3', seeded: 'h3' });
+    expect(view.udpProbe).toEqual({ fresh: false, seeded: false });
+    expect(view.quicProbe).toEqual({ fresh: true, seeded: true }); // HEAD: + old (never aged)
     expect(Object.keys(view.testResults)).toEqual(['fresh', 'old', 'down', 'vpn', 'vpnOld']);
     expect(view.testedAt).toEqual({ fresh: AT, old: AT, down: AT, vpn: AT, vpnOld: AT });
   });
@@ -315,9 +323,9 @@ describe('CONTROL — FROZEN: the fresh maps of a fixed cache, as the commit bef
   it('CRITICAL deriveProbeViewWithEndpointRows — the overlay admits a RESOLVED tunnel’s fresh readings and drops its placeholder result, exactly as before', () => {
     const view = deriveProbeViewWithEndpointRows(cache, NOW);
     expect(Object.keys(view.osFingerprints)).toEqual(['fresh', 'seeded', 'vpn']);
-    expect(view.quicMeasured).toEqual({ fresh: 'h3', vpn: 'h3' });
-    expect(view.udpProbe).toEqual({ fresh: false, vpn: false });
-    expect(view.quicProbe).toEqual({ fresh: true, vpn: true }); // HEAD: + old, vpnOld
+    expect(view.quicMeasured).toEqual({ fresh: 'h3', seeded: 'h3', vpn: 'h3' });
+    expect(view.udpProbe).toEqual({ fresh: false, seeded: false, vpn: false });
+    expect(view.quicProbe).toEqual({ fresh: true, seeded: true, vpn: true }); // HEAD: + old, vpnOld
     expect(Object.keys(view.testResults)).toEqual(['fresh', 'old', 'down']);
     expect(view.testedAt).toEqual({ fresh: AT, old: AT, down: AT, vpn: AT, vpnOld: AT });
   });
@@ -523,15 +531,20 @@ describe('the chips — an aged reading can never be mistaken for a current one'
     expect(agedQuicReading(undefined)).toBeUndefined();
   });
 
-  it('CRITICAL the OS chip shows the last reading muted with its age and in the NEUTRAL tone — a reading that was a green match nine hours ago supports no claim about the exit now. MUTATION: in agedOsFingerprintVerdict drop `tone: "unknown"` and this reds', () => {
+  // ⛔ OWNER 2026-09-24 (item 9): "if it's a Apple, it should be green status".
+  // This reading is Apple: it keeps the green, in the aged chrome (dashed, dated,
+  // past tense) — never as a current chip. A non-Apple aged reading still gives up
+  // its tone (an-absent / every-badge-surface files pin that half).
+  it('CRITICAL the OS chip shows the last reading with its age, in the aged chrome — and an Apple reading keeps its green there (owner 2026-09-24; this arm pinned the NEUTRAL tone until then). MUTATION: in agedOsFingerprintVerdict force `tone: "unknown"` and this reds', () => {
     const { container } = render(
       <ProxyOsChip fingerprint={undefined} aged={aged?.osFingerprint} nowMs={NOW} autoRecheck />,
     );
     const chip = container.querySelector('[data-component="proxy-os-fingerprint"]');
-    expect(chip?.getAttribute('data-os-tone')).toBe('unknown');
+    expect(chip?.getAttribute('data-os-tone')).toBe('match');
     expect(chip?.getAttribute('data-ok')).toBe('aged');
     expect(chip?.textContent).toBe('✓iOS/macOS · 9 h ago');
-    expect(chip?.className).not.toContain('status-ready');
+    expect(chip?.className).toContain('status-ready');
+    expect(chip?.className).toContain('border-dashed');
     expect(chip?.getAttribute('title')).toMatch(
       /^Last checked 9 hours ago\. It will be rechecked automatically\. What it found then: /,
     );
@@ -584,10 +597,12 @@ describe('the chips — an aged reading can never be mistaken for a current one'
   const WEBRTC = 'UDP works — WebRTC calls and media stream through this exit.';
   const HTTP2 = 'Connected and logged in — HTTP/2 works through this exit.';
 
+  // (2026-09-24, owner item 9) The UDP chip's LABEL is "UDP" — one word for that
+  // reading on every surface; it read "WebRTC". Only the label moved.
   it('CRITICAL a caller that passes NO aged prop — the profile card — renders byte for byte what it rendered before the aged state existed: the inferred chip, a current relay verdict, and the no-UDP negative', () => {
     expect(render(<ProxyCapabilityChips result={OK} />).container.innerHTML).toBe(
       row(
-        chip(WEBRTC, 'webrtc', true, false, 'text-[10px]', GREEN, '✓', 'WebRTC'),
+        chip(WEBRTC, 'webrtc', true, false, 'text-[10px]', GREEN, '✓', 'UDP'),
         chip(
           'UDP works, so HTTP/3 is likely — not yet tested. Run Test or a session to confirm.',
           'quic',
@@ -603,7 +618,7 @@ describe('the chips — an aged reading can never be mistaken for a current one'
     );
     expect(render(<ProxyCapabilityChips result={OK} quicProbe={true} />).container.innerHTML).toBe(
       row(
-        chip(WEBRTC, 'webrtc', true, false, 'text-[10px]', GREEN, '✓', 'WebRTC'),
+        chip(WEBRTC, 'webrtc', true, false, 'text-[10px]', GREEN, '✓', 'UDP'),
         chip(
           'This proxy carries QUIC — HTTP/3 works through this exit.',
           'quic',
@@ -630,7 +645,7 @@ describe('the chips — an aged reading can never be mistaken for a current one'
           'text-[9px]',
           MUTED,
           '⤵',
-          'WebRTC',
+          'UDP',
         ),
         chip(
           'No UDP — HTTP/3 cannot work here; it falls back to HTTP/2.',

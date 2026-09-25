@@ -19,6 +19,10 @@ export interface KeyboardFocusFrame {
    *  omits it (undefined/null, or a non-boolean) is a no-op — the keyboard's
    *  current visibility is left exactly as it was. */
   inputFocused?: boolean | null;
+  /** The phone's "the field that already had focus was tapped again" (sent only
+   *  with `inputFocused: true`). A fresh focus edge: it re-shows the keyboard,
+   *  even after the customer hid it — a tap into the field is asking to type. */
+  inputRefocus?: boolean | null;
   /** The tab the frame is attributed to. Absent/null marks a legacy (tabId-less)
    *  frame, which is only trusted for focus outside the post-switch grace. */
   tabId?: string | null;
@@ -78,6 +82,11 @@ export function applyInputFocusFromPageState(
   if (frame.inputFocused === false) {
     if (actuator.getSuppressedTab() === ctx.activeTabId) actuator.setSuppressedTab(null);
     actuator.setVisible(false);
+  } else if (frame.inputRefocus === true) {
+    // A tap on the focused field: the blur→focus edge the phone cannot send
+    // (the field never lost focus). It lifts a Hide the same way that edge does.
+    if (actuator.getSuppressedTab() === ctx.activeTabId) actuator.setSuppressedTab(null);
+    actuator.setVisible(true);
   } else if (actuator.getSuppressedTab() !== ctx.activeTabId) {
     actuator.setVisible(true);
   }

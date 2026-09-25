@@ -125,7 +125,7 @@ describe('ProxiesView "Test" button result card', () => {
     expect(screen.getByText('42ms')).toBeTruthy();
     // Professional protocol-capability chips on a UDP-capable exit
     // (replaced the bare "UDP" badge): WebRTC + QUIC + HTTP/2.
-    expect(screen.getByText('WebRTC')).toBeTruthy();
+    expect(screen.getByText('UDP')).toBeTruthy();
     expect(screen.getByText('QUIC')).toBeTruthy();
     expect(screen.getByText('HTTP/2')).toBeTruthy();
   });
@@ -205,7 +205,7 @@ describe('ProxiesView "Test" button result card', () => {
     expect(await screen.findByText('unreachable')).toBeTruthy();
     // No protocol-capability chips when the exit isn't even reachable — the
     // slot reads "not verified" instead, and there is no WebRTC chip.
-    expect(screen.queryByText('WebRTC')).toBeNull();
+    expect(screen.queryByText('UDP')).toBeNull();
     expect(screen.getByText('not verified')).toBeTruthy();
   });
 });
@@ -285,13 +285,13 @@ describe('capability board (approved proxy-health port)', () => {
     const { container } = render(<ProxiesView />);
     await clickTestAndSettle();
     // The capability chips render with every protocol ok (data-ok="true").
-    expect(await screen.findByText('WebRTC')).toBeInTheDocument();
+    expect(await screen.findByText('UDP')).toBeInTheDocument();
     expect(container.querySelector('[data-capability="webrtc"][data-ok="true"]')).not.toBeNull();
     expect(container.querySelector('[data-capability="quic"][data-ok="true"]')).not.toBeNull();
     // Pool stats are derived over TESTED proxies only.
     expect(screen.getByText('Tested')).toBeInTheDocument();
     expect(screen.getByText('1 / 1')).toBeInTheDocument();
-    expect(screen.getByText('WebRTC + QUIC')).toBeInTheDocument();
+    expect(screen.getByText('UDP + QUIC')).toBeInTheDocument();
   });
 
   it('after a Test, the card shows a "Tested <relative>" timestamp (staleness), not just "Added"', async () => {
@@ -307,7 +307,7 @@ describe('capability board (approved proxy-health port)', () => {
     const { container } = render(<ProxiesView />);
     await clickTestAndSettle();
     // The capability chips confirm the probe landed.
-    await screen.findByText('WebRTC');
+    await screen.findByText('UDP');
     // A <time> with a "Tested:" tooltip now drives the card's last-checked line —
     // so a green pill is dated, not assumed fresh. (The pool-stat label "Tested"
     // is a <span>, so scope to <time> to avoid matching it.)
@@ -328,7 +328,7 @@ describe('capability board (approved proxy-health port)', () => {
     });
     const { container } = render(<ProxiesView />);
     await clickTestAndSettle();
-    await screen.findByText('WebRTC');
+    await screen.findByText('UDP');
     expect(container.querySelector('[data-capability="webrtc"][data-ok="false"]')).not.toBeNull();
     expect(container.querySelector('[data-capability="quic"][data-ok="false"]')).not.toBeNull();
     expect(container.querySelector('[data-capability="http2"][data-ok="true"]')).not.toBeNull();
@@ -363,7 +363,7 @@ describe('capability board (approved proxy-health port)', () => {
       latency_ms: 10,
       message: 'ok',
     });
-    expect(await screen.findByText('WebRTC')).toBeInTheDocument();
+    expect(await screen.findByText('UDP')).toBeInTheDocument();
     await waitFor(() => {
       expect(testProxy).toHaveBeenCalledTimes(1); // one saved proxy in the mock store
     });

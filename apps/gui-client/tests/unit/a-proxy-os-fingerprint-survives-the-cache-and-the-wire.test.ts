@@ -320,12 +320,12 @@ describe('the wire', () => {
   // value from the wire to the verdict. This one does: server reply → wire parse
   // → cache save → cache load → derivation → verdict. A drop at any hop turns
   // the green into the neutral '?' and reds this arm.
-  const mobileReply = (webPort: boolean) =>
+  const mobileReply = (webPort: boolean, os = 'macos-or-ios') =>
     json(200, {
       ok: true,
       latency_ms: 5,
       os_fingerprint: {
-        os: 'macos-or-ios',
+        os,
         confidence: 'high',
         reason: 'TTL 64, window-scale before SACK-permitted — Darwin',
         observed_ip: '1.2.3.4',
@@ -335,8 +335,8 @@ describe('the wire', () => {
         ...(webPort ? { web_port_vantage: true } : {}),
       },
     });
-  const verdictThroughTheChain = async (id: string, webPort: boolean) => {
-    nextResponse = () => mobileReply(webPort);
+  const verdictThroughTheChain = async (id: string, webPort: boolean, os = 'macos-or-ios') => {
+    nextResponse = () => mobileReply(webPort, os);
     const r = await testAccountProxy('https://api.example', 'ds_x', id);
     if (!r.ok || r.os_fingerprint === undefined)
       throw new Error('fixture is an ok reply with a fingerprint');
@@ -354,10 +354,21 @@ describe('the wire', () => {
     expect(v.hint).toMatch(/presents as iOS\/macOS/);
   });
 
-  it('CRITICAL CONTROL — the same reading WITHOUT the web-port vantage stays neutral, so the arm above is about the vantage and not a relaxed gate', async () => {
-    const v = await verdictThroughTheChain('mobile-obs', false);
-    expect(v.tone).toBe('unknown');
-    expect(v.label, 'the observer-port front door is the gateway: no verdict, no name').toBe('OS');
+  // ⛔ OWNER 2026-09-24 (item 9): "if it's a Apple, it should be green status". An
+  // Apple reading is green from EVERY vantage now, so it can no longer show that
+  // the web-port flag survived the chain. The control moves to the RED arm, which
+  // still needs that vantage: the same Windows reading is red with the flag and
+  // neutral without it — so the flag reached the verdict intact.
+  it('CRITICAL CONTROL — the vantage survives the chain: a Windows reading is red WITH the web-port flag and neutral WITHOUT it (an Apple reading is green either way: owner 2026-09-24)', async () => {
+    const withFlag = await verdictThroughTheChain('mobile-win-web', true, 'windows');
+    expect(withFlag.tone).toBe('mismatch');
+    const without = await verdictThroughTheChain('mobile-win-obs', false, 'windows');
+    expect(without.tone).toBe('unknown');
+    expect(without.label, 'the observer-port front door is the gateway: no verdict, no name').toBe(
+      'OS',
+    );
+    const apple = await verdictThroughTheChain('mobile-obs', false);
+    expect(apple.tone).toBe('match');
   });
 
   it('CRITICAL an older server that sends NO vantage field defaults to withholding, never to asserting', async () => {

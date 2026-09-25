@@ -16,6 +16,26 @@
 // https:// prefixed; anything that doesn't look like a URL becomes a Google
 // search (mirrors the GUI omnibox + a real browser new-tab page). It sets
 // window.location so the navigation happens IN the streamed tab.
+//
+// 2026-09-24 (owner item 6: "the HTTP/3 always show still as ; Not detected, this
+// whole might need a upgrade as well") — the panel under the field is a small
+// CONNECTION CHECK: what any website can see about this tab's connection, each
+// row measured in this tab. Diagnostics only: it shows what is visible and
+// changes nothing about it. ROOT CAUSE of "HTTP/3: Not detected", measured with a
+// real browser against the live page on a direct connection (no proxy at all):
+//   1. The page only looked at its FIRST loads. A browser's first contact with a
+//      site is over TCP; it learns from the response (`alt-svc: h3=":443"`) that
+//      the site offers HTTP/3 and uses it from the NEXT request on. The
+//      navigation and the one trace fetch were h2; a second fetch was h3.
+//   2. Its test could not match the value it read: Cloudflare's trace spells the
+//      protocol `http=http/3`, and the page tested `/h3|quic/` — no "h3" in
+//      "http/3" — so even a trace that arrived over HTTP/3 read "Not detected",
+//      while the Connection row above it said "HTTP/3".
+// The check below fixes both: it reads every one of this page's own loads (the
+// navigation and each trace fetch's `nextHopProtocol`, and the trace's own
+// `http=`), and after the first load it asks again, when the browser has
+// learned the site offers HTTP/3. Through a proxy the answer is still only "yes"
+// when the connection carries UDP — which is exactly the fact worth showing.
 ---
 
 <!doctype html>
@@ -28,7 +48,7 @@
     <title>New Tab · Driftstack</title>
     <style>
       /* Inline copy of the dark+oxblood tokens — keep the values in sync with
-         docs/internal/2026-07-03-design-system-v2-dashboard.md (marketing's
+         the internal 2026-07-03 design-system v2 dashboard notes (marketing's
          --ink-3 deliberately runs #8c8c96, not the dashboard's #73737f — AA
          on #060608; see apps/marketing-site/src/styles/base.css). */
       :root {
@@ -63,14 +83,16 @@
           'Segoe UI', sans-serif;
         -webkit-font-smoothing: antialiased;
         display: flex;
-        align-items: center;
-        justify-content: center;
         min-height: 100%;
       }
+      /* Centred by `margin: auto`, not by the body's align/justify: a flex item
+         centred that way is cut off at the TOP (unscrollably) once it is taller
+         than the window — the connection check made it so on short windows. */
       main {
         width: 100%;
         max-width: 520px;
         padding: 24px;
+        margin: auto;
         text-align: center;
       }
       .brand {
@@ -150,10 +172,8 @@
         color: var(--ink-3);
         font-size: 12.5px;
       }
-      /* Live "this device's network identity" panel — shows the customer exactly
-         what a real site sees through their proxy (exit IP, spoofed timezone,
-         whether the connection negotiated HTTP/3 over QUIC/UDP). All detected
-         client-side + via the same-origin Cloudflare /cdn-cgi/trace echo. */
+      /* The connection check — what any website can see about this tab's
+         connection, each row measured in this tab (see the note at the top). */
       .conn {
         margin-top: 26px;
         border: 1px solid var(--border);
@@ -181,9 +201,25 @@
         background: #35c26b;
         box-shadow: 0 0 8px rgba(53, 194, 107, 0.6);
       }
+      .conn-head .again {
+        margin-left: auto;
+        background: transparent;
+        color: var(--ink-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 4px 10px;
+        font-size: 11.5px;
+        font-weight: 600;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .conn-head .again:hover {
+        background: var(--border);
+        color: var(--ink);
+      }
       .info-row {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 14px;
         padding: 10px 16px;
@@ -195,6 +231,14 @@
         color: var(--ink-3);
         font-size: 13px;
         flex: none;
+        padding-top: 1px;
+      }
+      .info-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 3px;
+        min-width: 0;
       }
       .info-value {
         color: var(--ink);
@@ -202,6 +246,12 @@
         font-weight: 500;
         text-align: right;
         font-variant-numeric: tabular-nums;
+        overflow-wrap: anywhere;
+      }
+      .info-note {
+        color: var(--ink-3);
+        font-size: 12px;
+        text-align: right;
         overflow-wrap: anywhere;
       }
       .badge {
@@ -218,11 +268,21 @@
         background: rgba(53, 194, 107, 0.14);
       }
       .badge.off {
-        color: var(--ink-3);
+        color: var(--ink-2);
         background: rgba(140, 140, 150, 0.14);
+      }
+      .badge.warn {
+        color: #f5c56b;
+        background: rgba(245, 197, 107, 0.14);
       }
       .muted {
         color: var(--ink-3);
+      }
+      .conn-foot {
+        padding: 9px 16px 11px;
+        border-top: 1px solid var(--border);
+        color: var(--ink-3);
+        font-size: 11.5px;
       }
     </style>
   </head>
@@ -262,6 +322,7 @@
           <circle cx="11" cy="11" r="8"></circle>
           <path d="m21 21-4.3-4.3"></path>
         </svg>
+        <!-- No autofocus and no focus() on load: the first tap must be a real focus so the on-screen keyboard opens. -->
         <input
           id="newtab-input"
           type="text"
@@ -269,35 +330,60 @@
           placeholder="Search or enter address"
           aria-label="Search or enter address"
           spellcheck="false"
-          autofocus
         />
         <button type="submit">Go</button>
       </form>
-      <section class="conn" aria-label="Connection details">
-        <div class="conn-head"><span class="dot"></span>This device, as sites see it</div>
+      <section class="conn" aria-label="Connection check">
+        <div class="conn-head">
+          <span class="dot"></span>What websites can see
+          <button type="button" class="again" id="conn-again">Check again</button>
+        </div>
         <div class="info-row">
           <span class="info-label">IP address</span>
-          <span class="info-value" id="v-ip">…</span>
+          <span class="info-cell"><span class="info-value" id="v-ip">…</span></span>
         </div>
         <div class="info-row">
           <span class="info-label">Location</span>
-          <span class="info-value" id="v-loc">…</span>
+          <span class="info-cell"><span class="info-value" id="v-loc">…</span></span>
         </div>
         <div class="info-row">
           <span class="info-label">Time zone</span>
-          <span class="info-value" id="v-tz">…</span>
+          <span class="info-cell">
+            <span class="info-value" id="v-tz">…</span>
+            <span class="info-note" id="v-tz-check"></span>
+          </span>
         </div>
         <div class="info-row">
           <span class="info-label">Language</span>
-          <span class="info-value" id="v-lang">…</span>
+          <span class="info-cell">
+            <span class="info-value" id="v-lang">…</span>
+            <span class="info-note" id="v-lang-check"></span>
+          </span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">WebRTC</span>
+          <span class="info-cell">
+            <span class="info-value" id="v-webrtc"><span class="badge off">Checking…</span></span>
+            <span class="info-note" id="v-webrtc-note"></span>
+          </span>
         </div>
         <div class="info-row">
           <span class="info-label">Connection</span>
-          <span class="info-value" id="v-proto">…</span>
+          <span class="info-cell">
+            <span class="info-value" id="v-proto">…</span>
+            <span class="info-note" id="v-rtt"></span>
+          </span>
         </div>
         <div class="info-row">
-          <span class="info-label">HTTP/3</span>
-          <span class="info-value" id="v-quic"><span class="badge off">Checking…</span></span>
+          <span class="info-label">HTTP/3 (QUIC)</span>
+          <span class="info-cell">
+            <span class="info-value" id="v-quic"><span class="badge off">Checking…</span></span>
+            <span class="info-note" id="v-quic-note"></span>
+          </span>
+        </div>
+        <div class="conn-foot">
+          Checked in this tab, through this profile's connection. Nothing here is changed — it only
+          shows what a site can see.
         </div>
       </section>
     </main>
@@ -334,17 +420,25 @@
           });
         }
 
-        // ── Live connection panel ────────────────────────────────────────────
-        // Shows what a real website sees about this simulated device: exit IP +
-        // country, the (spoofed) browser time zone + language, and whether the
-        // connection to the edge negotiated HTTP/3 over QUIC/UDP. Everything is
-        // detected in-page; IP/country/protocol come from the same-origin
-        // Cloudflare /cdn-cgi/trace echo (goes through the session's proxy, so
-        // the IP IS the proxy exit). All best-effort — a field that can't be
-        // read shows "—" rather than breaking the tab.
+        // ── The connection check ─────────────────────────────────────────────
+        // What any website can see about this tab's connection. Every row is
+        // measured here, in this tab, through the profile's connection; a row
+        // that cannot be read says so rather than breaking the tab.
+        function el(id) {
+          return document.getElementById(id);
+        }
         function set(id, text) {
-          var el = document.getElementById(id);
-          if (el) el.textContent = text;
+          var e = el(id);
+          if (e) e.textContent = text;
+        }
+        function badge(id, tone, text) {
+          var e = el(id);
+          if (!e) return;
+          e.textContent = '';
+          var b = document.createElement('span');
+          b.className = 'badge ' + tone;
+          b.textContent = text;
+          e.appendChild(b);
         }
         function flag(cc) {
           if (!cc || cc.length !== 2 || !/^[A-Za-z]{2}$/.test(cc)) return '';
@@ -354,28 +448,75 @@
             String.fromCodePoint(base + (cc.toUpperCase().charCodeAt(1) - 65))
           );
         }
-        function protoLabel(p) {
-          p = (p || '').toLowerCase();
-          if (p === 'h3' || p.indexOf('http/3') === 0 || p.indexOf('quic') !== -1)
-            return 'HTTP/3';
-          if (p === 'h2' || p.indexOf('http/2') === 0) return 'HTTP/2';
-          if (p.indexOf('http/1') === 0 || p === 'http/1.1') return 'HTTP/1.1';
-          return p ? p : '—';
+        // Normalise every spelling a protocol arrives in: `h3` / `h2` (Resource
+        // Timing's nextHopProtocol) and `http/3` / `http/2` (Cloudflare's trace).
+        // ⛔ The old test was /h3|quic/, which cannot match "http/3".
+        function protoKey(p) {
+          p = String(p || '').toLowerCase();
+          if (p === 'h3' || p.indexOf('h3-') === 0 || p === 'http/3' || p.indexOf('quic') !== -1)
+            return 'h3';
+          if (p === 'h2' || p === 'http/2' || p === 'http/2.0') return 'h2';
+          if (p.indexOf('http/1') === 0) return 'h1';
+          return '';
         }
-        function setQuic(on) {
-          var el = document.getElementById('v-quic');
-          if (!el) return;
-          el.innerHTML =
-            '<span class="badge ' +
-            (on ? 'on' : 'off') +
-            '">' +
-            (on ? '✓ Supported' : '✗ Not detected') +
-            '</span>';
+        var PROTO_LABEL = { h3: 'HTTP/3', h2: 'HTTP/2', h1: 'HTTP/1.1' };
+        function parseTrace(t) {
+          var m = {};
+          String(t)
+            .trim()
+            .split('\n')
+            .forEach(function (line) {
+              var i = line.indexOf('=');
+              if (i > 0) m[line.slice(0, i)] = line.slice(i + 1);
+            });
+          return m;
+        }
+        // Resource Timing for one of this page's own requests (same origin, so
+        // nextHopProtocol is readable). '' when the browser does not report it.
+        function hopOf(path) {
+          try {
+            var url = new URL(path, location.href).href;
+            var list = performance.getEntriesByName ? performance.getEntriesByName(url) : [];
+            var e = list && list[list.length - 1];
+            return (e && e.nextHopProtocol) || '';
+          } catch (err) {
+            return '';
+          }
+        }
+        function navHop() {
+          try {
+            var nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+            return (nav && nav.nextHopProtocol) || '';
+          } catch (err) {
+            return '';
+          }
+        }
+        // Every protocol this page's loads used so far — the navigation, and
+        // each trace fetch by its own timing entry AND by what the site saw.
+        var seen = { h1: false, h2: false, h3: false };
+        function note(p) {
+          var k = protoKey(p);
+          if (k) seen[k] = true;
+        }
+        function bounded(url, ms, method) {
+          var c = new AbortController();
+          var t = window.setTimeout(function () {
+            c.abort();
+          }, ms);
+          return fetch(url, {
+            method: method || 'GET',
+            cache: 'no-store',
+            signal: c.signal,
+            credentials: 'omit',
+          }).finally(function () {
+            window.clearTimeout(t);
+          });
         }
 
         // Time zone + local time + language — instant, no network.
+        var browserTz = '';
         try {
-          var tz = (Intl.DateTimeFormat().resolvedOptions().timeZone) || '—';
+          browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
           var off = -new Date().getTimezoneOffset();
           var sign = off >= 0 ? '+' : '-';
           var a = Math.abs(off);
@@ -384,22 +525,138 @@
           };
           var offStr = 'UTC' + sign + pad(Math.floor(a / 60)) + ':' + pad(a % 60);
           var localTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          set('v-tz', tz + ' · ' + offStr + ' · ' + localTime);
+          set('v-tz', (browserTz || '—') + ' · ' + offStr + ' · ' + localTime);
         } catch (e) {
           set('v-tz', '—');
         }
-        set('v-lang', navigator.language || '—');
-
-        // Fast secondary protocol signal from the navigation timing entry.
-        var hop = '';
+        var langs = [];
         try {
-          var navEntry =
-            performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
-          hop = (navEntry && navEntry.nextHopProtocol) || '';
+          langs = (navigator.languages && navigator.languages.length
+            ? Array.prototype.slice.call(navigator.languages)
+            : [navigator.language]
+          ).filter(function (x) {
+            return !!x;
+          });
         } catch (e) {}
+        set('v-lang', langs.length ? langs.slice(0, 3).join(', ') : '—');
 
-        // Same-origin Cloudflare trace → exit IP, country, negotiated protocol, TLS.
-        // Keep this diagnostic bounded: the new-tab page is also the Simulator's
+        // What the site's own edge sees, and the exit's place. Filled in as the
+        // answers arrive; the consistency lines are drawn once both are known.
+        var exit = { ip: '', country: '', tz: '', city: '', region: '' };
+
+        // Same wall-clock time now in two zones = the same offset, whatever the
+        // zones are called (Europe/Amsterdam and Europe/Berlin agree).
+        function sameClock(tzA, tzB) {
+          try {
+            var now = new Date();
+            var o = { timeZone: tzA, hour: '2-digit', minute: '2-digit', hour12: false };
+            var p = { timeZone: tzB, hour: '2-digit', minute: '2-digit', hour12: false };
+            return now.toLocaleTimeString('en-US', o) === now.toLocaleTimeString('en-US', p);
+          } catch (e) {
+            return false;
+          }
+        }
+        function drawConsistency() {
+          if (exit.tz && browserTz) {
+            if (exit.tz === browserTz) set('v-tz-check', '✓ Matches your IP address’s location');
+            else if (sameClock(exit.tz, browserTz))
+              set('v-tz-check', '✓ Same time as your IP address’s location (' + exit.tz + ')');
+            else set('v-tz-check', '⚠ Your IP address is in ' + exit.tz);
+          }
+          if (exit.country && langs.length) {
+            var cc = exit.country.toUpperCase();
+            var match = langs.some(function (l) {
+              var parts = String(l).split('-');
+              return parts.length > 1 && parts[parts.length - 1].toUpperCase() === cc;
+            });
+            set(
+              'v-lang-check',
+              match ? '✓ Matches your IP address’s country' : 'Your IP address is in ' + cc,
+            );
+          }
+        }
+        function drawLocation() {
+          var place = [exit.city, exit.region].filter(function (x) {
+            return !!x;
+          });
+          var cc = exit.country ? (flag(exit.country) + ' ' + exit.country).trim() : '';
+          if (place.length) set('v-loc', place.join(', ') + (cc ? ' · ' + cc : ''));
+          else set('v-loc', cc || '—');
+        }
+
+        // ── HTTP/3 ─────────────────────────────────────────────────────────
+        // A first contact is over TCP. The browser learns from that response
+        // (the page's own `alt-svc` header) that the site offers HTTP/3 and
+        // tries it from the next request on — so this page asks again, a moment
+        // apart, before calling it: once for the page itself (which also tells
+        // us whether the site offers HTTP/3 at all), then the trace.
+        var offersH3 = false;
+        function checkOffer() {
+          var path = location.pathname + '?h3=offer';
+          return bounded(path, 3000, 'HEAD')
+            .then(function (r) {
+              try {
+                offersH3 = /h3/i.test(r.headers.get('alt-svc') || '');
+              } catch (e) {}
+              note(hopOf(path));
+            })
+            .catch(function () {});
+        }
+        function drawQuic(done) {
+          if (seen.h3) {
+            badge('v-quic', 'on', '✓ In use');
+            set('v-quic-note', 'This page reached the site over QUIC (UDP).');
+            return;
+          }
+          if (!done) return;
+          // "Not in use" only on evidence: at least one load that reported TCP
+          // (HTTP/1.1 or HTTP/2). With no reading at all — every trace failed and
+          // the timing reported nothing — the page does not know, and says so.
+          if (!seen.h1 && !seen.h2) {
+            badge('v-quic', 'off', 'Could not be checked');
+            set('v-quic-note', 'None of this page’s loads reported which protocol it used.');
+            return;
+          }
+          badge('v-quic', 'off', 'Not in use');
+          set(
+            'v-quic-note',
+            offersH3
+              ? 'The site offers HTTP/3, but this connection stayed on TCP — usually because UDP does not get through.'
+              : 'This page’s loads used TCP.',
+          );
+        }
+        function drawProto(tls, done) {
+          var k = seen.h3 ? 'h3' : seen.h2 ? 'h2' : seen.h1 ? 'h1' : '';
+          var label = PROTO_LABEL[k] || (done ? 'Could not be checked' : 'Checking…');
+          set('v-proto', label + (k && tls ? ' · ' + tls : ''));
+        }
+        function probeH3(n, tls) {
+          if (seen.h3 || n <= 0) {
+            drawProto(tls, true);
+            drawQuic(true);
+            return;
+          }
+          window.setTimeout(function () {
+            var path = '/cdn-cgi/trace?h3=' + n;
+            bounded(path, 3000)
+              .then(function (r) {
+                return r.ok ? r.text() : '';
+              })
+              .then(function (t) {
+                note(parseTrace(t).http);
+                note(hopOf(path));
+              })
+              .catch(function () {})
+              .then(function () {
+                probeH3(n - 1, tls);
+              });
+          }, 250);
+        }
+
+        note(navHop());
+
+        // Same-origin Cloudflare trace → exit IP, country, the protocol the site
+        // saw, TLS. Kept bounded: the new-tab page is also the Simulator's
         // recovery surface, so a stalled edge request must not leave "Checking…"
         // on screen forever.
         var traceController = new AbortController();
@@ -412,30 +669,142 @@
             return r.text();
           })
           .then(function (t) {
-            var m = {};
-            String(t)
-              .trim()
-              .split('\n')
-              .forEach(function (line) {
-                var i = line.indexOf('=');
-                if (i > 0) m[line.slice(0, i)] = line.slice(i + 1);
-              });
+            var m = parseTrace(t);
+            exit.ip = m.ip || '';
+            if (!exit.country && m.loc) exit.country = m.loc;
             set('v-ip', m.ip || 'unavailable');
-            set('v-loc', m.loc ? (flag(m.loc) + ' ' + m.loc).trim() : '—');
-            var proto = m.http || hop;
-            set('v-proto', protoLabel(proto) + (m.tls ? ' · ' + m.tls : ''));
-            setQuic(/h3|quic/i.test(proto) || hop === 'h3');
+            drawLocation();
+            drawConsistency();
+            note(m.http);
+            note(hopOf('/cdn-cgi/trace'));
+            drawProto(m.tls);
+            drawQuic(false);
+            checkOffer().then(function () {
+              probeH3(2, m.tls);
+            });
+            webrtcCheck();
           })
           .catch(function () {
-            // Proxy/edge didn't return trace — fall back to what the page itself knows.
+            // The trace did not answer — fall back to what the page itself knows.
             set('v-ip', 'unavailable');
-            set('v-loc', '—');
-            set('v-proto', protoLabel(hop));
-            setQuic(hop === 'h3');
+            drawLocation();
+            drawProto('', true);
+            drawQuic(true);
+            webrtcCheck();
           })
           .finally(function () {
             window.clearTimeout(traceTimeout);
           });
+
+        // The exit's city and time zone, from Driftstack's own echo of this
+        // request (it answers with what its edge saw — no third-party lookup).
+        bounded('https://api.driftstack.dev/v1/egress/echo', 4000)
+          .then(function (r) {
+            return r.ok ? r.json() : null;
+          })
+          .then(function (j) {
+            if (!j || typeof j !== 'object') return;
+            if (typeof j.country === 'string') exit.country = j.country;
+            if (typeof j.city === 'string') exit.city = j.city;
+            if (typeof j.region === 'string') exit.region = j.region;
+            if (typeof j.timezone === 'string') exit.tz = j.timezone;
+            drawLocation();
+            drawConsistency();
+          })
+          .catch(function () {});
+
+        // ── WebRTC ─────────────────────────────────────────────────────────
+        // The addresses a site can collect through WebRTC, compared with the IP
+        // address above. Private and hidden (.local) addresses are not counted:
+        // only a PUBLIC address other than the IP address is something a site
+        // could see that it should not.
+        var webrtcStarted = false;
+        function isPublic(ip) {
+          if (!ip || ip.indexOf('.local') !== -1) return false;
+          if (ip.indexOf(':') !== -1) {
+            var v6 = ip.toLowerCase();
+            return !(
+              v6 === '::1' ||
+              v6.indexOf('fe80:') === 0 ||
+              v6.indexOf('fc') === 0 ||
+              v6.indexOf('fd') === 0
+            );
+          }
+          var o = ip.split('.').map(Number);
+          if (o.length !== 4 || o.some(isNaN)) return false;
+          return !(
+            o[0] === 10 ||
+            o[0] === 127 ||
+            o[0] === 0 ||
+            (o[0] === 169 && o[1] === 254) ||
+            (o[0] === 172 && o[1] >= 16 && o[1] <= 31) ||
+            (o[0] === 192 && o[1] === 168) ||
+            (o[0] === 100 && o[1] >= 64 && o[1] <= 127)
+          );
+        }
+        function webrtcCheck() {
+          if (webrtcStarted) return;
+          webrtcStarted = true;
+          var PC = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+          if (!PC) {
+            badge('v-webrtc', 'on', '✓ Not available to sites');
+            set('v-webrtc-note', 'WebRTC is not offered in this browser.');
+            return;
+          }
+          var found = {};
+          var finished = false;
+          var pc;
+          function finish() {
+            if (finished) return;
+            finished = true;
+            try {
+              pc.close();
+            } catch (e) {}
+            var ips = Object.keys(found);
+            var others = ips.filter(function (x) {
+              return x !== exit.ip;
+            });
+            if (!ips.length) {
+              badge('v-webrtc', 'on', '✓ No address shown');
+              set('v-webrtc-note', 'WebRTC gives sites no public address.');
+            } else if (!others.length) {
+              badge('v-webrtc', 'on', '✓ Same as your IP address');
+              set('v-webrtc-note', 'WebRTC shows only the IP address above.');
+            } else if (!exit.ip) {
+              badge('v-webrtc', 'off', 'Shows ' + ips.join(', '));
+              set('v-webrtc-note', 'The IP address could not be read to compare.');
+            } else {
+              badge('v-webrtc', 'warn', '⚠ Shows another address');
+              set('v-webrtc-note', others.join(', ') + ' is visible to sites through WebRTC.');
+            }
+          }
+          try {
+            pc = new PC({ iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] });
+            pc.createDataChannel('check');
+            pc.onicecandidate = function (e) {
+              if (!e || !e.candidate) return finish();
+              var parts = String(e.candidate.candidate || '').split(' ');
+              var ip = parts[4];
+              if (isPublic(ip)) found[ip] = true;
+            };
+            pc.createOffer()
+              .then(function (o) {
+                return pc.setLocalDescription(o);
+              })
+              .catch(finish);
+            window.setTimeout(finish, 4000);
+          } catch (e) {
+            badge('v-webrtc', 'off', 'Could not be checked');
+            set('v-webrtc-note', '');
+          }
+        }
+
+        var again = el('conn-again');
+        if (again) {
+          again.addEventListener('click', function () {
+            window.location.reload();
+          });
+        }
       })();
     </script>
   </body>

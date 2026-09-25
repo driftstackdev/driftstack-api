@@ -1,4 +1,4 @@
-// Fable GUI LiveKit re-audit — a key whose default action moves GUI focus INTO a
+// GUI LiveKit re-audit — a key whose default action moves GUI focus INTO a
 // text input (Tab / Shift+Tab into the address bar or the "Tell the agent"
 // composer) used to forward its keyDown but DROP its keyUp, because onKeyUp
 // re-evaluated editingLocally() at keyup time (now true) instead of mirroring the

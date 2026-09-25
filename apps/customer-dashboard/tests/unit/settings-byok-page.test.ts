@@ -465,7 +465,7 @@ describe('settings page — BYOK Anthropic key', () => {
     );
   });
 
-  // S35 2026-07-07 (fable-frontend-audit) — a transient non-2xx on the
+  // S35 2026-07-07 (frontend audit) — a transient non-2xx on the
   // status GET used to fall back to byokShowState('empty'), telling a
   // customer WITH a stored key "No key on file"; and the chain called
   // r.json() on the (HTML) error body without .catch, surfacing a

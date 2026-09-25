@@ -195,6 +195,18 @@ async function openInProcessSimulatorWindow(
 
   const existing = await WebviewWindow.getByLabel(label).catch(() => null);
   if (existing !== null) {
+    // ⛔ Hand the open window THIS launch's key and join token — never just
+    // focus it. The key was freshly minted for this launch; a mint by a
+    // different principal rotates it and the window's old key stops working, so
+    // focusing alone would leave the window without control of its session.
+    // The same `ds-session` handoff the macOS app uses for a relaunch, addressed
+    // to this window only: the payload carries the session's control key.
+    try {
+      const { emitTo } = await import('@tauri-apps/api/event');
+      await emitTo({ kind: 'WebviewWindow', label }, 'ds-session', btoa(query));
+    } catch (err) {
+      console.warn('[simulator] could not hand the open window its new session details:', err);
+    }
     await existing.setFocus().catch(() => undefined);
     return { opened: true };
   }

@@ -15,7 +15,7 @@
 //   • lastUpdated = '2026-05-03' (ISO date).
 //   • Source provenance: parent driftstack repo /docs/progress/
 //     phase-2.md cumulative-rig snapshot.
-//   • Update protocol pinned (Agent 1 → founder relay → Agent 2
+//   • Update protocol pinned (fingerprint work → founder relay → this repo
 //     Tier 1 maintenance commit).
 //   • Probes-with-iPhone-reference denominator framing pinned
 //     (raw includes ref=None pinned post-V-141 and is NOT
@@ -57,9 +57,9 @@ describe('W384.A marketing-site src/data/capabilities.ts CUMULATIVE_RIG content 
     );
   });
 
-  it('update-protocol pinned (Agent 1 → founder → Agent 2 Tier-1 maintenance)', () => {
+  it('update-protocol pinned (fingerprint work → founder → this repo Tier-1 maintenance)', () => {
     expect(body).toMatch(
-      /Update protocol: when Agent 1 closes a cumulative-rig batch that\s*\/\/\s*moves the numerator or denominator/,
+      /Update protocol: when the fingerprint work closes a cumulative-rig batch\s*\/\/\s*that moves the numerator or denominator/,
     );
     expect(body).toMatch(
       /Tier 1 maintenance commit \(no founder review needed for factual\s*\/\/\s*technical state\)/,

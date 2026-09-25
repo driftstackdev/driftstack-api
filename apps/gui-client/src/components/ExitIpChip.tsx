@@ -5,7 +5,7 @@
 // exit_timezone / webrtc_candidate_ips), which the control plane already
 // projects onto the session body — this component READS them off the report the
 // simulator already holds; it never fetches. The fields are INERT until the
-// harness (A3) emits them, so the chip degrades gracefully: absent exit_ip
+// harness emits them, so the chip degrades gracefully: absent exit_ip
 // renders a muted "measuring…" state, never a crash and never a false verdict.
 //
 // Leak tell: a WebRTC candidate IP that differs from the exit IP means the
@@ -136,7 +136,7 @@ export function ExitIpChip({
   report: AgentSessionCapabilityReport | null;
 }): JSX.Element {
   const exitIp = report?.exit_ip;
-  // Absent exit IP = not observed yet (the live state until A3 emits). Show a
+  // Absent exit IP = not observed yet (the live state until the harness emits). Show a
   // muted measuring line rather than nothing or an error.
   if (exitIp === undefined) {
     return (

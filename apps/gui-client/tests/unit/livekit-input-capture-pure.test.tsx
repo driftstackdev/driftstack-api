@@ -13,9 +13,9 @@
 //     - null for clicks in the letterbox / pillarbox bars (off-surface)
 //     - DOWNSCALE-INVARIANT: the sent coords do NOT depend on video.videoWidth/
 //       Height, so an SFU-throttled (downscaled) track maps identically to a
-//       full-res one (the founder tap-offset fix, A3 W2811)
+//       full-res one (the founder tap-offset fix, W2811)
 //     - PER-ARCHETYPE: passing a device's `logical` dims maps to that device's space
-//       (content-only fork A3 84de32ad4d — the captured video is the web content
+//       (content-only fork 84de32ad4d — the captured video is the web content
 //       edge-to-edge, sized per archetype)
 //     - rounds to nearest integer (Mac-side decoder expects ints)
 //
@@ -272,7 +272,7 @@ describe('LK.6.d pure-function tests', () => {
   });
 
   // The founder's intermittent "taps land above where I tap, then it's normal
-  // again" (2026-06-23), root-caused with A3 (W2811): the Mac touch injector
+  // again" (2026-06-23), root-caused with the harness (W2811): the Mac touch injector
   // addresses a FIXED 402×874 device-CSS-px frame, but pointerToViewport used to
   // scale by video.videoWidth/videoHeight — and the SFU REMB-DOWNSCALES the
   // published track under bandwidth pressure (e.g. 402×874 → ~201×437). On a
@@ -281,7 +281,7 @@ describe('LK.6.d pure-function tests', () => {
   // against the fixed logical frame (the default `logical` arg), so the SENT
   // coords are identical no matter what resolution the <video> element currently
   // reports. These pins lock that invariance so the regression can't return.
-  describe('downscale invariance (founder tap-offset / A3 W2811)', () => {
+  describe('downscale invariance (founder tap-offset / W2811)', () => {
     // A 402×874 element whose <video> intrinsic size is whatever the SFU sent.
     const iphoneEl = (videoWidth: number, videoHeight: number): HTMLVideoElement =>
       fakeVideo({
@@ -319,16 +319,16 @@ describe('LK.6.d pure-function tests', () => {
     });
   });
 
-  // Per-archetype content-only mapping (A3 84de32ad4d, box mac-macstadium-us-001):
+  // Per-archetype content-only mapping (84de32ad4d, box mac-macstadium-us-001):
   // the captured video is the web content edge-to-edge, sized PER archetype, so the
   // touch injector addresses each device's captured-frame logical space (= screen_width
   // × inner_height ÷ dpr). The simulator threads those dims via the `logical` arg
   // (videoW/dpr × videoH/dpr from the first full-res frame). These pins lock that a
   // per-archetype `logical` maps correctly AND stays SFU-downscale-invariant for each
   // device — the founder's "coords went off after the per-archetype size change" class.
-  describe('per-archetype content-only mapping (A3 84de32ad4d)', () => {
+  describe('per-archetype content-only mapping (84de32ad4d)', () => {
     // Each archetype's captured-frame LOGICAL dims (= screen_width × inner_height),
-    // per A3's dims (16pro 402×714, 14promax 430×739, 13pro 390×699) — the content-only
+    // per the harness's dims (16pro 402×714, 14promax 430×739, 13pro 390×699) — the content-only
     // web viewport the injector now targets. The <video> element fills its (logical-
     // aspect) container; intrinsic px = logical × dpr but the SFU may downscale it.
     const cases = [
@@ -365,7 +365,7 @@ describe('LK.6.d pure-function tests', () => {
 
       it(`${name}: is SFU-downscale-invariant (same coords as the track is throttled)`, () => {
         // The element keeps its logical-aspect size; only the intrinsic track px shrink.
-        // Coords must NOT depend on videoWidth/videoHeight (A3 W2811) — passing the same
+        // Coords must NOT depend on videoWidth/videoHeight (W2811) — passing the same
         // per-archetype `logical` at every downscale level yields identical coords.
         const edge = fakeMouseEvent(w, h);
         for (const k of [1, 0.8, 0.5, 0.3]) {

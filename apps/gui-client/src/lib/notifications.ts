@@ -1,9 +1,9 @@
 // 2026-05-20 — GUI panel notification subscriber.
 //
 // Opens an EventSource against GET /v1/account/me/notifications
-// (server-side route: apps/server/src/routes/account-notifications.ts,
-// design doc: docs/internal/driftstack-telemetry-event-schema-for-
-// gui-panel.md). Each SSE frame's `event:` header carries the
+// (server-side route: apps/server/src/routes/account-notifications.ts;
+// designed in the internal telemetry event schema for the GUI panel).
+// Each SSE frame's `event:` header carries the
 // discriminator (`cost.threshold_alert` / `incident.broadcast` /
 // `audit.high_severity` / `session.errored`); the `data:` line is
 // the JSON-encoded NotificationEvent matching the server union.

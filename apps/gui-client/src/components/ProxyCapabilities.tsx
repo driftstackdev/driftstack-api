@@ -42,6 +42,13 @@ import {
 import type { AgedReading, AgedRowReadings } from '../lib/proxy-probe-cache';
 import { formatRelativeNarrow } from './RelativeTime';
 
+/** Owner item 9 (2026-09-24) — ONE word for the UDP reading on every surface: the
+ *  Proxies tab's chip said "WebRTC", the profile card and the list said "UDP",
+ *  about the same measurement. It is "UDP" — what the chip measures (the proxy
+ *  relays UDP) — and WebRTC, what that makes possible, is in its hover. The
+ *  capability KEY stays `webrtc` (a data attribute, not copy). */
+export const UDP_LABEL = 'UDP';
+
 export interface ProxyCapability {
   /** 'quic-relay' — T-1's SEPARATE probe chip: the fleet Mac's standalone QUIC
    *  handshake through the proxy. Present only when that probe ran. */
@@ -55,6 +62,13 @@ export interface ProxyCapability {
   inferred?: boolean;
   /** Long-form tooltip explaining what the state means for a session. */
   hint: string;
+  /**
+   * Owner item 9 (2026-09-24) — nothing has measured this capability yet. Only a
+   * row this Mac has not tested itself can have one (see
+   * `serverReadingCapabilities`): there, a chip the server's readings do not
+   * cover says so ('— UDP'), rather than vanishing beside the ones they do.
+   */
+  unmeasured?: true;
   /**
    * Set when this chip shows a reading that is NO LONGER CURRENT: what it found
    * (`value`) and when (`atMs`). `ok` / `inferred` beside it still describe the
@@ -109,6 +123,12 @@ export function agedChipAge(atMs: number, nowMs: number): string {
 // the room to keep it whole.
 export const AGED_CHIP_CLASS =
   'ds-proxy-aged-chip whitespace-nowrap border border-dashed border-surface-divider bg-surface-inset text-ink-muted';
+/** Owner item 9 (2026-09-24) — the ONE aged reading that keeps its colour: an OS
+ *  reading of Apple, which matches the device however old it is ("if it's a
+ *  Apple, it should be green status"). Same dashed, dated chrome as every aged
+ *  chip — so it still reads as "when last checked" — in the ready hue. */
+export const AGED_MATCH_CHIP_CLASS =
+  'ds-proxy-aged-chip whitespace-nowrap border border-dashed border-status-ready/50 bg-status-ready/10 text-status-ready';
 
 /**
  * ONE QUIC chip, strongest evidence wins (2026-09-09). Previously `quicProbe` got its
@@ -232,7 +252,7 @@ export function proxyCapabilities(
   return [
     {
       key: 'webrtc',
-      label: 'WebRTC',
+      label: UDP_LABEL,
       ok: udp,
       hint: udp
         ? 'UDP works — WebRTC calls and media stream through this exit.'
@@ -251,12 +271,98 @@ export function proxyCapabilities(
 }
 
 /**
+ * Owner item 9 (2026-09-24) — the chips of a SOCKS5 row this Mac has NOT tested
+ * itself but Driftstack has: a second Mac, a reinstall, the automatic capability
+ * check. Its readings are Driftstack's own — UDP through the proxy (`udpProbe`)
+ * and QUIC (`quicMeasured` / `quicProbe`) — and until this change the grid drew
+ * none of them: the row read "untested" beside a green "✓ iOS/macOS" from the
+ * same automatic check ("has not been measured, but QUIC did, or the other way
+ * around"). Same chips, same words, same colours as a tested row's, so a reading
+ * reads the same whichever machine took it:
+ *   • UDP    — `udpProbe`: ✓ / ⤵, aged when old, '—' when nothing measured it;
+ *   • QUIC   — the same strongest-evidence order as `proxyCapabilities`; with no
+ *              QUIC reading, the inference from Driftstack's UDP reading ('~' when
+ *              UDP relays, ⤵ when it does not), and '—' when there is neither.
+ * No HTTP/2 chip: that is the native handshake's fact, and nothing here took it.
+ */
+export function serverReadingCapabilities(
+  udpProbe: boolean | undefined,
+  quicMeasured: MeasuredQuic | null | undefined,
+  quicProbe: boolean | undefined,
+  aged?: AgedRowReadings,
+  agedHint: { nowMs: number; autoRecheck: boolean } = { nowMs: Date.now(), autoRecheck: false },
+): ProxyCapability[] {
+  const agedUdp = udpProbe === undefined ? aged?.udpProbe : undefined;
+  const udpKnown = udpProbe !== undefined;
+  const webrtc: ProxyCapability =
+    udpProbe !== undefined
+      ? {
+          key: 'webrtc',
+          label: UDP_LABEL,
+          ok: udpProbe,
+          hint: udpProbe
+            ? 'UDP works through this exit (measured by Driftstack) — WebRTC calls and media stream through it.'
+            : 'No UDP through this exit (measured by Driftstack) — WebRTC falls back to a slower, more detectable path.',
+        }
+      : agedUdp !== undefined
+        ? {
+            key: 'webrtc',
+            label: UDP_LABEL,
+            ok: agedUdp.value,
+            aged: agedUdp,
+            hint: `${agedReadingHint(agedUdp.atMs, agedHint.nowMs, agedHint.autoRecheck)} ${
+              agedUdp.value
+                ? 'UDP worked through this exit then.'
+                : 'UDP did not work through this exit then.'
+            }`,
+          }
+        : {
+            key: 'webrtc',
+            label: UDP_LABEL,
+            ok: false,
+            unmeasured: true,
+            hint: 'UDP not measured yet — run Test to check WebRTC through this exit.',
+          };
+  // The QUIC chip: the tested row's own rule over a result that grants exactly
+  // what Driftstack measured about UDP — so a relay/live verdict wins, and the
+  // fallback is the same inference a tested row draws from its own UDP.
+  const synthetic: ProxyTestResult = {
+    reachable: true,
+    auth_ok: true,
+    udp_associate: udpProbe === true,
+    can_route: true,
+    connect_reply: 0x00,
+    latency_ms: 0,
+    message: '',
+  };
+  const quic = proxyCapabilities(synthetic, quicMeasured, quicProbe, aged, agedHint).find(
+    (c) => c.key === 'quic',
+  ) as ProxyCapability;
+  const quicMeasuredNow =
+    quicMeasured === 'h3' || quicMeasured === 'h2-only' || quicProbe !== undefined;
+  // Neither a QUIC reading nor a UDP one to infer from: say "not measured", never
+  // the '⤵' the inference would draw from a UDP grant nobody measured.
+  const quicChip: ProxyCapability =
+    !quicMeasuredNow && !udpKnown && quic.aged === undefined
+      ? {
+          key: 'quic',
+          label: 'QUIC',
+          ok: false,
+          unmeasured: true,
+          hint: 'QUIC not measured yet — run Test to check HTTP/3 through this exit.',
+        }
+      : quic;
+  return [webrtc, quicChip];
+}
+
+/**
  * Capability chips. `size` tunes density: 'xs' for the dense card proxy-row,
  * 'sm' for the proxies-tab detail. A fell-back protocol shows a ⤵ glyph + muted
  * styling (not struck-through — it still works, just downgraded).
  */
 export function ProxyCapabilityChips({
   result,
+  udpProbe,
   quicMeasured,
   quicProbe,
   aged,
@@ -264,7 +370,12 @@ export function ProxyCapabilityChips({
   nowMs = Date.now(),
   size = 'sm',
 }: {
-  result: ProxyTestResult;
+  /** This Mac's own handshake. ABSENT (owner item 9) for a row only Driftstack has
+   *  measured: the chips are then Driftstack's readings (`serverReadingCapabilities`). */
+  result: ProxyTestResult | undefined;
+  /** Driftstack's UDP reading — read ONLY when `result` is absent (a tested row's
+   *  WebRTC chip is its own handshake's, exactly as before). */
+  udpProbe?: boolean;
   /** T-6 — a measured QUIC verdict promotes the QUIC chip out of the inferred
    *  '~' state: 'h3' → green ✓, 'h2-only' → measured negative; null/undefined
    *  keeps the inferred rendering. */
@@ -284,12 +395,29 @@ export function ProxyCapabilityChips({
   nowMs?: number;
   size?: 'xs' | 'sm';
 }): JSX.Element {
-  const caps = proxyCapabilities(result, quicMeasured, quicProbe, aged, { nowMs, autoRecheck });
+  const caps =
+    result !== undefined
+      ? proxyCapabilities(result, quicMeasured, quicProbe, aged, { nowMs, autoRecheck })
+      : serverReadingCapabilities(udpProbe, quicMeasured, quicProbe, aged, { nowMs, autoRecheck });
   const text = size === 'xs' ? 'text-[9px]' : 'text-[10px]';
   return (
     <div className="flex flex-wrap items-center gap-1" data-component="proxy-capabilities">
       {caps.map((c) =>
-        c.aged !== undefined ? (
+        c.unmeasured === true ? (
+          // Owner item 9 — "not measured yet", stated: the '—' every surface uses
+          // for it ('— OS' beside it), never a ⤵ that reads as a measured NO.
+          <span
+            key={c.key}
+            title={c.hint}
+            data-capability={c.key}
+            data-ok="unmeasured"
+            data-inferred="false"
+            className={`inline-flex items-center gap-0.5 rounded-sm px-1 py-px ${text} bg-surface-inset text-ink-muted`}
+          >
+            <span aria-hidden="true">—</span>
+            {c.label}
+          </span>
+        ) : c.aged !== undefined ? (
           // An AGED reading: past tense, muted, dated. `data-ok="aged"` — never
           // "true" / "false", which every consumer reads as a current verdict.
           <span
@@ -368,7 +496,9 @@ export function ProxyOsChip({
   const text = size === 'xs' ? 'text-[9px]' : 'text-[10px]';
   const tone =
     v.aged === true
-      ? AGED_CHIP_CLASS
+      ? v.tone === 'match'
+        ? AGED_MATCH_CHIP_CLASS
+        : AGED_CHIP_CLASS
       : v.tone === 'match'
         ? 'bg-status-ready/15 text-status-ready'
         : v.tone === 'mismatch'

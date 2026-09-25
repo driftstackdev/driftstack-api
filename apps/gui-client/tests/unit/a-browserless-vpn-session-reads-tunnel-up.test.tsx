@@ -15,13 +15,13 @@
 //   • rendered: the Controls-pane address bar and the browser-mode bar each show
 //     the tunnel-up caption + notice instead of "connecting…", and drop them the
 //     moment the stream is live.
-//   • (W1, contract 2026-09-14) A3's seven BARE bring-up phases are accepted
+//   • (W1, contract 2026-09-14) the harness's seven BARE bring-up phases are accepted
 //     exactly as spelled — whole-string, no prefix matching — each with its own
 //     caption; a token outside the set stays the generic caption. `up` is
-//     CONCEPTUAL (settled with A3 later that day), never emitted:
+//     CONCEPTUAL (settled with the harness later that day), never emitted:
 //     `vpn_egress_active` stays the tunnel-up token and a bare `up` is unknown.
 //   • (W2) the two terminal reads hand the panel {reason, summary, lastPhase}:
-//     A3's host-free summary verbatim, and a DERIVED last phase (the last
+//     the harness's host-free summary verbatim, and a DERIVED last phase (the last
 //     provisioning_detail this window observed before the terminal frame), kept
 //     in a PER-SESSION record that only a non-empty detail can write — so no
 //     relay-cleared terminal read, terminal mutation body, or failed read blanks
@@ -594,7 +594,7 @@ describe('(h) the pure step helpers — "tunnel up" is never said while the tunn
     ).not.toMatch(/time out|timeout/);
   });
 
-  it('vpnTunnelIsUp is false ONLY for vpn_egress_bringing_up and (W1) A3’s seven pre-up phases', () => {
+  it('vpnTunnelIsUp is false ONLY for vpn_egress_bringing_up and (W1) the harness’s seven pre-up phases', () => {
     expect(vpnTunnelIsUp(detail('vpn_egress_bringing_up'))).toBe(false);
     expect(vpnTunnelIsUp(detail('vpn_egress_bringing_up', '203.0.113.7'))).toBe(false);
     for (const phase of BRINGUP_PHASES) {
@@ -740,8 +740,8 @@ describe('(h) SimulatorWindow — the address bars during bring-up and the brows
   });
 });
 
-// W1 — A3's bare bring-up phases (contract 2026-09-14), exactly as given: the
-// seven phases are a tunnel that is NOT up. `up` is CONCEPTUAL (settled with A3
+// W1 — the harness's bare bring-up phases (contract 2026-09-14), exactly as given: the
+// seven phases are a tunnel that is NOT up. `up` is CONCEPTUAL (settled with the harness
 // later the same day) — never an emitted token; `vpn_egress_active` remains the
 // tunnel-up signal, and a bare `up` is OUTSIDE the set. Accepted whole-string
 // only, no prefix matching.
@@ -758,7 +758,7 @@ const NOTICE = '[data-component="simulator-vpn-tunnel-up-notice"]';
 const CHIP = '[data-component="simulator-address-vpn-tunnel-up"]';
 const CONNECTING = '[data-component="simulator-address-connecting"]';
 
-describe('(W1) the pure helpers — A3’s bare phases, accepted exactly as spelled, each with its own caption', () => {
+describe('(W1) the pure helpers — the harness’s bare phases, accepted exactly as spelled, each with its own caption', () => {
   const quiet = { streamLive: false, everLive: false, ended: false };
   const vpnRep = report({ proxy_kind: 'openvpn' });
 
@@ -871,7 +871,7 @@ describe('(W1) the pure helpers — A3’s bare phases, accepted exactly as spel
   });
 });
 
-describe('(W1) SimulatorWindow — the address bars during A3’s bring-up phases', () => {
+describe('(W1) SimulatorWindow — the address bars during the harness’s bring-up phases', () => {
   it('CRITICAL at `handshaking` the chip, placeholder and notice say the tunnel is coming up and name the phase; nothing says "tunnel up"', () => {
     manualControlState = STEP('handshaking');
     const { container } = renderSim();

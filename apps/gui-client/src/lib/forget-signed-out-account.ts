@@ -30,6 +30,21 @@ const STEPS: ReadonlyArray<readonly [string, () => Promise<void>]> = [
   ['profile notes', () => forgetProfilesMeta()],
 ];
 
+/**
+ * What every sign-out path asks before it does any of the above — the sidebar
+ * button, ⌘⇧L and Settings all show THIS text, so what the customer is told is
+ * removed cannot drift from STEPS (a test holds each step to a phrase here).
+ * It says what is removed from this computer, what stays, and that nothing
+ * changes on the account itself.
+ */
+export const SIGN_OUT_CONFIRM_MESSAGE = [
+  'Sign out on this computer?',
+  '',
+  'This removes from this computer: your API key, your AI chat history, your saved proxies with their passwords, proxy check results, which proxy each profile uses, and the notes, folders and tags you gave your profiles. Any open iPhone window closes.',
+  '',
+  'Your recordings stay on this computer. Nothing changes on your Driftstack account: your profiles and sessions stay, and your API key keeps working until you revoke it in the web dashboard.',
+].join('\n');
+
 export async function forgetSignedOutAccount(): Promise<void> {
   // Sequential: several of these share settings.json, and the order keeps the
   // windows (the only step with a live session behind it) first.

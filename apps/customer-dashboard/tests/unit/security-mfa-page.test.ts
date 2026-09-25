@@ -482,7 +482,7 @@ describe('security page — MFA (2FA) disable', () => {
   });
 });
 
-// S35 2026-07-07 (fable-frontend-audit) — regenerate-recovery-codes
+// S35 2026-07-07 (frontend audit) — regenerate-recovery-codes
 // visibility. The reveal panel used to live INSIDE
 // data-section="mfa-enroll", which setMfaState() hides for enrolled
 // users — so the 10 fresh codes rendered into an invisible subtree
@@ -700,7 +700,7 @@ describe('security page — MFA (2FA) enrollment verify', () => {
   });
 });
 
-// S35 2026-07-07 (fable-frontend-audit) — enroll-start guard. Every
+// S35 2026-07-07 (frontend audit) — enroll-start guard. Every
 // unguarded click fired a fresh POST /enroll and each call mints a NEW
 // pending secret server-side (last write wins), so a double-click with
 // out-of-order responses could leave the customer scanning a stale QR.

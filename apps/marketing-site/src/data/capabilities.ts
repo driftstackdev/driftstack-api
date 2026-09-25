@@ -5,9 +5,9 @@
 // not raw — raw includes ref=None pinned post-V-141 capture and is
 // NOT the marketing-surface number).
 //
-// Update protocol: when Agent 1 closes a cumulative-rig batch that
-// moves the numerator or denominator, founder relays the new values
-// to Agent 2 in next interaction; Agent 2 lands the update as a
+// Update protocol: when the fingerprint work closes a cumulative-rig batch
+// that moves the numerator or denominator, founder relays the new values
+// to this repo, where the update lands as a
 // Tier 1 maintenance commit (no founder review needed for factual
 // technical state).
 //
@@ -47,7 +47,7 @@ export const CUMULATIVE_RIG = {
 // ARCHETYPE_REGISTRY — the customer-selectable catalog (entries with
 // status 'launch' | 'available'; the single internal 'reference'
 // baseline iphone15pro_ios17_5_safari17_5 is excluded), itself synced
-// from Agent-1's real-device-verified catalog
+// from the fork's real-device-verified catalog
 // (driftstack/operations/archetype-catalog.json).
 //
 // Values re-derived from the registry on 2026-09-14. Update them ONLY

@@ -1,7 +1,7 @@
 // Shared client-side data layer + formatters for the admin panel.
 //
-// Phase-0 of the admin-panel redesign (docs/internal/2026-06-02-admin-panel-
-// redesign-plan.md). Every page previously re-implemented an inline
+// Phase-0 of the admin-panel redesign (2026-06-02 internal redesign
+// plan). Every page previously re-implemented an inline
 // `authedFetch` (bearer from localStorage + PUBLIC_API_BASE_URL +
 // credentials:include) plus `escapeHtml` / `fmtIso`. This module is the single
 // source of truth so every (re)built page fetches REAL data identically and

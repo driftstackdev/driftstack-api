@@ -43,6 +43,7 @@ export function AnswerCard({
   sessionId,
   baseUrl,
   apiKey,
+  controlKey,
   captureSrc,
 }: {
   answer: string;
@@ -60,6 +61,9 @@ export function AnswerCard({
   sessionId: string | null;
   baseUrl: string;
   apiKey: string | null;
+  /** The session's control key, for the capture fetch in a window with no
+   *  account key (the Simulator). Undefined in the main window. */
+  controlKey?: string | null;
   captureSrc?: string;
 }): JSX.Element {
   const [copied, setCopied] = useState(false);
@@ -128,6 +132,7 @@ export function AnswerCard({
               <CaptureThumbnail
                 baseUrl={baseUrl}
                 apiKey={apiKey}
+                controlKey={controlKey}
                 sessionId={sessionId}
                 captureId={captureId}
                 src={captureSrc}
@@ -148,6 +153,7 @@ export function AnswerCard({
               <CaptureThumbnail
                 baseUrl={baseUrl}
                 apiKey={apiKey}
+                controlKey={controlKey}
                 sessionId={sessionId}
                 captureId={captureId}
                 src={captureSrc}

@@ -1,5 +1,5 @@
 // SimulatorWindow — address bar → data-channel navigate (founder 2026-06-19
-// "can't press the URL bar"; A3 W2668). The fork's rendered iOS-Safari URL bar
+// "can't press the URL bar"; W2668). The fork's rendered iOS-Safari URL bar
 // is browser CHROME, un-tappable via the WebDriver page-touch path, so the GUI
 // provides its own address control that emits {type:'navigate',url} on the SAME
 // LiveKit data channel as taps (no server route — it would 401 for the

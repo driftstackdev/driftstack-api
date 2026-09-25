@@ -330,8 +330,8 @@ describe('SimulatorWindow — a detected bot challenge is visible and resumable'
     expect(resumeChallengedSessionMock.mock.calls[0]?.[1]).toBe('chal_round_trip');
   });
 
-  it('⛔ A3 blind-spot arm: a render test cannot see whether the frame ARRIVES — pin the subscription', async () => {
-    // A3 found that their own frame-contract and queue-state tests both stayed
+  it('⛔ harness blind-spot arm: a render test cannot see whether the frame ARRIVES — pin the subscription', async () => {
+    // The harness side found that its own frame-contract and queue-state tests both stayed
     // green when the publish call itself was deleted. The client twin of that
     // blind spot: asserting the badge given a synthetic frame proves nothing
     // about whether this window is listening at all. So assert the listener.
@@ -446,7 +446,7 @@ describe('SimulatorWindow — page-stalled badge poll-re-raise gate', () => {
     expect(stalledBadge(container)).not.toBeNull();
   });
 
-  it('a page_state frame carrying logicalContentWidth/Height is processed normally (A3 W3005 dims reader is additive — never drops the frame or its state)', async () => {
+  it('a page_state frame carrying logicalContentWidth/Height is processed normally (W3005 dims reader is additive — never drops the frame or its state)', async () => {
     const { container } = renderSim();
     await flush();
     // A loading→errored sequence whose frames ALSO carry the fixed logical dims must

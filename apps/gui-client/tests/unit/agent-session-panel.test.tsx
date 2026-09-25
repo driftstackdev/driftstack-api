@@ -499,7 +499,7 @@ describe('AgentSessionPanel overlay UX', () => {
     expect(container.querySelector('[data-action="reconnect-stream"]')).toBeNull();
   });
 
-  it('keeps the FIXED canonical box aspect on loadedmetadata (NOT the SFU-drifted live aspect) + still reports real dims for the window resize (A3 W2840)', () => {
+  it('keeps the FIXED canonical box aspect on loadedmetadata (NOT the SFU-drifted live aspect) + still reports real dims for the window resize (W2840)', () => {
     connectMock.mockReset();
     connectMock.mockReturnValueOnce(new Promise(() => {}));
     const dims: Array<[number, number]> = [];
@@ -514,7 +514,7 @@ describe('AgentSessionPanel overlay UX', () => {
     Object.defineProperty(video, 'videoWidth', { configurable: true, value: 1320 });
     Object.defineProperty(video, 'videoHeight', { configurable: true, value: 2868 });
     fireEvent.loadedMetadata(video);
-    // Founder 2026-06-23 / A3 W2840: the box must NOT adopt the drifted live aspect
+    // Founder 2026-06-23 / W2840: the box must NOT adopt the drifted live aspect
     // (that letterboxed the view inside the exactly-402:874 host → "iPhone smaller").
     // It stays the canonical aspect; the <video> object-contain absorbs the drift.
     // The real dims still flow to the parent's one-time WINDOW resize.
@@ -989,7 +989,7 @@ describe('AgentSessionPanel overlay UX', () => {
   // #1 — a transient track drop that RE-SUBSCRIBES within the grace window must show
   // only the calm "reconnecting…" pill (over the last frame) and NEVER the scary
   // launch-failed overlay. This is the founder's "reconnecting, happens too often"
-  // (A3 idle frame-pump down-clock / brief SFU re-negotiation).
+  // (harness idle frame-pump down-clock / brief SFU re-negotiation).
   it('#1: a transient track unsubscribe → re-subscribe shows a calm pill, NOT the launch-failed alarm', async () => {
     vi.useFakeTimers();
     try {
@@ -1299,7 +1299,7 @@ describe('AgentSessionPanel overlay UX', () => {
     ['session_config_invalid', 'Session configuration unavailable', 'current configuration'],
     ['node-restarted', 'Session stopped unexpectedly', 'on our side stopped this session'],
     ['session-ended', 'Session completed', 'ended normally'],
-    // A3's typed VPN bring-up reasons. The POINT of each is where it sends the
+    // The harness's typed VPN bring-up reasons. The POINT of each is where it sends the
     // customer, so the assertion is on the destination words, not the label.
     ['remote_unresolved', 'Proxy address not found', 'supplies the proxy'],
     ['remote_refused', 'Proxy refused the connection', 'whoever supplies it'],
@@ -1495,7 +1495,7 @@ describe('AgentSessionPanel overlay UX', () => {
   });
 
   it('an unknown VPN reason is never routed — it falls back to the generic copy', async () => {
-    // A3 owns the enum and will add to it. A value this build does not know must
+    // The harness owns the enum and will add to it. A value this build does not know must
     // NOT borrow the nearest destination: sending someone to their provider for
     // our bug is worse than saying nothing. Matched as whole tokens for the same
     // reason — `remote_unresolved_v2` must not inherit `remote_unresolved`.
@@ -1561,7 +1561,7 @@ describe('AgentSessionPanel overlay UX', () => {
     ['configuring_routes', 'ours, not yours'],
     ['starting_proxy', 'ours, not yours'],
     ['verifying', 'ours, not yours'],
-    // Settled with A3 2026-09-14: the tunnel was up (today's tunnel-up frame is
+    // Settled with the harness 2026-09-14: the tunnel was up (today's tunnel-up frame is
     // the last detail) and the browser never came — ours, beside the four.
     ['vpn_egress_active', 'ours, not yours'],
   ])('tunnel_setup_timeout stalled in %s routes to "%s"', async (lastPhase, destination) => {
@@ -1595,7 +1595,7 @@ describe('AgentSessionPanel overlay UX', () => {
     createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
     // `up` is CONCEPTUAL — never an emitted token (the emitted tunnel-up detail
     // is `vpn_egress_active`, which IS routed) — so a caller handing it over is
-    // aliasing and must not route. The rest are spellings A3 does not emit: a
+    // aliasing and must not route. The rest are spellings the harness does not emit: a
     // `vpn_` prefix on a bare phase, a prefix of a real token, a case variant, a
     // suffixed variant, trailing whitespace, and a prototype member. Every one
     // of them must fall to the routeless sentence.
@@ -1679,7 +1679,7 @@ describe('AgentSessionPanel overlay UX', () => {
     }
   });
 
-  it("renders A3's host-free summary verbatim under the explanation, and nothing when it is absent", async () => {
+  it("renders the harness's host-free summary verbatim under the explanation, and nothing when it is absent", async () => {
     connectMock.mockReset();
     connectMock.mockResolvedValue(undefined);
     createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
@@ -1776,7 +1776,7 @@ describe('AgentSessionPanel overlay UX', () => {
     expect(vpnBringupPhaseRoute('verifying')).toBe('ours');
     // Settled 2026-09-14: the tunnel-up frame as last detail = tunnel up, browser never came.
     expect(vpnBringupPhaseRoute('vpn_egress_active')).toBe('ours');
-    // `up` is conceptual, never emitted; the rest are not A3's spellings.
+    // `up` is conceptual, never emitted; the rest are not the harness's spellings.
     for (const bad of [
       'up',
       null,

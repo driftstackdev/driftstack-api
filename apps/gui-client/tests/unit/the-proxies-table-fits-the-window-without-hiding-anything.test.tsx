@@ -687,7 +687,7 @@ describe('the proxies table fits the window without hiding anything', () => {
         expect(el.className).not.toMatch(/(^|\s)(truncate|line-clamp-\d+)(\s|$)/);
   });
 
-  it('(i) AGED readings — a proxy checked hours ago shows what was found THEN, muted and dated, on both kinds of row; never "untested", and never in the tone of a current reading. An aged reading beside a failed check is not shown at all', async () => {
+  it('(i) AGED readings — a proxy checked hours ago shows what was found THEN, muted and dated, on both kinds of row; never "untested", and never in the tone of a current reading (except an Apple OS reading, which keeps its green in the aged chrome — owner 2026-09-24). An aged reading beside a failed check is not shown at all', async () => {
     // MUTATION: stop passing `aged` to VpnUdpChip / VpnQuicChip / ProxyCapabilityChips
     // in ProxyRow → the chips fall back to "unmeasured" / the inference → red.
     // MUTATION: drop the `vpnFailure === undefined` test on `aged` in ProxyRow → the
@@ -767,7 +767,12 @@ describe('the proxies table fits the window without hiding anything', () => {
     expect(socksQuic.getAttribute('data-aged-value')).toBe('false');
     const os = rowOf('socks-aged').querySelector('[data-component="proxy-os-fingerprint"]')!;
     expect(os.getAttribute('data-ok')).toBe('aged');
-    expect(os.getAttribute('data-os-tone')).toBe('unknown');
+    // ⛔ OWNER 2026-09-24 (item 9): an aged APPLE reading keeps its green, in the
+    // aged chrome ("if it's a Apple, it should be green status"); any other aged
+    // reading is still neutral.
+    // (The fixture's reading is macOS/iOS, so: match, in the dashed aged chrome.)
+    expect(os.getAttribute('data-os-tone')).toBe('match');
+    expect(os.className).toContain('border-dashed');
     expect(os.textContent).toContain('9 h ago');
 
     // ⛔ Beside a FAILED check nothing aged is shown: the view drops every

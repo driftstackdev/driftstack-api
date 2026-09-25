@@ -4,7 +4,7 @@
 // activities, and at some point the app gets stuck and then freezes completely,
 // with a full restart the only way out. It emits NOTHING — no error, no log, no
 // crash — which is exactly why 32,000 tests and two independent static sweeps
-// have not found it. A2 and A3 have jointly eliminated in-memory stores,
+// have not found it. This repo and the harness have jointly eliminated in-memory stores,
 // listener leaks, timers, the input-receipt table, uncapped React state,
 // per-tick re-renders and the send/backpressure path, all statically and neither
 // under load. Every candidate still standing is one only a running app can show.
@@ -25,6 +25,8 @@
 // so a sample whose window was hidden at either end is discarded rather than
 // reported. That is a deliberate loss of coverage: a freeze that begins while
 // hidden is invisible here, and the alternative is an instrument nobody trusts.
+
+import { LazyStore } from '@tauri-apps/plugin-store';
 
 /** A stall long enough to be a defect rather than a slow frame. */
 export const STALL_THRESHOLD_MS = 3_000;
@@ -288,6 +290,17 @@ export function shouldSurfaceRecord(record: FlightRecord | null, cleanShutdown: 
   return true;
 }
 
+/**
+ * The census without the stall prefix: the counts only, plus the blocked time
+ * when there WAS a stall. A periodic snapshot is not a stall, and printing
+ * "[stall] main thread blocked 0ms" inside it read as one.
+ */
+function formatCensus(census: StallCensus): string {
+  return formatStall(census)
+    .replace(/^\[stall\] /, '')
+    .replace(/^main thread blocked 0ms /, '');
+}
+
 /** One line describing what the previous run was holding when it died. */
 export function formatFlightRecord(record: FlightRecord): string {
   const when = new Date(record.at).toISOString();
@@ -298,7 +311,123 @@ export function formatFlightRecord(record: FlightRecord): string {
   // where the customer actually browses. A record that does not name the thread
   // sends the next investigation to the wrong one.
   const where = record.window === undefined ? '' : ` [${record.window}]`;
-  return `[flight-recorder]${where} previous run ended without shutting down — ${why} at ${when}: ${formatStall(record.census)}`;
+  // What it means, in the line itself: a normal quit is recorded (see ExitMark),
+  // so a surviving record is a crash, a force-quit, or a window that froze.
+  const meaning = record.onStall
+    ? 'it stopped responding, then closed'
+    : 'it crashed, was force-quit, or froze';
+  return `[flight-recorder]${where} previous run ended without shutting down (${meaning}) — ${why} at ${when}: ${formatCensus(record.census)}`;
+}
+
+// ─── Exit mark: telling a normal quit from a crash ──────────────────────────
+//
+// ⛔ THE CLEAN-SHUTDOWN MARK WAS ONLY EVER WRITTEN BY A REACT EFFECT CLEANUP, and
+// quitting the app (⌘Q, the red button on the last window, an update relaunch)
+// tears the webview down without unmounting anything. So EVERY normal quit read
+// as "ended without shutting down": on the maintainer's Mac all five records in
+// the bounded history were periodic snapshots, none a stall, and the dev log
+// carried the line at every launch — for both windows.
+//
+// The mark now rides the store plugin's own exit hook. tauri-plugin-store 2.x
+// saves every open store on `RunEvent::Exit` (plugin lib.rs, `on_event`), and
+// Tauri dispatches that to plugins BEFORE it clears the resource table. So each
+// run, at startup:
+//   1. read the mark the previous run left (true = it exited normally);
+//   2. write `false` and SAVE it — this run has not exited yet;
+//   3. write `true` WITHOUT saving, into a store opened with autoSave off.
+// Step 3 reaches the disk only through the plugin's exit save. A crash, a kill
+// or a force-quit never runs it, and the `false` from step 2 is what the next
+// launch reads.
+//
+// ⚠️ Known gap, stated rather than hidden: the webview's JavaScript and the
+// app's exit path run on different threads. A window that FROZE and was then
+// quit with ⌘Q (rather than force-quit) still exits through the plugin, so it
+// reads as a normal quit. A stall that recovered long enough to be recorded is
+// still reported, because its record says `onStall`. The alternative — every
+// normal quit reported as a crash — is what this replaces.
+
+/** Main window's exit-mark store. Separate from FLIGHT_STORE_FILE because it
+ *  must be opened with autoSave OFF, and the recorder's store saves on purpose. */
+export const EXIT_MARK_FILE = 'diagnostics-exit.json';
+/** The simulator window's own exit mark (same reasoning as its flight store). */
+export const SIMULATOR_EXIT_MARK_FILE = 'diagnostics-simulator-exit.json';
+const EXIT_KEY = 'exitedNormally';
+
+export interface ExitMark {
+  /**
+   * Did the run before this one exit normally? `true` yes, `false` no (it was
+   * armed and never reached the exit save), `null` unknown — no mark at all,
+   * which is the first launch of a version that writes one. Read once per
+   * process and remembered, so arming can never be observed by the reader.
+   */
+  previousExitWasClean: () => Promise<boolean | null>;
+  /** Steps 2 and 3 above. Idempotent; never throws. */
+  arm: () => Promise<void>;
+}
+
+/** Build an exit mark over a store. PURE given the store, so it is testable. */
+export function createExitMark(store: FlightStore): ExitMark {
+  let read: Promise<boolean | null> | null = null;
+  let armed: Promise<void> | null = null;
+  const previousExitWasClean = (): Promise<boolean | null> => {
+    read ??= (async () => {
+      try {
+        const v = await store.get<boolean>(EXIT_KEY);
+        return typeof v === 'boolean' ? v : null;
+      } catch {
+        return null;
+      }
+    })();
+    return read;
+  };
+  const arm = (): Promise<void> => {
+    armed ??= (async () => {
+      // Read first: arming before the read would report this run, not the last.
+      await previousExitWasClean();
+      try {
+        await store.set(EXIT_KEY, false);
+        await store.save();
+        // In memory only — the plugin's exit save is the only writer of `true`.
+        await store.set(EXIT_KEY, true);
+      } catch {
+        /* a diagnostic must never break startup */
+      }
+    })();
+    return armed;
+  };
+  return { previousExitWasClean, arm };
+}
+
+/** A store opened with autoSave off. Constructed lazily, on first use, so
+ *  importing this module never touches the store (tests, the visual harness). */
+function lazyStoreWithoutAutoSave(file: string): FlightStore {
+  let opened: LazyStore | null = null;
+  const open = (): LazyStore => {
+    opened ??= new LazyStore(file, { defaults: {}, autoSave: false });
+    return opened;
+  };
+  return {
+    get: <T>(k: string) => open().get<T>(k),
+    set: (k, v) => open().set(k, v),
+    save: () => open().save(),
+  };
+}
+
+const exitMarks = new Map<string, ExitMark>();
+
+/** The exit mark for a window, one per store file per JS context. */
+export function exitMarkFor(windowLabel: string | undefined): ExitMark {
+  const file = windowLabel === 'simulator' ? SIMULATOR_EXIT_MARK_FILE : EXIT_MARK_FILE;
+  let mark = exitMarks.get(file);
+  if (mark === undefined) {
+    mark = createExitMark(lazyStoreWithoutAutoSave(file));
+    exitMarks.set(file, mark);
+  }
+  return mark;
+}
+
+function inTauri(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
 
 /** Separate from settings.json: a diagnostic must not risk the file that holds
@@ -337,14 +466,24 @@ export async function reportPreviousRun(
     save: () => Promise<void>;
   },
   onReport: (line: string, record: FlightRecord) => void,
-  /** Durable sink for the formatted line — the log buffer's ERROR path, which
-   *  flushes to disk immediately rather than on the 1s debounce a crash loop
-   *  can outrun. Optional so callers without a sink still get the toast. */
-  persist?: (line: string) => void,
+  /** Durable sink for the formatted line — ONE log entry, flushed to disk
+   *  immediately rather than on the 1s debounce a crash loop can outrun.
+   *  Optional so callers without a sink still get the toast. ⛔ The caller must
+   *  not ALSO log the line from `onReport`: that is how every record came out
+   *  twice, once as ERROR and once as WARN. */
+  persist?: (line: string, record: FlightRecord) => void,
+  /** The window's exit mark. When given, it decides: a run that exited
+   *  normally is not reported, and neither is one with no mark (the first
+   *  launch after this shipped — its record is the old version's normal quit).
+   *  Without it, only the legacy clean-shutdown key counts. */
+  exitMark?: Pick<ExitMark, 'previousExitWasClean'>,
 ): Promise<void> {
   try {
     const record = (await store.get<FlightRecord>(FLIGHT_KEY)) ?? null;
-    const clean = (await store.get<boolean>(CLEAN_KEY)) ?? false;
+    const legacyClean = (await store.get<boolean>(CLEAN_KEY)) ?? false;
+    const exitedNormally =
+      exitMark === undefined ? false : (await exitMark.previousExitWasClean()) !== false;
+    const clean = legacyClean || exitedNormally;
     if (shouldSurfaceRecord(record, clean) && record !== null) {
       const line = formatFlightRecord(record);
       // ⛔ THE ONLY COPY USED TO BE DESTROYED BY THE ACT OF REPORTING IT. The
@@ -355,7 +494,7 @@ export async function reportPreviousRun(
       // caller's sink.
       const prior = (await store.get<FlightRecord[]>(HISTORY_KEY)) ?? [];
       await store.set(HISTORY_KEY, [record, ...prior].slice(0, FLIGHT_HISTORY_MAX));
-      persist?.(line);
+      persist?.(line, record);
       onReport(line, record);
     }
     // Cleared unconditionally, including when nothing was surfaced: a record
@@ -399,7 +538,11 @@ export function startFlightRecorder(
   deps: StallCensusDeps,
   intervalMs: number = FLIGHT_RECORDER_INTERVAL_MS,
   windowLabel?: string,
+  /** Armed at start so a normal quit is recorded as one. Defaults to this
+   *  window's own mark when running in Tauri; nothing elsewhere. */
+  exitMark: Pick<ExitMark, 'arm'> | null = inTauri() ? exitMarkFor(windowLabel) : null,
 ): { stop: () => Promise<void>; recordStall: (census: StallCensus) => void } {
+  if (exitMark !== null) void exitMark.arm();
   const write = (census: StallCensus, onStall: boolean): void => {
     const record: FlightRecord = {
       at: Date.now(),

@@ -7,7 +7,7 @@
 //      into lossy mode for high-frequency mouseMove streams.
 //
 // Both responsibilities are wire-contract invariants:
-//   - The Mac-side decoder (Agent 1's Swift RoomDataDispatcher) parses
+//   - The Mac-side decoder (the harness's Swift RoomDataDispatcher) parses
 //     a UTF-8 JSON byte stream — any encoding drift breaks decode.
 //   - Reliable=true by default ensures mouse/key events arrive in
 //     order; drift to lossy-by-default would lose click chains under
@@ -339,7 +339,7 @@ describe('sendInputEvent — benign teardown errors', () => {
   });
 });
 
-// URL navigation rides the SAME reliable data channel as taps (A3 W2668;
+// URL navigation rides the SAME reliable data channel as taps (W2668;
 // founder "can't press the URL bar" — the fork's URL bar is un-tappable chrome).
 // No server route (would 401 for the keychain-less Simulator app); the harness
 // re-validates the URL with an http(s) allowlist + SSRF rejection.
@@ -375,7 +375,7 @@ describe('sendNavigate', () => {
   });
 });
 
-// Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract). The GUI emits the
+// Browser-style page TABS (doc-150 item 4; locked harness contract). The GUI emits the
 // full tab list on every change + an activateTab (with a correlation requestId) on a
 // switch, both over the SAME reliable data channel as taps/navigate.
 /**

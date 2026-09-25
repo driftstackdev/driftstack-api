@@ -54,8 +54,8 @@ export default {
           'red-soft': '#f25366',
           'red-deep': '#a8202d',
         },
-        // Fleet token namespace (2026-06-12 rework — see
-        // docs/internal/2026-06-12-design-system-spec.md); same mapping as
+        // Fleet token namespace (2026-06-12 rework — see the internal
+        // 2026-06-12 design-system spec); same mapping as
         // marketing-site so the two surfaces stay in lockstep.
         tk: {
           bg: 'rgb(var(--bg-rgb) / <alpha-value>)',

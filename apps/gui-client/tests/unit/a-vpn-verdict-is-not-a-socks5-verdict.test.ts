@@ -337,8 +337,20 @@ describe('saveObservedQuic — a live observation touches only the verdict', () 
     expect(cache['p1']?.quicMeasuredAt).toBe(50);
   });
 
-  it('VACUITY CONTROL — a proxy with no entry gets nothing invented', async () => {
+  // ⛔ OWNER 2026-09-24 (item 9) — this arm read "gets nothing invented", and that
+  // DROPPED a live session's HTTP/3 on a proxy this Mac never tested (the Simulator
+  // said "HTTP/3 ✓ live" while the card and the grid said nothing). The entry it
+  // gets is the fail-closed `serverSeeded` placeholder, and it still touches ONLY
+  // the verdict: no usable result, no local check, no exit, no latency.
+  it('a proxy with no entry gets the verdict on a SEEDED placeholder — and nothing else', async () => {
     const cache = await saveObservedQuic('ghost', 'h3', 50);
-    expect(cache['ghost']).toBeUndefined();
+    const e = cache['ghost'];
+    expect(e?.serverSeeded).toBe(true);
+    expect(e?.quicMeasured).toBe('h3');
+    expect(e?.quicMeasuredAt).toBe(50);
+    expect(e?.result.reachable).toBe(false);
+    expect(e?.endpoint).toBeUndefined();
+    expect(e?.exitIp).toBeUndefined();
+    expect(e?.serverLatencyMs).toBeUndefined();
   });
 });

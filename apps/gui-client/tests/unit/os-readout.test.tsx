@@ -83,21 +83,25 @@ describe('OsReadout', () => {
     }
   });
 
-  it('renders "<os> · <confidence>" once the exit OS fingerprint was observed', () => {
+  // ⛔ 2026-09-24 (owner item 9) — the OS is named in the customer's words
+  // ('Windows', 'iOS/macOS'), never the wire id ('windows', 'macos-or-ios').
+  it('renders "<OS> · <confidence>" once the exit OS fingerprint was observed', () => {
     render(
       <OsReadout report={report({ os_fingerprint: { os: 'windows', confidence: 'medium' } })} />,
     );
-    const el = screen.getByText(/OS: windows · medium/);
+    const el = screen.getByText(/OS: Windows · medium/);
     expect(el.getAttribute('data-state')).toBe('observed');
     // Neutral, not a status colour (mirrors ExitIpChip's text-white/70).
     expect(el.className).toContain('text-white/70');
   });
 
-  it('shows the observed os + confidence verbatim (no coercion of the confidence label)', () => {
+  it('shows the observed os + confidence (no coercion of the confidence label) — and an Apple reading is the match, in green (owner item 9, 2026-09-24: "if it\'s a Apple, it should be green status")', () => {
     render(
       <OsReadout report={report({ os_fingerprint: { os: 'macos-or-ios', confidence: 'high' } })} />,
     );
-    expect(screen.getByText(/OS: macos-or-ios · high/)).toBeTruthy();
+    const el = screen.getByText(/OS: ✓ iOS\/macOS · high/);
+    expect(el.className).toContain('text-status-ready');
+    expect(el.className).not.toContain('text-white/70');
   });
 
   // ⛔⛔ (V-219) THIS FIELD IS NOT A LIVE MEASUREMENT and every field beside it
@@ -125,7 +129,7 @@ describe('OsReadout', () => {
     // ×10 keeps it in days, which is what this arm is about.
     const at = new Date(NOW - OS_FINGERPRINT_TTL_MS * 10).toISOString();
     render(<OsReadout report={observed(at)} nowMs={NOW} />);
-    const el = screen.getByText(/OS: windows · high ·/);
+    const el = screen.getByText(/OS: Windows · high ·/);
     expect(el.getAttribute('data-age')).toBe('aged');
     expect(el.textContent ?? '').toMatch(/·\s*\d+\s*d ago$/);
     // And the title says the one thing a customer can do about it, plus WHY the
@@ -137,7 +141,7 @@ describe('OsReadout', () => {
   it('CRITICAL a FRESH reading says nothing about age — "just now" on every session is noise, and the label has to mean something when it appears', () => {
     const at = new Date(NOW - 5 * 60 * 1000).toISOString();
     render(<OsReadout report={observed(at)} nowMs={NOW} />);
-    const el = screen.getByText(/^OS: windows · high$/);
+    const el = screen.getByText(/^OS: Windows · high$/);
     expect(el.getAttribute('data-age')).toBe('fresh');
     expect(el.textContent ?? '').not.toMatch(/ago/);
   });
@@ -158,7 +162,7 @@ describe('OsReadout', () => {
 
   it('an UNDATED reading still renders — a control plane that predates the stamp is a gap in OUR plumbing, not evidence about the customer\'s proxy, and blanking it would read as "never measured"', () => {
     render(<OsReadout report={observed(undefined)} nowMs={NOW} />);
-    const el = screen.getByText(/^OS: windows · high$/);
+    const el = screen.getByText(/^OS: Windows · high$/);
     expect(el.getAttribute('data-state')).toBe('observed');
     expect(el.getAttribute('data-age')).toBe('undated');
   });
@@ -166,7 +170,7 @@ describe('OsReadout', () => {
   it('CONTROL — a stamp in the FUTURE reads as current, never as a negative age. Clock skew between the box and this Mac is real, and "-3 d ago" is worse than saying nothing.', () => {
     const at = new Date(NOW + 60 * 60 * 1000).toISOString();
     render(<OsReadout report={observed(at)} nowMs={NOW} />);
-    const el = screen.getByText(/^OS: windows · high$/);
+    const el = screen.getByText(/^OS: Windows · high$/);
     expect(el.getAttribute('data-age')).toBe('fresh');
   });
 

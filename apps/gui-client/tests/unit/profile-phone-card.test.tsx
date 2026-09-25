@@ -834,9 +834,13 @@ describe('B1 — the health pill: ONE element, seven arms, strict precedence (he
     const el = pill(container);
     expect(el.textContent).toBe('Not reachable');
     expect(el.getAttribute('data-health')).toBe('broken');
-    // Polish — the error ink is red-300 on the red tint (the red-400 token
-    // measured 3.3–3.8:1 there at 10px); the tint is unchanged.
-    expect(classes(el)).toEqual(expect.arrayContaining(['bg-status-error/15', 'text-[#fca5a5]']));
+    // Polish — the error ink is the soft error-as-text token on the red tint
+    // (the red-400 token measured 3.3–3.8:1 there at 10px); the tint is
+    // unchanged. 2026-09-24: it was the dark-only literal red-300 (#fca5a5),
+    // unreadable on the light theme's card.
+    expect(classes(el)).toEqual(
+      expect.arrayContaining(['bg-status-error/15', 'text-status-error-text']),
+    );
     expect(classes(el)).not.toContain('text-status-error');
     expect(el.getAttribute('title')).toBe('The proxy did not answer.');
     expect(container.textContent).not.toMatch(/stale/);
@@ -1174,7 +1178,7 @@ describe('B1 — the health pill: ONE element, seven arms, strict precedence (he
     expect(el.textContent).toBe(ENDPOINT_UNRESOLVED);
     expect(el.textContent).toBe('address unknown');
     expect(el.getAttribute('data-health')).toBe('broken');
-    expect(classes(el)).toContain('text-[#fca5a5]');
+    expect(classes(el)).toContain('text-status-error-text');
     expect(el.getAttribute('title')).toBe('DNS lookup of wg.example.com failed: no such host.');
     expect(container.textContent).not.toMatch(/not measured/);
     expect(container.textContent).not.toMatch(/untested/);
@@ -1488,7 +1492,10 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // estimate, and that estimate over-reserves. '? Apple' estimated 56 against
     // a real 43.80 and put a measured OS chip behind a '+1' at the 178px column.
     // Update it only alongside a real measurement.
-    expect(entries).toHaveLength(21);
+    // 21 -> 22 on 2026-09-24 (owner item 9): 'UDP — not on plan' (96.5), a VPN
+    // row on a plan without VPN, measured the same way with '? OS' 29.97 and
+    // '✓ Apple' 47.16 reproduced as controls in the same run.
+    expect(entries).toHaveLength(22);
     expect(entries.filter(([, n]) => Number.isInteger(n)).map(([t]) => t)).toEqual([]);
     // …and the floor it is the only companion of is still named and still 3.
     expect(source('components/ProfilePhoneCard.tsx')).toContain('const CAPS_MIN_SLACK = 3;');
@@ -1610,9 +1617,12 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // a cached record written before the field existed, an older server and a
     // tampered response all read `undefined`, and every one of them has to fail
     // to assert rather than default into a confident claim.
+    // ⛔ OWNER 2026-09-24 (item 9), verbatim: "if it's a Apple, it should be green
+    // status, which we don't always have". The GREEN half of this symmetry was
+    // overruled: an Apple reading reads '✓' from these vantages too (pinned just
+    // after this loop, with the caveat now in its title). The RED half stands and
+    // is what this loop pins.
     for (const [label, fp, os] of [
-      ['green, server said false', REAL_OS_MULTI_HOP, 'iOS/macOS'],
-      ['green, legacy record with no vantage field at all', REAL_OS_LEGACY, 'iOS/macOS'],
       ['red, server said false', WINDOWS_OS_MULTI_HOP, 'Windows'],
       ['red, legacy record with no vantage field at all', WINDOWS_OS_LEGACY, 'Windows'],
     ] as const) {
@@ -1647,6 +1657,21 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       );
       // …and it is never worded as either verdict, at any width.
       expect(chip?.title, label).not.toMatch(/can be detected|matches the iOS device behind it/);
+    }
+    // OWNER 2026-09-24 — the green half: the same two vantages, an Apple reading,
+    // a '✓' match that SAYS what the vantage cannot rule out.
+    for (const [label, fp] of [
+      ['green, server said false', REAL_OS_MULTI_HOP],
+      ['green, legacy record with no vantage field at all', REAL_OS_LEGACY],
+    ] as const) {
+      const chip = visibleChips(props({ osFingerprint: fp, quicMeasured: 'h3' }), 400).chips.find(
+        (c) => c.key === 'os',
+      );
+      expect(chip?.text, label).toBe('✓ iOS/macOS');
+      expect(chip?.attrs['data-os-tone'], label).toBe('match');
+      expect(chip?.keep, label).toBe(true);
+      expect(chip?.title, label).toMatch(/matches the iOS device behind it/);
+      expect(chip?.title, label).toMatch(/some websites may reach a different one/);
     }
     // ⛔ VACUITY CONTROL — the IDENTICAL readings WITH the vantage still assert,
     // in both tones. Without this the loop above would pass just as happily if
@@ -1820,7 +1845,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       expect(os.textContent).toBe('✗ Win');
       expect(os.getAttribute('data-os-tone')).toBe('mismatch');
       expect(classes(os)).toEqual(
-        expect.arrayContaining(['bg-status-error/15', 'text-[#fca5a5]', 'px-1']),
+        expect.arrayContaining(['bg-status-error/15', 'text-status-error-text', 'px-1']),
       );
       expect(os.getAttribute('title')).toMatch(
         /^(Your proxy presents as|This proxy looks like) Windows/,
@@ -1834,7 +1859,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     });
   });
 
-  it('V-219 rendered — the SAME mismatch from a multi-hop vantage wears the neutral chrome, never the red; and the green half is withheld just as hard', () => {
+  it('V-219 rendered — the SAME mismatch from a multi-hop vantage wears the neutral chrome, never the red; and the green half (Apple) is a match: owner 2026-09-24', () => {
     // ⛔ ADDED 2026-09-14 — the DOM counterpart of the symmetry arm above, and a
     // deliberate inversion of 'C3 rendered' directly before it. The fixture is
     // WINDOWS_OS minus the vantage and nothing else, so what this arm isolates
@@ -1857,7 +1882,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // The exact two classes 'C3 rendered' asserts, now absent — a red chip is a
     // claim of a detectable defect, and this vantage cannot support one.
     expect(classes(os)).not.toContain('bg-status-error/15');
-    expect(classes(os)).not.toContain('text-[#fca5a5]');
+    expect(classes(os)).not.toContain('text-status-error-text');
     // …and it did not fall the OTHER way either: withholding a mismatch must not
     // mint the reassurance. This is the false green the gate exists to prevent.
     expect(classes(os)).not.toContain('text-status-ready');
@@ -1870,9 +1895,9 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(byComponent(caps, 'caps-overflow')).toBeNull();
     cleanup();
     // The green half, from the shape MOST stored rows are actually in: a cached
-    // record written before the field existed. ABSENT MEANS FALSE — it renders
-    // '? iOS/macOS', never the '✓ iOS/macOS' this same reading rendered until
-    // today, and never the green ink.
+    // record written before the field existed. ⛔ OWNER 2026-09-24 (item 9) — it
+    // renders the green '✓ iOS/macOS' again (V-219 had made it '? iOS/macOS'),
+    // with the vantage's caveat in its title.
     const { container: green } = render(
       <ProfilePhoneCard {...props({ osFingerprint: REAL_OS_LEGACY })} />,
     );
@@ -1880,10 +1905,11 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       byRegion(green, 'caps') as HTMLElement,
       'proxy-os-fingerprint',
     ) as HTMLElement;
-    expect(g.textContent).toBe('? iOS/macOS');
-    expect(g.getAttribute('data-os-tone')).toBe('unknown');
-    expect(classes(g)).not.toContain('text-status-ready');
-    expect(g.getAttribute('title')).not.toMatch(/matches the iOS device behind it/);
+    expect(g.textContent).toBe('✓ iOS/macOS');
+    expect(g.getAttribute('data-os-tone')).toBe('match');
+    expect(classes(g)).toContain('text-status-ready');
+    expect(g.getAttribute('title')).toMatch(/matches the iOS device behind it/);
+    expect(g.getAttribute('title')).toMatch(/some websites may reach a different one/);
     cleanup();
   });
 
@@ -2284,7 +2310,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(container.querySelector('.text-status-error')).toBeNull();
     expect(
       Array.from(container.querySelectorAll('*')).some((el) =>
-        classes(el).includes('text-[#fca5a5]'),
+        classes(el).includes('text-status-error-text'),
       ),
     ).toBe(false);
     cleanup();
@@ -3173,8 +3199,12 @@ describe('P1 — the when row: compact relative forms, the left fact has priorit
 });
 
 describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on the app's tokens", () => {
-  const HOVER_SHADOW =
-    'hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_18px_40px_rgba(0,0,0,0.45)]';
+  // 2026-09-24 (owner item 1) — the hover lift moved from a black-and-white
+  // literal utility into `.pf-card:hover` (index.css), on the mode tokens
+  // `--pf-lift-hover`: in the light theme the literal laid a 45% near-black
+  // shadow under a white tile. It still writes Tailwind's shadow SLOT, so the
+  // selected ring composes over it.
+  const HOVER_SHADOW_RULE = '.pf-card:hover {';
   const FOCUS_RING = [
     'focus-visible:outline-none',
     'focus-visible:ring-2',
@@ -3182,7 +3212,7 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
     'focus-visible:ring-offset-2',
   ];
 
-  it('the article: a white/8% hairline over a 180° slate gradient, a hover shadow that DEEPENS, a solid focus ring; running = a mint frame; selected = accent2 border + a 2px 35% RING (survives every shadow change)', () => {
+  it('the article: an ink/8% hairline over a 180° gradient on the mode tokens, a hover shadow that DEEPENS, a solid focus ring; running = a mint frame; selected = accent2 border + a 2px 35% RING (survives every shadow change)', () => {
     // Article className in ProfilePhoneCard.tsx: `hover:shadow-xl` back reds the
     // hover arm (it rewrote --tw-shadow and erased the selected box-shadow ring);
     // the selected ring back into `shadow-[0_0_0_1.5px…]` reds the ring arm.
@@ -3190,8 +3220,7 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
     const article = (): HTMLElement => container.querySelector('article') as HTMLElement;
     expect(classes(article())).toEqual(
       expect.arrayContaining([
-        'border-white/[0.08]',
-        HOVER_SHADOW,
+        'border-ink-primary/[0.08]',
         'hover:-translate-y-0.5',
         ...FOCUS_RING,
         'focus-visible:ring-offset-surface-base',
@@ -3209,26 +3238,32 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
     expect(article().getAttribute('data-card-light')).toBe('idle');
     const css = readFileSync(resolve(__dirname, '../../src/styles/index.css'), 'utf8');
     const pfCard = css.slice(css.indexOf('.pf-card {'), css.indexOf('.pf-card[data-card-light='));
-    expect(pfCard).toContain('linear-gradient(180deg');
+    expect(pfCard).toContain('linear-gradient(');
+    expect(pfCard).toContain('180deg');
     expect(pfCard).toContain('--tw-shadow:');
     expect(pfCard).not.toMatch(/^\s*box-shadow:/m);
+    // The hover deepens the lift in the same slot (never box-shadow), and the
+    // deeper lift is the mode's own token.
+    const hover = css.slice(
+      css.indexOf(HOVER_SHADOW_RULE),
+      css.indexOf('}', css.indexOf(HOVER_SHADOW_RULE)),
+    );
+    expect(hover).toContain('--tw-shadow:');
+    expect(hover).toContain('var(--pf-lift-hover)');
+    expect(hover).not.toMatch(/^\s*box-shadow:/m);
+    expect(classes(article()).some((c) => c.startsWith('hover:shadow-'))).toBe(false);
     rerender(<ProfilePhoneCard {...props({ running: true })} />);
     expect(classes(article())).toContain('border-status-ready/35');
     expect(article().getAttribute('data-card-light')).toBe('live');
     rerender(<ProfilePhoneCard {...props({ selected: true })} />);
     expect(classes(article())).toEqual(
-      expect.arrayContaining([
-        'border-accent-hover',
-        'ring-2',
-        'ring-accent-hover/35',
-        HOVER_SHADOW,
-      ]),
+      expect.arrayContaining(['border-accent-hover', 'ring-2', 'ring-accent-hover/35']),
     );
     expect(classes(article()).some((c) => c.startsWith('shadow-[0_0_0_1.5px'))).toBe(false);
     cleanup();
   });
 
-  it('the screen carries ONE radial hue wash (no full-screen tint, no blurred disc, no inset vignette) plus the gloss; the select indicator is a hollow white/35 ring at z-[15], BELOW the menu (z-20)', () => {
+  it('the screen carries ONE radial hue wash (no full-screen tint, no blurred disc, no inset vignette) plus the gloss; the select indicator is a hollow ink/35 ring at z-[15], BELOW the menu (z-20)', () => {
     const { container } = render(<ProfilePhoneCard {...props({ hue: 150 })} />);
     const screenEl = byComponent(container, 'phone-screen') as HTMLElement;
     const washes = screenEl.querySelectorAll('[data-component="screen-wash"]');
@@ -3244,7 +3279,7 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
     ).toBe(false);
     const indicator = byComponent(container, 'select-indicator') as HTMLElement;
     expect(classes(indicator)).toEqual(
-      expect.arrayContaining(['z-[15]', 'border-white/35', 'bg-transparent']),
+      expect.arrayContaining(['z-[15]', 'border-ink-primary/35', 'bg-transparent']),
     );
     expect(classes(indicator)).not.toContain('bg-black/35');
     const menu = byComponent(document, 'card-actions-menu') as HTMLElement;
@@ -3381,10 +3416,10 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
     expect(thumb.style.backgroundColor).toBe(probe.style.backgroundColor);
     cleanup();
   });
-  it('the dock: a white/6% hairline; Launch is a 30px 12px block titled with a sentence; live → solid ready, launching → the neutral busy button at FULL opacity (only launchDisabled dims); ⋯ is a borderless white/6% fill; both wear the solid focus ring', () => {
+  it('the dock: an ink/6% hairline; Launch is a 30px 12px block titled with a sentence; live → solid ready, launching → the neutral busy button at FULL opacity (only launchDisabled dims); ⋯ is a borderless ink/6% fill; both wear the solid focus ring', () => {
     const { container, rerender } = render(<ProfilePhoneCard {...props()} />);
     const dock = byComponent(container, 'card-dock') as HTMLElement;
-    expect(classes(dock)).toContain('border-white/[0.06]');
+    expect(classes(dock)).toContain('border-ink-primary/[0.06]');
     expect(classes(dock)).not.toContain('border-surface-divider');
     const launch = (): HTMLElement =>
       screen.getByRole('button', { name: /^(Launch|Open session|Launching…)$/ });
@@ -3407,7 +3442,7 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
     expect(launch().getAttribute('title')).toBe('Launch a session with this profile');
     const more = screen.getByRole('button', { name: 'More actions' });
     expect(classes(more)).toEqual(
-      expect.arrayContaining(['bg-white/[0.06]', 'text-ink-primary', ...FOCUS_RING]),
+      expect.arrayContaining(['bg-ink-primary/[0.06]', 'text-ink-primary', ...FOCUS_RING]),
     );
     expect(classes(more)).not.toContain('border');
     expect(classes(more)).not.toContain('border-surface-divider');
@@ -3626,7 +3661,7 @@ describe('P3 — via, caps, meta rows: pills and chips in one family', () => {
     }
   });
 
-  it("the repair row: Re-test (the Proxies tab's word) is OUTLINED red-300, Change / Test are outlined divider buttons, all 10px/600 with transition-colors, enabled-guarded hovers and an inset focus ring; in flight the button is the neutral busy button at full opacity with aria-busy", () => {
+  it("the repair row: Re-test (the Proxies tab's word) is OUTLINED in the soft error ink, Change / Test are outlined divider buttons, all 10px/600 with transition-colors, enabled-guarded hovers and an inset focus ring; in flight the button is the neutral busy button at full opacity with aria-busy", () => {
     expect(RETEST_ACTION).toBe('Re-test');
     // (p) D1 — the grid renders the constant, not a literal of its own.
     expect(source('views/ProxiesView.tsx')).toContain('? RETEST_ACTION :');
@@ -3643,7 +3678,7 @@ describe('P3 — via, caps, meta rows: pills and chips in one family', () => {
         'border',
         'border-status-error/45',
         'bg-status-error/10',
-        'text-[#fca5a5]',
+        'text-status-error-text',
         'text-[10px]',
         'font-semibold',
         'transition-colors',

@@ -241,10 +241,13 @@ describe('a reading measured on another Mac reaches this one', () => {
       />,
     );
     const chip = container.querySelector('[data-component="proxy-os-fingerprint"]');
-    // ⛔ Never the green of a current match, whatever the reading said.
-    expect(chip?.getAttribute('data-os-tone')).toBe('unknown');
+    // ⛔ OWNER 2026-09-24 (item 9): "if it's a Apple, it should be green status".
+    // This reading is Apple, so it keeps the green — but ALWAYS in the aged
+    // chrome (dashed, dated), never as a current chip. (Until then this arm pinned
+    // the neutral tone "whatever the reading said".)
+    expect(chip?.getAttribute('data-os-tone')).toBe('match');
     expect(chip?.getAttribute('data-ok')).toBe('aged');
-    expect(chip?.className).not.toContain('status-ready');
+    expect(chip?.className).toContain('border-dashed');
     // ⛔ PIN UPDATED 2026-09-17 — the age follows `OS_FINGERPRINT_TTL_MS`, which is
     // now derived from the six-hourly check that re-takes the reading (8 h, not
     // 30 min). `stale` above is one minute past whatever that is, so the sentence

@@ -2,7 +2,19 @@
 // polish so all error surfaces look identical and dismiss the same way.
 
 import { useEffect } from 'react';
-import { record } from '../lib/log-buffer';
+import { recentApiFailure } from '../lib/client';
+import { record, type LogLevel } from '../lib/log-buffer';
+
+/**
+ * The level a banner is logged at. A banner that follows a 4xx the server
+ * ANSWERED — a validation refusal, a conflict, a key it no longer accepts — is
+ * an ordinary, handled outcome: WARN. A 5xx, no answer at all, or a failure
+ * that did not come from a request is a real failure: ERROR. Every banner used
+ * to log at ERROR, which buried the real ones.
+ */
+export function bannerLogLevel(failure: { status: number } | null): LogLevel {
+  return failure !== null && failure.status >= 400 && failure.status < 500 ? 'warn' : 'error';
+}
 
 export interface ErrorBannerProps {
   message: string;
@@ -12,6 +24,9 @@ export interface ErrorBannerProps {
   onRetry?: () => void;
   /** Keeps the retry action single-flight and names the work in progress. */
   retrying?: boolean;
+  /** How the dev log records this banner, when the caller knows better than
+   *  {@link bannerLogLevel} can infer (a local validation message is 'warn'). */
+  logLevel?: 'warn' | 'error';
 }
 
 export function ErrorBanner({
@@ -19,13 +34,17 @@ export function ErrorBanner({
   onDismiss,
   onRetry,
   retrying = false,
+  logLevel,
 }: ErrorBannerProps): JSX.Element {
   // W609 — Dev Logs productivity: every error a user SEES also lands in
   // the Dev Logs panel (views render friendly messages without touching
   // console.*, so before this the panel was empty during visible errors).
-  // Effect keyed on message → re-logs only when the text changes.
+  // Effect keyed on message → re-logs only when the text changes. The level is
+  // read when the banner appears, next to the request that caused it.
   useEffect(() => {
-    record('error', ['[ui] ' + message]);
+    record(logLevel ?? bannerLogLevel(recentApiFailure()), ['[ui] ' + message]);
+    // Deliberately keyed on the text alone: logged once per message, at the
+    // level of the moment it appeared.
   }, [message]);
   return (
     <div

@@ -13,7 +13,11 @@
 //   - probe answered 429 / 5xx: 'degraded' + lastError msg (GUI audit #20 —
 //     the server IS reachable; it is busy. "Offline" sent customers off to
 //     check their own network.)
-//   - probe fail (network error / any other non-2xx): 'offline' + lastError msg
+//   - probe fail, no answer at all: 'degraded' ("Server busy", NOT_ANSWERING_YET)
+//     and a re-check every 3 s while the outage is young — a restart looks like
+//     this for a few seconds — then 'offline' once it has lasted
+//     (client.ts RIDE_OUT_BUDGET_MS, shared with the API client's reads)
+//   - probe fail (timeout / any other non-2xx): 'offline' + lastError msg
 //   - on baseUrl change: reset to 'connecting' + probe immediately
 //
 // 30s cadence chosen so the pill catches real outages within a single
@@ -25,9 +29,23 @@ import { useEffect, useRef, useState } from 'react';
 import { disposeResponseBody } from './dispose-response-body';
 import { readBoundedDiagnosticJson } from './read-bounded-json';
 import { humanizeError } from './humanize-error';
+import {
+  apiReachability,
+  noteApiAnswered,
+  noteApiUnreachable,
+  subscribeApiReachability,
+} from './client';
 
 const PROBE_INTERVAL_MS = 30_000;
 const PROBE_TIMEOUT_MS = 8_000;
+/** While the server is not answering, check again this often rather than
+ *  every 30 s, so the pill turns back to Connected soon after a restart. */
+const RETRY_PROBE_MS = 3_000;
+
+/** The pill's calm status while a restart is ridden out (client.ts): the
+ *  server is not answering, and nothing is wrong on the customer's side yet.
+ *  "Offline" is kept for an outage that lasts. */
+export const NOT_ANSWERING_YET = 'The server is not answering right now. Retrying automatically.';
 
 export type ConnectionState = 'connecting' | 'connected' | 'degraded' | 'offline';
 
@@ -67,12 +85,48 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimer: number | null = null;
     setStatus({
       state: 'connecting',
       lastOkAt: null,
       lastError: null,
       driver: null,
       agentExecution: null,
+    });
+
+    const scheduleRetryProbe = (): void => {
+      if (retryTimer !== null) return;
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        if (!cancelled) void probe();
+      }, RETRY_PROBE_MS);
+    };
+
+    // The API client and this probe share one view of the server. When the
+    // client's reads find it not answering, the pill says so calmly at once;
+    // when they find it answering again, the pill re-checks now rather than up
+    // to 30 s later.
+    let lastSeen = apiReachability(baseUrl).state;
+    // Our own probe's notes are handled where they are made, not echoed back.
+    let noting = false;
+    const unsubscribe = subscribeApiReachability(() => {
+      if (cancelled || noting) return;
+      const now = apiReachability(baseUrl);
+      if (now.state === lastSeen) return;
+      const was = lastSeen;
+      lastSeen = now.state;
+      if (now.state === 'retrying') {
+        setStatus((prev) => ({ ...prev, state: 'degraded', lastError: NOT_ANSWERING_YET }));
+        scheduleRetryProbe();
+      } else if (now.state === 'down') {
+        setStatus((prev) => ({
+          ...prev,
+          state: 'offline',
+          lastError: "Couldn't reach Driftstack. Check your connection and try again.",
+        }));
+      } else if (was !== 'answering') {
+        void probe();
+      }
     });
 
     async function probe(): Promise<void> {
@@ -130,6 +184,10 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
             // /version body unreadable — leave fields null (banners just won't show).
           }
           if (cancelled) return;
+          noting = true;
+          noteApiAnswered(trimmed);
+          noting = false;
+          lastSeen = 'answering';
           setStatus({
             state: 'connected',
             lastOkAt: Date.now(),
@@ -140,6 +198,13 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
           return;
         }
         await disposeResponseBody(res);
+        // A 4xx is the server itself answering, so it is reachable.
+        if (res.status < 500) {
+          noting = true;
+          noteApiAnswered(trimmed);
+          noting = false;
+          lastSeen = 'answering';
+        }
         // GUI audit #20 — an answer is reachability: a rate-limited or failing
         // server is busy, not offline.
         const busy = res.status === 429 || res.status >= 500;
@@ -153,6 +218,20 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
       } catch (err) {
         if (cancelled) return;
         const errorName = err && typeof err === 'object' && 'name' in err ? String(err.name) : '';
+        if (errorName !== 'AbortError') {
+          // No answer at all. A restart looks exactly like this for a few
+          // seconds, so it reads as "not answering, retrying" until it has
+          // lasted (client.ts RIDE_OUT_BUDGET_MS), and only then as Offline.
+          noting = true;
+          const reach = noteApiUnreachable(trimmed, 'GET /version → network failure');
+          noting = false;
+          lastSeen = reach.state;
+          if (reach.state === 'retrying') {
+            setStatus((prev) => ({ ...prev, state: 'degraded', lastError: NOT_ANSWERING_YET }));
+            scheduleRetryProbe();
+            return;
+          }
+        }
         const message =
           errorName === 'AbortError'
             ? 'Connection check timed out. Check your connection and try again.'
@@ -176,6 +255,8 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
 
     return () => {
       cancelled = true;
+      unsubscribe();
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
       if (probeRef.current !== null) {
         window.clearInterval(probeRef.current);
         probeRef.current = null;

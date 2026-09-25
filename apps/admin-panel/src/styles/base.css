@@ -80,7 +80,7 @@
 
 /* ── Fleet token axes (ported verbatim from marketing base.css — keep synchronised) ── */
 /* ── Fleet design-system token layer (2026-06-12 rework; the LOCKED contract
-   is docs/internal/2026-06-12-design-system-spec.md). Two independent axes on
+   is the internal 2026-06-12 design-system spec). Two independent axes on
    <html>: data-mode (light|dark) × data-accent (violet|oxblood|teal). ADDITIVE
    foundation — new Fleet markup consumes these via the `tk` Tailwind namespace;
    legacy classes keep their baked palette until each page's port lands, so this

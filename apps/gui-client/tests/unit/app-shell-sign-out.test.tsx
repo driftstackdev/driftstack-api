@@ -5,7 +5,7 @@
 // flow and verify the wizard re-appears.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 // react-testing-library uses jsdom; the dom matchers come from jest-dom.
 import '@testing-library/jest-dom/vitest';
 
@@ -69,7 +69,8 @@ beforeEach(() => {
     telemetryOptIn: null,
   });
   invokeStore.set('api_key:api.driftstack.dev', 'ds_live_test_existing_key');
-  // (Sign-out is one-click since 2026-05-20 — no confirm() needed.)
+  // Sign-out asks first (2026-09-24): it removes this computer's chats,
+  // proxies, notes and bindings, which signing in again does not bring back.
   // Mock fetch so accountMe / etc don't fail with real network errors.
   // @ts-expect-error vitest mocks
   window.fetch = vi.fn(async () =>
@@ -84,7 +85,13 @@ afterEach(() => {
 describe('App shell — sign-out flow', () => {
   it('clicking sidebar Sign out clears keychain and returns to the wizard', async () => {
     const { App } = await import('../../src/App');
-    render(<App />);
+    // As main.tsx mounts it: the sign-out confirm is the ConfirmProvider dialog.
+    const { ConfirmProvider } = await import('../../src/components/ConfirmProvider');
+    render(
+      <ConfirmProvider>
+        <App />
+      </ConfirmProvider>,
+    );
 
     // Wait until the shell renders (apiKey is set so wizard is gated past).
     await waitFor(() => {
@@ -96,6 +103,8 @@ describe('App shell — sign-out flow', () => {
     expect(signOutBtn).toBeInTheDocument();
 
     signOutBtn.click();
+    const dialog = await screen.findByRole('dialog');
+    within(dialog).getByRole('button', { name: 'Sign out' }).click();
 
     // After sign-out, the FirstRunWizard's Welcome heading should appear.
     await waitFor(

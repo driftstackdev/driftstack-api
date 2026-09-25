@@ -34,6 +34,7 @@ import {
 import { useNotifications } from './lib/use-notifications';
 import {
   browserStallCensusDeps,
+  exitMarkFor,
   reportPreviousRun,
   startFlightRecorder,
   startStallWatch,
@@ -63,10 +64,11 @@ import {
   type AvailableUpdate,
 } from './lib/updater';
 import { fetchActiveAgentSessionCount } from './lib/active-agent-sessions';
-import { buildClient } from './lib/client';
+import { buildClient, subscribeKeyRefused, type KeyRefusalReason } from './lib/client';
 import { dispatchDeepLink } from './lib/deep-link';
 import { openSessionById } from './lib/open-simulator';
-import { forgetSignedOutAccount } from './lib/forget-signed-out-account';
+import { forgetSignedOutAccount, SIGN_OUT_CONFIRM_MESSAGE } from './lib/forget-signed-out-account';
+import { useConfirm } from './components/ConfirmProvider';
 import { friendlySimulatorOpenReason } from './lib/simulator-open-error';
 import { installAppDeepLinkSources } from './lib/app-deep-link-listener';
 import { record } from './lib/log-buffer';
@@ -504,10 +506,15 @@ function Shell(): JSX.Element {
     // timer running LATE, which needs the thread to recover, and the reported
     // failure never does. The customer cannot open devtools during it either —
     // the report is "nothing is usable, I have to restart".
+    // ⛔ ONE log entry per record, at WARN — a previous run's crash is a warning
+    // about THAT run, not an error in this one — flushed to disk at once so a
+    // crash loop cannot outrun it. It used to go out twice: the sink below wrote
+    // it as ERROR and `console.warn(line)` here wrote it again as WARN, for each
+    // window. The toast is the customer's copy; the log line is the developer's.
+    const logPreviousRun = (line: string): void => record('warn', [line], { flush: true });
     void reportPreviousRun(
       store,
-      (line, record) => {
-        console.warn(line);
+      (_line, record) => {
         // ⛔ console.warn ALONE was the whole delivery, and the comment above says why
         // that fails: in a release build the customer cannot open devtools, and the
         // freeze this exists for is exactly when they cannot. So the recorder worked,
@@ -527,7 +534,8 @@ function Shell(): JSX.Element {
           tone: 'warn',
         });
       },
-      (line) => record('error', [line]),
+      logPreviousRun,
+      exitMarkFor(undefined),
     );
 
     // ⛔ THE SIMULATOR'S RECORD IS REPORTED HERE, NOT IN THE SIMULATOR.
@@ -539,8 +547,7 @@ function Shell(): JSX.Element {
     const simulatorStore = new LazyStore(SIMULATOR_FLIGHT_STORE_FILE);
     void reportPreviousRun(
       simulatorStore,
-      (line, record) => {
-        console.warn(line);
+      (_line, record) => {
         push({
           title: 'The browser window stopped responding last time',
           body: record.onStall
@@ -549,13 +556,17 @@ function Shell(): JSX.Element {
           tone: 'warn',
         });
       },
-      (line) => record('error', [line]),
+      logPreviousRun,
+      // Read only: the simulator arms its own mark when it runs.
+      exitMarkFor('simulator'),
     );
 
     const recorder = startFlightRecorder(store, deps);
     const stopWatch = startStallWatch(
       (line, census) => {
-        console.warn(line, census);
+        // The line already carries the census; logging the object too printed
+        // every count twice.
+        console.warn(line);
         recorder.recordStall(census);
       },
       deps,
@@ -648,13 +659,18 @@ function Shell(): JSX.Element {
   // is the macOS "Quit all apps" combo; pick Cmd+Shift+L instead so
   // we don't fight the OS shortcut.
   const { settings: kbSettings, update: kbUpdate } = useSettings();
-  // 2026-05-20 — confirm() prompts in Tauri WKWebView can be flaky and
-  // were swallowing the customer's sign-out clicks. Drop the dialog —
-  // sign-out is reversible (key still lives on the server, the wizard
-  // re-mints it on the next browser sign-in), so the friction wasn't
-  // earning anything. One-click is the reliable shape.
-  const handleSignOut = async (): Promise<void> => {
-    if (kbSettings.apiKey === null) return;
+  const confirmSignOut = useConfirm();
+  // 2026-05-20 dropped the dialog here because the NATIVE confirm() was flaky
+  // in the WKWebView and swallowed sign-out clicks; the reasoning was that
+  // sign-out was reversible. ⛔ It no longer is: since GUI audit #5 it also
+  // removes this computer's chats, saved proxies and their passwords, notes
+  // and bindings, and none of that comes back by signing in again. So the
+  // sidebar button and ⌘⇧L now ask first, through the React dialog
+  // (ConfirmProvider) that replaced the native one, with the same text as
+  // Settings. Cancel, Escape or the backdrop leave everything as it was.
+  const [keyRefused, setKeyRefused] = useState<KeyRefusalReason | null>(null);
+  // The sign-out itself, shared by the confirmed paths and the forced one below.
+  const signOutNow = async (): Promise<void> => {
     try {
       await kbUpdate({
         apiKey: null,
@@ -674,6 +690,46 @@ function Shell(): JSX.Element {
     setWizardDismissed(false);
     setView({ kind: 'profiles' });
   };
+  const handleSignOut = async (): Promise<void> => {
+    if (kbSettings.apiKey === null) return;
+    const confirmed = await confirmSignOut(SIGN_OUT_CONFIRM_MESSAGE, {
+      confirmLabel: 'Sign out',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    setKeyRefused(null);
+    await signOutNow();
+  };
+  // Owner decision 2026-09-24 — the server refused THIS app's key (revoked, or
+  // not recognised): sign out, and say so until the customer signs in again or
+  // dismisses it. client.ts only reports a confirmed revoked-key / invalid-key
+  // answer, never a network failure, a timeout or a 5xx. The refused key must
+  // be the one the app holds now: a late answer for a key that was already
+  // replaced changes nothing. One sign-out however many requests were refused.
+  const signOutNowRef = useRef(signOutNow);
+  signOutNowRef.current = signOutNow;
+  const heldKeyRef = useRef({ apiKey: kbSettings.apiKey, baseUrl: kbSettings.baseUrl });
+  heldKeyRef.current = { apiKey: kbSettings.apiKey, baseUrl: kbSettings.baseUrl };
+  const forcedSignOutRef = useRef(false);
+  useEffect(
+    () =>
+      subscribeKeyRefused((refusal) => {
+        const held = heldKeyRef.current;
+        if (held.apiKey === null || refusal.apiKey !== held.apiKey) return;
+        if (refusal.baseUrl !== held.baseUrl.replace(/\/+$/, '')) return;
+        if (forcedSignOutRef.current) return;
+        forcedSignOutRef.current = true;
+        setKeyRefused(refusal.reason);
+        void signOutNowRef.current().finally(() => {
+          forcedSignOutRef.current = false;
+        });
+      }),
+    [],
+  );
+  // Signing in again is the answer to the notice, so it goes with it.
+  useEffect(() => {
+    if (kbSettings.apiKey !== null) setKeyRefused(null);
+  }, [kbSettings.apiKey]);
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (e.metaKey && e.key === ',') {
@@ -923,20 +979,29 @@ function Shell(): JSX.Element {
   // (wizardActive latched true) — the latter keeps it mounted past its own key
   // save, which would otherwise null the `apiKey === null` check and unmount it
   // before the First-profile step the stepper advertises.
+  const keyRefusedNotice =
+    keyRefused === null ? null : (
+      <KeyRefusedNotice reason={keyRefused} onDismiss={() => setKeyRefused(null)} />
+    );
+
   if ((settings.apiKey === null || wizardActive) && !wizardDismissed) {
     return (
-      <FirstRunWizard
-        onComplete={() => {
-          setWizardActive(false);
-          setWizardDismissed(true);
-        }}
-      />
+      <>
+        {keyRefusedNotice}
+        <FirstRunWizard
+          onComplete={() => {
+            setWizardActive(false);
+            setWizardDismissed(true);
+          }}
+        />
+      </>
     );
   }
 
   const mode = deploymentLabel(settings.baseUrl);
   return (
     <>
+      {keyRefusedNotice}
       <div className="flex h-screen w-screen flex-col bg-surface-base">
         {/* 2026-05-20 — GUI panel notification overlay. Mounts at the
           shell level (above any view) so cost / incident / audit /
@@ -1230,6 +1295,60 @@ function deploymentLabel(baseUrl: string): 'cloud' | 'self-hosted' {
     // since cloud customers wouldn't typo their base URL).
     return 'self-hosted';
   }
+}
+
+/** What the customer is told when the server refused this app's key. */
+export const KEY_REFUSED_COPY: Record<KeyRefusalReason, { title: string; body: string }> = {
+  revoked: {
+    title: 'Your sign-in was revoked — sign in again',
+    body: 'This account’s chats, saved proxies and notes were removed from this computer. Recordings stay.',
+  },
+  invalid: {
+    title: 'Your sign-in is no longer valid — sign in again',
+    body: 'This account’s chats, saved proxies and notes were removed from this computer. Recordings stay.',
+  },
+};
+
+/** Stays until the customer signs in again or dismisses it — a toast would be
+ *  gone before anyone looked, and the reason for the sign-out with it.
+ *  Exported for the visual harness's `audit-signed-out` scene.
+ *
+ *  Kept to two short lines and pinned just under the title bar: in the 960x600
+ *  minimum window the first-run card starts ~112px down, and a taller notice
+ *  covered its first row. */
+export function KeyRefusedNotice({
+  reason,
+  onDismiss,
+}: {
+  reason: KeyRefusalReason;
+  onDismiss: () => void;
+}): JSX.Element {
+  const copy = KEY_REFUSED_COPY[reason];
+  return (
+    <div
+      role="alert"
+      data-component="key-refused-notice"
+      className="fixed left-1/2 top-11 z-50 flex w-[min(42rem,calc(100vw-2rem))] -translate-x-1/2 items-start gap-2.5 rounded-lg border border-status-error/60 bg-surface-raised px-3.5 py-2.5 shadow-xl"
+    >
+      <span
+        className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-status-error"
+        aria-hidden="true"
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <p className="text-sm font-semibold leading-5 text-ink-primary">{copy.title}</p>
+        <p className="text-xs leading-4 text-ink-secondary">{copy.body}</p>
+      </div>
+      <button
+        type="button"
+        aria-label="Dismiss"
+        title="Dismiss"
+        className="-mr-1 shrink-0 rounded px-1.5 text-base leading-5 text-ink-muted hover:bg-surface-elevated hover:text-ink-primary"
+        onClick={onDismiss}
+      >
+        ×
+      </button>
+    </div>
+  );
 }
 
 /** Map an openSessionById failure `reason` to friendly, actionable toast copy.

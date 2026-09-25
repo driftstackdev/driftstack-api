@@ -17,12 +17,12 @@ describe('sanitizeUiDiagnostic', () => {
 
   it('redacts local user roots and private node addresses while retaining stack context', () => {
     const safe = sanitizeUiDiagnostic(
-      'Error at /Users/john/code/driftstack/src/main.ts:42:7 via 10.22.3.4, node.internal:9443 and [fd00::12]',
+      'Error at /Users/dev/code/driftstack/src/main.ts:42:7 via 10.22.3.4, node.internal:9443 and [fd00::12]',
     );
 
     expect(safe).toContain('~/code/driftstack/src/main.ts:42:7');
     expect(safe).toContain('[private-host]');
-    expect(safe).not.toMatch(/\/Users\/john|10\.22\.3\.4|node\.internal|9443|fd00::12/);
+    expect(safe).not.toMatch(/\/Users\/dev|10\.22\.3\.4|node\.internal|9443|fd00::12/);
   });
 
   it('redacts the complete input before applying the display bound', () => {

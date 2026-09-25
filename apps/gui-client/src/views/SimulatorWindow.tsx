@@ -21,6 +21,11 @@ import type { ContextType, PointerEvent as ReactPointerEvent, ReactNode } from '
 import { SettingsContext, SettingsProvider } from '../lib/SettingsContext';
 import { AgentChatProvider, type AgentChatContextValue } from '../lib/AgentChatProvider';
 import { SimulatorAgentChat } from './simulator-chat/SimulatorAgentChat';
+import {
+  NO_SIMULATOR_CHAT_CONTROL,
+  SimulatorChatSettings,
+  type SimulatorChatControl,
+} from './simulator-chat/simulator-chat-access';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import {
@@ -54,8 +59,16 @@ import {
   startFlightRecorder,
   stallHeartbeatMs,
   startStallWatch,
+  exitMarkFor,
   SIMULATOR_FLIGHT_STORE_FILE,
 } from '../lib/main-thread-stall-detector';
+import { reportSimulatorPreviousRun } from '../lib/simulator-previous-run';
+import { admitTabIncarnation, type TabIncarnations } from '../lib/simulator-tab-incarnation';
+import {
+  SESSION_ACCESS_EXPIRED_NOTICE,
+  isControlKeyRefused,
+  queryAfterHandoff,
+} from '../lib/simulator-session-access';
 import { record } from '../lib/log-buffer';
 import { applyInputFocusFromPageState, type KeyboardFocusActuator } from '../lib/keyboard-focus';
 import {
@@ -66,6 +79,7 @@ import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { preferTypedEndReason } from '../lib/session-end-reason';
 import { ExitIpChip } from '../components/ExitIpChip';
 import { QuicReadout } from '../components/QuicReadout';
+import { UdpReadout } from '../components/UdpReadout';
 import { OsReadout } from '../components/OsReadout';
 import { IOSKeyboard } from '../components/IOSKeyboard';
 import { SimulatorRecordingPane } from '../components/SimulatorRecordingPane';
@@ -122,12 +136,26 @@ import { writeClipboardText } from '../lib/clipboard';
 import { pointerToViewport } from '../lib/livekit-input-capture';
 import {
   URL_BAR_INFLIGHT_ARM_MS,
-  URL_BAR_INFLIGHT_CEILING_MS,
   judgePendingNavigationFrame,
   pageStateResolvesInFlight,
   type PendingNavigation,
 } from '../lib/url-bar-inflight';
 import { capabilityReportsEqual } from '../lib/capability-report-equal';
+import { suppressNativeContextMenu } from '../lib/simulator-context-menu';
+import {
+  INPUT_REPORT_PATIENCE_MS,
+  MANUAL_INPUT_UNREPORTED_LONG_BADGE,
+  inputReportAfterRead,
+  rememberInputReport,
+  type LastInputReport,
+} from '../lib/simulator-input-report';
+import {
+  TAP_NAVIGATION_CONFIRM_MS,
+  isFreezeStall,
+  isLoadTimeoutStall as isLoadTimeoutStallFrame,
+  polledLoadingMayStartALoad,
+  pressBecameADrag,
+} from '../lib/simulator-load-indicators';
 import {
   MANUAL_INPUT_SESSION_OVER_CAPTION,
   MANUAL_INPUT_UNAVAILABLE_BADGE,
@@ -153,6 +181,15 @@ import {
   persistSimulatorWindowSize,
 } from '../lib/settings';
 import { fitSimulatorHeight, simulatorScreenKey } from '../lib/simulator-window-fit';
+import {
+  comfortableSimulatorHeight,
+  isSiblingSimulatorWindow,
+  loadPlacement,
+  placementMonitorOf,
+  planPlacementRestore,
+  savePlacement,
+  type PlacementPlan,
+} from '../lib/simulator-window-placement';
 import {
   clearPersistedControlKey,
   loadProtectedControlKey,
@@ -183,6 +220,7 @@ import {
   type SessionCookie,
   type SessionFileHandle,
   resumeChallengedSession,
+  mintLivekitToken,
 } from '../lib/agent-session-control';
 import { endAgentSessionOnUnload, shouldEndOnPageHide } from '../lib/agent-session-unload';
 
@@ -364,7 +402,7 @@ export function dataUrlByteSize(dataUrl: string): number {
 // of nothing"). The "+" action opens a fresh tab to the branded Driftstack
 // new-tab page (apps/marketing-site/src/pages/newtab.astro) so the box renders an
 // on-brand page instead of a literally-empty about:blank. A NAMED CONSTANT so it's
-// a one-line swap back to 'about:blank' if A3 prefers it for fingerprint reasons.
+// a one-line swap back to 'about:blank' if the harness needs it for fingerprint reasons.
 // TRAILING SLASH is deliberate: Astro (output:'static', directory format) builds the
 // page to dist/newtab/index.html, served at /newtab/. Without the slash CF Pages
 // 308-redirects /newtab → /newtab/, which the box reports back as an extra navigation
@@ -384,8 +422,8 @@ function isBlankTabUrl(url: string): boolean {
 }
 /** #135 — normalize a URL for nav-target comparison (drop trailing slash + fragment,
  *  lowercase), so a box page_state 'errored'/'loaded' frame can be matched to the
- *  current navigation target despite trailing-slash / case / #hash differences. A3
- *  confirmed page_state.errored is emitted ONLY for a MAIN-FRAME nav failure and
+ *  current navigation target despite trailing-slash / case / #hash differences. The
+ *  harness confirmed page_state.errored is emitted ONLY for a MAIN-FRAME nav failure and
  *  carries the failing url — so matching the frame's url against the current target
  *  drops a STALE 'errored' from a page the operator already navigated away from (the
  *  founder's repeated "PAGE FAILED TO LOAD" on an open, fine page). Empty ⇒ untracked. */
@@ -433,6 +471,8 @@ const SWITCH_AFFORDANCE_TIMEOUT_MS = 6000;
 // SWITCH_LAGGING_FRAME_GRACE_MS below.
 
 const PAGE_STATE_GRACE_MS = 2500;
+/** At most one fresh-join-token request per this long, per session. */
+const JOIN_REFRESH_MIN_GAP_MS = 15_000;
 
 /**
  * How long after a tab switch a tabId-LESS frame may still be describing the tab
@@ -448,7 +488,7 @@ const PAGE_STATE_GRACE_MS = 2500;
  * second "New Tab" (owner 2026-08-30).
  */
 const SWITCH_LAGGING_FRAME_GRACE_MS = SWITCH_AFFORDANCE_TIMEOUT_MS + 500;
-// Client-side fallback for a load whose terminal page_state is dropped. A3 emits
+// Client-side fallback for a load whose terminal page_state is dropped. The harness emits
 // its own timeout-stall advisory at ~40s; keep the browser bar truthful until just
 // after that window, then replace it with the same actionable Retry treatment.
 // This is deliberately far beyond the old 6s cutoff, which made the bar announce
@@ -461,7 +501,7 @@ const PAGE_LOAD_FALLBACK_MS = 45_000;
 // in between: forty-five seconds of an unchanged page with no word is
 // indistinguishable from a hung app.
 //
-// A3's box emits its own timeout-tagged 'stalled' frame, but that arrives ONLY
+// The harness's box emits its own timeout-tagged 'stalled' frame, but that arrives ONLY
 // over the data channel — the same channel whose sends can be dropped silently
 // (harness publishInputAck / publishData). So this advisory is raised LOCALLY
 // on a timer and needs the device to say nothing at all. Same target-owned,
@@ -474,8 +514,8 @@ const PAGE_LOAD_SLOW_HINT_MS = 9_000;
 // gone; its 25s escalation ("it may not arrive on its own" + a retry) lives here so
 // the ladder reads 9s → 25s → 45s from ONE element, on the same target-owned clock.
 const PAGE_LOAD_STALLED_HINT_MS = 25_000;
-// flip true when A3's navigateHistory handler deploys — bus W2870
-const BACK_FORWARD_ENABLED = true; // A3 navigateHistory handler deployed (bus W2872; A3 01a5d48f1)
+// flip true when the harness's navigateHistory handler deploys (W2870)
+const BACK_FORWARD_ENABLED = true; // harness navigateHistory handler deployed (W2872; 01a5d48f1)
 // Finding #6 — throttle for the unrecognized-data-frame breadcrumb (below). One warn at
 // most per window so a flood of drifted frames can't spam the console.
 const UNRECOGNIZED_FRAME_WARN_THROTTLE_MS = 10_000;
@@ -621,7 +661,10 @@ export function reportHasEgressReadout(report: AgentSessionCapabilityReport | nu
     report.h3_connection_observed === true ||
     // (q) Item 11 residual — a measured count (a zero included) is a readout too.
     report.h3_connection_count !== undefined ||
-    report.os_fingerprint !== undefined
+    report.os_fingerprint !== undefined ||
+    // Owner item 9 — the UDP line and the no-HTTP/3 state read these.
+    report.proxy_udp_supported !== undefined ||
+    report.transport_mode_active !== undefined
   );
 }
 
@@ -634,7 +677,7 @@ export interface VpnTunnelUp {
   /** 'detail' = the harness's provisioning_detail said so; 'report' = the (b) heuristic. */
   source: 'report' | 'detail';
   /** The step token when source is 'detail' — one of `VPN_STEPS` (the (c)/(h)
-   *  tokens and, W1, A3's eight bare bring-up phases). */
+   *  tokens and, W1, the harness's eight bare bring-up phases). */
   step?: VpnProvisioningStep;
   /** Whether the SESSION is a VPN one — from a `vpn_`-prefixed step (only the VPN
    *  tail emits those) or the report's kind. The shared tokens
@@ -644,9 +687,9 @@ export interface VpnTunnelUp {
 }
 
 /**
- * W1 — A3's VPN bring-up PHASES (contract 2026-09-14): a closed set, emitted as
+ * W1 — the harness's VPN bring-up PHASES (contract 2026-09-14): a closed set, emitted as
  * a provisioning frame each time the phase CHANGES, so each lands in
- * `provisioning_detail` exactly like the `vpn_egress_*` tokens. A3 gives them
+ * `provisioning_detail` exactly like the `vpn_egress_*` tokens. The harness gives them
  * BARE — `resolving`, not `vpn_resolving` — and they are accepted here exactly
  * as spelled: whole-string membership, no prefix matching, no aliasing. A bare
  * token is NOT proof of a VPN session; the capability report's `proxy_kind`
@@ -691,7 +734,7 @@ function vpnBringupPhaseOf(step: VpnProvisioningStep | undefined): VpnBringupPha
 }
 
 /** The harness's provisioning step tokens the simulator knows how to phrase:
- *  the four (c)/(h) tokens plus A3's eight bare bring-up phases (W1). */
+ *  the four (c)/(h) tokens plus its eight bare bring-up phases (W1). */
 export type VpnProvisioningStep =
   | 'vpn_egress_bringing_up'
   | 'vpn_egress_active'
@@ -712,7 +755,7 @@ const VPN_STEPS: ReadonlyArray<VpnProvisioningStep> = [
   'starting_proxy',
   'verifying',
 ];
-/** Whole-string membership ONLY. ⛔ Never `startsWith` / `includes`: A3's bare
+/** Whole-string membership ONLY. ⛔ Never `startsWith` / `includes`: the harness's bare
  *  phases share prefixes with tokens that mean something else (`up` /
  *  `upstream`, `connecting` / `connecting_x`), and a token outside the set must
  *  read as unknown — the generic caption — never as its nearest neighbour. */
@@ -804,7 +847,7 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
     // before its launch timeout, so that caption states what is true — tunnel
     // up, browser not attached — instead of promising progress that is not coming.
     if (t.step === 'vpn_egress_bringing_up') return 'Starting the VPN tunnel…';
-    // W1 — A3's pre-`up` phases: the tunnel is not up, and the caption says what
+    // W1 — the harness's pre-`up` phases: the tunnel is not up, and the caption says what
     // it is doing right now. No exit is named here: none is observed before `up`.
     const phase = vpnBringupPhaseOf(t.step);
     if (phase !== null) return VPN_BRINGUP_PHASES[phase].caption;
@@ -827,7 +870,7 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
     // availability claim made from the one place that cannot know it. Say
     // only what the step token says — the tunnel is up and no browser has
     // attached — with no claim either way about what comes next.
-    // W1 — A3's `up` (success) phase reads the same line: it IS today's
+    // W1 — the harness's `up` (success) phase reads the same line: it IS today's
     // tunnel-up state, and what follows it is the harness's to announce.
     return where !== null
       ? `VPN tunnel connected (${where}) — browser not open`
@@ -838,7 +881,7 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
 
 /**
  * (h) — is the tunnel actually UP in this state? Only `vpn_egress_bringing_up`
- * and (W1) A3's seven pre-`up` phases say it is not: every other step (`up`
+ * and (W1) the harness's seven pre-`up` phases say it is not: every other step (`up`
  * included), and the (b) report heuristic (which needs an observed exit),
  * describes a tunnel that came up. Every "tunnel up" word in the address bars
  * is gated on this, so a bringing-up notice never sits under a chip claiming
@@ -897,8 +940,8 @@ export function nextEverLiveLatch(
 
 /**
  * W2 — what the terminal "Session ended" overlay is handed. `reason` is the end
- * reason the customer reads (`preferTypedEndReason`: A3's fine code when it is
- * one we know, else the coarse one). `summary` is A3's host-free sentence from
+ * reason the customer reads (`preferTypedEndReason`: the harness's fine code when it is
+ * one we know, else the coarse one). `summary` is the harness's host-free sentence from
  * the error event, VERBATIM — it never carries the customer's proxy host
  * (doctrine W2679, not a gap), and this window cannot fill the host in: it
  * holds a per-session control key, not the account's proxy list, and the
@@ -909,13 +952,13 @@ export interface SessionEndedState {
   reason: string | null;
   /** `error_event.summary`, as sent. null when the session carries no error event. */
   summary: string | null;
-  /** ⚠️ DERIVED, not a field A3 sends: the last `provisioning_detail` this window
+  /** ⚠️ DERIVED, not a field the harness sends: the last `provisioning_detail` this window
    *  observed before the terminal frame. null when it observed none. */
   lastPhase: string | null;
 }
 
 /**
- * W2 — the DERIVED `last_phase`. A3 carries the last bring-up phase reached
+ * W2 — the DERIVED `last_phase`. The harness carries the last bring-up phase reached
  * alongside `tunnel_setup_timeout`, but where it lands on the session body is
  * not pinned yet — checked 2026-09-14: `ApiSession` (lib/agent-session-control.ts)
  * and the server's `PublicAgentSession` (routes/agent-sessions.ts) carry no
@@ -935,8 +978,8 @@ export interface SessionEndedState {
  *  ⛔ Why a latch and not "the last read": our own relay
  *  (apps/server/src/services/session-provisioning-detail-relay.ts) CLEARS
  *  provisioning_detail on a terminal status, so the terminal read carries null
- *  and the control-state snapshot is overwritten with it. A3's guarantee is
- *  that THEY emit no provisioning frame on the way out; it does not cover our
+ *  and the control-state snapshot is overwritten with it. The harness's guarantee is
+ *  that IT emits no provisioning frame on the way out; it does not cover our
  *  relay. So the value the timeout routes on has to be remembered here, from the
  *  last non-empty detail a poll or refresh observed, and never erased by a
  *  blank — only replaced by a newer non-empty detail, or reset by a different
@@ -994,11 +1037,11 @@ function VpnTunnelUpNotice({ tunnel }: { tunnel: VpnTunnelUp }): JSX.Element {
 // per-archetype logical width (deviceLogicalRef) instead.
 const DEVICE_LOGICAL_WIDTH = 402;
 // NOTE: the box formerly published the web content at 3× dpr (e.g. 1206×2142 px), so
-// the touch space was videoWidth/3 × videoHeight/3. A3's 2026-06-29 black-band fix
+// the touch space was videoWidth/3 × videoHeight/3. The harness's 2026-06-29 black-band fix
 // switched the capture to 1×-display content res — the published track IS now the
 // logical viewport (e.g. 402×714) — so the touch space is the track dims directly and
 // the former STREAM_DPR division is removed in handleVideoDimensions (taps were
-// landing 3× off otherwise; A3 carries a box-side reconcile stopgap until this ships).
+// landing 3× off otherwise; the harness carries a box-side reconcile stopgap until this ships).
 // Activity-bar drawer (founder 2026-06-24) — a slim icon RAIL is ALWAYS docked
 // next to the phone; clicking a section icon EXPANDS its content PANE to the
 // right of the rail (VS Code's activity-bar + side-panel idiom). The window
@@ -1740,7 +1783,7 @@ export function DeviceToolbar({
           ) : null}
           {/* On-screen iOS keyboard toggle (founder 2026-06-25 "behave exactly
               like a real iPhone"). Manual v1 — auto-show-on-focus is deferred to
-              A3's box-side focus signal (W2992). */}
+              the harness's box-side focus signal (W2992). */}
           <button
             type="button"
             aria-label={
@@ -2355,8 +2398,8 @@ function NavigateAddressBar({
  * Browser mode (founder 2026-06-21): a dedicated, full-width browser-chrome bar
  * below the toolbar — a real native address bar (the rendered iOS Safari pill is
  * un-tappable fork chrome). Reload + a bigger live URL field + a loading bar. The
- * live URL + load progress come from A3's page_state over the data channel (bus
- * W2719); until then onNavigate drives an optimistic loading sweep. The field
+ * live URL + load progress come from the harness's page_state over the data channel
+ * (W2719); until then onNavigate drives an optimistic loading sweep. The field
  * follows the live URL while not being edited. `data-no-drag` so the toolbar's
  * window-drag handler doesn't hijack clicks here.
  */
@@ -2382,9 +2425,9 @@ function BrowserBar({
   /** WHICH signal the bar is waiting for (lib/manual-input-wait), non-null exactly
    *  while `canNavigate` is false. Its sentence replaces the bare word "connecting". */
   wait?: ManualInputWait | null;
-  // Sim back/forward (A3 W2870) — steps the device's browser history via
+  // Sim back/forward (W2870) — steps the device's browser history via
   // navigateAgentSessionHistory. Rendered only when BACK_FORWARD_ENABLED (flag-off
-  // until A3's daemon handler lands).
+  // until the harness's daemon handler lands).
   onHistory: (direction: 'back' | 'forward') => void;
   liveUrl: string;
   pageLoading: boolean;
@@ -2428,7 +2471,7 @@ function BrowserBar({
     if (!focused) setDraft(liveUrl);
   }, [liveUrl, focused]);
   // Realistic browser-style load progress (founder: "realistic progress of the
-  // page's loading, just like our web browser"). A3 only emits progress 0 (start)
+  // page's loading, just like our web browser"). The harness only emits progress 0 (start)
   // then 1 (done), so a raw bar would jump 0→100%. Instead trickle the DISPLAYED
   // progress up toward ~90% while loading (nprogress-style, decelerating — never
   // quite reaching it), snap to 100% on completion, then fade out.
@@ -2565,8 +2608,8 @@ function BrowserBar({
       data-no-drag
       className="relative flex h-10 w-full shrink-0 items-center gap-2 bg-[#1d1e24] px-3 ring-1 ring-white/[0.10] shadow-[inset_0_-1px_0_rgba(0,0,0,0.45)]"
     >
-      {/* Sim back/forward (A3 W2870) — built but NOT rendered until the wire is live;
-          BACK_FORWARD_ENABLED flips true when A3's navigateHistory handler deploys. */}
+      {/* Sim back/forward (W2870) — built but NOT rendered until the wire is live;
+          BACK_FORWARD_ENABLED flips true when the harness's navigateHistory handler deploys. */}
       {BACK_FORWARD_ENABLED && (
         <>
           <button
@@ -3215,7 +3258,7 @@ function IosStatusBar({ timeZone }: { timeZone?: string }): JSX.Element {
 // ── Fancy Cookies pane (founder 2026-06-24, APPROVED) ──────────────────────
 // The Cookies section is a live, per-domain jar (mirrors the approved demo): a
 // pulsing live indicator, Export (works today, client-side) + a disabled Import
-// (the set-cookies wire is pending A3), a client-side search, and per-domain
+// (the set-cookies wire is pending on the harness), a client-side search, and per-domain
 // expandable groups with per-cookie flag chips. Pure presentation over the
 // existing `cookies` / `cookiesNote` state — the poll + gating are unchanged.
 
@@ -3312,7 +3355,7 @@ function CookieFlag({
  * per-domain expandable jar with Export. Import reads a cookies.json, validates
  * the shape, and writes it into the live session over the control plane (the
  * write-twin of the cookies read); it no-ops gracefully ("ships with the next
- * device update") until A3's harness setCookies extension lands.
+ * device update") until the harness's setCookies extension lands.
  */
 // Exported for test only: the note-latch fix below is the kind that survives
 // precisely because nothing renders the component in isolation. Its Network twin
@@ -4022,14 +4065,31 @@ export function SimulatorWindow({
   const controlModeOverride = isSessionMode(fixtureSession?.mode) ? fixtureSession.mode : undefined;
   const pairKindOverride =
     fixtureSession !== null ? (fixtureSession.pair_mode_state?.kind ?? null) : undefined;
+  // Owner item 5 — the session's control key, reported up by the inner window
+  // (which resolves it) so the chat ABOVE it can talk through it. See
+  // simulator-chat/simulator-chat-access.tsx.
+  const [chatControl, setChatControl] = useState<SimulatorChatControl>(NO_SIMULATOR_CHAT_CONTROL);
+  const reportChatControl = useCallback((next: SimulatorChatControl): void => {
+    setChatControl((prev) =>
+      prev.sessionId === next.sessionId &&
+      prev.controlKey === next.controlKey &&
+      prev.baseUrl === next.baseUrl &&
+      prev.pending === next.pending
+        ? prev
+        : next,
+    );
+  }, []);
   const inner = (
-    <AgentChatProvider value={agentChatOverride}>
-      <SimulatorWindowInner
-        standIn={standIn}
-        controlModeOverride={controlModeOverride}
-        pairKindOverride={pairKindOverride}
-      />
-    </AgentChatProvider>
+    <SimulatorChatSettings control={chatControl} fixture={agentChatOverride?.chat !== undefined}>
+      <AgentChatProvider value={agentChatOverride}>
+        <SimulatorWindowInner
+          standIn={standIn}
+          controlModeOverride={controlModeOverride}
+          pairKindOverride={pairKindOverride}
+          onChatControl={reportChatControl}
+        />
+      </AgentChatProvider>
+    </SimulatorChatSettings>
   );
   return settingsOverride !== undefined ? (
     <SettingsContext.Provider value={settingsOverride}>{inner}</SettingsContext.Provider>
@@ -4050,8 +4110,13 @@ function SimulatorWindowInner({
   standIn,
   controlModeOverride,
   pairKindOverride,
+  onChatControl,
 }: {
   standIn?: ReactNode;
+  /** Owner item 5 — reports this session's control key (or that it is still
+   *  loading / absent) to the outer component, whose chat provider sits above
+   *  this one. */
+  onChatControl?: (control: SimulatorChatControl) => void;
   /** Round-2 stage B gallery seam — see `SimulatorWindow`'s own doc comment.
    *  `undefined` in the app and in every test that does not pass
    *  `agentChatOverride` to the outer component. */
@@ -4158,7 +4223,9 @@ function SimulatorWindowInner({
     const recorder = startFlightRecorder(store, deps, undefined, 'simulator');
     const stopWatch = startStallWatch(
       (line, census) => {
-        console.warn(line, census);
+        // The line already carries the census; logging the object beside it
+        // printed every count twice (the main window's copy was fixed the same way).
+        console.warn(line);
         recorder.recordStall(census);
       },
       deps,
@@ -4219,13 +4286,42 @@ function SimulatorWindowInner({
   } | null>(null);
   // Expose loaded material only when its complete owner tuple matches this
   // render. A stale async set may exist in state, but it is authority-inert.
-  const controlAuth =
+  const nativeControlLoaded =
     controlAuthBoundary.needsNativeLoad &&
     loadedControlAuth?.sessionId === sessionId &&
     loadedControlAuth.generation === controlAuthBoundary.generation &&
-    loadedControlAuth.baseUrl === baseUrl
+    loadedControlAuth.baseUrl === baseUrl;
+  const controlAuth =
+    nativeControlLoaded && loadedControlAuth !== null
       ? loadedControlAuth.auth
       : controlAuthBoundary.auth;
+  // Owner item 5 — hand the chat the SAME credential every control call here
+  // uses. `null` auth (no key handed off) is NOT the account key for the chat:
+  // this window cannot read that key, so the chat reports itself unavailable.
+  const chatControlKey = controlAuth !== null ? controlAuth.controlKey : null;
+  const chatControlPending = controlAuthBoundary.needsNativeLoad && !nativeControlLoaded;
+  // The session key the server last REFUSED (401), or null. Held as the key
+  // itself, not a flag: a fresh key handed to this window is not the refused
+  // one, so the refusal stops applying the moment the key changes.
+  const [refusedControlKey, setRefusedControlKey] = useState<string | null>(null);
+  const controlKeyRefused = refusedControlKey !== null && refusedControlKey === chatControlKey;
+  useEffect(() => {
+    onChatControl?.({
+      sessionId,
+      controlKey: chatControlKey,
+      baseUrl: controlAuth?.baseUrl ?? baseUrl,
+      pending: chatControlPending,
+      refused: controlKeyRefused,
+    });
+  }, [
+    onChatControl,
+    sessionId,
+    chatControlKey,
+    controlAuth?.baseUrl,
+    baseUrl,
+    chatControlPending,
+    controlKeyRefused,
+  ]);
 
   // V-2170 — the operator solved the challenge in the live view; tell the harness
   // to carry on. The challengeId is round-tripped from the box's own frame, never
@@ -4296,22 +4392,41 @@ function SimulatorWindowInner({
     if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
     let unlisten: (() => void) | undefined;
     void (async () => {
+      // ⛔ On THIS window only. The payload carries the session's control key;
+      // a listener on every window would let one session's handoff re-point
+      // another session's window (and hand it that key). The senders address
+      // it to this window (lib.rs `emit_to`, open-simulator.ts `emitTo`).
       const { listen } = await import('@tauri-apps/api/event');
-      unlisten = await listen<string>('ds-session', (event) => {
-        try {
-          const search = atob(event.payload);
-          const qs = search.startsWith('?') ? search : `?${search}`;
-          const next = infoFromQuery(qs);
-          window.history.replaceState(
-            {},
-            '',
-            safeSimulatorSearch(next.sessionId, next.controlGeneration),
-          );
-          setQuery(next);
-        } catch {
-          // Garbled payload — ignore; the current session keeps streaming.
-        }
-      });
+      const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+      // A Tauri window always knows its label; only a stubbed host (a test with
+      // no window metadata) cannot say, and there there is no other window.
+      let label: string | null = null;
+      try {
+        label = getCurrentWebviewWindow().label;
+      } catch {
+        label = null;
+      }
+      unlisten = await listen<string>(
+        'ds-session',
+        (event) => {
+          try {
+            const search = atob(event.payload);
+            const qs = search.startsWith('?') ? search : `?${search}`;
+            const next = infoFromQuery(qs);
+            window.history.replaceState(
+              {},
+              '',
+              safeSimulatorSearch(next.sessionId, next.controlGeneration),
+            );
+            // Reopening the session this window shows (a fresh key after the
+            // old one was refused) must not also drop and re-join a live video.
+            setQuery((prev) => queryAfterHandoff(prev, next, connStateRef.current === 'connected'));
+          } catch {
+            // Garbled payload — ignore; the current session keeps streaming.
+          }
+        },
+        label !== null ? { target: { kind: 'WebviewWindow', label } } : undefined,
+      );
     })().catch(() => undefined); // listen()/import() unavailable (non-Tauri / mock) — no-op
     return () => {
       unlisten?.();
@@ -4507,6 +4622,29 @@ function SimulatorWindowInner({
     mutationPending: false,
   }));
   const manualInputControlRef = useRef(manualInputControl);
+  // Owner item 7 — the phone's last capability report for this session, kept
+  // through a session read that leaves the report out (the server lost its
+  // in-memory copy, e.g. on a restart, and the phone re-sends only minutes
+  // later). See lib/simulator-input-report.ts.
+  const lastInputReportRef = useRef<LastInputReport | null>(null);
+  const inputReportFromRead = (
+    readSessionId: string,
+    polled: AgentSessionCapabilityReport | undefined,
+    terminal: boolean,
+  ): AgentSessionCapabilityReport | null => {
+    const next = inputReportAfterRead({
+      sessionId: readSessionId,
+      polled,
+      terminal,
+      last: lastInputReportRef.current,
+    });
+    lastInputReportRef.current = rememberInputReport(
+      lastInputReportRef.current,
+      readSessionId,
+      polled,
+    );
+    return next;
+  };
   // W2 — see nextObservedPhase: the phase the timeout routes on, latched per
   // session from every observed detail, immune to the terminal read's null.
   const observedPhaseRef = useRef<ObservedPhase>({ sessionId: '', detail: null });
@@ -4560,7 +4698,7 @@ function SimulatorWindowInner({
   // copy ('idle_timeout', 'orphaned-lifetime', a worker-close, …). Reset on every
   // session swap (a fresh session starts non-terminal). Declared up here (before the
   // freeze-recovery effect that reads it) to avoid a TDZ on the effect's dep array.
-  // W2 — also carries A3's host-free `summary` (verbatim) and the DERIVED
+  // W2 — also carries the harness's host-free `summary` (verbatim) and the DERIVED
   // `lastPhase` (see SessionEndedState / derivedLastPhase); both call sites below
   // populate all three.
   // GALLERY SEAM — the 'ended' fixture scene seeds this directly (the terminal
@@ -4595,7 +4733,7 @@ function SimulatorWindowInner({
   const fpsArmedElRef = useRef<HTMLVideoElement | null>(null);
   // #3/#6 — wall-clock timestamp of the LAST frame the <video> ELEMENT actually
   // produced (rVFC fired). This is the freeze detector's source of truth: a
-  // legitimately idle-but-live stream (A3's idle frame-pump down-clock, W2952)
+  // legitimately idle-but-live stream (the harness's idle frame-pump down-clock, W2952)
   // STILL fires rVFC at the down-clocked rate, so its last-frame time keeps
   // advancing — only a TRUE freeze (the element stops producing frames) lets it
   // go stale. Down-clock-invariant by construction (unlike decodeFps===0, which
@@ -4627,6 +4765,28 @@ function SimulatorWindowInner({
     el.requestVideoFrameCallback?.((t) => tick(t));
   }
   const { notice, showNotice, clearNotice } = useTransientNotice();
+  // A Simulator crash is reported here when nobody else can see it: the
+  // separate macOS Simulator app keeps its flight record in its own data folder,
+  // which the main window never reads (lib/simulator-previous-run.ts). One WARN
+  // log entry per record, whose line says what it means; the clean-exit mark
+  // keeps a normal quit from reading as a crash. The in-process window (Windows,
+  // Linux) leaves it to the main window, which reads the same folder.
+  useEffect(() => {
+    if (isGalleryFixture) return;
+    if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
+    void reportSimulatorPreviousRun({
+      store: new LazyStore(SIMULATOR_FLIGHT_STORE_FILE),
+      appIdentifier: async () => {
+        const { getIdentifier } = await import('@tauri-apps/api/app');
+        return getIdentifier();
+      },
+      exitMark: exitMarkFor('simulator'),
+      log: (line) => record('warn', [line], { flush: true }),
+      notify: (message) => showNotice(message, 8_000),
+    });
+    // Once per window: `isGalleryFixture` never changes after mount and
+    // `showNotice` is stable.
+  }, [isGalleryFixture, showNotice]);
   // Non-fatal control-channel health: set when the FIRST input publish fails
   // (the LiveKit data channel is effectively dead, so taps/keys aren't reaching
   // the device). Surfaced as a small badge rather than blocking the view.
@@ -4663,7 +4823,7 @@ function SimulatorWindowInner({
   // severe loss) WITHOUT a box-side stall leaves the last frame frozen with no
   // indicator.
   //
-  // Source of truth = the <video> ELEMENT's OWN frame progress, NOT decodeFps. A3's
+  // Source of truth = the <video> ELEMENT's OWN frame progress, NOT decodeFps. The harness's
   // idle frame-pump down-clock (W2952) drives the publish FPS to ~0 on a static/idle
   // page → a decodeFps===0-for-Ns heuristic FALSE-FIRES "Video frozen" on a perfectly
   // healthy idle stream (the reported "reconnecting, happens too often"). But a
@@ -4682,7 +4842,7 @@ function SimulatorWindowInner({
   // a true freeze pins it.
   const lastSampledCurrentTimeRef = useRef<number | null>(null);
   const lastCurrentTimeAdvanceAtRef = useRef(0);
-  // Cross-cycle freeze-recovery cap (A3-agreed 2026-07-11) — see the recovery effect
+  // Cross-cycle freeze-recovery cap (agreed with the harness 2026-07-11) — see the recovery effect
   // below. consecutiveAdvancesRef counts CONSECUTIVE ticks with a real currentTime
   // advance; SUSTAINED_PROGRESS_TICKS in a row = genuine frame recovery, the ONLY thing
   // that resets rebuildAttemptsRef. We can't key that reset on `videoFrozen`: the
@@ -4752,7 +4912,7 @@ function SimulatorWindowInner({
           // resubscribe→Room-rebuild recovery loop (~every 16s) and SUPPRESSED the
           // honest 'no live video' launch-failed overlay (its 30s no-publisher timer
           // never elapsed because the rebuild kept restarting it). Progress is now
-          // recorded only on an ACTUAL currentTime change. (Fable GUI re-audit
+          // recorded only on an ACTUAL currentTime change. (GUI re-audit
           // 2026-07-02.)
           lastSampledCurrentTimeRef.current = ct;
         } else if (Math.abs(ct - prev) > 0.001) {
@@ -4889,7 +5049,7 @@ function SimulatorWindowInner({
           // badge; and — overlay audit wsob9ma70 — surface an actionable Reconnect on the
           // badge (freezeRecoveryExhausted) so the founder isn't stuck at a passive frozen
           // pill with no way out; session-end detection still surfaces the terminal overlay
-          // when the worker is confirmed gone. (A3 freeze-recovery loop.)
+          // when the worker is confirmed gone. (Harness freeze-recovery loop.)
           setFreezeRecoveryExhausted(true);
           setRecovering(false);
           return;
@@ -4954,7 +5114,7 @@ function SimulatorWindowInner({
   const [landscape, setLandscape] = useState(false);
   // On-screen iOS keyboard (founder 2026-06-25 "behave exactly like a real
   // iPhone"). v1 is MANUAL — toggled from the toolbar; auto-show-on-focus + the
-  // keyboard viewport-resize are deferred to A3's box-side signals (W2992). The
+  // keyboard viewport-resize are deferred to the harness's box-side signals (W2992). The
   // keyboard is GUI chrome mounted BELOW the video, so it never moves the
   // <video> on-screen rect the tap/scroll coord mapping reads. Forwarded only in
   // confirmed manual mode (AI and pair modes remain agent-owned).
@@ -4972,6 +5132,30 @@ function SimulatorWindowInner({
   // active-tab transition suppresses inherited `inputFocused=true` until that target
   // reports a blur; the next false→true edge is then a fresh focus action.
   const keyboardFocusSuppressedTabRef = useRef<string | null>(null);
+  // Owner item 11 — the phone's most recent focus report for this window, kept
+  // even when it could not be acted on (no manual control yet). The phone
+  // reports focus only when it CHANGES, so a focus that landed before this
+  // window could act on it (an autofocus on the first page, while the session
+  // was still coming up) is never reported again — tapping the already-focused
+  // field sends nothing. Replayed the moment control FIRST arrives for the
+  // session — only then: once the customer has had control, a focus from an
+  // agent-driven stretch must wait for a fresh signal (simulator-window-frozen
+  // pins that for a hand-back).
+  const firstControlForRef = useRef<{ sessionId: string; room: Room } | null>(null);
+  const latestFocusReportRef = useRef<{
+    sessionId: string;
+    room: Room;
+    focused: boolean;
+    targetId: string;
+    inSwitchGrace: boolean;
+  } | null>(null);
+  // Owner item 11 — the last navigation frame (no focus field) for the active
+  // tab, so a NEW top-level load is recognised once, not per repeated frame.
+  const lastNavFrameRef = useRef<{ state: string; url: string } | null>(null);
+  // The phone's tab-incarnation fence (lib/simulator-tab-incarnation.ts): the
+  // highest renderer incarnation seen per tab on the live channel. Reset with
+  // the tab set.
+  const tabIncarnationsRef = useRef<TabIncarnations>(new Map());
   // Pin = always-on-top (the floating-iPhone default). Unpinned the window
   // behaves like a normal sibling window (Cmd+` cycling, Mission Control,
   // doesn't hover over other apps) — the strongest separate-window identity
@@ -4983,7 +5167,7 @@ function SimulatorWindowInner({
   // Cockpit info overlay (demo-concepts arc): session facts at a glance.
   // Expandable control panel — collapsed by default so the window is phone-only
   // (founder 2026-06-17); the chevron reveals the labelled control rows. EXCEPT
-  // until the user has navigated at least once: A3's tap-path investigation
+  // until the user has navigated at least once: a harness tap-path investigation
   // (wpiyo8v6x, 2026-06-21) found the founder kept tapping the RENDERED Safari
   // pill (non-interactive fork chrome) because the GUI's own Address bar — which
   // lives in this panel — wasn't discoverable. So we open the panel on launch
@@ -5097,8 +5281,8 @@ function SimulatorWindowInner({
   // tap-path can't reach). When on, the toolbar center is an editable address
   // field (Enter → navigate) rather than the device identity; fingerprint-neutral
   // (operator-view only). DEFAULT ON (founder 2026-06-21) — opt-out via the panel
-  // toggle (persists '0'). Phase 1; tabs + A3 content-only video follow. See
-  // docs/internal/gui-browser-chrome-mode-plan-2026-06-21.md.
+  // toggle (persists '0'). Phase 1; tabs + content-only video follow (internal
+  // browser-chrome mode plan, 2026-06-21).
   const [browserMode, setBrowserMode] = useState<boolean>(() => {
     try {
       return localStorage.getItem('ds-sim-browser-mode') !== '0';
@@ -5123,19 +5307,19 @@ function SimulatorWindowInner({
   // <video>'s real frame aspect is, which IS videoW/videoH in either orientation.
   const [contentAspect, setContentAspect] = useState(402 / 874);
   // The live per-archetype captured-frame LOGICAL CSS-px dims (videoW/DPR ×
-  // videoH/DPR) the Mac touch injector addresses (A3 84de32ad4d content-only fork).
+  // videoH/DPR) the Mac touch injector addresses (84de32ad4d content-only fork).
   // STATE (not just a ref) so it flows into AgentSessionPanel → useInputCapture and
   // re-keys the capture effect when the per-archetype frame arrives. Seeded to the
   // launch archetype's screen (402×874) until the first full-res frame reports; set
   // ONCE from the first-reported (full-res) dims so the SFU downscale can't shrink
-  // the touch space (A3 W2811 invariance). A mirror ref feeds the Cmd+0 reset.
+  // the touch space (W2811 invariance). A mirror ref feeds the Cmd+0 reset.
   const [inputLogical, setInputLogical] = useState<{ width: number; height: number }>({
     width: 402,
     height: 874,
   });
   const deviceLogicalRef = useRef(inputLogical);
   deviceLogicalRef.current = inputLogical;
-  // A3 W3005 — once the box's page_state delivers the FIXED per-archetype logical
+  // W3005 — once the box's page_state delivers the FIXED per-archetype logical
   // content dims, they OWN the tap/scroll coordinate space; the track-derived dims in
   // handleVideoDimensions become a pre-first-page_state fallback only (the encoded
   // track downscales under bandwidth → can't be trusted for tap coords). Latched true
@@ -5239,6 +5423,58 @@ function SimulatorWindowInner({
       console.warn('[simulator] could not remember the window size (ignored):', err);
     }
   };
+  // Owner item 3 — the placement to reopen at: the remembered position/size, on
+  // the remembered screen, when that screen is connected and no other phone is
+  // already open (a second one keeps its cascaded spot so the two never stack).
+  // Null → the per-screen size / comfortable default decides, as before.
+  const restorePlacementPlan = async (
+    win: WebviewWindow,
+    windowWidthFor: (height: number) => number,
+  ): Promise<PlacementPlan | null> => {
+    try {
+      const remembered = await loadPlacement();
+      if (remembered === null) return null;
+      const { availableMonitors, getAllWindows } = await import('@tauri-apps/api/window');
+      const others = (await getAllWindows()).filter((w) =>
+        isSiblingSimulatorWindow(win.label, w.label),
+      );
+      if (others.length > 0) return null;
+      return planPlacementRestore({
+        remembered,
+        monitors: await availableMonitors(),
+        windowWidthFor,
+      });
+    } catch (err) {
+      console.warn('[simulator] could not restore where the window was left (ignored):', err);
+      return null;
+    }
+  };
+  // Owner item 3 — remember where and how the window is, once it has settled
+  // after a move or a resize. Phone-only width, like T-12's per-screen size.
+  const rememberPlacement = async (win: WebviewWindow): Promise<void> => {
+    if (isGalleryFixture) return;
+    try {
+      const { currentMonitor } = await import('@tauri-apps/api/window');
+      const monitor = await currentMonitor();
+      if (monitor === null) return;
+      const factor = await win.scaleFactor();
+      const pos = await win.outerPosition();
+      const size = await win.innerSize();
+      const width = Math.round(size.width / factor) - drawerExtraRef.current;
+      const height = Math.round(size.height / factor);
+      if (width <= 0 || height <= 0) return;
+      await savePlacement({
+        v: 1,
+        x: Math.round(pos.x),
+        y: Math.round(pos.y),
+        width,
+        height,
+        monitor: placementMonitorOf(monitor),
+      });
+    } catch (err) {
+      console.warn('[simulator] could not remember where the window was left (ignored):', err);
+    }
+  };
   // Size the window so the device video FILLS the frame width AND the whole window
   // FITS the screen height. The iPhone's tall aspect makes a width-driven height
   // overflow a laptop screen → the OS clamps the height → the device letterboxes
@@ -5273,16 +5509,16 @@ function SimulatorWindowInner({
       let height = simulatorWindowHeight(phoneW, aspect, browserModeOn, keyboardOn);
       let width = curWidth; // = phoneW + drawerExtra, preserved
       // T-12 — ONE clamp, shared with resetToActualSize: the screen work area (a
-      // smaller share of it on a laptop) and, on any screen, the device at 1:1.
+      // smaller share of it on a laptop).
+      //
+      // ⛔ Owner item 3 — NOT the device at 1:1 any more. The phone on screen is a
+      // local picture of the device; drawing it larger changes nothing about the
+      // device's own resolution (the video scales, taps map back through it). The
+      // old 1:1 ceiling here shrank a phone the customer had dragged larger on
+      // every browser-bar toggle and on each session's first video frame.
       const fitted = fitSimulatorHeight({
         desired: height,
         availHeight: avail,
-        nativeLogicalHeight: simulatorWindowHeight(
-          actualSizePhoneWidth(),
-          aspect,
-          browserModeOn,
-          keyboardOn,
-        ),
       });
       if (fitted < height) {
         height = fitted;
@@ -5331,29 +5567,55 @@ function SimulatorWindowInner({
       const phoneW = actualSizePhoneWidth();
       let width = phoneW + drawerExtra;
       let height = simulatorWindowHeight(phoneW, aspect, browserMode, keyboardOn);
-      // The 1:1 height: the target of every reset, and the ceiling of the fresh-open
-      // fit below (a remembered size larger than the device is brought back to 1:1).
+      // The 1:1 height: the target of every reset (Cmd+0, rotate) and its ceiling.
       const actualSizeH = height;
+      let avail = typeof window !== 'undefined' ? (window.screen?.availHeight ?? 0) : 0;
+      let ceiling: number | undefined = actualSizeH;
+      const widthForHeight = (h: number): number =>
+        Math.round((h - chrome) * aspect + BEZEL_PAD) + drawerExtra;
       if (!rememberedSizeUsedRef.current) {
         rememberedSizeUsedRef.current = true;
-        const remembered = await rememberedWindowSize();
-        // HEIGHT-driven like refitForDrawer: keep the remembered height, re-derive the
-        // phone width from the LIVE aspect, so a different archetype or rotation still
-        // fills the frame edge-to-edge.
-        if (remembered !== null && remembered.height - chrome > 0) {
-          height = remembered.height;
-          width = Math.round((height - chrome) * aspect + BEZEL_PAD) + drawerExtra;
+        // ⛔ Owner item 3 — the fresh open is NOT capped at 1:1: it reopens at the
+        // size the customer left it at, or fills a comfortable share of the screen.
+        // The device's own resolution is untouched either way (see fitWindow).
+        ceiling = undefined;
+        // Owner item 3 — where and how the customer last had it: position, size
+        // and screen, when that screen is still connected.
+        const plan = isGalleryFixture ? null : await restorePlacementPlan(win, widthForHeight);
+        if (plan !== null) {
+          const { PhysicalPosition } = await import('@tauri-apps/api/dpi');
+          await win.setPosition(new PhysicalPosition(plan.position.x, plan.position.y));
+          height = plan.height;
+          avail = plan.availHeight;
+          width = widthForHeight(height);
+        } else {
+          const remembered = await rememberedWindowSize();
+          // HEIGHT-driven like refitForDrawer: keep the remembered height, re-derive
+          // the phone width from the LIVE aspect, so a different archetype or
+          // rotation still fills the frame edge-to-edge.
+          if (remembered !== null && remembered.height - chrome > 0) {
+            height = remembered.height;
+            width = widthForHeight(height);
+          } else {
+            // Nothing remembered for this screen: scale the phone UP to a
+            // comfortable share of it (never down — the screen clamp below does
+            // that on a small one).
+            const comfortable = comfortableSimulatorHeight(avail);
+            if (comfortable !== null && comfortable > height) {
+              height = comfortable;
+              width = widthForHeight(height);
+            }
+          }
         }
       }
       // An iPhone is taller than many laptop work areas; if the ideal height would
       // overflow, cap it and derive the width from the aspect so the device still
       // fills the frame edge-to-edge (same guarantee fitWindow makes — the SAME
       // helper, so the two sites cannot drift).
-      const avail = typeof window !== 'undefined' ? (window.screen?.availHeight ?? 0) : 0;
       const fitted = fitSimulatorHeight({
         desired: height,
         availHeight: avail,
-        nativeLogicalHeight: actualSizeH,
+        ...(ceiling !== undefined ? { nativeLogicalHeight: ceiling } : {}),
       });
       if (fitted < height) {
         height = fitted;
@@ -5488,7 +5750,7 @@ function SimulatorWindowInner({
     return () => document.removeEventListener('keydown', onKey);
   }, [browserMode, info]);
 
-  // Paste-into-device (QW1, A3 accepted `{type:'text'}` 2026-07-11) — ⌘V / Ctrl+V while
+  // Paste-into-device (QW1, harness accepted `{type:'text'}` 2026-07-11) — ⌘V / Ctrl+V while
   // the DEVICE screen has focus pastes the Mac clipboard INTO the phone's focused field.
   // iOS ⌘V would paste the DEVICE's (empty) clipboard, so we bridge: read the Mac
   // clipboard and send ONE atomic `text` event (the harness types it un-flooded via
@@ -5653,8 +5915,10 @@ function SimulatorWindowInner({
     if (info === null || typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window))
       return;
     let unlisten = (): void => {};
+    let unlistenMoved = (): void => {};
     let disposed = false;
     let timer = 0;
+    let moveTimer = 0;
     void (async () => {
       try {
         const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
@@ -5686,6 +5950,7 @@ function SimulatorWindowInner({
                   // correction above re-fires onResized and lands here one debounce
                   // later, so the remembered size is always the aspect-locked one.
                   await rememberWindowSize(w - drawerExtraRef.current, h);
+                  await rememberPlacement(win);
                 }
               } catch {
                 /* window API unavailable (non-Tauri / mock) — ignore */
@@ -5695,6 +5960,22 @@ function SimulatorWindowInner({
         });
         if (disposed) stop();
         else unlisten = stop;
+        // Owner item 3 — a MOVE settles into the remembered placement too (a
+        // resize does, above). Only the final spot counts, hence the debounce.
+        // Its own try: a window API without move events must not cost the
+        // aspect-lock above.
+        try {
+          const stopMoved = await win.onMoved(() => {
+            window.clearTimeout(moveTimer);
+            moveTimer = window.setTimeout(() => {
+              void rememberPlacement(win);
+            }, 400);
+          });
+          if (disposed) stopMoved();
+          else unlistenMoved = stopMoved;
+        } catch {
+          /* onMoved unavailable (non-Tauri / mock) — nothing is remembered on a move */
+        }
       } catch {
         /* getCurrentWebviewWindow / onResized unavailable (non-Tauri / mock) — ignore */
       }
@@ -5702,7 +5983,9 @@ function SimulatorWindowInner({
     return () => {
       disposed = true;
       window.clearTimeout(timer);
+      window.clearTimeout(moveTimer);
       unlisten();
+      unlistenMoved();
     };
   }, [browserMode, info]);
 
@@ -5761,10 +6044,18 @@ function SimulatorWindowInner({
     inFlightArmTimerRef.current = window.setTimeout(() => {
       inFlightArmTimerRef.current = null;
       setNavInFlight(true);
-      inFlightCeilingTimerRef.current = window.setTimeout(() => {
-        inFlightCeilingTimerRef.current = null;
-        setNavInFlight(false);
-      }, URL_BAR_INFLIGHT_CEILING_MS);
+      // Owner item 2 — a tapped link confirms fast (the phone reports `loading`
+      // the moment a navigation STARTS, before the proxy answers), so a tap that
+      // has produced no page state after TAP_NAVIGATION_CONFIRM_MS did not
+      // navigate. It used to spin for the full 20 s typed-navigation ceiling
+      // after every tap on a button or a field. See lib/simulator-load-indicators.
+      inFlightCeilingTimerRef.current = window.setTimeout(
+        () => {
+          inFlightCeilingTimerRef.current = null;
+          setNavInFlight(false);
+        },
+        Math.max(0, TAP_NAVIGATION_CONFIRM_MS - URL_BAR_INFLIGHT_ARM_MS),
+      );
     }, URL_BAR_INFLIGHT_ARM_MS);
   }, []);
   // Tear the timers down on unmount (a pending arm/ceiling must not fire into a
@@ -5777,7 +6068,7 @@ function SimulatorWindowInner({
     },
     [],
   );
-  // 'stalled' (A3 W2845): the device renderer froze (hung JS / compositor
+  // 'stalled' (W2845): the device renderer froze (hung JS / compositor
   // deadlock) — the LiveKit stream still reports `live` (the pump repeats the
   // last frame), so the GUI can't detect it from the track. The harness watchdog
   // reports it via pageState{state:'stalled'}; we surface a "reconnecting —
@@ -5805,6 +6096,11 @@ function SimulatorWindowInner({
   // poll re-stamps the TTL. Recording the live frame time lets the poll defer to a
   // fresher data-channel state instead of re-raising over a page that already recovered.
   const lastDataChannelStateAtRef = useRef(0);
+  // Owner item 2 — the room + session the live data channel last reported page
+  // state for. While that channel is connected and has reported, it alone may
+  // START a load; the poll's stored copy can be minutes stale (see
+  // lib/simulator-load-indicators.ts).
+  const liveChannelPageStateRef = useRef<{ room: unknown; sessionId: string } | null>(null);
   // V-2168 — the box restarting a died SCStream capture (renderer alive).
   const [captureStalled, setCaptureStalled] = useState(false);
   // V-2170 — the bot challenge the harness auto-paused on. Null = none.
@@ -5849,12 +6145,12 @@ function SimulatorWindowInner({
   const [navSendFailed, setNavSendFailed] = useState<string | null>(null);
   // #135 — a SOFT load-stall advisory, distinct from BOTH the W2845 renderer-freeze
   // badge (pageStalled → "page unresponsive") and the W616 hard nav-failure overlay
-  // (pageError → "Page failed to load"). A3's nav-stall timer (box 5eeaf794a) emits a
+  // (pageError → "Page failed to load"). The harness's nav-stall timer (box 5eeaf794a) emits a
   // page_state{state:'stalled', error:{kind:'timeout', message}} when a main-frame nav
   // hasn't committed/finished within ~40s: the page is STILL TRYING, just slow — NOT a
   // freeze and NOT a terminal error. We surface a gentle "taking longer than usual —
   // Retry" banner (the founder's "it just stops loading, stays on the same site" report),
-  // and per A3's contract a later 'loaded' clears it while an 'errored' upgrades it to the
+  // and per the harness contract a later 'loaded' clears it while an 'errored' upgrades it to the
   // hard overlay. The timeout `error.kind` is what distinguishes it from the freeze stall
   // (which carries no error), so the two don't collide on the shared 'stalled' state.
   // T-15 — `local: true` marks a rung of the GUI's own elapsed-time ladder (9s / 25s,
@@ -5914,7 +6210,7 @@ function SimulatorWindowInner({
   // the old address by a frame describing the page the box is still on. A ref, not
   // state: the data-channel + poll callbacks read it synchronously.
   const pendingNavRef = useRef<PendingNavigation | null>(null);
-  // Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract). The GUI owns the
+  // Browser-style page TABS (doc-150 item 4; locked harness contract). The GUI owns the
   // tab model; each tab is a page the harness keeps a renderer for, and `activeTabId`
   // is the one currently published into the video. We seed exactly one tab on mount so
   // there's always ≥1 (the close handler also refuses to drop below one). The ACTIVE
@@ -5986,7 +6282,7 @@ function SimulatorWindowInner({
   const pendingActivationsRef = useRef<Map<string, LogicalTabActivation>>(new Map());
   const activationOwnersRef = useRef<Map<string, LogicalTabActivation>>(new Map());
   // INSTANT switch-feedback (founder 2026-06-25: "kinda slow to switch"). The real
-  // speed lever is A3's box-side no-reload; on the GUI we make the switch FEEL
+  // speed lever is the harness's box-side no-reload; on the GUI we make the switch FEEL
   // responsive with a subtle "switching…" affordance on the target tab. Holds the
   // tabId currently being switched TO; set on click, cleared the moment the box's
   // page_state for that tab arrives (the one-shot reconcile / activateTabResult ok /
@@ -6132,7 +6428,7 @@ function SimulatorWindowInner({
       if (switchAffordanceOwnerRef.current !== owner) return;
       switchAffordanceOwnerRef.current = null;
       // P-26 (2026-09-05, corrected 2026-09-06) — the hold expired. Two cases: no ack
-      // at all (the switch took the daemon's cold reload path past the bound — A3's
+      // at all (the switch took the daemon's cold reload path past the bound — the harness
       // canary saw exactly this, no ACTIVATE-RESULT within 45 s) or an ack whose target
       // never published its loaded frame in time.
       //
@@ -6522,6 +6818,10 @@ function SimulatorWindowInner({
     keyboardVisibleRef.current = false;
     keyboardOverlayRef.current = false;
     setKeyboardVisible(false);
+    // Owner item 11 — the focus and navigation the old page reported are not the
+    // new page's.
+    latestFocusReportRef.current = null;
+    lastNavFrameRef.current = null;
     setPageError(null);
     setPageStalled(false);
     setPageLoadStalled(null); // #135 — don't bleed a load-stall advisory across tabs
@@ -6587,7 +6887,7 @@ function SimulatorWindowInner({
         const msg = JSON.parse(new TextDecoder().decode(payload)) as {
           type?: string;
           state?: string;
-          // A3 48bc7c7aa — published on the SAME room data channel as page_state,
+          // Harness 48bc7c7aa — published on the SAME room data channel as page_state,
           // reliable, once per stall, at the auto-pause transition. `challengeId`
           // must be ROUND-TRIPPED to resume: the harness validates it against the
           // active challenge and stays paused on a mismatch.
@@ -6597,14 +6897,14 @@ function SimulatorWindowInner({
           title?: string;
           loading?: boolean;
           progress?: number;
-          // A3 W3005 / box 76b720c0d — the per-archetype FIXED logical content
+          // W3005 / box 76b720c0d — the per-archetype FIXED logical content
           // viewport (CSS-px the injector's origin:viewport maps to, e.g. 402×714
           // launch / 402×678 Family-A), emitted on EVERY page_state frame. The GUI
           // uses THIS as the tap/scroll coordinate space, never the SFU-downscaled
           // video track px (which vary with bandwidth → would corrupt tap coords).
           logicalContentWidth?: number;
           logicalContentHeight?: number;
-          // A3 W3019/#6 — the box emits this on every page_state frame once a text
+          // W3019/#6 — the box emits this on every page_state frame once a text
           // field on the page gains/loses focus (fork DRIFTSTACK_INPUT_FOCUS token →
           // harness PageState.inputFocused). Drives the on-screen keyboard exactly like
           // a real iPhone: appears the instant the user taps into a field, disappears
@@ -6612,6 +6912,12 @@ function SimulatorWindowInner({
           // (founder 2026-06-30); the manual ⌨ toggle stays available as an override/
           // fallback (e.g. while a session is on an older box build pre-dating this).
           inputFocused?: boolean;
+          // The field that already had focus was tapped again (sent only with
+          // inputFocused: true): a fresh focus edge — lib/keyboard-focus.ts.
+          inputRefocus?: boolean;
+          // The tab's renderer incarnation: omitted until the phone replaces the
+          // renderer, then 1, 2, … — lib/simulator-tab-incarnation.ts.
+          tabIncarnation?: number;
           // tabId (doc-150 item 4 → live-state accuracy) — a page_state frame the box
           // attributes to a specific renderer. When present we route url/title to THAT
           // tab; absent → the active tab. Forward-compatible: per-tab routing activates
@@ -6620,7 +6926,7 @@ function SimulatorWindowInner({
           // activateTabResult (doc-150 item 4) — the harness's reply to activateTab.
           requestId?: string;
           ok?: boolean;
-          // A3 warm-tabs (#116, harness wasWarm 13ad369ae) — true when the box brought
+          // Harness warm-tabs (#116, harness wasWarm 13ad369ae) — true when the box brought
           // the target tab's LIVE pre-warmed view to front (instant, no re-navigation);
           // absent/false = a COLD switch (re-navigate). Drives whether the GUI drops the
           // "switching…" blank on the ack (warm = instant, drop now) or keeps it until the
@@ -6652,7 +6958,7 @@ function SimulatorWindowInner({
           const pending = pendingActivationsRef.current.get(msg.requestId);
           if (pending === undefined) {
             // P-26 (2026-09-06) — a reply for an activation we stopped tracking. This
-            // returned in silence, which is why A3's 102,431 ms ack on the fleet box
+            // returned in silence, which is why the harness's 102,431 ms ack on the fleet box
             // left no trace: by the time it landed the pending record was long gone.
             // The tombstone keeps the one number that matters.
             const tomb = activationTombstonesRef.current.get(msg.requestId);
@@ -6766,7 +7072,7 @@ function SimulatorWindowInner({
                 authorityEpoch: pending.authorityEpoch,
               });
             }
-            // A3 contract audit (2026-09-05, harness 07c8a693f) — "session ended" is not a
+            // Harness contract audit (2026-09-05, harness 07c8a693f) — "session ended" is not a
             // per-switch failure: the whole session is gone, so the tab the revert above
             // just selected is gone too, and the next tap would repeat this same toast.
             // Say it once, in the vocabulary the agent-session panel already uses for
@@ -6833,6 +7139,8 @@ function SimulatorWindowInner({
           // in this same task routes against the restored set rather than the retired
           // seed/previous set.
           tabsRef.current = restored;
+          // A new tab set: incarnations seen for the old one no longer apply.
+          tabIncarnationsRef.current = new Map();
           setTabs(restored);
           // Activate BEFORE marking the space established: the first restore is
           // the seed giving way to the real tab, and the activation must see
@@ -6847,8 +7155,8 @@ function SimulatorWindowInner({
           return;
         }
         // Accept BOTH the proposed {type:'page_state', url, loading, progress}
-        // envelope AND A3's shipped HarnessOutbound.PageState {sessionId, state,
-        // url, error} where state ∈ loading|loaded|errored (bus W2717-done). The
+        // envelope AND the harness's shipped HarnessOutbound.PageState {sessionId, state,
+        // url, error} where state ∈ loading|loaded|errored (W2717-done). The
         // box emits the latter over THIS data channel on navigate; prod's
         // page-state REST endpoint is stubbed, so the channel is the only live
         // source — keying only on type:'page_state' silently dropped every event.
@@ -6857,7 +7165,7 @@ function SimulatorWindowInner({
           msg.state === 'loaded' ||
           msg.state === 'errored' ||
           msg.state === 'stalled' ||
-          // V-2168 (A3) — a DISTINCT diagnosis from 'stalled': the renderer is
+          // V-2168 (harness) — a DISTINCT diagnosis from 'stalled': the renderer is
           // ALIVE and the page is fine, but the SCStream capture died and the box
           // is restarting it. Unhandled it fell through to the unknown-frame
           // breadcrumb and showed nothing at all. It only became reachable in
@@ -6875,13 +7183,24 @@ function SimulatorWindowInner({
           });
           return;
         }
-        if (msg.type !== 'page_state' && !isHarnessState) {
+        // A focus report and nothing else — `{ inputFocused, inputRefocus }`,
+        // no `type`, no `state` — is the shape the phone sends in a session with
+        // no tabs. It is a focus edge, so it drives the keyboard (below) and
+        // nothing else: no page, load or navigation chrome reads it.
+        const isFocusOnlyFrame =
+          msg.type === undefined &&
+          msg.state === undefined &&
+          typeof msg.inputFocused === 'boolean';
+        if (msg.type !== 'page_state' && !isHarnessState && !isFocusOnlyFrame) {
           // Finding #6 — the frame matched NONE of the known discriminants
           // (activateTabResult / tabListRestore / page_state / a harness state). The
           // latency-ping channel shares this data channel, so exclude it first; then
           // emit a throttled, prod-visible breadcrumb so a real box-envelope drift is
           // diagnosable instead of silently stalling page_state + the overlays.
-          if (msg.type !== 'ping') warnUnrecognizedDataFrame(msg);
+          // A `pong` is the phone answering the window's own keep-alive ping —
+          // expected, and handled by the latency reader; never a drift breadcrumb
+          // (it logged a WARN every ~10 s).
+          if (msg.type !== 'ping' && msg.type !== 'pong') warnUnrecognizedDataFrame(msg);
           return;
         }
         // Finding #3 — once the session has terminally ended (one-way latch), freeze the
@@ -6901,7 +7220,16 @@ function SimulatorWindowInner({
         // own no tab in this window, so they must not mutate input dimensions, focus,
         // tab metadata, or any foreground page chrome.
         if (pageStateTargetId === null) return;
-        // A3 W3005 — adopt the box's FIXED per-archetype logical content dims as the
+        // A frame from a renderer the phone has since replaced (a lower
+        // tabIncarnation for this tab) is inert, like one for a closed tab.
+        if (
+          typeof msg.tabId === 'string' &&
+          msg.tabId !== '' &&
+          !admitTabIncarnation(tabIncarnationsRef.current, msg.tabId, msg.tabIncarnation)
+        ) {
+          return;
+        }
+        // W3005 — adopt the box's FIXED per-archetype logical content dims as the
         // tap/scroll coordinate space (every page_state frame carries them). The
         // durable fix for SFU-downscale tap drift: the encoded track px vary with
         // bandwidth, but these CSS-px viewport dims are stable, so taps map 1:1 to what
@@ -6927,8 +7255,50 @@ function SimulatorWindowInner({
         // (the authority check requires confirmed manual mode) because that focus belongs
         // to the agent rather than the founder. The SAME rule drives the CP poll path
         // below, via the shared helper, so the two transports cannot drift.
+        //
+        // Owner item 11 — a NEW top-level load on the active tab resets the page's
+        // focus on the phone, which reports no blur for it. Lift an explicit Hide
+        // (it belonged to the page that is going) and forget the focus the old
+        // page reported — otherwise the next page's first focus was swallowed by
+        // a stale suppression, and only a blur that never comes could lift it.
+        // The keyboard's visibility itself is left alone: a frame without a focus
+        // field never moves it (simulator-window-frozen.test.tsx pins that).
+        if (
+          isHarnessState &&
+          typeof msg.inputFocused !== 'boolean' &&
+          pageStateTargetId === activeTabIdRef.current
+        ) {
+          const navUrl = typeof msg.url === 'string' ? msg.url : '';
+          const prevNav = lastNavFrameRef.current;
+          if (
+            msg.state === 'loading' &&
+            !(prevNav?.state === 'loading' && prevNav.url === navUrl)
+          ) {
+            if (keyboardFocusSuppressedTabRef.current === activeTabIdRef.current) {
+              keyboardFocusSuppressedTabRef.current = null;
+            }
+            latestFocusReportRef.current = null;
+          }
+          lastNavFrameRef.current = { state: String(msg.state), url: navUrl };
+        }
+        // Owner item 11 — the switch grace exists so a tabId-less focus frame from
+        // the tab just LEFT cannot reopen the keyboard. With a single tab there is
+        // no other tab it could describe, and the phone stamps no tabId on focus,
+        // so the grace only ever swallowed the first focus after the session's
+        // own tab restore at start-up.
+        const focusInSwitchGrace =
+          tabsRef.current.length > 1 && Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
+        if (typeof msg.inputFocused === 'boolean') {
+          latestFocusReportRef.current = {
+            sessionId: listenerSessionId,
+            room: listenerRoom,
+            focused: msg.inputFocused,
+            targetId: pageStateTargetId,
+            inSwitchGrace: focusInSwitchGrace && (msg.tabId === undefined || msg.tabId === null),
+          };
+        }
         applyInputFocusFromPageState(
-          { inputFocused: msg.inputFocused, tabId: msg.tabId },
+          { inputFocused: msg.inputFocused, inputRefocus: msg.inputRefocus, tabId: msg.tabId },
           {
             targetId: pageStateTargetId,
             activeTabId: activeTabIdRef.current,
@@ -6937,10 +7307,11 @@ function SimulatorWindowInner({
               listenerRoom,
               listenerAuthorityEpoch,
             ),
-            withinSwitchGrace: Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS,
+            withinSwitchGrace: focusInSwitchGrace,
           },
           keyboardFocusActuatorRef.current,
         );
+        if (isFocusOnlyFrame) return;
         // Box is the ONLY writer of a tab's stored url/title (live-state accuracy
         // refactor). Route a recognised tabId exactly, retain the active fallback only
         // for legacy null/omitted tags, and reject unknown ownership above. A title-only
@@ -6994,7 +7365,7 @@ function SimulatorWindowInner({
         // in-flight indicator. The bar's url tracks the box's url via writeTabPageState
         // above, so this only tears down the WAIT treatment — it never fabricates a url.
         if (isHarnessState && pageStateResolvesInFlight(msg.state)) clearUrlBarInFlight();
-        // #135 — a page_state{state:'stalled'} is OVERLOADED: A3's NAV-stall timer
+        // #135 — a page_state{state:'stalled'} is OVERLOADED: the harness's NAV-stall timer
         // (box 5eeaf794a) tags a slow-LOAD stall with error.kind==='timeout', while the
         // W2845 renderer-FREEZE stall carries no error. Split them: the timeout variant
         // is the soft "taking longer to load — Retry" advisory (pageLoadStalled, handled
@@ -7003,8 +7374,9 @@ function SimulatorWindowInner({
           typeof msg.error === 'object' && msg.error !== null
             ? (msg.error as { kind?: string; message?: string })
             : null;
-        const isLoadTimeoutStall = msg.state === 'stalled' && stallErr?.kind === 'timeout';
-        // A3 W2845 — a FREEZE 'stalled' frame surfaces the frozen-renderer badge; any
+        // One rule with the poll path below (lib/simulator-load-indicators).
+        const isLoadTimeoutStall = isLoadTimeoutStallFrame(msg.state, stallErr);
+        // W2845 — a FREEZE 'stalled' frame surfaces the frozen-renderer badge; any
         // other harness state clears it (the page is responsive again). #4 —
         // applyStalledState stamps the frame time so the TTL sweep can self-clear a
         // stale latch (the store re-applies a one-time stall forever otherwise). The
@@ -7013,7 +7385,8 @@ function SimulatorWindowInner({
           // Stamp the live-source time FIRST so a near-simultaneous poll defers to this
           // authoritative frame (the poll's un-TTL'd store can lag behind a recovery).
           lastDataChannelStateAtRef.current = Date.now();
-          applyStalledState(msg.state === 'stalled' && !isLoadTimeoutStall);
+          liveChannelPageStateRef.current = { room: listenerRoom, sessionId: listenerSessionId };
+          applyStalledState(isFreezeStall(msg.state, stallErr));
           // ⛔ Its own badge, not the "page unresponsive" one: the page is
           // healthy and the video is coming back on its own in a few seconds,
           // so telling the operator their page is unresponsive would send them
@@ -7039,7 +7412,7 @@ function SimulatorWindowInner({
           // #72 — honor 'errored' as a REAL failure only BEFORE the page loaded; #135 —
           // AND only when the frame is for the CURRENT nav target (drop a STALE 'errored'
           // from a superseded page = the founder's false "PAGE FAILED TO LOAD" over a
-          // working, open page). A3 confirmed errored is main-frame-only, so url-match
+          // working, open page). The harness confirmed errored is main-frame-only, so url-match
           // never hides a real sub-resource-vs-toplevel distinction.
           if (
             msg.state === 'errored' &&
@@ -7061,11 +7434,11 @@ function SimulatorWindowInner({
             setPageError(null);
           }
         }
-        // #135 — the soft load-stall advisory (A3's timeout-tagged 'stalled'). Show it
+        // #135 — the soft load-stall advisory (the harness's timeout-tagged 'stalled'). Show it
         // ONLY for the CURRENT nav target that has not yet painted 'loaded' (a late stall
         // after load, or one for a page already left, is ignored). ANY other harness state
         // — a real 'loaded'/'errored'/fresh 'loading', or the freeze stall — supersedes it,
-        // matching A3's "a later loaded clears it, errored upgrades it" contract.
+        // matching the harness's "a later loaded clears it, errored upgrades it" contract.
         if (isHarnessState) {
           if (isLoadTimeoutStall && navTargetOk && !pageReachedLoadedRef.current) {
             const nextStall = {
@@ -7121,7 +7494,18 @@ function SimulatorWindowInner({
             5000,
           );
         }
-        const loading = isHarnessState ? msg.state === 'loading' : msg.loading;
+        // Owner item 2 — a FOCUS frame is not news about the page load. The phone
+        // sends focus changes with its LAST recorded page state attached (and no
+        // url), so a tap into a field on a page whose last state was `loading`
+        // (a load the phone never finished reporting) replayed that `loading` and
+        // restarted the bar over a page that was done. Only navigation frames
+        // start or end a load.
+        const focusReplay = typeof msg.inputFocused === 'boolean';
+        const loading = focusReplay
+          ? undefined
+          : isHarnessState
+            ? msg.state === 'loading'
+            : msg.loading;
         if (typeof loading === 'boolean') {
           // audit wb1w3015f #7 — mirror the poll-path grace guard (line ~3849) on this
           // authoritative data-channel path: a stale loading=false from the page the
@@ -7144,7 +7528,7 @@ function SimulatorWindowInner({
             }
           }
         }
-        setLoadProgress(typeof msg.progress === 'number' ? msg.progress : null);
+        if (!focusReplay) setLoadProgress(typeof msg.progress === 'number' ? msg.progress : null);
       } catch {
         /* not a page_state JSON message — ignore */
       }
@@ -7187,7 +7571,7 @@ function SimulatorWindowInner({
     setControlLinkUnreachable(false);
   }, [room, activeTabId, connState, manualInputControl.epoch]);
 
-  // Live URL via the page-state API (A3 W2730): the box reports pageState over the
+  // Live URL via the page-state API (W2730): the box reports pageState over the
   // CONTROL PLANE (→ server sessionPageStateStore), NOT the LiveKit data channel —
   // which is why the data-channel consumer above never populated it. The founder
   // asked the API to expose the URL; this POLLS GET /v1/agent-sessions/:id/
@@ -7247,7 +7631,7 @@ function SimulatorWindowInner({
         // fails when a legacy node keeps re-asserting the tabId-less prior title; keeping
         // the tab's own last-known title (null ⇒ writeTabPageState skips it) until a
         // genuine frame arrives is strictly more accurate. Current fleet nodes carry
-        // tabId; this branch remains a compatibility fallback (A3 #116).
+        // tabId; this branch remains a compatibility fallback (harness #116).
         const hasTabId = typeof ps.tabId === 'string' && ps.tabId !== '';
         const inGrace =
           Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS ||
@@ -7301,7 +7685,7 @@ function SimulatorWindowInner({
         // touch the foreground chrome (else the #72/#135 false-error is re-introduced
         // cross-tab). Recognition mirrors writeTabPageState exactly.
         if (pollTargetId !== activeTabIdRef.current) return;
-        // A3 W2845 — surface/clear the frozen-renderer badge from the poll too
+        // W2845 — surface/clear the frozen-renderer badge from the poll too
         // (independent of the loading grace window; a stall is real regardless).
         // #4 — through applyStalledState so each 'stalled' poll refreshes the TTL
         // stamp: a real ongoing stall keeps re-stamping (badge stays lit), while a
@@ -7315,11 +7699,31 @@ function SimulatorWindowInner({
         // stale stall flip entirely; a genuinely-still-stalled page keeps pushing
         // 'stalled' over the data channel, so the badge stays lit for a REAL freeze.
         const liveFrameFresh = Date.now() - lastDataChannelStateAtRef.current < PAGE_STATE_GRACE_MS;
-        if (!liveFrameFresh) applyStalledState(ps.state === 'stalled');
+        // The SAME freeze rule as the live channel: a load that timed out
+        // (`stalled` with error.kind 'timeout') is not a frozen page, and the
+        // stored copy would otherwise replay it as "page unresponsive" every 2 s.
+        if (!liveFrameFresh) applyStalledState(isFreezeStall(ps.state, ps.error));
+        // Owner item 2 — is the live channel the authority for load STARTS? It is
+        // once it is connected and has reported page state for this session. The
+        // poll replays a stored frame the phone forwards only when the server next
+        // talks to it, so its `loading` is routinely the page's PREVIOUS load —
+        // replayed every 2 s for up to two minutes after the live channel said
+        // `loaded`. Each replay used to re-arm the bar (parking its trickle under
+        // 90% over a finished page) and, when the page had rewritten its address
+        // while scrolling, to move the nav target and restart the bar outright.
+        const liveReported = liveChannelPageStateRef.current;
+        const pollMayStartLoad = polledLoadingMayStartALoad({
+          connected: connStateRef.current === 'connected',
+          hasReportedPageState:
+            liveReported !== null &&
+            liveReported.room === pollRoom &&
+            liveReported.sessionId === pollSessionId,
+        });
         // #135 — mirror the data-channel: a 'loading' poll tracks the current nav
         // target; the loaded/errored gates match against it so a stale poll frame from
         // a page already left can't drive the overlay / load-gate.
         if (
+          pollMayStartLoad &&
           ps.state === 'loading' &&
           typeof ps.url === 'string' &&
           ps.url.length > 0 &&
@@ -7367,12 +7771,14 @@ function SimulatorWindowInner({
           // rerender (including the video host + tab strip) while an error is shown.
           return prev !== null && pageErrorInfoEqual(prev, next) ? prev : next;
         });
-        // #135 — clear the soft load-stall advisory from the POLL too. A3's timeout
-        // stall arrives ONLY over the data channel (publishPageStateToRoom), so the
-        // poll never SETS pageLoadStalled — but the terminal 'loaded'/'errored' that
-        // supersedes it may reach the GUI only via the poll if the data-channel frame
-        // was dropped/coalesced, which would otherwise latch the banner over a loaded
-        // page forever. Defer to a fresher data-channel frame (which already cleared
+        // #135 — clear the soft load-stall advisory from the POLL too. The poll never
+        // SETS pageLoadStalled: a load-timeout `stalled` can reach the stored copy
+        // too, but the advisory is raised only by the live push (which carries the
+        // current nav target it is about), and the poll's replay of it must not
+        // raise "page unresponsive" either (isFreezeStall above). The terminal
+        // 'loaded'/'errored' that supersedes it may reach the GUI only via the poll
+        // if the data-channel frame was dropped/coalesced, which would otherwise
+        // latch the banner over a loaded page forever. Defer to a fresher data-channel frame (which already cleared
         // it in its else-branch) and only clear for the current nav target reaching a
         // terminal state.
         if (
@@ -7395,6 +7801,9 @@ function SimulatorWindowInner({
         )
           return;
         if (loading) {
+          // Owner item 2 — a replayed `loading` never restarts the bar while the
+          // live channel is reporting; the poll may only END a load then.
+          if (!pollMayStartLoad) return;
           setPageLoading(armLoadWatchdog());
         } else {
           setPageLoading(false);
@@ -7501,9 +7910,9 @@ function SimulatorWindowInner({
             });
             setSessionEnded({
               reason: preferTypedEndReason(s.errorEvent?.code, s.closedReason),
-              // A3's host-free sentence, verbatim; null when there is no error event.
+              // The harness's host-free sentence, verbatim; null when there is no error event.
               summary: s.errorEvent?.summary ?? null,
-              // DERIVED (derivedLastPhase) — not a field A3 sends yet.
+              // DERIVED (derivedLastPhase) — not a field the harness sends yet.
               lastPhase: derivedLastPhase(s.provisioningDetail, observedPhase),
             });
             return;
@@ -7541,8 +7950,10 @@ function SimulatorWindowInner({
               lifecycleConfirmed: true,
               lifecycleTerminal: s.terminal,
               provisioningDetail: s.provisioningDetail,
-              // Omitted/unknown capability is intentionally non-interactive.
-              capabilityReport: s.capabilityReport ?? null,
+              // Omitted/unknown capability is intentionally non-interactive —
+              // unless the phone already reported for this session (owner item 7:
+              // a read without the report says nothing new about the phone).
+              capabilityReport: inputReportFromRead(reqSessionId, s.capabilityReport, s.terminal),
             });
             setPairKind(s.pairKind);
           } else {
@@ -7559,7 +7970,7 @@ function SimulatorWindowInner({
               lifecycleConfirmed: true,
               lifecycleTerminal: s.terminal,
               provisioningDetail: s.provisioningDetail,
-              capabilityReport: s.capabilityReport ?? null,
+              capabilityReport: inputReportFromRead(reqSessionId, s.capabilityReport, s.terminal),
             });
           }
         })
@@ -7592,6 +8003,11 @@ function SimulatorWindowInner({
           // "connecting…" for one tick on every 5xx); only an auth failure
           // blanks it.
           const authFailure = isControlAuthFailure(err);
+          // A refused key ends what this window may believe about the session.
+          if (authFailure) lastInputReportRef.current = null;
+          if (isControlKeyRefused(err) && controlAuth !== null) {
+            setRefusedControlKey(controlAuth.controlKey);
+          }
           updateManualInputControl({
             sessionId: reqSessionId,
             modeConfirmed: false,
@@ -7709,7 +8125,7 @@ function SimulatorWindowInner({
           // the jar can't refresh) which keeps its actionable note even over a stale jar.
           const note =
             status === 401 || status === 403
-              ? "This session's access has expired — reopen the session to refresh."
+              ? SESSION_ACCESS_EXPIRED_NOTICE
               : status === 404
                 ? 'cookies will appear once a page loads in the session'
                 : status === 503
@@ -7970,7 +8386,7 @@ function SimulatorWindowInner({
           }
           const credsExpired = status === 401 || status === 403;
           const note = credsExpired
-            ? "This session's access has expired — reopen the session to refresh."
+            ? SESSION_ACCESS_EXPIRED_NOTICE
             : status === 404
               ? 'network activity will appear once the page starts loading'
               : status === 503
@@ -8045,10 +8461,10 @@ function SimulatorWindowInner({
     if (activePane === 'network' && !networkEverReported) setActivePane(null);
   }, [activePane, networkEverReported]);
 
-  // File-control upload (A3 W2851 / founder "control files"). Upload a file's bytes
+  // File-control upload (W2851 / founder "control files"). Upload a file's bytes
   // (base64) into the running session's isolated 0o700 jail → get an OPAQUE handle
   // the customer can hand to a page's <input type=file>. Upload-only here; the
-  // file-chooser handle-pick DRIVE (when a page opens a chooser) is A3's next
+  // file-chooser handle-pick DRIVE (when a page opens a chooser) is the next
   // harness piece, so we just collect handles for now.
   const [files, setFiles] = useState<SessionFileHandle[]>([]);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
@@ -8138,9 +8554,9 @@ function SimulatorWindowInner({
     reader.readAsDataURL(file);
   };
 
-  // File-control DOWNLOAD (A3 W2856). Poll the session's download jar like cookies;
+  // File-control DOWNLOAD (W2856). Poll the session's download jar like cookies;
   // fetching one saves it to the user's machine via an <a download>. The jar is empty
-  // until A3's fork download-delegate populates it → "No downloads yet".
+  // until the fork's download-delegate populates it → "No downloads yet".
   const downloadsStoreRef = useRef<DownloadsListStore | null>(null);
   if (downloadsStoreRef.current === null) downloadsStoreRef.current = createDownloadsListStore();
   const downloadsStore = downloadsStoreRef.current;
@@ -8224,7 +8640,7 @@ function SimulatorWindowInner({
           // EXCEPT 401/403 (creds expired → can't refresh) keeps its actionable note.
           const note =
             status === 401 || status === 403
-              ? "This session's access has expired — reopen the session to refresh."
+              ? SESSION_ACCESS_EXPIRED_NOTICE
               : status === 404
                 ? 'Session is no longer live.'
                 : status === 503
@@ -8330,18 +8746,40 @@ function SimulatorWindowInner({
   };
   const ownsRenderedManualInput = (): boolean =>
     manualInputAuthorityCheckRef.current(sessionId, room, manualInputControl.epoch);
+  // Owner item 2 — where the current press started, so a press that travels past
+  // the tap slop (a scroll) can take back the "a tapped link may be loading"
+  // spinner it armed on the way down. Null when no press is in progress.
+  const pressOriginRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
+  const trackPressTravel = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    const origin = pressOriginRef.current;
+    if (origin === null || origin.pointerId !== e.pointerId) return;
+    if (pressBecameADrag(origin, { x: e.clientX, y: e.clientY })) {
+      pressOriginRef.current = null;
+      // A scroll is not a navigation: drop the pending arm, and the spinner if
+      // it already showed. Never touches the page-load bar.
+      clearUrlBarInFlight();
+    }
+  };
+  const endPress = (): void => {
+    pressOriginRef.current = null;
+  };
   const showTap = (e: ReactPointerEvent<HTMLDivElement>): void => {
     // No tap feedback unless human input is positively owned. Input capture is off
     // while ownership is unknown/in AI mode/device-disabled, so a ripple there would
     // falsely signal "it worked" on a silent no-op (the same confusion the off-surface
     // guard below prevents).
     if (!humanInputEnabled || !ownsRenderedManualInput()) return;
+    // Owner item 4 — only the primary button is a touch: the input capture ignores
+    // a right or middle press (no iPhone analogue), so a ripple or a "page may be
+    // loading" spinner for one would claim a tap the phone never received.
+    if (typeof e.button === 'number' && e.button !== 0) return;
     // T-10 — a forwarded tap MIGHT be a link/redirect whose destination the GUI cannot
     // predict. Arm the URL-bar in-flight watch here (input is positively owned, so this
     // tap is forwarded to the device): if the box confirms no page_state shortly, the
     // bar shows the WAIT over the dimmed stale url. Address-bar navigates are optimistic
     // and never reach this handler, so they never arm it (the vacuity case).
     armUrlBarInFlight();
+    pressOriginRef.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY };
     const host = screenHostRef.current;
     if (host === null) return;
     const r = host.getBoundingClientRect();
@@ -8483,7 +8921,41 @@ function SimulatorWindowInner({
     connState === 'connected' &&
     publisherState === 'publishing';
   useEffect(() => {
-    if (humanInputEnabled) return;
+    if (humanInputEnabled) {
+      // Owner item 11 — control just arrived for the FIRST time in this session.
+      // If the phone already reported a focused field on the active tab (and
+      // nothing has reported since), show the keyboard now: the phone will not
+      // report that focus again.
+      const first = firstControlForRef.current;
+      const isFirstControl = !(
+        first !== null &&
+        first.sessionId === sessionId &&
+        first.room === room
+      );
+      if (room !== null) firstControlForRef.current = { sessionId, room };
+      const last = latestFocusReportRef.current;
+      if (
+        isFirstControl &&
+        last !== null &&
+        last.focused &&
+        !last.inSwitchGrace &&
+        last.sessionId === sessionId &&
+        last.room === room &&
+        last.targetId === activeTabIdRef.current
+      ) {
+        applyInputFocusFromPageState(
+          { inputFocused: true, tabId: last.targetId },
+          {
+            targetId: last.targetId,
+            activeTabId: activeTabIdRef.current,
+            hasManualAuthority: true,
+            withinSwitchGrace: false,
+          },
+          keyboardFocusActuatorRef.current,
+        );
+      }
+      return;
+    }
     touchCursorRef.current?.hide();
     setDotPressed(false);
     keyboardVisibleRef.current = false;
@@ -8576,6 +9048,7 @@ function SimulatorWindowInner({
     controlActionRef.current = null;
     controlRequestIdRef.current += 1;
     controlReadGenerationRef.current += 1;
+    lastInputReportRef.current = null;
     updateManualInputControl(
       {
         sessionId,
@@ -8612,7 +9085,7 @@ function SimulatorWindowInner({
     }
     loadWatchdogRef.current = { timer: null, target: '', expired: false };
     setPageLoadTimeout(null);
-    // A3 W2845 / audit pre-push (w83xq1aht): clear the frozen-renderer badge on a
+    // W2845 / audit pre-push (w83xq1aht): clear the frozen-renderer badge on a
     // per-session reset so a previous session's "stalled" overlay can't persist
     // over a NEW session's live frame after an in-place session swap.
     setPageStalled(false);
@@ -8690,7 +9163,7 @@ function SimulatorWindowInner({
   const controlErrorMessage = (err: unknown): string => {
     if (!(err instanceof AgentSessionControlError)) return 'Control request failed — try again';
     if (err.kind === 'auth_missing') return 'Sign in to control the session';
-    if (err.status === 401) return 'Session control expired — reopen the session';
+    if (err.status === 401) return SESSION_ACCESS_EXPIRED_NOTICE;
     if (err.kind === 'forbidden' || err.status === 403) {
       return "Your key can't control this session";
     }
@@ -8700,6 +9173,46 @@ function SimulatorWindowInner({
     if (err.status === 429) return 'Too many control requests — wait a moment';
     if (err.status >= 500) return 'Session controls are temporarily unavailable';
     return 'Control request failed — try again';
+  };
+  // A fresh LiveKit join token when the video connection has to re-join. Tokens
+  // are checked only when a connection JOINS, and the ones minted through the
+  // control key live ten minutes, so the launch token cannot carry a session
+  // past its first drop after that. One ask per failure burst (the panel may
+  // report several failures while one ask is out), never for an ended session,
+  // and only with a control key (this window cannot use the account key).
+  const joinRefreshRef = useRef<{ sessionId: string; at: number } | null>(null);
+  const refreshJoinToken = (): void => {
+    const reqSessionId = sessionIdRef.current;
+    if (reqSessionId === '' || info === null || isGalleryFixture) return;
+    if (sessionEndedRef.current !== null) return;
+    if (controlAuth === null || controlAuth.controlKey === null) return;
+    const last = joinRefreshRef.current;
+    if (
+      last !== null &&
+      last.sessionId === reqSessionId &&
+      Date.now() - last.at < JOIN_REFRESH_MIN_GAP_MS
+    ) {
+      return;
+    }
+    joinRefreshRef.current = { sessionId: reqSessionId, at: Date.now() };
+    void mintLivekitToken(reqSessionId, controlAuth)
+      .then((fresh) => {
+        if (sessionIdRef.current !== reqSessionId || sessionEndedRef.current !== null) return;
+        setQuery((prev) =>
+          prev.sessionId === reqSessionId && prev.info !== null
+            ? {
+                ...prev,
+                info: { ...prev.info, ws_url: fresh.ws_url, token: fresh.token },
+              }
+            : prev,
+        );
+      })
+      .catch((err: unknown) => {
+        console.warn(
+          '[simulator] could not get a fresh join token (the panel keeps retrying):',
+          err,
+        );
+      });
   };
   const noticeControlError = (err: unknown, reqSessionId = sessionIdRef.current): void => {
     if (sessionIdRef.current === reqSessionId) showNotice(controlErrorMessage(err));
@@ -8830,6 +9343,7 @@ function SimulatorWindowInner({
         // this flag the bar says "checking this session's status…" forever about a
         // check nobody is running, next to the pane's own "Retry".
         controlReadFailed: controlLinkUnreachable || controlError !== null,
+        controlAccessExpired: controlKeyRefused,
         lifecycleTerminal: manualInputControl.lifecycleTerminal,
         lifecycleStatus: manualInputControl.lifecycleStatus,
         manualInputAvailable,
@@ -8854,6 +9368,18 @@ function SimulatorWindowInner({
   // surfaces stating different reasons for one session is exactly what the
   // shared module exists to prevent.
   const manualInputUnreported = manualInputWait?.group === 'input-unreported';
+  // Owner item 7 — the plain wait line is right for the first seconds of a
+  // session; past INPUT_REPORT_PATIENCE_MS the phone is waiting on its periodic
+  // report, so the badge says how long that can take and what to do meanwhile.
+  const [inputReportOverdue, setInputReportOverdue] = useState(false);
+  useEffect(() => {
+    if (!manualInputUnreported) {
+      setInputReportOverdue(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setInputReportOverdue(true), INPUT_REPORT_PATIENCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [manualInputUnreported, sessionId]);
   // Event handlers must re-check the live transport owner at invocation time. React
   // can retain a rendered handler for one turn after onRoom synchronously replaces or
   // clears the binding; captured `room`/readiness values would otherwise admit one
@@ -8926,8 +9452,9 @@ function SimulatorWindowInner({
           lifecycleConfirmed: true,
           lifecycleTerminal: s.terminal,
           provisioningDetail: s.provisioningDetail,
-          // Older/partial responses do not prove the fork accepts manual input.
-          capabilityReport: s.capabilityReport ?? null,
+          // Older/partial responses do not prove the fork accepts manual input —
+          // but they do not revoke a report the phone already gave (owner item 7).
+          capabilityReport: inputReportFromRead(reqSessionId, s.capabilityReport, s.terminal),
         });
         setPairKind(s.pairKind);
         // P1a — the SAME round-trip carries lifecycle liveness. A terminal status
@@ -8938,9 +9465,9 @@ function SimulatorWindowInner({
         if (s.terminal) {
           setSessionEnded({
             reason: preferTypedEndReason(s.errorEvent?.code, s.closedReason),
-            // A3's host-free sentence, verbatim; null when there is no error event.
+            // The harness's host-free sentence, verbatim; null when there is no error event.
             summary: s.errorEvent?.summary ?? null,
-            // DERIVED (derivedLastPhase) — not a field A3 sends yet.
+            // DERIVED (derivedLastPhase) — not a field the harness sends yet.
             lastPhase: derivedLastPhase(s.provisioningDetail, observedPhase),
           });
         }
@@ -8956,6 +9483,10 @@ function SimulatorWindowInner({
           return;
         // Authority is unknown after a failed lifecycle/control read. Stay view-only;
         // never reinterpret an unreachable control plane as manual ownership.
+        if (isControlAuthFailure(err)) lastInputReportRef.current = null;
+        if (isControlKeyRefused(err) && controlAuth !== null) {
+          setRefusedControlKey(controlAuth.controlKey);
+        }
         updateManualInputControl({
           sessionId: reqSessionId,
           mode: null,
@@ -9110,7 +9641,7 @@ function SimulatorWindowInner({
           lifecycleConfirmed: true,
           lifecycleTerminal: s.terminal,
           provisioningDetail: s.provisioningDetail,
-          capabilityReport: s.capabilityReport ?? null,
+          capabilityReport: inputReportFromRead(request.sessionId, s.capabilityReport, s.terminal),
           mutationPending: false,
         });
         setPairKind(s.pairKind);
@@ -9252,11 +9783,11 @@ function SimulatorWindowInner({
   // Address-bar navigation (founder 2026-06-19: "can't press the URL bar"). The
   // fork's rendered URL bar is un-tappable chrome, so the GUI's own address bar
   // emits a `navigate` command on the SAME LiveKit data channel as taps (no
-  // server route — it would 401 for the keychain-less app; A3 W2668). Normalize
+  // server route — it would 401 for the keychain-less app; W2668). Normalize
   // to http(s) first (prepend https:// when scheme-less); a non-http(s) entry is
   // dropped here and the harness re-validates with the same allowlist + SSRF
   // rejection. No-op until the room is connected.
-  // ── Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract) ──────────
+  // ── Browser-style page TABS (doc-150 item 4; locked harness contract) ────────
   // Fire-and-forget full-list publish to the harness; called on EVERY new / close /
   // switch / reorder so the harness reconciles its per-tab pages. No-op (the wire
   // payload is still computed) until the room connects. MUST .catch: the livekit
@@ -9455,7 +9986,7 @@ function SimulatorWindowInner({
     lastSwitchAtRef.current = Date.now();
     // ACTIVELY switch the box's published page to the new tab NOW. emitTabList above
     // is a state-only tabListUpdate that does NOT switch the published page (per the
-    // A2↔A3 contract), so without this the box keeps publishing the PRIOR tab and the
+    // harness contract), so without this the box keeps publishing the PRIOR tab and the
     // founder sees the old page linger until the box happens to catch up (founder
     // 2026-07-02: "new tab keeps the old tab open until the new page loads"). Fire the
     // same activateTab path onActivateTab uses so the box starts loading NEW_TAB_URL
@@ -9500,7 +10031,7 @@ function SimulatorWindowInner({
       // Cancel any in-flight switch retry for the tab being CLOSED so its ack-miss
       // timer can't re-issue activateTab for a tab that no longer exists (the box
       // would try to switch its published page to a removed tab). Same root cause
-      // as the superseded-switch cancel in onActivateTab. (Fable GUI re-audit
+      // as the superseded-switch cancel in onActivateTab. (GUI re-audit
       // 2026-07-02.)
       discardActivationForTab(id);
       // Whether the close moves focus to a neighbour (we closed the ACTIVE tab). Side
@@ -9517,7 +10048,7 @@ function SimulatorWindowInner({
       // Compute the neighbour we're focusing (deterministic from the synchronous tab
       // mirror) so we
       // can ask the box to ACTIVATE it — tabListUpdate is fire-and-forget state-only and
-      // does NOT switch the published page (only activateTab does, per the A2↔A3 contract,
+      // does NOT switch the published page (only activateTab does, per the harness contract,
       // agent-tab-ops.ts). Without an activateTab the strip + address bar flip to the
       // neighbour but the BOX keeps publishing the just-closed tab's page → the founder's
       // "closed a tab and the content didn't change."
@@ -9851,7 +10382,7 @@ function SimulatorWindowInner({
       // (video/GUI desync), and the next tabId-less poll then wrote B's url onto
       // tab C (corrupting the active tab's stored URL). resolveSwitch's own doc
       // says it's called "when a newer switch supersedes it" — this wires that.
-      // (Fable GUI re-audit 2026-07-02.)
+      // (GUI re-audit 2026-07-02.)
       for (const tid of activationRetryRef.current.keys()) {
         if (tid !== id) {
           discardActivationForTab(tid);
@@ -9870,7 +10401,7 @@ function SimulatorWindowInner({
       resetPageChromeForSwitch();
       setActiveTabIdSynchronized(id);
       // INSTANT feedback — show "switching…" on the target tab immediately (real
-      // speed is A3's box-side no-reload). Cleared when the box reports the tab's
+      // speed is the harness's box-side no-reload). Cleared when the box reports the tab's
       // page (resolveSwitch via writeTabPageState / ack), or the hard timeout below.
       beginSwitchAffordance(id);
       emitTabList(tabs, id, authorityEpoch);
@@ -10084,10 +10615,10 @@ function SimulatorWindowInner({
       clearLoadWatchdog();
     });
   };
-  // Sim back/forward (A3 W2870) — steps the device's browser history one entry over
+  // Sim back/forward (W2870) — steps the device's browser history one entry over
   // the control plane (HTTP, unlike navigate which rides the LiveKit data channel; the
   // history route correlates a navigateHistory → navigateHistoryResult round-trip).
-  // Wired to BrowserBar's gated buttons (BACK_FORWARD_ENABLED, flag-off until A3's
+  // Wired to BrowserBar's gated buttons (BACK_FORWARD_ENABLED, flag-off until the harness's
   // daemon handler lands). No-op until the room is connected.
   const onHistory = (direction: 'back' | 'forward'): void => {
     const authorityEpoch = manualInputControl.epoch;
@@ -10150,7 +10681,7 @@ function SimulatorWindowInner({
   // different-aspect archetype keeps the prior window shape + letterboxes (audit S5).
   useEffect(() => {
     sizedToStreamRef.current = false;
-    // A3 W3005 — a new session re-negotiates its archetype dims; drop the latch so the
+    // W3005 — a new session re-negotiates its archetype dims; drop the latch so the
     // box's fresh page_state dims (or the track fallback) re-own the touch space.
     hasPageStateDimsRef.current = false;
     // Re-seed the touch logical frame to the launch archetype until the NEW session's
@@ -10188,14 +10719,14 @@ function SimulatorWindowInner({
     // window-sizing math below, so box == host == video.
     setContentAspect(w / h);
     // FALLBACK touch-coordinate space ONLY. The box's page_state now delivers the
-    // FIXED per-archetype logical content dims (A3 W3005) which OWN the touch space —
+    // FIXED per-archetype logical content dims (W3005) which OWN the touch space —
     // see the page_state reader's hasPageStateDimsRef latch above. Until the first
     // page_state frame carrying dims arrives, derive a provisional space from the
-    // captured-frame dims (A3's 2026-06-29 inner_height capture makes the track ≈ the
+    // captured-frame dims (the harness's 2026-06-29 inner_height capture makes the track ≈ the
     // content viewport, e.g. 402×714) so very-early taps aren't wildly off. Once the
     // latch is set the fixed page_state dims win and this never overrides them — the
     // encoded track downscales under bandwidth (268×476 / 300×654 observed) and is
-    // unreliable for tap coords (A3 W2811 / W3004). Set ONLY on the FIRST frame: a later
+    // unreliable for tap coords (W2811 / W3004). Set ONLY on the FIRST frame: a later
     // aspect-track re-fit must NOT touch the touch space (it's decoupled from the video
     // aspect — the fixed page_state dims own it, and the first-frame fallback already
     // seeded it; re-seeding from a downscaled later frame would drift taps).
@@ -10320,7 +10851,15 @@ function SimulatorWindowInner({
   }, [sessionPaneWide, paneOpen, info]);
 
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-transparent">
+    <div
+      className="flex h-screen w-screen items-center justify-center bg-transparent"
+      // Owner item 4 — no native right-click menu anywhere in the Simulator (on
+      // the phone it offered the VIDEO's own Show All Controls / Save Video Frame
+      // As…; elsewhere, Reload, which drops the session). Text fields keep their
+      // Cut / Copy / Paste. See lib/simulator-context-menu.ts for why nothing
+      // replaces it.
+      onContextMenu={suppressNativeContextMenu}
+    >
       <LiveLatencyBridge room={room} enabled={room !== null} store={latencyStore} />
       <LiveConnectionStatsBridge
         room={room}
@@ -10628,27 +11167,38 @@ function SimulatorWindowInner({
                     <div
                       role="status"
                       data-component="control-unreachable-badge"
-                      className="pointer-events-auto flex items-center gap-2 rounded-full bg-amber-500/90 px-3 py-1 text-[10px] font-medium text-black shadow"
+                      className={
+                        controlReceiptIssue === null && controlKeyRefused
+                          ? // A full sentence: a pill would wrap it into a lozenge.
+                            'pointer-events-auto max-w-[min(90%,22rem)] rounded-lg bg-amber-500/95 px-3 py-1.5 text-center text-[10.5px] font-semibold leading-snug text-black shadow'
+                          : 'pointer-events-auto flex items-center gap-2 rounded-full bg-amber-500/90 px-3 py-1 text-[10px] font-medium text-black shadow'
+                      }
                     >
                       <span>
-                        {controlReceiptIssue === 'timeout'
-                          ? 'Device did not confirm the last input'
-                          : controlReceiptIssue === 'dropped'
-                            ? 'Device dropped the last input'
-                            : controlReceiptIssue === 'failed'
-                              ? 'Device could not apply the last input'
-                              : controlReceiptIssue === 'stalled'
-                                ? 'Connection to the device stalled — inputs are being held. Reconnect to recover.'
-                                : 'Control may not be reaching the device'}
+                        {controlReceiptIssue === null && controlKeyRefused
+                          ? // The server refused this window's key: say the one
+                            // thing that fixes it (a reconnect presents the same key).
+                            SESSION_ACCESS_EXPIRED_NOTICE
+                          : controlReceiptIssue === 'timeout'
+                            ? 'Device did not confirm the last input'
+                            : controlReceiptIssue === 'dropped'
+                              ? 'Device dropped the last input'
+                              : controlReceiptIssue === 'failed'
+                                ? 'Device could not apply the last input'
+                                : controlReceiptIssue === 'stalled'
+                                  ? 'Connection to the device stalled — inputs are being held. Reconnect to recover.'
+                                  : 'Control may not be reaching the device'}
                       </span>
-                      <button
-                        type="button"
-                        data-component="control-unreachable-reconnect"
-                        onClick={manualReconnect}
-                        className="shrink-0 rounded-full bg-black/25 px-2 py-0.5 font-semibold text-black transition-colors hover:bg-black/40"
-                      >
-                        Reconnect
-                      </button>
+                      {!(controlReceiptIssue === null && controlKeyRefused) && (
+                        <button
+                          type="button"
+                          data-component="control-unreachable-reconnect"
+                          onClick={manualReconnect}
+                          className="shrink-0 rounded-full bg-black/25 px-2 py-0.5 font-semibold text-black transition-colors hover:bg-black/40"
+                        >
+                          Reconnect
+                        </button>
+                      )}
                     </div>
                   )}
                   {inputCongested && !controlUnreachable && (
@@ -10701,9 +11251,18 @@ function SimulatorWindowInner({
                     <div
                       role="status"
                       data-component="input-capability-unreported-badge"
-                      className="pointer-events-auto rounded-full bg-amber-400/95 px-3 py-1 text-[10px] font-semibold text-black shadow"
+                      data-overdue={inputReportOverdue ? '' : undefined}
+                      // Owner item 7 — the longer, two-sentence line wraps, so it
+                      // gets the advisory card's shape instead of a pill.
+                      className={
+                        inputReportOverdue
+                          ? 'pointer-events-auto max-w-[min(90%,22rem)] rounded-lg bg-amber-400/95 px-3 py-1.5 text-center text-[10.5px] font-semibold leading-snug text-black shadow'
+                          : 'pointer-events-auto rounded-full bg-amber-400/95 px-3 py-1 text-[10px] font-semibold text-black shadow'
+                      }
                     >
-                      {MANUAL_INPUT_UNREPORTED_BADGE}
+                      {inputReportOverdue
+                        ? MANUAL_INPUT_UNREPORTED_LONG_BADGE
+                        : MANUAL_INPUT_UNREPORTED_BADGE}
                     </div>
                   )}
                   {egressHealth === 'dead_proxy' && (
@@ -10715,7 +11274,7 @@ function SimulatorWindowInner({
                       Proxy connection failed — browsing is unavailable
                     </div>
                   )}
-                  {/* #135 — SOFT load-stall advisory (A3 box 5eeaf794a: a main-frame
+                  {/* #135 — SOFT load-stall advisory (harness box 5eeaf794a: a main-frame
                       nav that hasn't finished in ~40s). NON-blocking — the page is still
                       trying, so a gentle banner with a Retry, NOT the full-screen
                       "failed" overlay. Suppressed while the hard error overlay is up. */}
@@ -10739,7 +11298,7 @@ function SimulatorWindowInner({
                       </button>
                     </div>
                   )}
-                  {/* LOUD transport-fallback badge (A3 wmdoil11r rec (a)): WebRTC
+                  {/* LOUD transport-fallback badge (wmdoil11r rec (a)): WebRTC
                       silently falls back to a TCP/TURN relay when direct UDP is blocked
                       (box firewall / NAT / ISP) — head-of-line blocking makes real-time
                       video feel "1000× slower". Surface it prominently so a relayed
@@ -10775,7 +11334,7 @@ function SimulatorWindowInner({
                     </span>
                   </div>
                 )}
-                {/* A3 W2845 — frozen-renderer ("stalled") badge. The page hung
+                {/* W2845 — frozen-renderer ("stalled") badge. The page hung
                   (the last frame is still showing, the stream still reports live),
                   so we overlay a calm reconnecting indicator on the visible frame
                   rather than blanking to black. Cleared the moment the box reports
@@ -10932,9 +11491,14 @@ function SimulatorWindowInner({
                   data-component="simulator-screen-host"
                   // bg-black so any object-contain margin around the aspect-locked
                   // video reads as bezel-black, never a light see-through border
-                  // (founder 2026-06-23 white-border / A3 W2827).
+                  // (founder 2026-06-23 white-border / W2827).
                   className={`relative min-h-0 flex-1 bg-black ${humanInputEnabled ? 'cursor-none' : ''}`}
                   onPointerDownCapture={inputCongested || !humanInputEnabled ? undefined : showTap}
+                  // Owner item 2 — capture phase, so a scroll is recognised even
+                  // when the video's own input capture handles the move.
+                  onPointerMoveCapture={trackPressTravel}
+                  onPointerUpCapture={endPress}
+                  onPointerCancelCapture={endPress}
                   onPointerMove={moveTouchPoint}
                   onPointerEnter={moveTouchPoint}
                   onPointerLeave={hideTouchPoint}
@@ -10960,7 +11524,7 @@ function SimulatorWindowInner({
                     // top+bottom inside it. Seeded to 402:874 until the first frame.
                     aspectRatio={contentAspect}
                     // Chrome-band masks dropped: the content-only per-archetype fork
-                    // (A3 84de32ad4d, box mac-macstadium-us-001) publishes the web
+                    // (84de32ad4d, box mac-macstadium-us-001) publishes the web
                     // content edge-to-edge with NO bands, so the old bottom/top masks
                     // covered REAL content (founder's black-bottom + top-cutoff). The
                     // captured video IS the device's content frame now.
@@ -10990,6 +11554,10 @@ function SimulatorWindowInner({
                       connStateRef.current = s.kind;
                       setConnState(s.kind);
                       resumeDeferredActivation(sessionId, ownerRoom);
+                      // A failed or abandoned connection re-joins with a FRESH
+                      // token (the launch one may have expired). Not while
+                      // LiveKit is still resuming by itself ('reconnecting').
+                      if (s.kind === 'error' || s.kind === 'disconnected') refreshJoinToken();
                     }}
                     onPublisher={(nextPublisher, ownerRoom) => {
                       if (!ownsPanelRoom(sessionId, ownerRoom)) return;
@@ -11101,7 +11669,7 @@ function SimulatorWindowInner({
                   aligned. Only under exact confirmed manual ownership; AI and pair
                   remain agent-owned. Emits the SAME keyDown/keyUp the host keyboard
                   does — pure chrome, no fingerprint change (the viewport-resize that
-                  WOULD change the page's view is deferred to A3, W2992). */}
+                  WOULD change the page's view is deferred to the harness, W2992). */}
               {keyboardVisible && !keyboardOverlay && humanInputEnabled && (
                 <div
                   data-tauri-drag-region="false"
@@ -11858,6 +12426,10 @@ function SimulatorWindowInner({
                                         node-side; degrades to "measuring…" until observed,
                                         never a false "no HTTP/3". */}
                                     <QuicReadout report={sessionCapabilityReport} />
+                                    {/* Owner item 9 — does the exit relay UDP (WebRTC
+                                        and HTTP/3 need it): the card's and the grid's
+                                        states and words for the same reading. */}
+                                    <UdpReadout report={sessionCapabilityReport} />
                                     {/* Item 11 (owner, N-2) — the exit's passive TCP/IP OS
                                         fingerprint {os · confidence}, off the same
                                         capabilityReport (control-plane measured, projected at
@@ -11927,9 +12499,9 @@ function SimulatorWindowInner({
                     )}
 
                     {/* Files — upload a file into the session's isolated 0o700 jail; the
-                      OPAQUE handle drives a page's <input type=file> (A3 W2851 / founder
+                      OPAQUE handle drives a page's <input type=file> (W2851 / founder
                       "control files"). Upload-only for now — the file-chooser handle-pick
-                      drive (when a page opens a chooser) is A3's next harness piece. */}
+                      drive (when a page opens a chooser) is the next harness piece. */}
                     {activePane === 'files' && (
                       <section
                         data-component="simulator-files"
@@ -12065,8 +12637,8 @@ function SimulatorWindowInner({
                     )}
 
                     {/* Downloads — files a page wrote into the session's download jail
-                      (A3 W2856 / founder "control files"). Click one to save it to your
-                      machine. Empty until A3's fork download-delegate populates the jail. */}
+                      (W2856 / founder "control files"). Click one to save it to your
+                      machine. Empty until the fork's download-delegate populates the jail. */}
                     {activePane === 'downloads' && (
                       <DownloadsListSubscriber store={downloadsStore}>
                         {(downloads) => (

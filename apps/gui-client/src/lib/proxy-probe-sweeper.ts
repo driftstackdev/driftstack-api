@@ -1,4 +1,4 @@
-// Background proxy re-check — Wave 3 / P-8.
+// Background proxy re-check — P-8.
 //
 // WHY THIS EXISTS, precisely: single launch already re-probes the proxy at
 // launch time ("Re-test the proxy NOW rather than trusting whatever the cache

@@ -13,7 +13,7 @@
 //      stream selection) so every consumer in gui-client gets the
 //      same behaviour.
 //   2. Carry the InputEvent encoding that the Mac-side Quartz
-//      decoder (Agent 1's Swift code in commit 9170da82) accepts.
+//      decoder (the harness's Swift code in commit 9170da82) accepts.
 
 import { Room, RoomEvent } from 'livekit-client';
 import type { LiveKitInfo } from '@driftstack/sdk';
@@ -30,7 +30,7 @@ import {
 export { isBenignTeardownError } from './livekit-errors';
 
 /** LK.6.d — the input-event schema the Mac side decodes. Must
- *  stay in lock-step with Agent 1's Swift `InputEvent` enum. */
+ *  stay in lock-step with the harness's Swift `InputEvent` enum. */
 export type InputEvent =
   | { type: 'mouseMove'; x: number; y: number }
   | { type: 'mouseDown'; x: number; y: number; button: 0 | 1 | 2 }
@@ -39,21 +39,21 @@ export type InputEvent =
   | { type: 'keyUp'; key: string; modifiers?: readonly string[]; id?: string }
   | { type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }
   // Touch vocab (2026-06-08 product directive; device-CSS px; harness owns dynamics).
-  // Lock-step with packages/api-types InputEventSchema + Agent 1's harness.
+  // Lock-step with packages/api-types InputEventSchema + the Mac harness.
   | { type: 'tap'; x: number; y: number; id?: string }
   | { type: 'touchStart'; x: number; y: number; touchId: number }
   | { type: 'touchMove'; x: number; y: number; touchId: number }
   | { type: 'touchEnd'; x: number; y: number; touchId: number; id?: string }
   | { type: 'swipe'; x1: number; y1: number; x2: number; y2: number; durationMs: number }
-  // URL navigation over the SAME reliable data channel as taps (A3 W2668; founder
+  // URL navigation over the SAME reliable data channel as taps (W2668; founder
   // "can't press the URL bar"). The fork's rendered iOS-Safari URL bar is browser
   // CHROME — un-tappable via the WebDriver page-touch path — so the GUI provides
-  // its own address control and emits this command. Agent 1's RoomDataDispatcher
+  // its own address control and emits this command. The harness's RoomDataDispatcher
   // routes it to a WebDriver navigate WITH a full http/https allowlist + SSRF
   // rejection (≤4096 bytes, non-empty); no server route is needed (that would 401
   // for the keychain-less Simulator app).
   | { type: 'navigate'; url: string }
-  // Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract). The GUI owns
+  // Browser-style page TABS (doc-150 item 4; locked harness contract). The GUI owns
   // the tab list; the harness keeps one renderer/page per tab and switches the
   // PUBLISHED page on `activateTab`. Both ride the SAME reliable data channel as
   // taps/navigate.
@@ -78,10 +78,10 @@ export type InputEvent =
       url: string;
       scrollY: number;
     }
-  // Paste-into-device (QW1, A3 accepted 2026-07-11) — bulk text typed into the focused
+  // Paste-into-device (QW1, harness-accepted 2026-07-11) — bulk text typed into the focused
   // field on the device. The GUI's ⌘V reads the Mac clipboard and sends ONE atomic
   // `text` event (NOT per-char keyDown/keyUp — that would flood the reliable channel);
-  // Agent 1's harness types it via performKeyActions (per-key human hold, un-flooded +
+  // The harness types it via performKeyActions (per-key human hold, un-flooded +
   // non-robotic). A GUI↔box transport detail like navigate / tab ops — NOT part of the
   // customer InputEventSchema (see packages/api-types agent-tab-ops).
   | { type: 'text'; text: string; id?: string }
@@ -224,7 +224,7 @@ export async function connectToAgentSession(room: Room, info: LiveKitInfo): Prom
 }
 
 /** LK.6.d — send an InputEvent via the LiveKit DataChannel. The
- *  Mac harness (Agent 1's RoomDataDispatcher) decodes the JSON and
+ *  Mac harness (its RoomDataDispatcher) decodes the JSON and
  *  dispatches Quartz CGEvents.
  *
  *  Reliability: `lossy: false` (TCP-style; mouse/key events MUST
@@ -458,9 +458,9 @@ function publishWithinInputBound(publish: Promise<void>): Promise<InputPublishOu
 }
 
 /** Send a `navigate` command over the SAME reliable LiveKit DataChannel as
- *  taps (A3 W2668; founder "can't press the URL bar"). The fork's rendered
+ *  taps (W2668; founder "can't press the URL bar"). The fork's rendered
  *  iOS-Safari URL bar is browser CHROME — the WebDriver page-touch path can't
- *  drive it — so the GUI's own address bar emits this command instead. Agent 1's
+ *  drive it — so the GUI's own address bar emits this command instead. The harness's
  *  RoomDataDispatcher routes it to a WebDriver navigate WITH a full http/https
  *  allowlist + SSRF rejection; it rides the established session channel, so no
  *  server route is needed (POST /v1/agent-sessions/:id/navigate would 401 for the
@@ -531,7 +531,7 @@ function publishWithinTabSyncBound(room: Room, publish: Promise<void>): Promise<
   });
 }
 
-/** Send the FULL tab list to the harness (doc-150 item 4; locked A2↔A3 contract).
+/** Send the FULL tab list to the harness (doc-150 item 4; locked harness contract).
  *  Fire-and-forget — the GUI emits this on EVERY new / close / switch / reorder so
  *  the harness reconciles its per-tab pages (create missing, drop closed) and knows
  *  which tab (`activeTabId`) is published. reliable=true (a dropped list would leave
@@ -599,7 +599,7 @@ export function sendTabListUpdate(
   return state.drain;
 }
 
-/** Switch the PUBLISHED page to another tab (doc-150 item 4; locked A2↔A3 contract).
+/** Switch the PUBLISHED page to another tab (doc-150 item 4; locked harness contract).
  *  Mints a request id exactly as before. Correlating callers may receive it through
  *  `onRequestId` synchronously before publish begins, so their pending owner exists
  *  before a fast reply can arrive. Returns the same id placed on the wire.

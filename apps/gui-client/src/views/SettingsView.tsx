@@ -38,7 +38,7 @@ import {
 } from '../lib/device-key-refusal';
 import { WEB_DASHBOARD_HOST, WEB_DASHBOARD_SETTINGS_URL } from '../lib/web-dashboard';
 import { useSettings } from '../lib/SettingsContext';
-import { forgetSignedOutAccount } from '../lib/forget-signed-out-account';
+import { forgetSignedOutAccount, SIGN_OUT_CONFIRM_MESSAGE } from '../lib/forget-signed-out-account';
 import { isCloudBaseUrl } from '../lib/telemetry';
 import { DEFAULT_SETTINGS, rememberedKeyFor } from '../lib/settings';
 import { normalizeNavigateUrl } from '../lib/address-bar';
@@ -47,7 +47,14 @@ import { maskApiKey } from '../components/ApiKeyMaskedSpan';
 import { SettingsAccountCard } from '../components/SettingsAccountCard';
 import { useToasts } from '../lib/toasts';
 import { useAppVersion } from '../lib/app-version';
-import { checkForUpdateVerbose, type AvailableUpdate } from '../lib/updater';
+import {
+  checkForUpdateVerbose,
+  MOVE_TO_APPLICATIONS_SENTENCE,
+  type AvailableUpdate,
+} from '../lib/updater';
+
+/** `UpdateLocationError`'s name (lib/updater.ts). */
+const UPDATE_LOCATION_ERROR_NAME = 'UpdateLocationError';
 
 const CLOUD_URL = 'https://api.driftstack.dev';
 const SELF_HOSTED_DEFAULT = 'http://localhost:3000';
@@ -92,7 +99,9 @@ export function SettingsView(): JSX.Element {
   // calls it (App.tsx:698) — and Settings simply dropped it on the floor, so a
   // customer who deliberately went looking for an update was told one was
   // coming and then nothing happened. Reported by the owner exactly that way.
-  const [installState, setInstallState] = useState<'idle' | 'installing' | 'failed'>('idle');
+  const [installState, setInstallState] = useState<'idle' | 'installing' | 'failed' | 'blocked'>(
+    'idle',
+  );
   const [installPct, setInstallPct] = useState(0);
   const runUpdateCheck = async (): Promise<void> => {
     setUpdateCheck('checking');
@@ -119,7 +128,14 @@ export function SettingsView(): JSX.Element {
       await foundUpdate.install((f) => setInstallPct(Math.round(f * 100)));
       // On success the app relaunches into the new build, so there is no
       // success state to render — anything after this is the failure path.
-    } catch {
+    } catch (e) {
+      // Where the app runs from cannot take an update: say what to do, not
+      // "try again" (updater.ts has logged it once).
+      // By name, not `instanceof`: a check in a catch must not be able to throw.
+      if (e instanceof Error && e.name === UPDATE_LOCATION_ERROR_NAME) {
+        setInstallState('blocked');
+        return;
+      }
       // Surface it. The running app is untouched per install()'s contract, so
       // "failed" is recoverable: the customer can retry or download manually.
       setInstallState('failed');
@@ -957,10 +973,12 @@ export function SettingsView(): JSX.Element {
             onClick={() => {
               void (async () => {
                 if (
-                  await confirm(
-                    'Sign out on this computer? Your API key is removed from this app only. It stays valid until you revoke it in the web dashboard.',
-                    { confirmLabel: 'Sign out', tone: 'danger' },
-                  )
+                  // The same text as the sidebar and ⌘⇧L: it names what leaves
+                  // this computer and what stays, not only the API key.
+                  await confirm(SIGN_OUT_CONFIRM_MESSAGE, {
+                    confirmLabel: 'Sign out',
+                    tone: 'danger',
+                  })
                 ) {
                   // Await the keychain write BEFORE clearing the draft — a
                   // fire-and-forget update that fails would leave the UI signed
@@ -1230,6 +1248,8 @@ export function SettingsView(): JSX.Element {
                   stuck on a "Retry install" that has no way to succeed. */}
               {updateCheck === 'found' &&
                 foundUpdate !== null &&
+                foundUpdate.installBlocked === undefined &&
+                installState !== 'blocked' &&
                 (foundUpdate.downloadOnly === true ? (
                   <a
                     href={foundUpdate.downloadUrl}
@@ -1267,7 +1287,11 @@ export function SettingsView(): JSX.Element {
                 {updateCheck === 'none' && 'You are on the latest version.'}
                 {updateCheck === 'found' &&
                   installState === 'idle' &&
+                  foundUpdate?.installBlocked === undefined &&
                   `Version ${foundUpdate?.version ?? ''} is available.`}
+                {updateCheck === 'found' &&
+                  (installState === 'blocked' || foundUpdate?.installBlocked !== undefined) &&
+                  `Version ${foundUpdate?.version ?? ''} is available. ${MOVE_TO_APPLICATIONS_SENTENCE}`}
                 {installState === 'installing' &&
                   (installPct > 0
                     ? `Installing ${String(installPct)}%…`

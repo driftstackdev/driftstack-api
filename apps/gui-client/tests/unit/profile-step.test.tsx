@@ -2,8 +2,8 @@
 //
 // Focused on the archetype picker introduced in V-669. The picker derives from
 // ARCHETYPE_REGISTRY filtered to the customer-selectable statuses
-// (launch|available). Since 2026-09-14 that registry is GENERATED from Agent-1 catalog,
-// so its size moves whenever they publish — the arms below count from the
+// (launch|available). Since 2026-09-14 that registry is GENERATED from the fork's catalog,
+// so its size moves whenever it is republished — the arms below count from the
 // registry rather than pinning a number, and the held CriOS family is checked to
 // stay OUT of the picker. The iPhone 17 26.4 launch default is still
 // pre-selected. Skip path doesn't fire any API call.
@@ -40,7 +40,7 @@ describe('V-669 ProfileStep — archetype picker', () => {
     });
   });
 
-  it('offers the full Agent-1 catalog (launch iphone17 26.4 + every available slug); the iPhone 17 26.4/26.5 bands render and 26.4 is the default', async () => {
+  it('offers the full fork catalog (launch iphone17 26.4 + every available slug); the iPhone 17 26.4/26.5 bands render and 26.4 is the default', async () => {
     profilesCreate.mockClear();
     render(<ProfileStep onSkip={vi.fn()} onCreated={vi.fn()} />);
 
@@ -52,8 +52,8 @@ describe('V-669 ProfileStep — archetype picker', () => {
     // selectable, this arm failed for the RIGHT reason and told the wrong story
     // ("expected 99 to have length 81" reads like the picker broke). The property
     // worth pinning is that the picker offers exactly the selectable registry and
-    // nothing else; the count is a consequence, and it changes every time A1
-    // publishes.
+    // nothing else; the count is a consequence, and it changes every time the
+    // fork's catalog is republished.
     const selectable = ARCHETYPE_REGISTRY.filter(
       (a) => a.status === 'launch' || a.status === 'available',
     );

@@ -229,6 +229,7 @@ export function Composer({
   short,
   onRetryAdopt,
   onGoToSettings,
+  attachNotices,
 }: {
   chat: UseAgentChatResult;
   draft: string;
@@ -245,8 +246,20 @@ export function Composer({
   short?: boolean;
   onRetryAdopt: () => void;
   onGoToSettings?: () => void;
+  /**
+   * What the reattach state says, when the chat is ATTACHING rather than
+   * reattaching. The AI view reopens a past chat, so "the previous session" is
+   * true there and these are omitted. The Simulator's panel attaches to the
+   * session on screen, which is not "previous" — it passes its own words for
+   * the wait and for a failed attach.
+   */
+  attachNotices?: { pending: string; failed: string };
 }): JSX.Element {
   const confirmationPending = chat.pendingConfirmation !== null;
+  const reattachNotice =
+    chat.adoptError !== null
+      ? (attachNotices?.failed ?? chat.adoptError)
+      : (attachNotices?.pending ?? REATTACHING_NOTICE);
   const caption = composerCaption({
     sending: chat.sending,
     stopping: chat.stopping === true,
@@ -372,7 +385,7 @@ export function Composer({
                 className="flex flex-wrap items-center gap-2"
               >
                 <span>
-                  {chat.adoptError ?? REATTACHING_NOTICE}
+                  {reattachNotice}
                   {sendHeldByAdopt && ` ${SEND_HELD_SUFFIX}`}
                 </span>
                 {chat.adoptError !== null && (
@@ -461,7 +474,7 @@ export function Composer({
                 !aiReady
                   ? `${CONNECT_API_KEY_IN_SETTINGS} first`
                   : chat.adopting
-                    ? (chat.adoptError ?? REATTACHING_NOTICE)
+                    ? reattachNotice
                     : chat.stoppedTurnStillRunning
                       ? STILL_FINISHING_NOTICE
                       : proxyState.kind === 'pending'

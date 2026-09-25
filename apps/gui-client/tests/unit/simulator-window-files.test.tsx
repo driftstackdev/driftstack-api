@@ -1,4 +1,4 @@
-// SimulatorWindow — the file-upload "Files" drawer section (A3 W2851 / founder
+// SimulatorWindow — the file-upload "Files" drawer section (W2851 / founder
 // "control files"). Selecting a file uploads its bytes and lists the returned
 // OPAQUE handle; an 'unavailable' result shows the calm pending note. Own file
 // (the AgentSessionPanel→room mock pattern) so it doesn't leak into the base suite.
@@ -88,7 +88,7 @@ function fileInput(c: HTMLElement): HTMLInputElement {
   return c.querySelector('[data-component="simulator-files"] input[type=file]') as HTMLInputElement;
 }
 
-describe('SimulatorWindow — file-upload Files section (A3 W2851)', () => {
+describe('SimulatorWindow — file-upload Files section (W2851)', () => {
   beforeEach(() => {
     uploadMock.mockReset();
     dsSessionCb = null;

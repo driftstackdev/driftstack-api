@@ -23,11 +23,16 @@ import { useRef, useState, type JSX } from 'react';
 import { RelativeTime } from './RelativeTime';
 import { ProxyOsChip, agedChipAge } from './ProxyCapabilities';
 import {
+  OS_FINGERPRINT_MEASURING,
+  VPN_TUNNEL_OS_FINGERPRINT,
   agedOsFingerprintVerdict,
   agedReadingHint,
   type OsFingerprint,
   type OsVerdict,
 } from '../lib/os-fingerprint-verdict';
+// Type-only: ProfilePhoneCard imports this module at runtime, so this one takes
+// the chip's SHAPE from it and never the module.
+import type { CapChip } from './ProfilePhoneCard';
 import type { AgedReading, AgedRowReadings } from '../lib/proxy-probe-cache';
 import {
   CHECK_VPN_ACTION,
@@ -41,6 +46,9 @@ import {
   VPN_UDP_MEASURED_NONE_TITLE,
   VPN_UDP_MEASURED_OK_TITLE,
   VPN_UDP_NOT_MEASURED_TITLE,
+  UDP_NOT_ON_PLAN_CHIP,
+  VPN_UDP_NOT_ON_PLAN_HINT,
+  VPN_QUIC_NOT_ON_PLAN_HINT,
 } from '../lib/proxy-check-copy';
 
 export type ProfilesTableSortKey = 'name' | 'status' | 'country' | 'created' | 'lastUsed';
@@ -69,6 +77,16 @@ export interface ProfileTableRow {
    *  chip's own sentence, age first) instead of "not yet measured", which is
    *  false of a proxy the customer tested this morning. */
   quic?: 'ok' | 'inferred' | 'fail' | 'unknown' | 'aged';
+  /** Owner item 9 (2026-09-24) — the QUIC CHIP, exactly as the grid card draws it
+   *  for this proxy (`capabilityChips(...)`'s QUIC entry, computed by the parent
+   *  from the card's own inputs): its text, tone, hover and data attributes. The
+   *  list used to show QUIC only inside a tooltip. Absent = the card shows no QUIC
+   *  chip either (no proxy, or a tunnel nothing has measured) — the cell then
+   *  states "— QUIC", not measured. */
+  quicChip?: Pick<CapChip, 'text' | 'className' | 'title' | 'attrs'>;
+  /** Owner item 9 — the account's plan has no VPN egress (the card's prop of the
+   *  same name): a VPN row's UDP reads "UDP — not on plan", never "⇢ UDP". */
+  planExcludesVpn?: boolean;
   /** The aged QUIC reading's sentence — `proxyCapabilities`' hint for the same
    *  cap the card renders, so the list and the card say one thing. Only read
    *  beside `quic: 'aged'`. */
@@ -198,7 +216,9 @@ const COLS: ReadonlyArray<Col> = [
   { key: null, label: 'Tags', hideSmall: true },
   { key: 'status', label: 'Status', hideMed: true },
   { key: 'country', label: 'Exit IP' },
-  { key: null, label: 'UDP', hideMed: true },
+  // Owner item 9 — UDP, QUIC and OS, the card's caps row; it was "UDP" when
+  // QUIC lived in a tooltip.
+  { key: null, label: 'Network', hideMed: true },
   { key: 'created', label: 'Created', hideSmall: true },
   { key: 'lastUsed', label: 'Last used', hideSmall: true },
   // doc-150 item 5 — per-profile sealed-store size. Collapses on narrow widths
@@ -311,6 +331,11 @@ function quicClause(r: ProfileTableRow): string | null {
 
 const AGED_CELL_CHIP_CLASS =
   'bg-surface-inset text-ink-muted outline-dashed outline-1 -outline-offset-1 outline-ink-muted/60';
+/** Owner item 9 (2026-09-24) — an aged reading of Apple keeps its green ("if it's
+ *  a Apple, it should be green status"): the same dashed outline, in the ready
+ *  hue. Paint only — exactly as wide as the chip it stands in for. */
+const AGED_MATCH_CELL_CHIP_CLASS =
+  'bg-status-ready/15 text-status-ready outline-dashed outline-1 -outline-offset-1 outline-status-ready/60';
 
 /**
  * The verdict of an aged OS reading ON THIS ROW — `agedOsFingerprintVerdict`,
@@ -383,10 +408,53 @@ function AgedOsCellChip({
       data-component="proxy-os-fingerprint"
       data-os-tone={v.tone}
       data-ok="aged"
-      className={`inline-flex cursor-help items-center gap-0.5 whitespace-nowrap rounded-sm px-1 py-px text-[10px] ${AGED_CELL_CHIP_CLASS}`}
+      className={`inline-flex cursor-help items-center gap-0.5 whitespace-nowrap rounded-sm px-1 py-px text-[10px] ${
+        v.tone === 'match' ? AGED_MATCH_CELL_CHIP_CLASS : AGED_CELL_CHIP_CLASS
+      }`}
     >
       <span aria-hidden="true">{v.glyph}</span>
       {v.label}
+    </span>
+  );
+}
+
+/**
+ * Owner item 9 (2026-09-24) — the QUIC chip in the Network cell: the grid card's
+ * own chip for this proxy (`r.quicChip`, the parent's `capabilityChips` QUIC
+ * entry), in this table's chip size — so the card and the list cannot draw one
+ * reading two ways. With no chip on the card (a tunnel nothing has measured, or
+ * one the plan will never check) the cell states it: "— QUIC", or the plan.
+ */
+function QuicCellChip({ r }: { r: ProfileTableRow }): JSX.Element {
+  const c = r.quicChip;
+  if (c === undefined) {
+    const plan = r.vpn === true && r.planExcludesVpn === true;
+    return (
+      <span
+        data-component="list-quic-chip"
+        data-quic-inferred="false"
+        data-unmeasured={plan ? 'plan_excluded' : 'true'}
+        className="inline-block cursor-help whitespace-nowrap rounded bg-surface-inset px-1.5 py-0.5 text-[10px] font-bold text-ink-muted"
+        title={
+          plan
+            ? VPN_QUIC_NOT_ON_PLAN_HINT
+            : r.vpn === true
+              ? `QUIC not measured yet — run ${CHECK_VPN_ACTION} to measure it through this tunnel.`
+              : 'QUIC not measured yet — run Test to measure it through this proxy.'
+        }
+      >
+        — QUIC
+      </span>
+    );
+  }
+  return (
+    <span
+      {...c.attrs}
+      data-component="list-quic-chip"
+      className={`inline-block cursor-help whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold ${c.className}`}
+      title={c.title}
+    >
+      {c.text}
     </span>
   );
 }
@@ -734,87 +802,125 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           <span className="text-ink-muted">no proxy</span>
         )}
       </td>
-      {/* UDP + OS (collapses below md) */}
+      {/* Network — UDP, QUIC, OS (collapses below md). ⛔ It WRAPS (owner item 9,
+          2026-09-24): three chips side by side measured +101px on the list
+          scene's 1534px shell. Wrapped, the column is as wide as its widest chip
+          and the chips take two lines, inside the two lines the Exit IP cell
+          beside it already takes. */}
       <td className={`px-3 py-2 ${HIDE_MED}`}>
-        <div className="flex items-center gap-1">
-          {agedUdp !== undefined ? (
-            // Nothing current, but this tunnel's UDP WAS measured a while ago. The
-            // pill below says "not measured", which is false of it; this states
-            // what was found, muted and dashed like every aged chip — never the
-            // green of a current verdict — and its hover leads with the age.
-            <span
-              data-udp="aged"
-              data-ok="aged"
-              data-aged-value={agedUdp.value ? 'true' : 'false'}
-              className={`inline-flex cursor-help items-center gap-0.5 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold ${AGED_CELL_CHIP_CLASS}`}
-              // ⛔ (2026-09-17 review) The QUIC clause rides along here too. An
-              // aged UDP reading and a CURRENT QUIC verdict are two different
-              // measurements on one row, and leaving QUIC out of the only hover
-              // this branch renders is how the list came to say less than the card
-              // about the same proxy — the defect A7(a) exists to close.
-              title={`${agedReadingHint(agedUdp.atMs, agedNowMs, r.autoRecheck === true, CHECK_VPN_ACTION)} ${
-                agedUdp.value
-                  ? 'UDP worked through this VPN then.'
-                  : 'UDP did not work through this VPN then.'
-              }${agedUdpQuicSuffix(r)}`}
-            >
-              <span aria-hidden="true">{agedUdp.value ? '✓' : '⤵'}</span>
-              UDP
-            </span>
-          ) : r.vpn === true && r.udp === 'unknown' ? (
-            // (n) N18 — nothing probes a UDP grant on a tunnel: UDP rides inside
-            // it. The card's chip has said so since (h); the list showed a dash,
-            // which reads as "not measured" for something that is not measurable.
-            //
-            // ⛔ (V6 2026-09-16) ITEM 3 — and it is the NOT-MEASURED arm ONLY now.
-            // The node's three-state `udp_associate` is contracted, so "not
-            // measurable" stops being true of a tunnel: a VPN row with a MEASURED
-            // verdict falls through to the chip below and renders it, green for a
-            // relay and muted-⤵ for a measured fall-back. An unconditional pill
-            // here would have swallowed that verdict — the row would keep saying
-            // "UDP via tunnel" over a tunnel a Mac had just measured as carrying
-            // none. The sentence is shared with the grid and the card
-            // (`VPN_UDP_NOT_MEASURED_TITLE`), which is the only state it describes.
-            //
-            // ⛔ (2026-09-17 review) AND IT PRINTS THE QUIC CLAUSE. This is the
-            // branch nearly every VPN row actually lands in — today's node ASSERTS
-            // `udp_associate: true` on the tunnel and the control plane drops the
-            // assertion, so a VPN row is `'unknown'` until a Mac measures one
-            // (ProfilesView's own comment says so where `vpnUdp` is read). The
-            // QUIC clause added for item A7(a) therefore reached almost no tunnel:
-            // a customer with a MEASURED green relay verdict on the card still
-            // read nothing about QUIC in the list. `udpCellTitle` now owns the
-            // not-measured sentence too, so both branches speak with one voice.
-            <span
-              data-udp="tunnel"
-              // 2026-09-12 (review) — secondary ink, not muted: muted on the
-              // divider/60 wash over the raised row is 3.88:1 in dark (the one
-              // profiles-list finding the gate still reported); secondary is 6.71
-              // dark / 5.51 light there.
-              className="inline-block cursor-help rounded bg-surface-divider/60 px-1.5 py-0.5 text-[10px] font-bold text-ink-secondary"
-              title={udpCellTitle(r)}
-            >
-              UDP via tunnel
-            </span>
-          ) : r.udp === 'unknown' ? (
-            <span className="text-ink-muted">–</span>
-          ) : (
-            <span
-              className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                r.udp === 'ok'
-                  ? 'bg-status-ready/20 text-status-ready'
-                  : 'bg-surface-divider/60 text-ink-muted'
-              }`}
-              // (V6 2026-09-16) ITEM 3 — a VPN row reaches this chip only with a
-              // MEASURED verdict, and it gets the tunnel's own wording: the SOCKS5
-              // sentences talk about an exit and a UDP-ASSOCIATE grant, neither of
-              // which exists on a tunnel. Both halves are shared with the grid and
-              // the card so one measurement cannot be described three ways.
-              title={udpCellTitle(r)}
-            >
-              {r.udp === 'ok' ? '✓' : '⤵'}
-            </span>
-          )}
+        <div data-component="list-network-cell" className="flex flex-wrap items-center gap-1">
+          {/* UDP and QUIC stay on one line together; the OS chip is what wraps. */}
+          <span className="inline-flex items-center gap-1 whitespace-nowrap">
+            {agedUdp !== undefined ? (
+              // Nothing current, but this tunnel's UDP WAS measured a while ago. The
+              // pill below says "not measured", which is false of it; this states
+              // what was found, muted and dashed like every aged chip — never the
+              // green of a current verdict — and its hover leads with the age.
+              <span
+                data-udp="aged"
+                data-ok="aged"
+                data-aged-value={agedUdp.value ? 'true' : 'false'}
+                className={`inline-flex cursor-help items-center gap-0.5 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold ${AGED_CELL_CHIP_CLASS}`}
+                // ⛔ (2026-09-17 review) The QUIC clause rides along here too. An
+                // aged UDP reading and a CURRENT QUIC verdict are two different
+                // measurements on one row, and leaving QUIC out of the only hover
+                // this branch renders is how the list came to say less than the card
+                // about the same proxy — the defect A7(a) exists to close.
+                title={`${agedReadingHint(agedUdp.atMs, agedNowMs, r.autoRecheck === true, CHECK_VPN_ACTION)} ${
+                  agedUdp.value
+                    ? 'UDP worked through this VPN then.'
+                    : 'UDP did not work through this VPN then.'
+                }${agedUdpQuicSuffix(r)}`}
+              >
+                <span aria-hidden="true">{agedUdp.value ? '✓' : '⤵'}</span>
+                UDP
+              </span>
+            ) : r.vpn === true && r.udp === 'unknown' && r.planExcludesVpn === true ? (
+              // Owner item 9 — the plan will never measure it: the card's and the
+              // Proxies tab's "UDP — not on plan", never "not measured yet".
+              <span
+                data-udp="tunnel"
+                data-unmeasured="plan_excluded"
+                className="inline-block cursor-help whitespace-nowrap rounded bg-surface-divider/60 px-1.5 py-0.5 text-[10px] font-bold text-ink-secondary"
+                title={VPN_UDP_NOT_ON_PLAN_HINT}
+              >
+                {UDP_NOT_ON_PLAN_CHIP}
+              </span>
+            ) : r.vpn === true && r.udp === 'unknown' ? (
+              // (n) N18 — nothing probes a UDP grant on a tunnel: UDP rides inside
+              // it. The card's chip has said so since (h); the list showed a dash,
+              // which reads as "not measured" for something that is not measurable.
+              //
+              // ⛔ (V6 2026-09-16) ITEM 3 — and it is the NOT-MEASURED arm ONLY now.
+              // The node's three-state `udp_associate` is contracted, so "not
+              // measurable" stops being true of a tunnel: a VPN row with a MEASURED
+              // verdict falls through to the chip below and renders it, green for a
+              // relay and muted-⤵ for a measured fall-back. An unconditional pill
+              // here would have swallowed that verdict — the row would keep saying
+              // "UDP via tunnel" over a tunnel a Mac had just measured as carrying
+              // none. The sentence is shared with the grid and the card
+              // (`VPN_UDP_NOT_MEASURED_TITLE`), which is the only state it describes.
+              //
+              // ⛔ (2026-09-17 review) AND IT PRINTS THE QUIC CLAUSE. This is the
+              // branch nearly every VPN row actually lands in — today's node ASSERTS
+              // `udp_associate: true` on the tunnel and the control plane drops the
+              // assertion, so a VPN row is `'unknown'` until a Mac measures one
+              // (ProfilesView's own comment says so where `vpnUdp` is read). The
+              // QUIC clause added for item A7(a) therefore reached almost no tunnel:
+              // a customer with a MEASURED green relay verdict on the card still
+              // read nothing about QUIC in the list. `udpCellTitle` now owns the
+              // not-measured sentence too, so both branches speak with one voice.
+              <span
+                data-udp="tunnel"
+                // 2026-09-12 (review) — secondary ink, not muted: muted on the
+                // divider/60 wash over the raised row is 3.88:1 in dark (the one
+                // profiles-list finding the gate still reported); secondary is 6.71
+                // dark / 5.51 light there.
+                className="inline-block cursor-help whitespace-nowrap rounded bg-surface-divider/60 px-1.5 py-0.5 text-[10px] font-bold text-ink-secondary"
+                title={udpCellTitle(r)}
+              >
+                {/* Owner item 9 — the card's and the Proxies tab's word for the same
+                  state (it read "UDP via tunnel" here). */}
+                ⇢ UDP
+              </span>
+            ) : r.udp === 'unknown' ? (
+              r.hasProxy ? (
+                <span
+                  data-udp="unmeasured"
+                  className="inline-block cursor-help whitespace-nowrap rounded bg-surface-inset px-1.5 py-0.5 text-[10px] font-bold text-ink-muted"
+                  title="UDP not measured yet — run Test to check UDP (WebRTC) through this proxy."
+                >
+                  — UDP
+                </span>
+              ) : (
+                <span className="text-ink-muted">–</span>
+              )
+            ) : (
+              <span
+                // ⛔ 2026-09-24 — the card's chip tones (CHIP_READY / CHIP_MUTED).
+                // While this chip was a bare '✓' / '⤵' the WCAG gate skipped it as
+                // a glyph; with the word on it, it measured 3.98:1 (ready/20 on the
+                // selected row, light), 4.49 (dark) and 3.88 (muted on divider/60,
+                // dark). The card's tones clear 4.5 on every row the card sits on.
+                className={`inline-block whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                  r.udp === 'ok'
+                    ? 'bg-status-ready/10 text-status-ready'
+                    : 'bg-ink-muted/15 text-ink-secondary'
+                }`}
+                // (V6 2026-09-16) ITEM 3 — a VPN row reaches this chip only with a
+                // MEASURED verdict, and it gets the tunnel's own wording: the SOCKS5
+                // sentences talk about an exit and a UDP-ASSOCIATE grant, neither of
+                // which exists on a tunnel. Both halves are shared with the grid and
+                // the card so one measurement cannot be described three ways.
+                title={udpCellTitle(r)}
+              >
+                {/* Owner item 9 — "UDP" on the chip itself, the card's text; the
+                  column holds QUIC and OS beside it now. */}
+                {r.udp === 'ok' ? 'UDP ✓' : '⤵ UDP'}
+              </span>
+            )}
+            {r.hasProxy ? <QuicCellChip r={r} /> : null}
+          </span>
           {/* C4 — the OS row the owner could not find, on the surface they read
             beside the grid. Rendered from the SHARED ProxyOsChip so the list and
             the card cannot disagree about what a fingerprint means, and ONLY
@@ -859,6 +965,23 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               autoRecheck={r.autoRecheck === true}
               nowMs={agedNowMs}
               vpn={r.vpn === true}
+            />
+          ) : r.hasProxy ? (
+            // ⛔ Owner item 9 (2026-09-24) — the rule above ("never paint '—' for a
+            // row that was simply not passed a value") is retired on purpose. This
+            // row IS always passed the same reading the card is handed, so an
+            // absent one is the card's absence, and the card states it: '— OS'
+            // ("OS not measured yet"), the tunnel's cause on a VPN row, '… OS'
+            // while this client's test runs. The list now states the same thing
+            // instead of an empty cell that reads like a missing feature.
+            <ProxyOsChip
+              fingerprint={
+                r.vpn === true
+                  ? VPN_TUNNEL_OS_FINGERPRINT
+                  : r.testing
+                    ? OS_FINGERPRINT_MEASURING
+                    : undefined
+              }
             />
           ) : null}
         </div>
@@ -916,7 +1039,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
         {editingNote ? (
           <div
             aria-busy={noteSaving}
-            className="flex max-w-[16rem] flex-col gap-1"
+            className="flex max-w-[13rem] flex-col gap-1"
             onClick={(e) => e.stopPropagation()}
           >
             <input
@@ -954,7 +1077,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               setNoteError(null);
               setEditingNote(true);
             }}
-            className="block max-w-[16rem] truncate text-left text-ink-secondary hover:text-ink-primary"
+            className="block max-w-[13rem] truncate text-left text-ink-secondary hover:text-ink-primary"
             title="Click to edit note"
           >
             {r.note}

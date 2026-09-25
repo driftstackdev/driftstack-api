@@ -435,7 +435,7 @@ const EMAIL_EVENTS = [
         </div>
       </div>
 
-      {/* S35 2026-07-07 (fable-frontend-audit) — dedicated load-failure
+      {/* S35 2026-07-07 (frontend audit) — dedicated load-failure
           state. A transient non-2xx on the status GET used to fall back
           to the 'empty' panel, telling a customer WITH a stored key
           "No key on file" — a false claim about their credential. */}
@@ -1620,7 +1620,7 @@ const EMAIL_EVENTS = [
       const byokStateLoading = document.querySelector('[data-byok-state="loading"]');
       const byokStateEmpty = document.querySelector('[data-byok-state="empty"]');
       const byokStateSet = document.querySelector('[data-byok-state="set"]');
-      // S35 2026-07-07 (fable-frontend-audit) — 4th state: load failure.
+      // S35 2026-07-07 (frontend audit) — 4th state: load failure.
       const byokStateError = document.querySelector('[data-byok-state="error"]');
       const byokRetryBtn = document.querySelector('[data-byok-retry]');
       const byokSetAt = document.querySelector('[data-byok-set-at]');
@@ -1731,7 +1731,7 @@ const EMAIL_EVENTS = [
         })
           .then((r) => {
             if (r.status === 404) return null; // empty (no key set)
-            // S35 2026-07-07 (fable-frontend-audit) — parse-safe: a 5xx
+            // S35 2026-07-07 (frontend audit) — parse-safe: a 5xx
             // from a gateway carries an HTML body, so r.json() itself
             // rejects; .catch(() => ({})) keeps the HTTP status as the
             // surfaced error instead of a JSON-parse one.
@@ -1774,7 +1774,7 @@ const EMAIL_EVENTS = [
           })
           .catch((err) => {
             if (loadGeneration !== byokLoadGeneration) return undefined;
-            // S35 2026-07-07 (fable-frontend-audit) — a load FAILURE is
+            // S35 2026-07-07 (frontend audit) — a load FAILURE is
             // not an empty keyring: showing 'empty' here told a customer
             // with a stored key "No key on file" on any transient non-2xx.
             byokShowError(requestErrorMessage(err, "Couldn't check whether a key is saved. Try again."));
@@ -1817,7 +1817,7 @@ const EMAIL_EVENTS = [
             body: JSON.stringify({ api_key: key }),
           })
             .then((r) => {
-              // S35 2026-07-07 (fable-frontend-audit) — parse-safe non-2xx
+              // S35 2026-07-07 (frontend audit) — parse-safe non-2xx
               // handling (HTML error bodies reject r.json()).
               if (!r.ok)
                 return r
@@ -1886,7 +1886,7 @@ const EMAIL_EVENTS = [
             headers: { authorization: 'Bearer ' + token },
           })
             .then((r) =>
-              // S35 2026-07-07 (fable-frontend-audit) — parse-safe non-2xx.
+              // S35 2026-07-07 (frontend audit) — parse-safe non-2xx.
               r.ok
                 ? r.json()
                 : r
@@ -1931,7 +1931,7 @@ const EMAIL_EVENTS = [
                 headers: { authorization: 'Bearer ' + token },
               },
             );
-            // S35 2026-07-07 (fable-frontend-audit) — parse-safe non-2xx.
+            // S35 2026-07-07 (frontend audit) — parse-safe non-2xx.
             if (!response.ok && response.status !== 404) {
               const body = await response.json().catch(() => ({}));
               throw window.driftstackResponseError(response, body);

@@ -1,4 +1,4 @@
-// GUI UX pass (Wave 1) — unit tests for pageErrorCopy. The live-session surface
+// GUI UX pass — unit tests for pageErrorCopy. The live-session surface
 // must NEVER show a raw transport code (e.g. a cryptic -1004) to the operator; the
 // default branch collapses any raw harness message to a friendly generic line, and
 // HTTP statuses get plain "what happened" copy that still keeps the (user-meaningful)

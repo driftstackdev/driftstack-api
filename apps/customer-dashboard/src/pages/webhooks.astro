@@ -6,7 +6,7 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 // instant paint; the inline <script> below replaces them with live
 // data when ds_web_session_token is in localStorage.
 //
-// S32 2026-07-07 (fable-frontend-audit) — removed the MOCK_WEBHOOKS /
+// S32 2026-07-07 (frontend audit) — removed the MOCK_WEBHOOKS /
 // MockWebhookEndpoint / frontmatter fmtIsoDay block: it was never
 // rendered (the template ships skeletons, not the mock), yet the
 // list-fetch error path told the customer "showing preview data
@@ -439,7 +439,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         Get notified when sessions finish or fail, crypto payments complete, and
         more. Just add a URL and pick the events you want.
       </p>
-      {/* S32 2026-07-07 (fable-frontend-audit) — was <a href="#new">, a
+      {/* S32 2026-07-07 (frontend audit) — was <a href="#new">, a
           dead anchor (no #new target, no handler): the primary CTA for
           every zero-endpoint customer did nothing. Now the same
           data-show-create trigger the header button uses. */}
@@ -690,7 +690,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             )
             .then((body) => {
               hideCreate();
-              // S32 2026-07-07 (fable-frontend-audit) — re-enable the submit
+              // S32 2026-07-07 (frontend audit) — re-enable the submit
               // button on SUCCESS too (only the .catch did before), or the
               // form is stuck on 'Creating…' after the first create and a
               // second endpoint can never be submitted without a reload.
@@ -830,7 +830,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         // response. Falls back to zeros if missing.
         const counts = e.delivery_counts || { delivered: 0, failed: 0, dlq: 0 };
         const dlqClass = counts.dlq > 0 ? 'text-tk-err-text' : 'text-tk-ink-3';
-        // S32 2026-07-07 (fable-frontend-audit) — was a dead #requeue-<id>
+        // S32 2026-07-07 (frontend audit) — was a dead #requeue-<id>
         // anchor (no handler, no such endpoint): there is no bulk-requeue
         // API — replay is per-delivery. This now opens the delivery log
         // filtered to the failed deliveries, where each row has a working
@@ -1167,7 +1167,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function loadDeliveries(endpointId, container, status) {
         if (!token) return;
-        // S32 2026-07-07 (fable-frontend-audit) — request-generation guard:
+        // S32 2026-07-07 (frontend audit) — request-generation guard:
         // changing the filter while a fetch is in flight left two live
         // requests, and a stale (slower, unfiltered) response landing last
         // would silently revert the customer's selection. Stamp each load
@@ -1370,7 +1370,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             }
           });
         });
-        // S32 2026-07-07 (fable-frontend-audit) — the "Review DLQ" card
+        // S32 2026-07-07 (frontend audit) — the "Review DLQ" card
         // link expands the delivery log pre-filtered to the dead-lettered
         // deliveries, where each row's Replay button works (replacing the
         // old dead #requeue anchor).
@@ -1968,7 +1968,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       if (!token) {
-        // S32 2026-07-07 (fable-frontend-audit) — no preview data exists;
+        // S32 2026-07-07 (frontend audit) — no preview data exists;
         // show the empty state, not a promise of data below.
         ul.classList.add('hidden');
         empty.classList.add('hidden');
@@ -2016,7 +2016,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             endpointDataAvailable = true;
             syncEndpointAuthority();
             hideBanner();
-            // S32 2026-07-07 (fable-frontend-audit) — the old success banner
+            // S32 2026-07-07 (frontend audit) — the old success banner
             // claimed delivery counts are "not exposed via /v1/webhooks",
             // but V-185 added delivery_counts and the cards render them; the
             // banner contradicted the page. No banner on a clean load.
@@ -2025,7 +2025,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch((err) => {
             endpointDataAvailable = false;
             syncEndpointAuthority('Refresh your endpoint list to enable actions again.');
-            // S32 2026-07-07 (fable-frontend-audit) — the old copy said
+            // S32 2026-07-07 (frontend audit) — the old copy said
             // "Showing preview data below", but no preview data is ever
             // rendered (MOCK_WEBHOOKS was dead code) — the customer was left
             // staring at loading skeletons forever. Show an honest error

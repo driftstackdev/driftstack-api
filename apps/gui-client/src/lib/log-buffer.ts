@@ -119,18 +119,68 @@ function schedulePersist(): void {
 function formatArg(arg: unknown): string {
   if (typeof arg === 'string') return arg;
   if (arg instanceof Error) return arg.stack ?? `${arg.name}: ${arg.message}`;
+  // An Event serialises as `{"isTrusted":…}` at best — its type is what matters.
+  if (typeof Event !== 'undefined' && arg instanceof Event) return describeOpaque(arg);
   try {
-    return JSON.stringify(arg);
+    const json = JSON.stringify(arg);
+    // ⛔ An error-like object whose fields are not enumerable (a DOMException,
+    // an Event, a library's own error class) serialises as `{}`: the dev log
+    // carried ERROR lines that ended in a bare `{}` and named nothing. Say
+    // what it was instead.
+    if (json === '{}' && typeof arg === 'object' && arg !== null) return describeOpaque(arg);
+    return json ?? String(arg);
   } catch {
     // Circular / non-serialisable.
     return String(arg);
   }
 }
 
+function describeOpaque(arg: object): string {
+  const o = arg as { name?: unknown; message?: unknown; type?: unknown };
+  const kind = Object.prototype.toString.call(arg).slice(8, -1);
+  const name = typeof o.name === 'string' && o.name !== '' ? o.name : kind;
+  if (typeof o.message === 'string' && o.message !== '') return `${name}: ${o.message}`;
+  if (typeof o.type === 'string' && o.type !== '') return `[${name} ${o.type}]`;
+  return `[${name}]`;
+}
+
+/**
+ * Credentials never reach the buffer, and so never the on-disk mirror.
+ *
+ * ⛔ Measured 2026-09-24 in a real `dev-log-simulator.txt`: the video library
+ * logs its signalling URL at INFO — `wss://…/rtc/v1?access_token=<JWT>&…` — and
+ * the capture above wrote the room's join token to disk in clear. Narrower than
+ * `sanitizeUiDiagnostic` on purpose: this is the developer's own log, so hosts,
+ * paths and stack frames stay; only secret VALUES go.
+ */
+export function redactSecrets(text: string): string {
+  return (
+    text
+      // Authorization header values.
+      .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/g, '$1 [redacted]')
+      // URL userinfo (https://user:password@host).
+      .replace(/\b((?:https?|wss?|socks5h?):\/\/)[^\s/@:]+:[^\s/@]+@/gi, '$1[redacted]@')
+      // Credential-shaped query parameters.
+      .replace(
+        /([?&#](?:access[_-]?token|token|api[_-]?key|key|secret|password|auth)=)[^&#\s"')]+/gi,
+        '$1[redacted]',
+      )
+      // Driftstack API keys and per-session control keys, wherever they appear.
+      .replace(/\b(ds_(?:live|test)_)[A-Za-z0-9_-]{6,}/g, '$1[redacted]')
+  );
+}
+
 /** Append an entry to the ring buffer (evicting the oldest past the cap) and
- *  notify subscribers. Exported so the bootstrap error handlers can feed it. */
-export function record(level: LogLevel, args: readonly unknown[]): void {
-  const text = args.map(formatArg).join(' ');
+ *  notify subscribers. Exported so the bootstrap error handlers can feed it.
+ *  `flush` writes the mirror at once whatever the level — for a line that must
+ *  survive a crash loop but is not an error in THIS run (the flight recorder's
+ *  report of the previous one). */
+export function record(
+  level: LogLevel,
+  args: readonly unknown[],
+  opts: { flush?: boolean } = {},
+): void {
+  const text = redactSecrets(args.map(formatArg).join(' '));
   entries.push({ id: nextId++, ts: Date.now(), level, text });
   if (entries.length > MAX_ENTRIES) entries.splice(0, entries.length - MAX_ENTRIES);
   for (const fn of listeners) fn();
@@ -139,7 +189,7 @@ export function record(level: LogLevel, args: readonly unknown[]): void {
   // window self-closes) inside that 1s window the last error — the one naming why —
   // never reaches the file. Cancel any pending debounced write first so the forced
   // flush doesn't race a duplicate. Non-error entries stay debounced (coalesced).
-  if (level === 'error') {
+  if (level === 'error' || opts.flush === true) {
     if (persistTimer !== null) {
       clearTimeout(persistTimer);
       persistTimer = null;

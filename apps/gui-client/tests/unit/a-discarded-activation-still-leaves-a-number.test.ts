@@ -36,7 +36,7 @@ describe('P-26 — a discarded activation still leaves a number', () => {
     });
     const kept = map.get('req_1');
     expect(kept).toBeDefined();
-    // The 102,431 ms ack A3 measured on the fleet box is exactly this subtraction.
+    // The 102,431 ms ack measured on the fleet box is exactly this subtraction.
     expect(103_431 - (kept as DiscardedActivation).startedAt - 0).toBe(102_431);
     expect((kept as DiscardedActivation).tabId).toBe('tab_a');
     expect((kept as DiscardedActivation).attempts).toBe(3);

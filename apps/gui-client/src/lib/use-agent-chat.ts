@@ -12,7 +12,7 @@
 // approvals surface) via the memoised SettingsContext client.
 //
 // Deployment note: the server executor is the stub (driver:mock) until
-// Agent-1's real webkit driver lands — so the Claude PLAN is real but the
+// the WebKit fork's real driver lands — so the Claude PLAN is real but the
 // browser ACTIONS are simulated. The hook is agnostic; the view labels it.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';

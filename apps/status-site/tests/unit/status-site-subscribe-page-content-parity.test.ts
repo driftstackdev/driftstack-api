@@ -68,7 +68,7 @@ describe('W369.C status-site /subscribe page content parity', () => {
 
   it('status-code branches: 202 success / 400 invalid email / 429 rate-limit / default error', () => {
     expect(body).toMatch(/res\.status === 202/);
-    // Wave 1119 / Slice 1119.3 C1 — the 202 branch swaps the form for a
+    // Slice 1119.3 C1 — the 202 branch swaps the form for a
     // dedicated confirm pane (separate assertion below); no longer
     // surfaces a single setStatus("Check your inbox…") line.
     expect(body).toMatch(/res\.status === 400/);
@@ -94,7 +94,7 @@ describe('W369.C status-site /subscribe page content parity', () => {
     expect(body).toMatch(/setEmailValid\(true\);\s*subscribeInFlight = true/);
   });
 
-  it('Wave 1119 / Slice 1119.3 C1 — dedicated confirm pane replaces form on 202 (states the address, the sender to look for status@driftstack.dev, the spam-folder hint, the volume-promise reminder + a "Subscribe another address" affordance)', () => {
+  it('Slice 1119.3 C1 — dedicated confirm pane replaces form on 202 (states the address, the sender to look for status@driftstack.dev, the spam-folder hint, the volume-promise reminder + a "Subscribe another address" affordance)', () => {
     // The pane is hidden initially + revealed on 202.
     expect(body).toMatch(
       /<div\s+id="subscribe-confirm"[\s\S]*?class="[^"]*\bhidden\b[^"]*"[\s\S]*?role="status"[\s\S]*?aria-live="polite"/,

@@ -21,16 +21,30 @@
 //                  scrollWidth > clientWidth) must carry a `title` or
 //                  `aria-label` on itself or within six ancestors.
 //
+// ⛔ GRADIENTS ARE BACKGROUNDS (2026-09-24). The background walk used to read
+// `background-color` only. A surface painted with a gradient — the `background:`
+// shorthand with a gradient leaves `background-color` transparent — was walked
+// THROUGH, and its text was measured against whatever lay behind it. That is how
+// the Profiles card shipped as a near-black slab in the LIGHT theme, with 1.05:1
+// names on it, while this gate reported 0 findings (it measured the dark ink on
+// the light page behind the card). Every gradient on the way up is now a
+// background layer: each of its colour stops is a candidate, composited over
+// whatever is behind it, and the text is measured against EVERY candidate — the
+// worst one decides. A finding that only the gradient reveals says so, with the
+// ratio the background-colour-only walk would have read. The positive control
+// carries one such element (see injectControl).
+//
 // Findings cluster by TOKEN (this gate found the light `--ink-muted-rgb` at
 // 2.6–3.3:1 on every surface, the dark `.btn-primary` at 2.9:1 and the accent
 // used as small text on slate at 2.4:1), so the fix is at the token in
 // styles/index.css — and this is the proof the token change closed them.
 //
-// POSITIVE CONTROL (`--control`): a 7px, 1.3:1 span, a clipped untitled span and
-// a mixed-content span faded to 2.46:1 by `opacity` are injected into every
+// POSITIVE CONTROL (`--control`): a 7px, 1.3:1 span, a clipped untitled span, a
+// mixed-content span faded to 2.46:1 by `opacity`, and white text on a
+// near-white gradient over a black `background-color` are injected into every
 // scene, and the run PASSES only when every scene in every theme reports exactly
-// those four findings (one SMALL, two CONTRAST, one CUT-NO-TITLE, all attributed
-// to data-component="scene-quality-control").
+// those five findings (one SMALL, two CONTRAST, one GRADIENT CONTRAST, one
+// CUT-NO-TITLE, all attributed to data-component="scene-quality-control").
 // An instrument that cannot see its own control is not measuring, and a clean
 // run from such an instrument would be the best-looking failure there is.
 //
@@ -270,7 +284,7 @@ function measureStage(root, opts) {
   // every translucent wash away: a status pill's `bg-status-ready/15` tint and
   // the active sidebar badge both measured against the bare card/base colour.
   // Below the stage the harness body is opaque (bg-surface-base).
-  const bgOf = (el) => {
+  const solidBgOf = (el) => {
     let e = el;
     let acc = null; // [r, g, b, alpha] of the stack so far, front-most first
     while (e) {
@@ -306,6 +320,72 @@ function measureStage(root, opts) {
       ];
     }
     return acc;
+  };
+  // The gradient-aware walk (see the header). Every gradient on the way up is a
+  // layer; each of its colour stops is one candidate backdrop, composited over
+  // what is behind it, so a stack of gradients fans out into every combination
+  // (capped — a real stack has one or two). Returns the opaque candidates, or
+  // null when nothing on the way up paints anything (the same "unmeasured" the
+  // background-colour-only walk reported).
+  const stopsOf = (img) => {
+    if (!img || img === 'none' || !/gradient\(/.test(img)) return [];
+    const stops = [];
+    for (const m of img.matchAll(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/g))
+      stops.push([+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]]);
+    return stops;
+  };
+  /** `front` over `back`, both [r, g, b, a]; `front` null = nothing yet. */
+  const under = (front, back) => {
+    if (front === null) return back;
+    const fa = front[3];
+    const ba = back[3];
+    const na = fa + ba * (1 - fa);
+    if (na === 0) return [0, 0, 0, 0];
+    return [
+      (front[0] * fa + back[0] * ba * (1 - fa)) / na,
+      (front[1] * fa + back[1] * ba * (1 - fa)) / na,
+      (front[2] * fa + back[2] * ba * (1 - fa)) / na,
+      na,
+    ];
+  };
+  const bgCandidatesOf = (el) => {
+    let stacks = [null];
+    let painted = false;
+    const open = () => stacks.some((a) => a === null || a[3] < 0.999);
+    for (let e = el; e && open(); e = e.parentElement) {
+      const cs = getComputedStyle(e);
+      // A gradient paints OVER its own element's background-color.
+      const stops = stopsOf(cs.backgroundImage);
+      if (stops.length > 0) {
+        painted = true;
+        const next = [];
+        for (const a of stacks) {
+          if (a !== null && a[3] >= 0.999) next.push(a);
+          else for (const st of stops) next.push(under(a, st));
+        }
+        stacks = next.slice(0, 64);
+      }
+      const c = parse(cs.backgroundColor);
+      if (c && c[3] > 0) {
+        painted = true;
+        stacks = stacks.map((a) => (a !== null && a[3] >= 0.999 ? a : under(a, c)));
+      }
+    }
+    if (!painted) return null;
+    // A translucent stack that never reached an opaque layer sits on the
+    // canvas: composite over the body's colour, else white.
+    const body = parse(getComputedStyle(document.body).backgroundColor) ?? [255, 255, 255, 1];
+    return stacks.map((a) => {
+      const s0 = a ?? [0, 0, 0, 0];
+      if (s0[3] >= 0.999) return s0;
+      const k = s0[3];
+      return [
+        s0[0] * k + body[0] * (1 - k),
+        s0[1] * k + body[1] * (1 - k),
+        s0[2] * k + body[2] * (1 - k),
+        1,
+      ];
+    });
   };
   const ratio = (fg, bg) => {
     const a = lum(fg[0], fg[1], fg[2]);
@@ -419,23 +499,40 @@ function measureStage(root, opts) {
         out.inactive += 1;
       } else if (!decorative(el)) {
         const fg = parse(cs.color);
-        const bg = fg === null ? null : bgOf(el);
-        if (fg === null || bg === null) {
+        const candidates = fg === null ? null : bgCandidatesOf(el);
+        if (fg === null || candidates === null) {
           // ⛔ Counted, never skipped silently: an unparseable colour or a
           // background the walk could not resolve is a hole in the measurement.
           out.unmeasured += 1;
         } else {
           const fa = fg[3] * alpha;
-          const fgc = [
+          const paintOver = (bg) => [
             fg[0] * fa + bg[0] * (1 - fa),
             fg[1] * fa + bg[1] * (1 - fa),
             fg[2] * fa + bg[2] * (1 - fa),
           ];
+          // The WORST backdrop decides (see the header).
+          let bg = candidates[0];
+          let fgc = paintOver(bg);
+          let rr = ratio(fgc, bg);
+          for (const cand of candidates.slice(1)) {
+            const f = paintOver(cand);
+            const r0 = ratio(f, cand);
+            if (r0 < rr) {
+              bg = cand;
+              fgc = f;
+              rr = r0;
+            }
+          }
           const bold = parseInt(cs.fontWeight, 10) >= 700;
           const large = size >= 24 || (bold && size >= 18.66);
           const need = large ? 3 : 4.5;
-          const rr = ratio(fgc, bg);
           if (rr < need) {
+            // What the background-colour-only walk read, for a finding only the
+            // gradient reveals.
+            const solid = solidBgOf(el);
+            const solidRatio = solid === null ? null : ratio(paintOver(solid), solid);
+            const gradientOnly = solidRatio !== null && solidRatio >= need;
             out.contrast.push({
               el: describe(el),
               ratio: +rr.toFixed(2),
@@ -448,6 +545,9 @@ function measureStage(root, opts) {
               placeholder: el.tagName === 'INPUT' || el.tagName === 'TEXTAREA',
               mixed,
               control,
+              ...(gradientOnly
+                ? { gradient: true, ratioIgnoringGradients: +solidRatio.toFixed(2) }
+                : {}),
             });
           }
         }
@@ -469,14 +569,18 @@ function measureStage(root, opts) {
  *  span (an aria-hidden glyph child + its own text) painted white on black at
  *  opacity .3 (2.46:1 — CONTRAST). The third is the control for the two holes
  *  the first instrument had: skip mixed-content text, or read opacity as fully
- *  painted, and it measures 21:1 and goes unreported — the control is MISSED. */
+ *  painted, and it measures 21:1 and goes unreported — the control is MISSED.
+ *  The fourth (2026-09-24) is white text on a near-white GRADIENT laid over a
+ *  black `background-color`: a background-colour-only walk reads 21:1 and passes
+ *  it, and it is painted at 1.04:1 — a GRADIENT finding, counted on its own. */
 function injectControl(root, component) {
   const c = document.createElement('div');
   c.setAttribute('data-component', component);
   c.innerHTML =
     '<span style="font-size:7px;color:#1a1f2e;background:#111827">control small+dim</span>' +
     '<span style="display:inline-block;width:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;background:#000">control clipped text that overflows</span>' +
-    '<span style="display:inline-block;background:#000"><span style="opacity:0.3;color:#fff"><i aria-hidden="true">•</i> control faded mixed</span></span>';
+    '<span style="display:inline-block;background:#000"><span style="opacity:0.3;color:#fff"><i aria-hidden="true">•</i> control faded mixed</span></span>' +
+    '<span style="display:inline-block;background-color:#000;background-image:linear-gradient(#fafafa,#fafafa);color:#fff">control on a gradient</span>';
   root.appendChild(c);
 }
 
@@ -580,7 +684,11 @@ async function main() {
           console.log(
             `  CONTRAST ${c.ratio} (need ${c.need}, ${c.size}px) fg ${c.fg} [${c.fgRaw}${
               c.opacity < 1 ? ` × opacity ${c.opacity}` : ''
-            }] on ${c.bg}  ${c.el}${c.mixed ? ' (own text of a mixed-content element)' : ''}`,
+            }] on ${c.bg}  ${c.el}${c.mixed ? ' (own text of a mixed-content element)' : ''}${
+              c.gradient
+                ? ` (on a gradient; background-color alone read ${c.ratioIgnoringGradients})`
+                : ''
+            }`,
           );
         for (const t of real(res.truncatedNoTitle))
           console.log(`  CUT-NO-TITLE (+${t.over}px)  ${t.el}`);
@@ -592,15 +700,17 @@ async function main() {
         if (CONTROL) {
           const seen = {
             small: ctl(res.small).length,
-            contrast: ctl(res.contrast).length,
+            contrast: ctl(res.contrast).filter((c) => c.gradient !== true).length,
+            gradient: ctl(res.contrast).filter((c) => c.gradient === true).length,
             cut: ctl(res.truncatedNoTitle).length,
           };
-          const ok = seen.small === 1 && seen.contrast === 2 && seen.cut === 1;
+          const ok =
+            seen.small === 1 && seen.contrast === 2 && seen.gradient === 1 && seen.cut === 1;
           res.controlDetected = seen;
           res.controlOk = ok;
           if (!ok) controlMisses += 1;
           console.log(
-            `  CONTROL ${ok ? 'detected' : 'MISSED'} — small ${seen.small}/1 contrast ${seen.contrast}/2 cut ${seen.cut}/1`,
+            `  CONTROL ${ok ? 'detected' : 'MISSED'} — small ${seen.small}/1 contrast ${seen.contrast}/2 gradient ${seen.gradient}/1 cut ${seen.cut}/1`,
           );
         }
       }
@@ -617,7 +727,7 @@ async function main() {
   console.log(`\n${findings} finding(s) across ${cells} scene×theme cells → ${OUT}/report.json`);
   if (CONTROL) {
     console.log(
-      `control: ${cells - controlMisses}/${cells} cells detected all four injected findings`,
+      `control: ${cells - controlMisses}/${cells} cells detected all five injected findings`,
     );
     process.exitCode = controlMisses > 0 ? 1 : 0;
     return;

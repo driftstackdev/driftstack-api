@@ -200,7 +200,7 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).not.toMatch(/billed on one invoice|contracted custom rate|announced at launch/i);
   });
 
-  // S31 2026-07-07 (fable-truth-audit) — the suspended-state/90-day-purge flow never existed:
+  // S31 2026-07-07 (truth audit) — the suspended-state/90-day-purge flow never existed:
   // Stripe cancellation downgrades to the perpetual free tier
   // (services/stripe-webhooks.ts) and deletes nothing.
   it('cancel posture: downgrade to the perpetual free tier, nothing deleted', () => {
@@ -366,7 +366,7 @@ describe('W368.A marketing-site /faq page content parity', () => {
       /Not every iPhone in that span is included: there is no iPhone SE, 16e, or Air profile\./,
     );
     expect(body).not.toMatch(/every iPhone from the\s+13/);
-    // Blanket identity claims retired (A1 sheet: per-surface, noise-protected surfaces vary by design).
+    // Blanket identity claims retired (fingerprint sheet: per-surface, noise-protected surfaces vary by design).
     expect(body).not.toMatch(/bit for bit|all the way down|vanishingly rare|kernel timings/);
     expect(body).not.toMatch(/the same browser code Apple ships/);
     // 2026-09-16 readability pass (verifier re-pin): the 52-word measurement

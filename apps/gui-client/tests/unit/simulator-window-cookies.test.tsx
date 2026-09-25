@@ -1,7 +1,7 @@
 // SimulatorWindow — the fancy live Cookies drawer pane (founder 2026-06-24,
 // APPROVED). Validates per-domain expandable groups, flag chips derived from the
 // REAL cookie fields, the working client-side Export, the disabled Import (the
-// set-cookies wire is pending A3), search, and the inert (null / empty) states.
+// set-cookies wire is pending on the harness), search, and the inert (null / empty) states.
 // Own file (the AgentSessionPanel→room mock pattern) so it doesn't leak into the
 // base suite. Mirrors simulator-window-downloads.test.tsx.
 
@@ -539,18 +539,21 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     expect(setCookiesMock).not.toHaveBeenCalled();
   });
 
-  it('an EXPIRED control key (401) degrades the cookies pane calmly — a reopen hint, NOT an endless "retrying"', async () => {
+  it('an EXPIRED control key (401) degrades the cookies pane calmly — says what fixes it, NOT an endless "retrying"', async () => {
     cookiesMock.mockRejectedValue(new AgentSessionControlError('control key expired', 401));
     const { container } = renderSim();
     openCookies(container);
     await waitFor(() => {
       const pane = container.querySelector('[data-component="simulator-cookies"]');
-      if (!pane || !pane.textContent?.toLowerCase().includes('access has expired'))
+      if (!pane || !pane.textContent?.toLowerCase().includes('access to this session has expired'))
         throw new Error('not yet');
       return pane;
     });
     const pane = container.querySelector('[data-component="simulator-cookies"]') as HTMLElement;
-    expect(pane.textContent?.toLowerCase()).toContain('reopen the session');
+    // Owner 2026-09-24 — the remedy by the main window's own words, never the
+    // unfindable "reopen the session".
+    expect(pane.textContent).toContain('click Open session on this profile');
+    expect(pane.textContent?.toLowerCase()).not.toContain('reopen the session');
     expect(pane.textContent?.toLowerCase()).not.toContain("couldn't load cookies — retrying");
   });
 

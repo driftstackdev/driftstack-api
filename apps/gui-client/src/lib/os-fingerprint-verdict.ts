@@ -68,6 +68,29 @@ export function isOsFingerprintUnavailable(v: unknown): v is OsFingerprintUnavai
   return typeof v === 'string' && (OS_FINGERPRINT_UNAVAILABLE as readonly string[]).includes(v);
 }
 
+/**
+ * Owner item 9 (2026-09-24) — the cause as the server PUBLISHES it since
+ * 2026-09-21 (services/customer-safe-proxy-test-vocabulary.ts renames every
+ * /test reply's cause into customer words), mapped back to the cause this chip
+ * states. `isOsFingerprintUnavailable` alone admitted only the internal words,
+ * so every published cause was DROPPED and the chip fell back to "OS not
+ * measured yet. Run Test" — on a row a Test had just measured. The internal
+ * words an older server sends still map to themselves; anything else is
+ * undefined (today's neutral wording, never a cause this build cannot state).
+ */
+const PUBLISHED_OS_FINGERPRINT_UNAVAILABLE: Readonly<Record<string, OsFingerprintUnavailable>> = {
+  not_available_for_vpn: 'vpn_tunnel',
+  not_captured: 'not_observed',
+  not_offered_here: 'observer_off',
+};
+export function cleanOsFingerprintUnavailable(v: unknown): OsFingerprintUnavailable | undefined {
+  if (isOsFingerprintUnavailable(v)) return v;
+  if (typeof v !== 'string') return undefined;
+  return Object.prototype.hasOwnProperty.call(PUBLISHED_OS_FINGERPRINT_UNAVAILABLE, v)
+    ? PUBLISHED_OS_FINGERPRINT_UNAVAILABLE[v]
+    : undefined;
+}
+
 export interface OsFingerprint {
   os: FingerprintedOs;
   confidence: FingerprintConfidence;
@@ -307,7 +330,12 @@ export function agedOsFingerprintVerdict(
   return {
     ...v,
     aged: true,
-    tone: 'unknown',
+    // ⛔ Owner item 9 (2026-09-24): "if it's a Apple, it should be green status".
+    // An aged reading of Apple is still a reading of Apple, and it still matches
+    // the device — so it keeps the green, in the aged chrome, with its age. Every
+    // OTHER aged reading gives up its tone as before: a red "does not match" from
+    // hours ago is a claim about now that the reading cannot support.
+    tone: v.tone === 'match' ? 'match' : 'unknown',
     hint: `${agedReadingHint(atMs, nowMs, autoRecheck)} What it found then: ${v.hint}`,
   };
 }
@@ -358,6 +386,34 @@ function osFingerprintVerdictUndated(fp: OsFingerprint | undefined): OsVerdict {
       glyph: '—',
       label: 'OS',
       hint: 'OS not measured yet. Run Test on this proxy.',
+    };
+  }
+  // ⛔⛔ Owner item 9 (2026-09-24), verbatim: "And if it's a Apple, it should be
+  // green status, which we don't always have". A reading of Apple (macOS or iOS)
+  // is the device's own family: it MATCHES the iPhone this product presents as,
+  // so it reads green on every surface, whichever vantage took it. Until this
+  // change two vantages withheld it as a neutral '?': a reading of the proxy's
+  // entry point on the observer port ("? OS", which did not even name Apple),
+  // and a reading through a multi-machine proxy ("? Apple") — which is also what
+  // every reading stored before the vantage flags existed looks like. What those
+  // vantages cannot rule out is still said, in the hint: a website may reach a
+  // different machine. The RED arm is untouched — a mismatch is still asserted
+  // only where the vantage supports it (below), so a withheld Windows reading
+  // stays a neutral '?'. This is a deliberate asymmetry, decided by the owner;
+  // the argument against it is the V-219 note further down and is kept there.
+  if (fp.os === 'macos-or-ios') {
+    const label = OS_LABEL['macos-or-ios'];
+    const websitePath = fp.singleHostVantage === true || fp.webPortVantage === true;
+    const entryPointOnly = fp.observedVia === 'proxy_host' && fp.webPortVantage !== true;
+    return {
+      tone: 'match',
+      glyph: '✓',
+      label,
+      hint: websitePath
+        ? `Your proxy presents as ${label} to websites (${fp.confidence} confidence) — it matches the iOS device behind it.${vantageSentence(fp)}`
+        : entryPointOnly
+          ? `Your proxy presents as ${label} (${fp.confidence} confidence) — it matches the iOS device behind it. Only the proxy's entry point could be read, so some websites may reach a different machine.`
+          : `Your proxy presents as ${label} (${fp.confidence} confidence) — it matches the iOS device behind it. It forwards through more than one machine, so some websites may reach a different one.`,
     };
   }
   // ⛔ MEASURED ON PROD 2026-09-14, and it is the owner's whole complaint: every
@@ -470,14 +526,7 @@ function osFingerprintVerdictUndated(fp: OsFingerprint | undefined): OsVerdict {
       hint: `This proxy looks like ${label} (${fp.confidence} confidence), but it forwards through more than one machine, so a website may reach a different one. Not a conclusion either way.`,
     };
   }
-  if (fp.os === 'macos-or-ios') {
-    return {
-      tone: 'match',
-      glyph: '✓',
-      label,
-      hint: `Your proxy presents as ${label} to websites (${fp.confidence} confidence) — it matches the iOS device behind it.${vantageSentence(fp)}`,
-    };
-  }
+  // (An Apple reading returned green at the top of this function — owner item 9.)
   return {
     tone: 'mismatch',
     glyph: '✗',

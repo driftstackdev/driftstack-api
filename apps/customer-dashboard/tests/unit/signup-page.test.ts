@@ -3,7 +3,7 @@
 // success hand-off to /verify-email (stashing ds_signup_email +
 // debug_token in sessionStorage, NO token yet), the per-field
 // validation-issue formatting (zod extensions.issues → friendly
-// messages, Issue 2 wave 1085+), the generic-detail fallback, V-667.C
+// messages, Issue 2), the generic-detail fallback, V-667.C
 // OAuth start, and the V-269 ?next= round-trip. Only source-regex
 // coverage before.
 //

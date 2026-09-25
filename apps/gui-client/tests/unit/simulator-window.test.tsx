@@ -513,7 +513,7 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(container.querySelector('[data-component="simulator-address"]')).not.toBeNull();
   });
 
-  it('shows a LOUD transport-fallback badge when the WebRTC media is relayed / TCP (the #1 latency suspect — A3 wmdoil11r)', () => {
+  it('shows a LOUD transport-fallback badge when the WebRTC media is relayed / TCP (the #1 latency suspect — wmdoil11r)', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
     // No fallback → no badge.
     mockConn = { ...EMPTY_CONN, transport: 'udp', relayed: false };

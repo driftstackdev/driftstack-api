@@ -846,7 +846,7 @@ npm i @driftstack/sdk</code></pre>
         const d = new Date(iso);
         const now = new Date();
         const diffMs = now.getTime() - d.getTime();
-        // S35 2026-07-07 (fable-frontend-audit) — FUTURE timestamps (a
+        // S35 2026-07-07 (frontend audit) — FUTURE timestamps (a
         // rotated key's grace expiry is now+24h) used to hit the floor()d
         // day math and render "-1 days ago" for the whole grace window.
         // Keep future grace deadlines readable instead of rendering negative

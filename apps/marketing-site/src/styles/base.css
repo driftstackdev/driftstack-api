@@ -301,7 +301,7 @@
      device language (`.ai-stage`/`.ai-room`/`.ai-floor`, apps/gui-client
      index.css — a dark "room" behind the phone, a soft pool of light under
      it, re-derived here in this site's own tk-* tokens, never imported: the
-     two apps don't share CSS (see docs/internal design-system notes).
+     two apps don't share CSS (see the internal design-system notes).
      One component change, every AppScreen instance: how-it-works, use cases,
      comparison and pricing all get the calm dark room; only `accent`
      (AppScreen's existing "this one is lit" prop, today just the hero) also
@@ -388,8 +388,8 @@
     @apply text-tk-accent-text font-mono;
   }
 
-  /* ── Fleet v2 recipes (2026-07-03 port from the dashboard kit —
-     docs/internal/2026-07-03-design-system-v2-dashboard.md). Class
+  /* ── Fleet v2 recipes (2026-07-03 port from the dashboard kit — the
+     internal 2026-07-03 design-system v2 dashboard notes). Class
      signatures match apps/customer-dashboard/src/styles/base.css so the
      two surfaces read as one product. */
 
@@ -508,7 +508,7 @@
 }
 
 /* ── Fleet design-system token layer (2026-06-12 rework; token contract per
-   docs/internal/2026-06-12-design-system-spec.md). Two independent axes on
+   the internal 2026-06-12 design-system spec). Two independent axes on
    <html>: data-mode (light|dark) × data-accent (violet|oxblood|teal). Fleet
    markup consumes these via the `tk` Tailwind namespace. The shipped default
    is dark+oxblood ("Fleet Mission Control — Dark + Red", founder-locked

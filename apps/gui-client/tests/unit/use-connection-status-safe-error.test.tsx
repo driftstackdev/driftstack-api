@@ -1,10 +1,14 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useConnectionStatus } from '../../src/lib/use-connection-status';
+import { NOT_ANSWERING_YET, useConnectionStatus } from '../../src/lib/use-connection-status';
+import { RIDE_OUT_BUDGET_MS, resetApiReachabilityForTests } from '../../src/lib/client';
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
+  // The server's reachability is shared with the API client (module state).
+  resetApiReachabilityForTests();
 });
 
 describe('useConnectionStatus safe diagnostics', () => {
@@ -18,8 +22,17 @@ describe('useConnectionStatus safe diagnostics', () => {
       ),
     );
 
+    // 2026-09-24 — no answer reads as "not answering, retrying" while young (a
+    // restart looks like this), and as Offline once it has lasted. Neither
+    // state may carry the native exception text.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const { result } = renderHook(() => useConnectionStatus('https://api.driftstack.dev'));
 
+    await waitFor(() => expect(result.current.state).toBe('degraded'));
+    expect(result.current.lastError).toBe(NOT_ANSWERING_YET);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RIDE_OUT_BUDGET_MS + 4_000);
+    });
     await waitFor(() => expect(result.current.state).toBe('offline'));
     expect(result.current.lastError).toBe('Connection check failed. Open Settings and try again.');
     expect(result.current.lastError).not.toMatch(/private-api|\/Users|token=secret/i);

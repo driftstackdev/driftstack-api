@@ -42,7 +42,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </p>
       </div>
 
-      <!-- Issue 3 wave 1085+ — when ?token= is present in the URL
+      <!-- Issue 3 — when ?token= is present in the URL
            (the link in the verification email), the form below is
            HIDDEN and the page shows "Verifying… one moment" while
            the auto-submit completes. The form is revealed as a
@@ -175,7 +175,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const formEl = root.querySelector('[data-form-fallback]');
       const spinnerEl = root.querySelector('[data-field="auto-verify-spinner"]');
       const introEl = root.querySelector('[data-field="intro"]');
-      // Issue 3 wave 1085+ — when the user clicks the link in the verify
+      // Issue 3 — when the user clicks the link in the verify
       // email, the token is already in `?token=…`. Auto-submit
       // immediately and HIDE the form (replace with a spinner). The
       // form is unhidden as a manual fallback only when:

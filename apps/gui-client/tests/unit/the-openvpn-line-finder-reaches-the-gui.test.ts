@@ -51,7 +51,7 @@ describe('T-20 the OpenVPN line finder reaches the desktop client through @drift
   });
 });
 
-/* A3 root-caused the owner's "session not starting still" on the egress node
+/* The harness side root-caused the owner's "session not starting still" on the egress node
  * 2026-09-14: openvpn 2.7.0 parses the stored config and rejects it outright
  * over a directive it no longer knows (`keysize`). The shared finder now
  * refuses that class at entry, which means the AUTO-STRIP note has to describe

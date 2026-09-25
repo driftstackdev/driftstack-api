@@ -272,7 +272,7 @@ const ARCHETYPES_REFERENCE_URL = 'https://docs.driftstack.io/api/archetypes/';
           <li>GET /v1/status/stream</li>
           <li>GET /v1/status/sla</li>
           <li>POST /v1/status/subscribe</li>
-          {/* S31 2026-07-07 (fable-truth-audit) — confirm/unsubscribe are
+          {/* S31 2026-07-07 (truth audit) — confirm/unsubscribe are
               GET (clicked-from-email links), not POST
               (routes/status-subscribe.ts). */}
           <li>GET /v1/status/subscribe/confirm</li>
@@ -396,7 +396,7 @@ func main() {
     <div class="mt-12">
       <h3 class="text-xl font-semibold text-tk-ink">2. Drive the session</h3>
       <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
-        {/* S31 2026-07-07 (fable-truth-audit) — "swipes" was wrong: the
+        {/* S31 2026-07-07 (truth audit) — "swipes" was wrong: the
             interact kinds are tap / type / scroll / press
             (packages/api-types/src/sessions.ts InteractActionSchema). */}
         Navigate, tap, wait. <code class="font-mono">interact</code>

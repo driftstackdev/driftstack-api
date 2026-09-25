@@ -119,17 +119,22 @@ describe('ProfilesTable', () => {
     cleanup();
   });
 
-  it('UDP shows ✓ (ok) / ✗ (fail) / – (unknown)', () => {
+  // 2026-09-24 (owner item 9) — the chips carry the word, the card's text for the
+  // same reading ('UDP ✓' / '⤵ UDP'), and a proxy nothing has measured says so
+  // ('— UDP'); the bare dash is left for a row with no proxy at all.
+  it('UDP shows UDP ✓ (ok) / ⤵ UDP (fail) / — UDP (not measured) / – (no proxy)', () => {
     const { rerender } = render(<ProfilesTable {...props({ rows: [row({ udp: 'ok' })] })} />);
-    expect(screen.getByText('✓')).toBeTruthy();
+    expect(screen.getByText('UDP ✓')).toBeTruthy();
     rerender(<ProfilesTable {...props({ rows: [row({ udp: 'fail' })] })} />);
-    expect(screen.getByText('⤵')).toBeTruthy();
+    expect(screen.getByText('⤵ UDP')).toBeTruthy();
     rerender(<ProfilesTable {...props({ rows: [row({ udp: 'unknown' })] })} />);
+    expect(screen.getByText('— UDP')).toBeTruthy();
+    rerender(<ProfilesTable {...props({ rows: [row({ udp: 'unknown', hasProxy: false })] })} />);
     expect(screen.getByText('–')).toBeTruthy();
     cleanup();
   });
 
-  it('C4 — the OS row reaches the LIST, and only where this client HOLDS a reading: a fed fingerprint renders its chip, an un-fed row (VPN or not) renders nothing', () => {
+  it('C4 — the OS row reaches the LIST: a fed fingerprint renders its chip, and an un-fed row states the card\'s absence ("— OS"), never a reading (owner item 9, 2026-09-24)', () => {
     // The owner, 2026-09-12: *"i dont see OS currently at profile grid either"* —
     // they read the list beside the grid, and `ProfileTableRow` carried no
     // `osFingerprint` field at all, so no fix to the card could reach this
@@ -213,15 +218,30 @@ describe('ProfilesTable', () => {
     // incidental: the tunnel pill is the NOT-MEASURED arm, and the factory's
     // default `udp: 'ok'` would (correctly) render a MEASURED chip instead. This
     // arm is about the OS chip, so it states the UDP state it means.
+    // ⛔ 2026-09-24 (owner item 9) — REVERSED, deliberately. The row IS always
+    // handed the reading the card is handed, so an absent one is the card's
+    // absence, and the list now states it as the card does: the tunnel's cause on
+    // a VPN row ('— OS', "not available for VPN connections"), "OS not measured
+    // yet" on a SOCKS5 row — never a reading, never an empty cell. The width the
+    // note above warns about is re-measured for the Network cell in the list
+    // scene's fits guard (scripts/marketing-screens.mjs) and the harness.
     rerender(<ProfilesTable {...props({ rows: [row({ vpn: true, udp: 'unknown' })] })} />);
-    expect(screen.getByText('UDP via tunnel')).toBeTruthy();
-    expect(document.querySelector('[data-component="proxy-os-fingerprint"]')).toBeNull();
+    expect(screen.getByText('⇢ UDP')).toBeTruthy();
+    const vpnOs = document.querySelector('[data-component="proxy-os-fingerprint"]');
+    expect(vpnOs?.textContent).toBe('—OS');
+    expect(vpnOs?.getAttribute('title')).toMatch(/not available for VPN connections/);
     rerender(<ProfilesTable {...props({ rows: [row()] })} />);
+    const socksOs = document.querySelector('[data-component="proxy-os-fingerprint"]');
+    expect(socksOs?.textContent).toBe('—OS');
+    expect(socksOs?.getAttribute('data-os-tone')).toBe('unknown');
+    expect(socksOs?.getAttribute('title')).toBe('OS not measured yet. Run Test on this proxy.');
+    // …and a row with no proxy says nothing about an OS it does not have.
+    rerender(<ProfilesTable {...props({ rows: [row({ hasProxy: false })] })} />);
     expect(document.querySelector('[data-component="proxy-os-fingerprint"]')).toBeNull();
     cleanup();
   });
 
-  it("C4/V-219 — a reading with NO single-host vantage still RENDERS on the list, as the withheld '?' tone: this cell decides PRESENCE, the shared verdict decides ASSERTION", () => {
+  it("C4/V-219 — a mismatch reading with NO single-host vantage still RENDERS on the list, as the withheld '?' tone: this cell decides PRESENCE, the shared verdict decides ASSERTION", () => {
     // ⚠️ A DELIBERATE INVERSION, not a regression. Before V-219 this exact
     // fixture — a real macOS/iOS reading carrying no vantage — rendered the
     // green '✓' chip on this surface; it no longer may. The owner measured why
@@ -245,12 +265,18 @@ describe('ProfilesTable', () => {
     // green. A false red is an irritant somebody eventually reports; a false
     // green on a detectable proxy costs a customer their account, and nobody
     // ever files a bug about a reassuring badge.
+    //
+    // ⛔ OWNER 2026-09-24 (item 9): "if it's a Apple, it should be green status".
+    // An Apple reading is now green from every vantage, so the withheld case this
+    // arm needs is the RED one: a Windows reading with no vantage must reach the
+    // cell as the neutral '?', and a cell that spread a vantage of its own would
+    // turn it red. (The fixture was a macOS/iOS reading until then.)
     render(
       <ProfilesTable
         {...props({
           rows: [
             row({
-              osFingerprint: { os: 'macos-or-ios', confidence: 'high', reason: 'SYN/TTL 64' },
+              osFingerprint: { os: 'windows', confidence: 'high', reason: 'SYN/TTL 128' },
             }),
           ],
         })}
@@ -266,7 +292,7 @@ describe('ProfilesTable', () => {
     // Still one glyph plus the same label — the OS that was measured is named,
     // only the claim about it is withheld — so the cell's width budget (see the
     // ProfilesTable comment beside this column) is the same shape as the green.
-    expect(chip?.textContent).toBe('?iOS/macOS');
+    expect(chip?.textContent).toBe('?Windows');
     expect(chip?.getAttribute('title')).toContain('a website may reach a different one');
     cleanup();
   });
@@ -401,9 +427,14 @@ describe('ProfilesTable', () => {
     render(<ProfilesTable {...props({ rows: [row({ sizeLabel: '18.7 MiB' })] })} />);
     expect(within(screen.getByRole('table')).getByText('18.7 MiB')).toBeTruthy();
     cleanup();
-    // never-saved profile → "—"
+    // never-saved profile → "—" (the storage CELL: the Network cell's '— OS'
+    // chip carries a '—' glyph of its own since 2026-09-24)
     render(<ProfilesTable {...props({ rows: [row({ sizeLabel: '—' })] })} />);
-    expect(within(screen.getByRole('table')).getByText('—')).toBeTruthy();
+    expect(
+      within(screen.getByRole('table'))
+        .getAllByText('—')
+        .some((el) => el.tagName === 'TD'),
+    ).toBe(true);
     cleanup();
   });
 
@@ -587,7 +618,7 @@ describe('the "UDP via tunnel" chip reads in secondary ink on its divider wash',
     // lands; a MEASURED row renders the chip below it instead. Stated here so the
     // contrast pin cannot start describing a different element.
     render(<ProfilesTable {...props({ rows: [row({ vpn: true, udp: 'unknown' })] })} />);
-    const chip = screen.getByText('UDP via tunnel');
+    const chip = screen.getByText('⇢ UDP'); // "UDP via tunnel" until 2026-09-24
     expect(chip.getAttribute('data-udp')).toBe('tunnel');
     const cls = chip.className.split(/\s+/);
     expect(cls).toContain('text-ink-secondary');

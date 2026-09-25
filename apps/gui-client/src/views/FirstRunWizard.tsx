@@ -771,7 +771,7 @@ export function ApiKeyStep({
 // customer-selectable statuses — 'launch' (the locked reference) + 'available'
 // (fingerprint-atlas-ready) — exactly as ProfilesView does. 'reference' /
 // 'planned' entries are intentionally excluded; a newly-promoted archetype
-// lights up here automatically the moment A1 flips its status, with zero
+// lights up here automatically the moment its registry status flips, with zero
 // wizard change. The customer-facing copy lives in a per-id lookup with a
 // generic fallback so a future archetype still renders a sensible blurb.
 const SELECTABLE_STATUSES = new Set<ArchetypeStatus>(['launch', 'available']);

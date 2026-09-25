@@ -78,7 +78,7 @@ describe('cleanMeasuredProtocol — the protocol closed-set gate', () => {
   });
 });
 
-/* A3 is wiring the fork's resource-load emitter (2026-09-12). Their hook fires
+/* The harness is wiring the fork's resource-load emitter (2026-09-12). Its hook fires
  * ONCE per resource load, after it completes, and carries no timestamp — so in
  * v1 the harness stamps `started_at` at parse, which is receive time and so
  * approximately COMPLETION. The gap between that and a real fetchStart is the

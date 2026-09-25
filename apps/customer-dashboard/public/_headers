@@ -1,7 +1,7 @@
 # Cloudflare Pages security headers for the customer dashboard.
 #
-# Audit context: docs/internal/2026-05-20-csp-header-audit.md
-# (TIER 5 security pass per FULL AUTOPILOT directive 2026-05-20).
+# Audit context: the 2026-05-20 CSP header audit (internal notes)
+# (TIER 5 security pass, 2026-05-20).
 #
 # Prior state: NO security headers on the dashboard surface. Customer
 # data (account info, API keys, billing, audit log) rendered without
@@ -9,7 +9,7 @@
 # (MIME sniffing surface). This file closes the basic-header gap.
 #
 # Content-Security-Policy is enforced after the runtime-origin audit in
-# docs/internal/2026-05-20-csp-header-audit.md. Astro's intentionally
+# the 2026-05-20 CSP header audit. Astro's intentionally
 # inline application code requires unsafe-inline until the static build
 # can emit stable hashes; remote scripts remain forbidden. API/Sentry
 # connections and HTTPS avatar/data/blob images are explicitly bounded.

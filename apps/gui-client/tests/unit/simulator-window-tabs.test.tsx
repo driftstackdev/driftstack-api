@@ -1,4 +1,4 @@
-// SimulatorWindow — browser-style page TAB strip (doc-150 item 4; locked A2↔A3
+// SimulatorWindow — browser-style page TAB strip (doc-150 item 4; locked harness
 // contract). The GUI owns the tab model and emits two ops over the SAME reliable
 // LiveKit data channel as taps/navigate:
 //   - tabListUpdate (full list, fire-and-forget) on every new / close / switch
@@ -15,7 +15,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent, within, act, waitFor } from '@testing-library/react';
 import { getLogEntries, clearLogEntries } from '../../src/lib/log-buffer';
 
-// A2/A3 2026-08-30 — GATE-ABLE, default immediate. The old unconditional immediate
+// 2026-08-30 — GATE-ABLE, default immediate. The old unconditional immediate
 // resolve hid the real wire ordering from every test in this suite: in production
 // `sendTabListUpdate` is single-flight and can queue behind an in-flight publish,
 // while `sendActivateTab` publishes immediately. A test that arms `tabListGate`
@@ -297,7 +297,7 @@ describe('SimulatorWindow — page tab strip', () => {
   // #116 warm-tabs pre-flight (workflow w58dcbhxt #5): the WINDOW-GLOBAL page chrome
   // (error overlay / freeze badge / loading bar / nav-target gate) must be driven ONLY by a
   // frame for the ACTIVE tab. Today prod page_state carries no tabId so every frame is
-  // implicitly the active tab (unchanged). The moment A3 stamps page_state.tabId AND
+  // implicitly the active tab (unchanged). The moment the harness stamps page_state.tabId AND
   // warm-tabs keeps live BACKGROUND renderers, a background tab's terminal frame would
   // otherwise clobber the FOREGROUND chrome — the #72/#135 false-error, re-introduced
   // cross-tab. url/title still route per-tab; only the global chrome is gated.
@@ -509,7 +509,7 @@ describe('SimulatorWindow — page tab strip', () => {
     }
   });
 
-  // A2/A3 2026-08-30 — the wire ordering, pinned as CONTRACT. A first-touch tab's
+  // 2026-08-30 — the wire ordering, pinned as CONTRACT. A first-touch tab's
   // activateTab may reach the harness BEFORE the tabListUpdate that registers its
   // id, because the list publish queues single-flight while the activate sends
   // immediately. The GUI deliberately does NOT defer the user's action on the

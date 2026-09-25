@@ -1,6 +1,6 @@
-// Wave 29-400 §1+§2 telemetry consumer — parser + aggregator unit tests.
-// Sample log lines mirror the schema in docs/internal/driftstack-
-// telemetry-event-schema-for-gui-panel.md.
+// Plan 29-400 §1+§2 telemetry consumer — parser + aggregator unit tests.
+// Sample log lines mirror the internal telemetry event schema for the GUI
+// panel.
 
 import { describe, expect, it } from 'vitest';
 import {

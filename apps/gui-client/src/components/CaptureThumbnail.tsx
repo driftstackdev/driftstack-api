@@ -33,6 +33,7 @@ type ThumbState = { kind: 'loading' } | { kind: 'ready'; url: string } | { kind:
 export function CaptureThumbnail({
   baseUrl,
   apiKey,
+  controlKey,
   sessionId,
   captureId,
   src,
@@ -40,6 +41,13 @@ export function CaptureThumbnail({
 }: {
   baseUrl: string;
   apiKey: string | null;
+  /**
+   * The session's control key, in a window that holds no account key (the
+   * Simulator). When set, the capture is fetched with it and the account key
+   * is never sent. Undefined in the main window, which fetches exactly as
+   * before.
+   */
+  controlKey?: string | null;
   sessionId: string | null;
   captureId: string;
   /**
@@ -80,7 +88,13 @@ export function CaptureThumbnail({
     let objectUrl: string | null = null;
     let cancelled = false;
     setState({ kind: 'loading' });
-    void fetchAgentCapture(baseUrl, apiKey, sessionId, captureId).then((blob) => {
+    // The main window's call keeps its four arguments exactly; only a window
+    // holding a control key passes the fifth.
+    const request =
+      typeof controlKey === 'string' && controlKey.length > 0
+        ? fetchAgentCapture(baseUrl, null, sessionId, captureId, controlKey)
+        : fetchAgentCapture(baseUrl, apiKey, sessionId, captureId);
+    void request.then((blob) => {
       if (cancelled) return;
       if (blob === null) {
         setState({ kind: 'error' });
@@ -93,7 +107,7 @@ export function CaptureThumbnail({
       cancelled = true;
       if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
     };
-  }, [baseUrl, apiKey, sessionId, captureId, src]);
+  }, [baseUrl, apiKey, controlKey, sessionId, captureId, src]);
 
   // ⛔ THE NOT-READY STATES NEED TO KNOW WHERE THEY ARE DRAWN. `inline` lands in
   // the step row and `figure` inside `.ai-shot-frame`, which is an opaque tile

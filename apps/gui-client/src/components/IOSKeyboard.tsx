@@ -9,7 +9,7 @@
 // so the page sees nothing beyond the keystrokes themselves (identical to host
 // typing today). It does NOT touch the page's view: the keyboard-driven
 // viewport resize (which WOULD change what the page sees) is intentionally
-// deferred to A3's box-side focus/resize signals (W2992). The keyboard mounts
+// deferred to the harness's box-side focus/resize signals (W2992). The keyboard mounts
 // BELOW the video as chrome, so it never moves the <video> on-screen rect the
 // tap/scroll coordinate mapping reads (pointerToViewport maps against the video
 // element's own bounding rect).
@@ -962,7 +962,7 @@ export function IOSKeyboard({
       // "two shift taps IN A ROW". Without clearing this, fast-typing an acronym
       // like "AB" (shift → a → shift, all within 300ms) had the second shift see
       // the FIRST shift's timestamp still within the window and falsely engage
-      // caps-lock. Reset it so only two CONSECUTIVE shift taps lock. (Fable GUI
+      // caps-lock. Reset it so only two CONSECUTIVE shift taps lock. (GUI
       // re-audit 2026-07-02.)
       lastShiftTap.current = 0;
       // One-shot shift reverts after a single letter (iOS); caps-lock persists.
@@ -982,8 +982,8 @@ export function IOSKeyboard({
       // A tap that RELEASES caps-lock must NOT seed the double-tap window: it is
       // the end of a sequence, not the start of one. Otherwise unlock → quick
       // shift tap (intending one-shot) sees this timestamp within 300ms and
-      // isDouble re-engages caps-lock. Mirror onCharPress's reset-to-0. (Fable
-      // GUI re-audit fix.)
+      // isDouble re-engages caps-lock. Mirror onCharPress's reset-to-0. (GUI
+      // re-audit fix.)
       lastShiftTap.current = prev === 'locked' ? 0 : now;
       if (prev === 'locked') return 'off';
       if (isDouble) return 'locked';
@@ -1471,7 +1471,7 @@ function FnKey({
     // touch, synthetic replay) would otherwise leave the FIRST tick() chain
     // orphaned: repeatTimerRef only tracks the latest timeout, so the eventual
     // stopRepeat cancels only the second chain and the first keeps firing
-    // Backspace forever. Exactly one live chain per key. (Fable GUI re-audit fix.)
+    // Backspace forever. Exactly one live chain per key. (GUI re-audit fix.)
     stopRepeat();
     let interval = KEY_REPEAT_START_MS;
     const tick = (): void => {

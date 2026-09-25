@@ -78,7 +78,7 @@
         // a FALSE negative that blocks a perfectly good app (founder-hit
         // 2026-07-07 at machine load 56). Succeed the instant #root has children.
         //
-        // STARVATION-ADAPTIVE (A3 co-diagnosis): this poll runs on the SAME JS
+        // STARVATION-ADAPTIVE (harness co-diagnosis): this poll runs on the SAME JS
         // thread as the bundle, so under starvation its own ticks fire LATE. A
         // tick that arrives far later than its 500ms interval proves the thread
         // was BLOCKED (parsing/mounting, not hung) — that stalled time is not

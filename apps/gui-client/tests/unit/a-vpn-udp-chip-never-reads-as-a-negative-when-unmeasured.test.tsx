@@ -182,15 +182,17 @@ function listProps(rows: ReadonlyArray<ProfileTableRow>): Parameters<typeof Prof
   } as unknown as Parameters<typeof ProfilesTable>[0];
 }
 
+// 2026-09-24 (owner item 9) — ONE word for the UDP reading on every surface: the
+// list's chips now carry the card's own texts ('UDP ✓', '⤵ UDP', '⇢ UDP'); they
+// were a bare '✓' / '⤵' and "UDP via tunnel". The states pinned here are unchanged.
 describe("the profiles list's VPN UDP cell has the same three states", () => {
   it('CRITICAL not measured — the routed-through pill, with the SAME sentence the card carries', () => {
     render(<ProfilesTable {...listProps([listRow()])} />);
-    const pill = screen.getByText('UDP via tunnel');
+    const pill = screen.getByText('⇢ UDP');
     expect(pill.getAttribute('data-udp')).toBe('tunnel');
     expect(pill.getAttribute('title')).toBe(VPN_UDP_NOT_MEASURED_TITLE);
     // …and on this surface too the sentence must STATE the absence, not merely
-    // avoid the negative one. The list's visible words are "UDP via tunnel",
-    // which on their own read as a capability the row has.
+    // avoid the negative one. The chip's visible words ("⇢ UDP") do not say it.
     expect(pill.getAttribute('title') ?? '').toMatch(/not been measured|not measured yet/i);
     expect(pill.getAttribute('title') ?? '').not.toMatch(/no udp/i);
     cleanup();
@@ -202,16 +204,16 @@ describe("the profiles list's VPN UDP cell has the same three states", () => {
     // reading "UDP via tunnel" — the verdict swallowed by the pill that means
     // "nothing measured this".
     render(<ProfilesTable {...listProps([listRow({ udp: 'fail' })])} />);
-    expect(screen.queryByText('UDP via tunnel')).toBeNull();
-    const chip = screen.getByText('⤵');
+    expect(screen.queryByText('⇢ UDP')).toBeNull();
+    const chip = screen.getByText('⤵ UDP');
     expect(chip.getAttribute('title')).toBe(VPN_UDP_MEASURED_NONE_TITLE);
     cleanup();
   });
 
   it('VACUITY CONTROL a measured true renders the green chip with the tunnel wording', () => {
     render(<ProfilesTable {...listProps([listRow({ udp: 'ok' })])} />);
-    expect(screen.queryByText('UDP via tunnel')).toBeNull();
-    const chip = screen.getByText('✓');
+    expect(screen.queryByText('⇢ UDP')).toBeNull();
+    const chip = screen.getByText('UDP ✓');
     expect(chip.getAttribute('title')).toBe(VPN_UDP_MEASURED_OK_TITLE);
     cleanup();
   });
@@ -221,7 +223,7 @@ describe("the profiles list's VPN UDP cell has the same three states", () => {
     // UDP cell at the tunnel sentence would satisfy the arms above and start
     // telling SOCKS5 customers about a tunnel they do not have.
     render(<ProfilesTable {...listProps([listRow({ vpn: false, udp: 'fail' })])} />);
-    const chip = screen.getByText('⤵');
+    const chip = screen.getByText('⤵ UDP');
     expect(chip.getAttribute('title')).not.toBe(VPN_UDP_MEASURED_NONE_TITLE);
     expect(chip.getAttribute('title') ?? '').toMatch(/UDP not supported/i);
     cleanup();

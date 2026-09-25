@@ -1,4 +1,4 @@
-// A3 contract audit (2026-09-05, harness 07c8a693f) — a switch that failed because the
+// Harness contract audit (2026-09-05, harness 07c8a693f) — a switch that failed because the
 // SESSION ended must not be reported as a failed switch.
 //
 // The harness can answer activateTab with six error tokens; the contract doc listed

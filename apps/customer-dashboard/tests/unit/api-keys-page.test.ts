@@ -550,7 +550,7 @@ describe('api-keys page — local integration', () => {
     expect(signal?.aborted).toBe(true);
   });
 
-  // S35 2026-07-07 (fable-frontend-audit) — fmtIso used to floor
+  // S35 2026-07-07 (frontend audit) — fmtIso used to floor
   // (now - date)/day, so any FUTURE timestamp rendered "-1 days ago":
   // every rotated key displayed "expires -1 days ago" for its entire
   // 24h grace window.

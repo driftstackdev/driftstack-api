@@ -2,7 +2,7 @@
 // for the (forthcoming) add-proxy OpenVPN editor, so the form gives INSTANT
 // feedback (and can show the resolved endpoint) before the customer submits and
 // the server's egress.ts refines reject it. The OVPN/WG storage design
-// (docs/internal/2026-06-17-account-proxies-vpn-storage-design.md §4/§5) keeps
+// (internal design notes, 2026-06-17, §4/§5) keeps
 // the .ovpn a verbatim blob; this util does NOT introspect beyond a shape check
 // + extracting the `remote` endpoint.
 //

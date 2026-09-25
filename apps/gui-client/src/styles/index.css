@@ -312,7 +312,7 @@
 }
 
 /* ─── Fleet design-system token layer (2026-06-12 rework) ─────────────
-   Contract: docs/internal/2026-06-12-design-system-spec.md. Two axes on
+   Contract: the internal 2026-06-12 design-system spec. Two axes on
    <html>: data-mode (light|dark) × data-accent (oxblood — the only accent).
    The semantic tailwind colors (surface/ink/accent/status) resolve to
    these vars, so the WHOLE GUI flips with the axes — no component
@@ -4767,26 +4767,82 @@
      the stage's own neutral darks and the black/white of a shadow (the same
      rule `.ai-stage` and `.sim-device` follow, and the same guard reads it).
    Nothing here moves a box: the card's padding, radius, the 220px screen and
-   the fixed body rows are exactly what the layout gates measured before. */
+   the fixed body rows are exactly what the layout gates measured before.
+
+   ⛔ 2026-09-24 (owner: "on light mode, this stays extremely dark and barely
+   visible text. Should match with light/dark theme.") The bezel and the glass
+   were typed as dark literals, so the card stayed a dark slab in the LIGHT
+   theme while every word on it took the light theme's dark ink — 1.1–1.6:1.
+   They are now tokens on the MODE axis (the blocks directly below): the dark
+   values are the ones this stage shipped with, byte for byte; the light values
+   are the light theme's own surfaces, so the card is a lit white tile there.
+   Each surface also declares a `background-color` — the stop the text sits on
+   that contrasts LEAST with the ink — because scripts/gui-text-quality.mjs
+   reads `background-color` only: the gradient-only shorthand left it
+   transparent, the gate walked through both layers to the page behind the
+   card, and measured dark ink against a light page it was never painted on
+   (0 findings on a card nobody could read). */
+[data-mode='dark'] {
+  --pf-bezel-top-rgb: 20 28 47;
+  --pf-bezel-bottom-rgb: 12 19 34;
+  --pf-glass-top-rgb: 27 33 48;
+  --pf-glass-bottom-rgb: 6 8 16;
+  /* the stop with the LEAST contrast against the mode's ink (light ink here) */
+  --pf-bezel-floor-rgb: var(--pf-bezel-top-rgb);
+  --pf-glass-floor-rgb: var(--pf-glass-top-rgb);
+  --pf-lift: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 10px 30px -14px rgb(0 0 0 / 0.8);
+  --pf-lift-hover: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 18px 40px rgb(0 0 0 / 0.45);
+  --pf-glass-rim: inset 0 0 0 1px rgb(255 255 255 / 0.06), inset 0 12px 26px -18px rgb(0 0 0 / 0.9);
+}
+[data-mode='light'] {
+  --pf-bezel-top-rgb: var(--surface-elevated-rgb);
+  --pf-bezel-bottom-rgb: var(--surface-raised-rgb);
+  --pf-glass-top-rgb: var(--surface-elevated-rgb);
+  --pf-glass-bottom-rgb: var(--surface-base-rgb);
+  /* the stop with the LEAST contrast against the mode's ink (dark ink here) */
+  --pf-bezel-floor-rgb: var(--pf-bezel-bottom-rgb);
+  --pf-glass-floor-rgb: var(--pf-glass-bottom-rgb);
+  --pf-lift:
+    inset 0 1px 0 rgb(255 255 255 / 0.9), 0 8px 22px -14px rgb(var(--ink-primary-rgb) / 0.35);
+  --pf-lift-hover:
+    inset 0 1px 0 rgb(255 255 255 / 0.9), 0 16px 32px -16px rgb(var(--ink-primary-rgb) / 0.4);
+  --pf-glass-rim:
+    inset 0 0 0 1px rgb(var(--ink-primary-rgb) / 0.07),
+    inset 0 12px 26px -18px rgb(var(--ink-primary-rgb) / 0.16);
+}
 .pf-card {
   --pf-light-rgb: 0 0 0;
   --pf-light-alpha: 0;
-  background: linear-gradient(180deg, rgb(20 28 47), rgb(12 19 34));
+  background-color: rgb(var(--pf-bezel-floor-rgb));
+  background-image: linear-gradient(
+    180deg,
+    rgb(var(--pf-bezel-top-rgb)),
+    rgb(var(--pf-bezel-bottom-rgb))
+  );
   /* The shadow is written into Tailwind's OWN shadow slot, not box-shadow: the
      card's selected state is a `ring-2` (a box-shadow layer Tailwind composes
      from `--tw-ring-shadow` + `--tw-shadow`), and a plain box-shadow here
      would erase it — the exact regression the card's frame test pins. The
-     hover utility sets the same slot with higher specificity, so the deepening
-     hover shadow still wins on hover. */
+     hover rule below sets the same slot with higher specificity, so the
+     deepening hover shadow still wins on hover. */
   --tw-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.05), 0 10px 30px -14px rgb(0 0 0 / 0.8),
-    0 0 0 1px rgb(var(--pf-light-rgb) / calc(var(--pf-light-alpha) * 0.55)),
+    var(--pf-lift), 0 0 0 1px rgb(var(--pf-light-rgb) / calc(var(--pf-light-alpha) * 0.55)),
     0 0 0 4px rgb(var(--pf-light-rgb) / calc(var(--pf-light-alpha) * 0.12)),
     0 16px 34px -16px rgb(var(--pf-light-rgb) / calc(var(--pf-light-alpha) * 0.45));
   --tw-shadow-colored: var(--tw-shadow);
   transition:
     transform 150ms var(--ai-ease),
     box-shadow var(--ai-dur-shift) var(--ai-ease);
+}
+/* Hover DEEPENS the lift (with the 2px rise the article's utility makes). It
+   was a `hover:shadow-[…]` utility of black and white literals, which in the
+   light theme laid a near-black 45% shadow under a white tile. */
+.pf-card:hover {
+  --tw-shadow:
+    var(--pf-lift-hover), 0 0 0 1px rgb(var(--pf-light-rgb) / calc(var(--pf-light-alpha) * 0.55)),
+    0 0 0 4px rgb(var(--pf-light-rgb) / calc(var(--pf-light-alpha) * 0.12)),
+    0 16px 34px -16px rgb(var(--pf-light-rgb) / calc(var(--pf-light-alpha) * 0.45));
+  --tw-shadow-colored: var(--tw-shadow);
 }
 .pf-card[data-card-light='live'] {
   --pf-light-rgb: var(--status-ready-rgb);
@@ -4800,12 +4856,32 @@
   --pf-light-rgb: var(--status-busy-rgb);
   --pf-light-alpha: 0.8;
 }
-/* the screen: glass in a dark room, whatever the window's theme */
+/* the screen: glass in the window's own theme — dark glass in dark, a lit
+   pane in light (the mode tokens above) */
 .pf-screen {
-  background: linear-gradient(165deg, rgb(27 33 48), rgb(6 8 16) 72%);
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.06),
-    inset 0 12px 26px -18px rgb(0 0 0 / 0.9);
+  background-color: rgb(var(--pf-glass-floor-rgb));
+  background-image: linear-gradient(
+    165deg,
+    rgb(var(--pf-glass-top-rgb)),
+    rgb(var(--pf-glass-bottom-rgb)) 72%
+  );
+  box-shadow: var(--pf-glass-rim);
+}
+/* the gloss across the top of the glass — light on glass, so it is the same
+   white in both themes, but only as strong as the pane can show: a sheen on the
+   dark glass, and on the light pane a whisper that does not grey it. */
+[data-mode='dark'] {
+  --pf-gloss-alpha: 0.07;
+}
+[data-mode='light'] {
+  --pf-gloss-alpha: 0.55;
+}
+.pf-gloss {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(255 255 255 / var(--pf-gloss-alpha)),
+    rgb(255 255 255 / 0)
+  );
 }
 /* the pool of light under the glass, rising from the bottom edge */
 .pf-screen::after {
@@ -5002,11 +5078,20 @@
     0 14px 34px -16px rgb(var(--accent-rgb) / 0.5);
   --tw-shadow-colored: var(--tw-shadow);
 }
+/* ⛔ 2026-09-24 — "the same dark glass the profile card's screen wears" was a
+   copy of that glass's dark LITERALS, so it stayed near-black in the light theme
+   under the light theme's muted ink ("saved" / "no frames" at 2.62:1). It now
+   wears the card screen's own mode tokens (`--pf-glass-*`, defined with
+   `.pf-card`), floor colour included, so the two cannot drift apart again. The
+   first frame, when there is one, covers the glass entirely. */
 .rc-thumb {
-  background: linear-gradient(165deg, rgb(27 33 48), rgb(6 8 16) 72%);
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.06),
-    inset 0 12px 26px -18px rgb(0 0 0 / 0.9);
+  background-color: rgb(var(--pf-glass-floor-rgb));
+  background-image: linear-gradient(
+    165deg,
+    rgb(var(--pf-glass-top-rgb)),
+    rgb(var(--pf-glass-bottom-rgb)) 72%
+  );
+  box-shadow: var(--pf-glass-rim);
 }
 
 /* ═════ shared: a section card with the lift — Settings, Proxies (stage 6) ═

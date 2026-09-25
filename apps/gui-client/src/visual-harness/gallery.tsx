@@ -8,11 +8,15 @@
 
 import { useMemo, type ContextType, type JSX, type ReactNode } from 'react';
 import type { AccountSelfProfile } from '@driftstack/sdk';
-import { ProfilePhoneCard, type ProfilePhoneCardProps } from '../components/ProfilePhoneCard';
+import {
+  ProfilePhoneCard,
+  capabilityChips,
+  type ProfilePhoneCardProps,
+} from '../components/ProfilePhoneCard';
 import { ProfilesTable, type ProfileTableRow } from '../components/ProfilesTable';
 import { CostPanel } from '../components/CostPanel';
 import { SkeletonRows } from '../components/Skeleton';
-import { ProxyForm } from '../views/ProxiesView';
+import { ProxyForm, UDP_AND_QUIC_TALLY_LABEL } from '../views/ProxiesView';
 import { DeviceToolbar } from '../views/SimulatorWindow';
 import {
   IconChat,
@@ -91,6 +95,10 @@ export const AUDIT_SCENES = [
   'audit-connectivity',
   'audit-settings',
   'audit-first-run',
+  // The first-run screen as a customer lands on it after the server refused
+  // the app's key (revoked, or not recognised): the wizard under the notice
+  // that says why they were signed out.
+  'audit-signed-out',
   'audit-recipes',
   // The AI view in each state a customer can be in. It is the ONE view whose
   // states cannot be reached from fixture data alone — a plan running, an
@@ -1426,7 +1434,7 @@ function gridOnlyRow(over: Partial<ProfileTableRow> & Pick<ProfileTableRow, 'id'
  *  (place names, selection, the live row's start time); the four grid-only
  *  profiles are rows built from the first row's shape. `local sandbox` (no
  *  proxy) is not in the grid and is not here. */
-export const MARKETING_TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
+const MARKETING_TABLE_ROWS_BASE: ReadonlyArray<ProfileTableRow> = [
   {
     ...tableRowById('1'),
     proxyAddress: 'nl-3.proxy.example.com:1080',
@@ -1507,6 +1515,45 @@ export const MARKETING_TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
   }),
 ];
 
+/** Owner item 9 (2026-09-24) — the list's Network cell draws the grid card's own
+ *  QUIC chip and OS reading, so the list scene takes them FROM the grid scene's
+ *  card of the same name (`capabilityChips`, the card's builder) rather than
+ *  typing a second copy that could disagree with the capture beside it. */
+function withCardNetwork(row: ProfileTableRow): ProfileTableRow {
+  const card = MARKETING_CARDS.find((c) => c.props.name === row.name)?.props;
+  if (card === undefined) return row;
+  const chips = capabilityChips(card).eligible;
+  const quic = chips.find((c) => c.key === 'quic');
+  // The card's UDP chip decides the row's UDP state too: the zurich tunnel's row
+  // was typed `udp: 'ok'` while its card, from the same scene, reads "⇢ UDP".
+  const udpAttr = chips.find((c) => c.key === 'udp')?.attrs['data-udp'];
+  const udp: ProfileTableRow['udp'] | undefined =
+    udpAttr === 'true'
+      ? 'ok'
+      : udpAttr === 'false'
+        ? 'fail'
+        : udpAttr === 'tunnel'
+          ? 'unknown'
+          : undefined;
+  return {
+    ...row,
+    ...(udp !== undefined ? { udp } : {}),
+    ...(quic !== undefined
+      ? {
+          quicChip: {
+            text: quic.text,
+            className: quic.className,
+            title: quic.title,
+            attrs: quic.attrs,
+          },
+        }
+      : {}),
+    ...(card.osFingerprint !== undefined ? { osFingerprint: card.osFingerprint } : {}),
+  };
+}
+export const MARKETING_TABLE_ROWS: ReadonlyArray<ProfileTableRow> =
+  MARKETING_TABLE_ROWS_BASE.map(withCardNetwork);
+
 /** The simulator cockpit's Egress readouts read the session's capability
  *  report; this is a fully-observed one (exit + HTTP/3 + OS), TEST-NET exit.
  *  ⛔ It is the SIMULATOR SCENE's session, so it must agree with that scene's
@@ -1542,11 +1589,16 @@ export const MARKETING_CAPTURED_AT_MS = Date.parse('2026-06-15T06:41:30.000Z');
 
 /** What the fleet knows about a proxy in the scene, in the terms ProxiesView
  *  tallies its header from: `isRowHealthy` counts a SOCKS5 row with a passing
- *  test and a VPN row the fleet brought up; the "WebRTC + QUIC" tally counts
- *  SOCKS5 rows with a measured UDP associate and is deliberately NOT VPN-aware
- *  (a tunnel carries UDP by construction; the tally is about proxies that
- *  had to prove it). The header numbers are DERIVED from these, never typed. */
-export type MarketingProxyVerdict = 'socks5_ok_udp' | 'socks5_ok' | 'vpn_up' | 'untested';
+ *  test and a VPN row the fleet brought up; the "UDP + QUIC" tally counts the
+ *  rows whose own chips read ✓ UDP AND ✓ QUIC (`rowShowsUdpAndQuic`, owner item
+ *  9, 2026-09-24 — it was "WebRTC + QUIC" over the UDP grant alone). The header
+ *  numbers are DERIVED from these, never typed. */
+export type MarketingProxyVerdict =
+  | 'socks5_ok_udp_quic'
+  | 'socks5_ok_udp'
+  | 'socks5_ok'
+  | 'vpn_up'
+  | 'untested';
 export function proxyTally(list: ReadonlyArray<{ verdict: MarketingProxyVerdict }>): {
   total: number;
   healthy: number;
@@ -1555,7 +1607,7 @@ export function proxyTally(list: ReadonlyArray<{ verdict: MarketingProxyVerdict 
   return {
     total: list.length,
     healthy: list.filter((p) => p.verdict !== 'untested').length,
-    udpCapable: list.filter((p) => p.verdict === 'socks5_ok_udp').length,
+    udpCapable: list.filter((p) => p.verdict === 'socks5_ok_udp_quic').length,
   };
 }
 
@@ -1576,6 +1628,10 @@ export const MARKETING_PROXIES: ReadonlyArray<{
 }> = [
   {
     label: 'socks5',
+    // UDP relayed, QUIC NOT measured — the same proxy's card in the grid scene
+    // ('idle · UDP ok', Residential NL #3) reads 'UDP ✓' beside 'QUIC ~', so it
+    // is not a "UDP + QUIC" row and the header counts 0 (owner item 9: the tally
+    // counts what it says; it read "1 WebRTC + QUIC" over an inferred QUIC).
     verdict: 'socks5_ok_udp',
     draft: {
       label: 'Residential NL #3',
@@ -1886,7 +1942,7 @@ function ProxiesFrame({ children }: { children: ReactNode }): JSX.Element {
               <b className="font-semibold text-ink-primary">
                 {MARKETING_PROXY_TALLY.udpCapable}
               </b>{' '}
-              WebRTC + QUIC
+              {UDP_AND_QUIC_TALLY_LABEL}
               <span className="text-surface-divider">·</span>
               <span className="text-ink-muted">
                 protected on this device · synced encrypted when a session starts

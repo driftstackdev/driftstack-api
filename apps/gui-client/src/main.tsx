@@ -141,7 +141,7 @@ function reportNonFatal(code: string, reason: unknown): void {
 // Catch async errors + unhandled promise rejections (e.g. a failed API/keychain
 // call that nothing awaited) so they surface instead of leaving a dead UI.
 //
-// TWO-PHASE policy (founder "GUI keeps getting stuck, nobody can work on it"; A3
+// TWO-PHASE policy (founder "GUI keeps getting stuck, nobody can work on it"; harness
 // sweep 2026-07-10). The fatal overlay exists to make a BOOT failure visible — but
 // once the app has successfully mounted (__dsBooted), a stray async rejection is
 // almost never a "can't start" condition, and painting the LATCHED full-screen

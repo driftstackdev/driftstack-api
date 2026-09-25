@@ -259,16 +259,22 @@ describe('THE enumerating test — every pre-Phase-B fact is in the sheet, by it
   // into a claim still has to reach the sheet at full length, or the new rule
   // would have quietly cut one of the ten rows Phase C promised — exactly the
   // regression this file exists to catch.
-  it("a reading whose vantage supports no verdict is STILL a fact in the sheet: the OS row is there and named, the tone is the neutral one and the hint says it describes the proxy's own infrastructure — withheld, never deleted (a deliberate inversion: without singleHostVantage this row may NOT read 'match')", () => {
+  // ⛔ OWNER 2026-09-24 (item 9): "if it's a Apple, it should be green status".
+  // An Apple reading is a match from every vantage now, so the withheld reading
+  // this arm needs is a MISMATCH one: the same bytes as REAL_OS_NO_VANTAGE with a
+  // Windows stack. (It was the Apple reading itself until then.)
+  it("a reading whose vantage supports no verdict is STILL a fact in the sheet: the OS row is there and named, the tone is the neutral one and the hint says it describes the proxy's own infrastructure — withheld, never deleted (without singleHostVantage a MISMATCH may not read red)", () => {
     const { container } = render(
-      <ProfilePhoneCard {...everything({ osFingerprint: REAL_OS_NO_VANTAGE })} />,
+      <ProfilePhoneCard
+        {...everything({ osFingerprint: { ...REAL_OS_NO_VANTAGE, os: 'windows' } })}
+      />,
     );
     fireEvent.click(glyph());
     const chip = byComponent(sheetOf(container) as HTMLElement, 'proxy-os-fingerprint');
     expect(chip, 'the OS row survives a withheld verdict').not.toBeNull();
     // The measurement is still REPORTED — label is the OS name, glyph the
     // neutral '?' — it is the CLAIM about the phone it fronts that is withheld.
-    expect(chip?.textContent).toContain('iOS/macOS');
+    expect(chip?.textContent).toContain('Windows');
     expect(chip?.querySelector('[aria-hidden="true"]')?.textContent).toBe('?');
     // ⛔ ABSENT MEANS FALSE, and symmetrically: the same bytes minus the vantage
     // may not mint the green any more than the red. Of the two errors the false
@@ -373,8 +379,9 @@ describe('C1 — the sheet opens by CLICK (ⓘ glyph, Details menu row), never b
       /group-hover:(flex|block|inline|grid|opacity-100|pointer-events-auto|visible)\b/,
     );
     // Positive control for the scan: the select indicator's hover COLOUR is a
-    // group-hover token that is allowed (it reveals nothing).
-    expect(src).toMatch(/group-hover:border-white\/70/);
+    // group-hover token that is allowed (it reveals nothing). 2026-09-24 (owner
+    // item 1): the ring is the ink token now, so it follows the light theme.
+    expect(src).toMatch(/group-hover:border-ink-primary\/70/);
     const { container } = render(<ProfilePhoneCard {...everything()} />);
     fireEvent.mouseEnter(container.querySelector('article') as HTMLElement);
     fireEvent.mouseOver(container.querySelector('article') as HTMLElement);
