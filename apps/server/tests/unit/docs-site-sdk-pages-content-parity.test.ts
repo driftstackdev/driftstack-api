@@ -42,22 +42,36 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
 
     // P4 (2026-09-25) — the card takes the desktop app's card recipe: the 12px
     // card radius (rounded-xl) and the app's lift shadow (shadow-lift).
+    // P4 fix-up — each install line carries wrap-anywhere: the Go command is
+    // one unbreakable string, and it ran 28px past its card at 1440px and
+    // 132px past it (and off the screen) at 800px.
     it('TypeScript card — @driftstack/sdk, npm install command + status "published, pre-1.0" (the only one of the 3 SDKs in actual public production). S22.1 (2026-07-06): card chrome re-pinned on tk-* tokens (tk-border/tk-surface/tk-ink ladder); P4: the app\'s card radius + lift. Drift here would mislead customers about which SDK is safe to depend on today.', () => {
       expect(body).toMatch(
-        /<article class="rounded-xl border border-tk-border bg-tk-surface p-5 shadow-lift">\s*\n\s*<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">TypeScript<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">@driftstack\/sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">npm install @driftstack\/sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: published, pre-1\.0<\/p>\s*\n\s*<\/article>/,
+        /<article class="rounded-xl border border-tk-border bg-tk-surface p-5 shadow-lift">\s*\n\s*<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">TypeScript<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">@driftstack\/sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2 wrap-anywhere">npm install @driftstack\/sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: published, pre-1\.0<\/p>\s*\n\s*<\/article>/,
       );
     });
 
     it('Python card — published PyPI command + current pre-1.0 Alpha status.', () => {
       expect(body).toMatch(
-        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Python<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">driftstack-sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">pip install driftstack-sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: published on PyPI; pre-1\.0 Alpha<\/p>/,
+        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Python<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">driftstack-sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2 wrap-anywhere">pip install driftstack-sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: published on PyPI; pre-1\.0 Alpha<\/p>/,
       );
     });
 
     it('Go card — tagged-module command + current pre-1.0 status.', () => {
       expect(body).toMatch(
-        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Go<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">sdk-go<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">go get github\.com\/driftstackdev\/\.\.\.@latest<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: published tagged module; pre-1\.0<\/p>/,
+        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Go<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">sdk-go<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2 wrap-anywhere">go get github\.com\/driftstackdev\/\.\.\.@latest<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: published tagged module; pre-1\.0<\/p>/,
       );
+    });
+
+    it('P4 fix-up — the long Go module path never runs out of its card: the cards go three-up only when the COLUMN is wide enough for the commands (a container query, @3xl = 48rem; the old md:grid-cols-3 keyed off the viewport and squeezed them into ~140px at 800px), and every install command can still wrap inside its card (wrap-anywhere)', () => {
+      expect(body).toMatch(
+        /<div class="not-prose @container mt-8">\s*\n\s*<div class="grid gap-4 @3xl:grid-cols-3">/,
+      );
+      expect(body).not.toMatch(/md:grid-cols-3/);
+      const lines =
+        body.match(/<p class="mt-1 font-mono text-xs text-tk-ink-2[^"]*">[^<]+<\/p>/g) ?? [];
+      expect(lines).toHaveLength(3);
+      for (const line of lines) expect(line).toMatch(/ wrap-anywhere">/);
     });
 
     it('Get started + Reference link sections — 4 canonical cross-links pinned (Installation, Quickstart, Versioning policy, Error handling). Drift to a different href would orphan customers from these docs surfaces.', () => {
