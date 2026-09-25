@@ -99,12 +99,19 @@ function normaliseError(err: FastifyError | Error, _request: FastifyRequest): Ap
     // thing RFC 7807 §3.1 says a title must not be (it summarises the TYPE).
     // Pairing them removes the failure mode rather than adding the third arm:
     // one expression cannot disagree with itself.
+    //
+    // 413 (a body over the route's `bodyLimit`) has its own type for the same
+    // reason: it is the status PayloadTooLargeError answers with, and one
+    // problem type carries one status — so a client branching on
+    // `payload-too-large` sees every 413, from the body limit or the device.
     const [type, title] =
       fastifyErr.statusCode === 401
         ? ([PROBLEM_TYPES.Unauthorized, 'Unauthorized'] as const)
         : fastifyErr.statusCode === 403
           ? ([PROBLEM_TYPES.Forbidden, 'Forbidden'] as const)
-          : ([PROBLEM_TYPES.BadRequest, 'Bad Request'] as const);
+          : fastifyErr.statusCode === 413
+            ? ([PROBLEM_TYPES.PayloadTooLarge, 'Payload Too Large'] as const)
+            : ([PROBLEM_TYPES.BadRequest, 'Bad Request'] as const);
     return new ApiError({
       type,
       title,

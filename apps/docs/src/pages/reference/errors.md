@@ -62,6 +62,7 @@ returns true for that class.
 | `errors.driftstack.dev/storage-quota-exceeded`       | 409  | `StorageQuotaExceededError`           | `StorageQuotaExceededError`           | `StorageQuotaExceededError`           | no         |
 | `errors.driftstack.dev/proxy-validation-failed`      | 422  | `ProxyValidationFailedError`          | `ProxyValidationFailedError`          | `ProxyValidationFailedError`          | no         |
 | `errors.driftstack.dev/profile-in-use`               | 409  | `ProfileInUseError`                   | `ProfileInUseError`                   | `ProfileInUseError`                   | no         |
+| `errors.driftstack.dev/payload-too-large`            | 413  | `PayloadTooLargeError`                | `PayloadTooLargeError`                | `PayloadTooLargeError`                | no         |
 | `errors.driftstack.dev/internal`                     | 5xx  | `InternalError`                       | `InternalError`                       | `InternalError`                       | **yes**    |
 | (network failure / parse error)                      | 0    | `TransportError`                      | `TransportError`                      | `TransportError`                      | **yes**    |
 

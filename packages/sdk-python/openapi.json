@@ -620,6 +620,11 @@
               "observed_at"
             ]
           },
+          "upload_max_file_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The largest file, in bytes, one upload to this session can carry right now. Absent when not known."
+          },
           "error_event": {
             "type": ["object", "null"],
             "properties": {
@@ -4440,6 +4445,11 @@
                       "observed_at"
                     ]
                   },
+                  "upload_max_file_bytes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "The largest file, in bytes, one upload to this session can carry right now. Absent when not known."
+                  },
                   "error_event": {
                     "type": ["object", "null"],
                     "properties": {
@@ -5333,6 +5343,11 @@
                       "observed_at"
                     ]
                   },
+                  "upload_max_file_bytes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "The largest file, in bytes, one upload to this session can carry right now. Absent when not known."
+                  },
                   "error_event": {
                     "type": ["object", "null"],
                     "properties": {
@@ -5635,6 +5650,11 @@
                       "observed_at"
                     ]
                   },
+                  "upload_max_file_bytes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "The largest file, in bytes, one upload to this session can carry right now. Absent when not known."
+                  },
                   "error_event": {
                     "type": ["object", "null"],
                     "properties": {
@@ -5936,6 +5956,11 @@
                       "webrtc_candidate_ips",
                       "observed_at"
                     ]
+                  },
+                  "upload_max_file_bytes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "The largest file, in bytes, one upload to this session can carry right now. Absent when not known."
                   },
                   "error_event": {
                     "type": ["object", "null"],
@@ -6803,6 +6828,11 @@
                       "webrtc_candidate_ips",
                       "observed_at"
                     ]
+                  },
+                  "upload_max_file_bytes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "The largest file, in bytes, one upload to this session can carry right now. Absent when not known."
                   },
                   "error_event": {
                     "type": ["object", "null"],
@@ -37490,6 +37520,11 @@
                         "observed_at"
                       ]
                     },
+                    "upload_max_file_bytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "The largest file, in bytes, one upload to this session can carry right now. Absent when not known."
+                    },
                     "error_event": {
                       "type": ["object", "null"],
                       "properties": {
@@ -37978,6 +38013,11 @@
                               "observed_at"
                             ]
                           },
+                          "upload_max_file_bytes": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "The largest file, in bytes, one upload to this session can carry right now. Absent when not known."
+                          },
                           "error_event": {
                             "type": ["object", "null"],
                             "properties": {
@@ -38448,6 +38488,11 @@
                         "webrtc_candidate_ips",
                         "observed_at"
                       ]
+                    },
+                    "upload_max_file_bytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "The largest file, in bytes, one upload to this session can carry right now. Absent when not known."
                     },
                     "error_event": {
                       "type": ["object", "null"],
@@ -40339,6 +40384,11 @@
                         "observed_at"
                       ]
                     },
+                    "upload_max_file_bytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "The largest file, in bytes, one upload to this session can carry right now. Absent when not known."
+                    },
                     "error_event": {
                       "type": ["object", "null"],
                       "properties": {
@@ -41948,6 +41998,16 @@
               }
             }
           },
+          "413": {
+            "description": "The cookie jar is larger than the device running this session takes, or the request body is over 8 MiB. Nothing was written. When the device is the limit, `limit_bytes` is the largest jar it takes and `size_bytes` this jar's size.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "headers": {
@@ -42613,6 +42673,16 @@
           },
           "404": {
             "description": "Agent session not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The file is larger than the device running this session takes, or the request body is over 96 MiB. Nothing was sent. When the device is the limit, `limit_bytes` is the largest file it takes (decoded bytes, the same figure as the session's `upload_max_file_bytes`) and `size_bytes` this file's size.",
             "content": {
               "application/problem+json": {
                 "schema": {

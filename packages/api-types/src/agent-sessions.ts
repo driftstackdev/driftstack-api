@@ -123,6 +123,19 @@ export const AgentSessionSchema = z.object({
         .optional(),
     })
     .optional(),
+  /** The largest file, in bytes, that one upload to this session can carry right
+   *  now. Each device takes a file up to its own size, so this can be smaller
+   *  than the 64 MiB per-file maximum, and it can change while the session runs.
+   *  Only on `GET /v1/agent-sessions/{id}`, and only while the session is
+   *  running on a connected device; absent means not known. */
+  upload_max_file_bytes: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe(
+      'The largest file, in bytes, one upload to this session can carry right now. Absent when not known.',
+    ),
   /** The most recent start-up or runtime failure for this session. */
   error_event: z
     .object({

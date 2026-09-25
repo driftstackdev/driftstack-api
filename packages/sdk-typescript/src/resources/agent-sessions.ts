@@ -197,6 +197,13 @@ export interface AgentSession {
     webrtc_candidate_ips: string[] | null;
     observed_at: string | null;
   };
+  /**
+   * The largest file, in bytes, one upload to this session can carry right now.
+   * Each device takes a file up to its own size, so this can be smaller than the
+   * 64 MiB per-file maximum. Returned by `get` while the session is running on a
+   * connected device; absent means not known.
+   */
+  upload_max_file_bytes?: number;
   /** Latest launch or runtime failure reported for this session. */
   error_event?: {
     timestamp: string;

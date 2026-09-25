@@ -113,9 +113,19 @@ import {
   SessionReadinessCorrelator,
   type SessionReadinessOutcome,
 } from './session-readiness-correlator.js';
+import {
+  DeviceFrameGuard,
+  deviceFrameBytes,
+  maxUploadFileBytesForFrame,
+} from './device-frame-guard.js';
 
 /** What the WS route hands in: a function that writes a string frame to the
- *  node's socket (the route adapts the real `ws.send`). */
+ *  node's socket (the route adapts the real `ws.send`).
+ *
+ *  ⛔ RAW: it writes whatever it is given, and the device closes its whole
+ *  control socket on a message larger than it reads. A connection hands it
+ *  straight to its DeviceFrameGuard and keeps no copy; nothing else may call it
+ *  (enforced by only-the-device-frame-guard-writes-to-a-device-socket). */
 export type FleetNodeSocketSend = (data: string) => void;
 
 export type FleetInboundAdmission =
@@ -138,8 +148,13 @@ export type ProbeEgressDispatch =
 
 /**
  * One authenticated fleet-node connection. Owns the node's dispatch correlator
- * (sending serialised IntentDispatch frames out over `send`, JSON-stringified)
+ * (sending serialised IntentDispatch frames out through its DeviceFrameGuard)
  * and routes inbound HarnessOutbound frames to it.
+ *
+ * Every outbound frame — correlated or fire-and-forget — goes through
+ * `this.frames`, which refuses one larger than the device reads (its heartbeat's
+ * `maxInboundFrameBytes`, else 4 MiB, less a margin) with DeviceFrameTooLargeError
+ * instead of letting the device close the socket every session on it shares.
  */
 export class FleetControlConnection {
   readonly correlator: IntentDispatchCorrelator;
@@ -185,7 +200,9 @@ export class FleetControlConnection {
   // and the node re-reports `draining` on its next beat.
   private cordonedByCommand = false;
   private draining = false;
-  private readonly send: FleetNodeSocketSend;
+  /** The ONLY way a frame reaches this device: measures it against the device's
+   *  advertised inbound limit and refuses one that would close the socket. */
+  private readonly frames: DeviceFrameGuard;
   private readonly onProfileSaved?: (frame: ProfileSaved, reportingNodeId: string) => void;
   // audit M1 — the cross-node frames now carry the connection's authenticated
   // reportingNodeId so the consumer can drop a frame spoofed for another node's
@@ -237,7 +254,7 @@ export class FleetControlConnection {
 
   constructor(
     readonly nodeId: string,
-    send: FleetNodeSocketSend,
+    rawSend: FleetNodeSocketSend,
     onProfileSaved?: (frame: ProfileSaved, reportingNodeId: string) => void,
     onChallengeDetected?: (frame: ChallengeDetected, reportingNodeId: string) => void,
     onPageState?: (frame: PageStateFrame, reportingNodeId: string) => void,
@@ -269,7 +286,8 @@ export class FleetControlConnection {
     // are still stripped, only the count and the log line are lost.
     onUnknownResultKeys?: UnknownResultKeysObserver,
   ) {
-    this.send = send;
+    const log = logger ?? null;
+    this.frames = new DeviceFrameGuard(rawSend, { nodeId, logger: log });
     this.terminate = terminate;
     this.onProfileSaved = onProfileSaved;
     this.onChallengeDetected = onChallengeDetected;
@@ -282,35 +300,65 @@ export class FleetControlConnection {
     this.onNetworkRequests = onNetworkRequests;
     this.onSessionProvisioning = onSessionProvisioning;
     this.admitInbound = admitInbound;
-    const log = logger ?? null;
     this.logger = log;
-    const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
+    // Every transport below writes through the guard. A frame the device cannot
+    // take throws DeviceFrameTooLargeError out of `send`; each correlator already
+    // turns a throwing send into its settled error outcome (and clears its timer),
+    // so a refused request answers at once instead of waiting for a reply that
+    // could never come.
+    const frames = this.frames;
+    const transport: DispatchTransport = { send: (d) => frames.send(d) };
     this.correlator = new IntentDispatchCorrelator(transport, onUnknownResultKeys);
     this.sessionReadinessCorrelator = new SessionReadinessCorrelator();
-    const cookiesTransport: CookiesTransport = { send: (r) => send(JSON.stringify(r)) };
+    const cookiesTransport: CookiesTransport = { send: (r) => frames.send(r) };
     this.cookiesCorrelator = new CookiesRequestCorrelator(cookiesTransport, log);
-    const setCookiesTransport: SetCookiesTransport = { send: (r) => send(JSON.stringify(r)) };
+    const setCookiesTransport: SetCookiesTransport = { send: (r) => frames.send(r) };
     this.setCookiesCorrelator = new SetCookiesRequestCorrelator(setCookiesTransport, log);
-    const setEgressTransport: SetEgressTransport = { send: (r) => send(JSON.stringify(r)) };
+    const setEgressTransport: SetEgressTransport = { send: (r) => frames.send(r) };
     this.setEgressCorrelator = new SetEgressRequestCorrelator(setEgressTransport, log);
-    const navigateHistoryTransport: NavigateHistoryTransport = {
-      send: (r) => send(JSON.stringify(r)),
-    };
+    const navigateHistoryTransport: NavigateHistoryTransport = { send: (r) => frames.send(r) };
     this.navigateHistoryCorrelator = new NavigateHistoryRequestCorrelator(
       navigateHistoryTransport,
       log,
     );
-    const uploadTransport: UploadTransport = { send: (r) => send(JSON.stringify(r)) };
+    const uploadTransport: UploadTransport = { send: (r) => frames.send(r) };
     this.uploadCorrelator = new UploadRequestCorrelator(uploadTransport, log);
     const downloadTransport: DownloadTransport = {
-      sendList: (r) => send(JSON.stringify(r)),
-      sendFetch: (r) => send(JSON.stringify(r)),
+      sendList: (r) => frames.send(r),
+      sendFetch: (r) => frames.send(r),
     };
     this.downloadCorrelator = new DownloadRequestCorrelator(downloadTransport, log);
-    const trimProfileTransport: TrimProfileTransport = { send: (r) => send(JSON.stringify(r)) };
+    const trimProfileTransport: TrimProfileTransport = { send: (r) => frames.send(r) };
     this.trimProfileCorrelator = new TrimProfileRequestCorrelator(trimProfileTransport, log);
-    const probeEgressTransport: ProbeEgressTransport = { send: (r) => send(JSON.stringify(r)) };
+    const probeEgressTransport: ProbeEgressTransport = { send: (r) => frames.send(r) };
     this.probeEgressCorrelator = new ProbeEgressRequestCorrelator(probeEgressTransport, log);
+  }
+
+  /**
+   * The largest serialised frame this device may be sent right now, in UTF-8
+   * bytes: what its latest heartbeat advertised (or the 4 MiB default), clamped,
+   * less the safety margin. See services/device-frame-guard.ts.
+   */
+  deviceFrameLimitBytes(): number {
+    return this.frames.limitBytes();
+  }
+
+  /**
+   * The largest file, decoded, that one upload to `sessionId` on this device can
+   * carry: what fits in one `uploadFile` frame after base64 and the envelope,
+   * and never more than `ceilingBytes` (the route's absolute per-file cap).
+   */
+  maxUploadFileBytes(sessionId: string, ceilingBytes: number): number {
+    return Math.min(ceilingBytes, maxUploadFileBytesForFrame(this.frames.limitBytes(), sessionId));
+  }
+
+  /**
+   * The size, in UTF-8 bytes, of the `setCookies` frame that importing `cookies`
+   * into `sessionId` would send — to compare with `deviceFrameLimitBytes()`
+   * before relaying. The requestId is UUID-shaped, as the route mints it.
+   */
+  setCookiesFrameBytes(sessionId: string, cookies: Cookie[]): number {
+    return deviceFrameBytes(serializeSetCookies({ requestId: randomUUID(), sessionId, cookies }));
   }
 
   /**
@@ -513,12 +561,14 @@ export class FleetControlConnection {
    * dispatch). Unlike IntentDispatch (correlated request→result via the
    * correlator), a sessionAssign is fire-and-forget on this channel: the harness
    * acts on it (spawn + capture + publish) and later reports progress via
-   * `sessionStatus` frames up the same socket. JSON-stringified over the node's
-   * socket — identical framing to the correlator's transport. Caller builds the
+   * `sessionStatus` frames up the same socket. Written through the device frame
+   * guard — identical framing to the correlator's transport. Caller builds the
    * envelope with `serializeSessionAssign`.
+   * @throws DeviceFrameTooLargeError when the frame is larger than the device
+   *   reads; nothing is sent, and the socket stays open.
    */
   sendSessionAssign(assign: SessionAssign): void {
-    this.send(JSON.stringify(assign));
+    this.frames.send(assign);
   }
 
   /** Reserve readiness before a future strict provisioner sends SessionAssign.
@@ -533,7 +583,7 @@ export class FleetControlConnection {
    * framing as sendSessionAssign; caller builds the envelope with serializeSessionEnd.
    */
   sendSessionEnd(end: SessionEnd): void {
-    this.send(JSON.stringify(end));
+    this.frames.send(end);
   }
 
   /**
@@ -543,11 +593,11 @@ export class FleetControlConnection {
    * serializePauseSession / serializeResumeSession.
    */
   sendPauseSession(pause: PauseSession): void {
-    this.send(JSON.stringify(pause));
+    this.frames.send(pause);
   }
 
   sendResumeSession(resume: ResumeSession): void {
-    this.send(JSON.stringify(resume));
+    this.frames.send(resume);
   }
 
   /**
@@ -567,7 +617,7 @@ export class FleetControlConnection {
     } else {
       this.cordonedByCommand = true;
     }
-    this.send(JSON.stringify(command));
+    this.frames.send(command);
   }
 
   /**
@@ -888,6 +938,10 @@ export class FleetControlConnection {
             // picker skips a node draining for a SIGUSR1 / scheduled restart, the
             // same way it skips an operator-cordoned one. Absent drainState = serving.
             this.draining = frame.drainState === 'draining';
+            // The device's inbound frame limit follows its LATEST beat: a beat
+            // without the field (or with an invalid one, which the schema turns
+            // into absent) puts the 4 MiB default back.
+            this.frames.observeAdvertisedMaxInboundFrameBytes(frame.maxInboundFrameBytes);
             this.onHeartbeat?.(frame);
           }
           break;
@@ -1206,7 +1260,7 @@ export class FleetControlRegistry {
 
   register(
     nodeId: string,
-    send: FleetNodeSocketSend,
+    rawSend: FleetNodeSocketSend,
     // Closes the NEW socket — threaded into the connection so a later reconnect can
     // actively terminate THIS one on supersede (P0 2026-07-11). Optional: legacy/test
     // callers omit it and supersede degrades to close-only (the prior behaviour).
@@ -1220,7 +1274,7 @@ export class FleetControlRegistry {
     }
     const conn = new FleetControlConnection(
       nodeId,
-      send,
+      rawSend,
       this.onProfileSaved,
       this.onChallengeDetected,
       this.onPageState,

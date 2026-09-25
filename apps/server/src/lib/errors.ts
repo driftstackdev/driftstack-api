@@ -83,6 +83,25 @@ export class BadRequestError extends ApiError {
   }
 }
 
+/**
+ * 413 — the request is too large for where it has to go, and was refused
+ * before anything was sent there. Today: a file or cookie jar larger than the
+ * device running the session reads in one message. `limit_bytes` is the most
+ * that fits and `size_bytes` what was asked; `detail` is the sentence to show.
+ */
+export class PayloadTooLargeError extends ApiError {
+  constructor(detail: string, sizes: { limitBytes: number; sizeBytes: number }) {
+    super({
+      type: PROBLEM_TYPES.PayloadTooLarge,
+      title: 'Payload Too Large',
+      status: 413,
+      detail,
+      extensions: { limit_bytes: sizes.limitBytes, size_bytes: sizes.sizeBytes },
+    });
+    this.name = 'PayloadTooLargeError';
+  }
+}
+
 export class ValidationError extends ApiError {
   constructor(issues: unknown) {
     super({

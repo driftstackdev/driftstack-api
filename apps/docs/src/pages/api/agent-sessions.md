@@ -117,6 +117,14 @@ customer names of the last two. Read a missing or false value on either pair as
 "this reading does not describe the path a website sees". `null` means not
 measured, never "no OS".
 
+`upload_max_file_bytes` is the largest file, in bytes, that one
+[upload](#upload-a-file) to this session can carry right now. Each device takes
+a file up to its own size, so this is often smaller than the 64 MiB per-file
+maximum, and it can change while the session runs. It is returned by
+`GET /v1/agent-sessions/{id}` while the session is running on a connected
+device, and absent otherwise — absent means "not known", not "no limit". Check
+a file against it before reading or encoding the file.
+
 The `error_event` field is **optional and nullable** — it carries the most
 recent launch or runtime failure recorded for the session, and is
 absent or `null` when none has been reported. Branch on its two booleans
@@ -1332,6 +1340,16 @@ running session's cookie store. Response (200) is the discriminated
 `{ "status": …, "reason"?: … }` shape — `ok` means the write was
 applied; on any other status nothing was written.
 
+Each device takes a cookie jar up to its own size, counted as JSON:
+about 3.9 MiB unless the device takes more. A larger jar is refused with a
+`413` and nothing is written — `detail` says "This cookie jar is too large to
+send to this device (limit …)", and the `limit_bytes` and `size_bytes`
+extensions carry the two sizes. A request body over 8 MiB is also a `413`.
+
+| Status | Type              | When                                                                                               |
+| ------ | ----------------- | -------------------------------------------------------------------------------------------------- |
+| 413    | payload-too-large | The jar is larger than the session's device takes, or the body is over 8 MiB. Nothing was written. |
+
 ## Change the session's proxy
 
 `POST /v1/agent-sessions/{id}/egress`
@@ -1400,6 +1418,20 @@ size is capped at **64 MiB** per file (larger, or an empty file, is
 a `400`); per-account concurrent upload volume (512 MiB) and
 per-session lifetime totals (2 GiB) are also capped — an over-cap
 request returns `status: "error"` with the cap named in `reason`.
+
+Each device takes a file up to its own size, so the largest file a session
+accepts is usually **smaller than 64 MiB**:
+about 2.9 MiB unless the device takes more. The session read's `upload_max_file_bytes` gives the exact figure
+for the session's device; check a file against it before reading it. A larger
+file is refused with a `413` and nothing is sent: `detail` says "This file is
+too large to send to this device (limit …)", and the `limit_bytes` (the same
+figure as `upload_max_file_bytes`) and `size_bytes` extensions carry the two
+sizes. A request body over 96 MiB is also a `413`.
+
+| Status | Type              | When                                                                                              |
+| ------ | ----------------- | ------------------------------------------------------------------------------------------------- |
+| 400    | bad-request       | The file is empty, or its decoded size is over 64 MiB.                                            |
+| 413    | payload-too-large | The file is larger than the session's device takes, or the body is over 96 MiB. Nothing was sent. |
 
 Response (200), discriminated:
 

@@ -87,6 +87,8 @@ var (
 	ErrProxyValidationFailed = errors.New("proxy validation failed")
 	// Single-active-session-per-profile guard (409 at launch).
 	ErrProfileInUse = errors.New("profile already in use")
+	// Too large for the endpoint or for the session's device (413).
+	ErrPayloadTooLarge = errors.New("payload too large")
 )
 
 // AuthError covers any of the auth-related problem types. Use the
@@ -333,6 +335,23 @@ type ProfileInUseError struct {
 
 func (e *ProfileInUseError) Is(target error) bool {
 	return target == ErrProfileInUse || target == ErrConflict
+}
+
+// PayloadTooLargeError — 413. The request is too large for where it has to
+// go, and nothing was sent there: a body over the endpoint's size limit, or a
+// file or cookie jar larger than the device running the session takes at
+// once. When the device is the limit, LimitBytes is the most that fits and
+// SizeBytes what was sent; both are 0 otherwise. For uploads, check a file
+// against the session's UploadMaxFileBytes first. errors.Is matches both
+// ErrPayloadTooLarge and ErrBadRequest (a 413 used to arrive as bad-request).
+type PayloadTooLargeError struct {
+	apiError
+	LimitBytes int64
+	SizeBytes  int64
+}
+
+func (e *PayloadTooLargeError) Is(target error) bool {
+	return target == ErrPayloadTooLarge || target == ErrBadRequest
 }
 
 // SessionDestroyedError — 410 when an op targets a destroyed session.

@@ -63,6 +63,8 @@ const REQUIRED_ALL_ENTRIES = [
   'PairModeStateInvalidTransitionError',
   'ProfileInUseError',
   'ProxyValidationFailedError',
+  // Too large for the endpoint or the session's device (413).
+  'PayloadTooLargeError',
   // Customer-facing return-type pydantic models (re-exported so
   // callers can annotate handlers without deep-importing via
   // driftstack.resources.*).

@@ -32,8 +32,8 @@ describe('agent-session response schema parity', () => {
     const ifaceFields = [...ifaceBody.matchAll(/^ {2}(\w+)\??:/gm)]
       .map((x) => x[1])
       .filter((f): f is string => f !== undefined);
-    // (c) 2026-09-10: + provisioning_detail.
-    expect(ifaceFields.length).toBe(21);
+    // (c) 2026-09-10: + provisioning_detail. 2026-09-24: + upload_max_file_bytes.
+    expect(ifaceFields.length).toBe(22);
     expect(new Set(Object.keys(AgentSessionSchema.shape))).toEqual(new Set(ifaceFields));
   });
 

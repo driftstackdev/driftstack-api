@@ -134,6 +134,40 @@ class BadRequestError(DriftstackError):
     handlers are unaffected."""
 
 
+class PayloadTooLargeError(BadRequestError):
+    """413 — the request is too large for where it has to go
+    (``payload-too-large`` problem-type), and nothing was sent there.
+
+    Either the request body is over the endpoint's size limit, or a file or
+    cookie jar is larger than the device running the session takes at once.
+    When the device is the limit, ``limit_bytes`` is the most that fits and
+    ``size_bytes`` what was sent; both are ``None`` otherwise. For uploads,
+    check a file against the session's ``upload_max_file_bytes`` first.
+
+    Subclasses :class:`BadRequestError` — a 413 used to arrive as the
+    ``bad-request`` type — so existing ``except BadRequestError`` handlers
+    still catch it.
+
+    Cross-SDK parity: TS exposes ``err.limitBytes`` / ``err.sizeBytes``; Go
+    exposes ``err.LimitBytes`` / ``err.SizeBytes``.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = 413,
+        problem_type: str | None = None,
+        problem: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, status=status, problem_type=problem_type, problem=problem)
+        p = problem or {}
+        limit = p.get("limit_bytes")
+        size = p.get("size_bytes")
+        self.limit_bytes: int | None = limit if isinstance(limit, int) else None
+        self.size_bytes: int | None = size if isinstance(size, int) else None
+
+
 class ValidationError(DriftstackError):
     """Request body or query parameters failed field-level schema validation
     (HTTP 400, ``validation-failed`` problem-type).
@@ -620,6 +654,8 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/proxy-validation-failed": ProxyValidationFailedError,
     # Single-active-session-per-profile guard (409 at launch).
     "https://errors.driftstack.dev/profile-in-use": ProfileInUseError,
+    # Too large for the endpoint or for the session's device (413).
+    "https://errors.driftstack.dev/payload-too-large": PayloadTooLargeError,
     "https://errors.driftstack.dev/revoked-key": RevokedKeyError,
     "https://errors.driftstack.dev/expired-key": ExpiredKeyError,
     "https://errors.driftstack.dev/invalid-key": InvalidKeyError,

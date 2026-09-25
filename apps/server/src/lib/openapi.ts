@@ -6289,6 +6289,11 @@ function buildRegistry(): OpenAPIRegistry {
       },
       404: { description: 'Agent session not found.', content: problemContent },
       ...errors4xx,
+      413: {
+        description:
+          "The cookie jar is larger than the device running this session takes, or the request body is over 8 MiB. Nothing was written. When the device is the limit, `limit_bytes` is the largest jar it takes and `size_bytes` this jar's size.",
+        content: problemContent,
+      },
       503: {
         description: 'AI chat agent not enabled on this deployment.',
         content: problemContent,
@@ -6402,7 +6407,9 @@ function buildRegistry(): OpenAPIRegistry {
               name: z.string().min(1).max(255),
               mime: z.string().min(1).max(255),
               // Base64-encoded file bytes; decoded size capped at 64 MiB
-              // (larger → 400). Per-account concurrent and per-session
+              // (larger → 400), and at what the session's device takes in one
+              // message (larger → 413; the session read's
+              // `upload_max_file_bytes`). Per-account concurrent and per-session
               // lifetime volume caps apply (over-cap → status 'error').
               dataB64: z.string().min(1),
             }),
@@ -6437,6 +6444,11 @@ function buildRegistry(): OpenAPIRegistry {
       // (declared after the spread so this description wins).
       400: {
         description: 'Validation failed (malformed body, empty file, or decoded size over 64 MiB).',
+        content: problemContent,
+      },
+      413: {
+        description:
+          "The file is larger than the device running this session takes, or the request body is over 96 MiB. Nothing was sent. When the device is the limit, `limit_bytes` is the largest file it takes (decoded bytes, the same figure as the session's `upload_max_file_bytes`) and `size_bytes` this file's size.",
         content: problemContent,
       },
       503: {

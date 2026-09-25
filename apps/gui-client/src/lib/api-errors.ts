@@ -117,6 +117,7 @@ export function fixedApiErrorMessage(
     'legal-acceptance-required': 'Review and accept the required terms before continuing.',
     'mfa-step-up-required': 'Confirm this action with a fresh authenticator code.',
     'profile-in-use': 'End the profile’s other live session before launching it again.',
+    'payload-too-large': 'That is too large to send. Choose something smaller and try again.',
     'proxy-validation-failed': 'The proxy could not be verified. Check its details and try again.',
     'storage-quota-exceeded': 'Profile storage is full. Trim or delete a profile, then try again.',
     // GUI audit #4 — not "in Settings": the app's own browser sign-in key is

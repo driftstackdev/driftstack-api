@@ -1526,6 +1526,27 @@ const HeartbeatPayloadSchema = z.object({
    * Same leniency + decoder contract as `harnessBinarySha256` above.
    */
   webkitFrameworkSha256: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional().catch(undefined),
+  /**
+   * The largest inbound control message the device reads, in bytes — its
+   * `URLSessionWebSocketTask.maximumMessageSize`. A larger message closes the
+   * device's WHOLE control socket (1009), so the control plane never sends one:
+   * services/device-frame-guard.ts measures every outbound frame against this,
+   * less a safety margin, per device, refreshed on every beat.
+   *
+   * OPTIONAL: every device build before the field reads 4 MiB, which is what an
+   * absent value means. Only a positive integer is accepted, and anything else
+   * (0, a negative, a string, a fraction) degrades to ABSENT through `.catch` —
+   * never to a refused heartbeat, which would take liveness, drain state and the
+   * session map down with it. A value that is too large is clamped by the guard,
+   * not here, so the parsed frame still says what the device claimed.
+   */
+  maxInboundFrameBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(Number.MAX_SAFE_INTEGER)
+    .optional()
+    .catch(undefined),
 });
 
 export const HeartbeatSchema = HeartbeatPayloadSchema.transform((frame, ctx) => {

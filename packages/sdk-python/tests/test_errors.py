@@ -25,6 +25,7 @@ from driftstack.errors import (
     NotFoundError,
     PairModeConflictError,
     PairModeStateInvalidTransitionError,
+    PayloadTooLargeError,
     ProfileInUseError,
     ProxyValidationFailedError,
     QuotaExceededError,
@@ -314,6 +315,36 @@ def test_profile_in_use_active_session_id_absent_is_empty() -> None:
     err = _error_from_response_data(status=409, text=body, retry_after_header=None)
     assert isinstance(err, ProfileInUseError)
     assert err.active_session_id == ""
+
+
+def test_payload_too_large_carries_the_device_limit() -> None:
+    # Every 413 is payload-too-large. When the session's device is the limit the
+    # problem carries limit_bytes and size_bytes; a 413 used to arrive as
+    # bad-request, so the class stays catchable as BadRequestError.
+    body = (
+        '{"type":"https://errors.driftstack.dev/payload-too-large",'
+        '"title":"Payload Too Large","status":413,'
+        '"detail":"This file is too large to send to this device (limit 2.95 MiB).",'
+        '"limit_bytes":3094176,"size_bytes":5242880}'
+    )
+    err = _error_from_response_data(status=413, text=body, retry_after_header=None)
+    assert isinstance(err, PayloadTooLargeError)
+    assert isinstance(err, BadRequestError)
+    assert err.limit_bytes == 3094176
+    assert err.size_bytes == 5242880
+    assert err.status == 413
+    assert is_retryable(err) is False
+
+
+def test_payload_too_large_without_sizes_leaves_them_none() -> None:
+    body = (
+        '{"type":"https://errors.driftstack.dev/payload-too-large",'
+        '"title":"Payload Too Large","status":413}'
+    )
+    err = _error_from_response_data(status=413, text=body, retry_after_header=None)
+    assert isinstance(err, PayloadTooLargeError)
+    assert err.limit_bytes is None
+    assert err.size_bytes is None
 
 
 def test_unknown_problem_type_falls_back_to_base_class() -> None:

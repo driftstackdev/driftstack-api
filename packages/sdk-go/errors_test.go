@@ -268,6 +268,34 @@ func TestProfileInUseExtractsActiveSessionID(t *testing.T) {
 	}
 }
 
+func TestPayloadTooLargeCarriesTheDeviceLimit(t *testing.T) {
+	t.Parallel()
+	// Every 413 is payload-too-large. When the session's device is the limit
+	// the problem carries limit_bytes and size_bytes; errors.Is matches BOTH
+	// ErrPayloadTooLarge and ErrBadRequest (a 413 used to arrive as bad-request).
+	body := []byte(`{"type":"https://errors.driftstack.dev/payload-too-large","title":"Payload Too Large","status":413,"detail":"This file is too large to send to this device (limit 2.95 MiB).","limit_bytes":3094176,"size_bytes":5242880}`)
+	err := errorFromResponse(413, body, "")
+	var ptl *PayloadTooLargeError
+	if !errors.As(err, &ptl) {
+		t.Fatalf("expected *PayloadTooLargeError, got %T", err)
+	}
+	if ptl.LimitBytes != 3094176 || ptl.SizeBytes != 5242880 {
+		t.Errorf("LimitBytes=%d SizeBytes=%d, want 3094176 5242880", ptl.LimitBytes, ptl.SizeBytes)
+	}
+	if ptl.Status != 413 {
+		t.Errorf("status=%d, want 413", ptl.Status)
+	}
+	if !errors.Is(err, ErrPayloadTooLarge) {
+		t.Error("expected errors.Is ErrPayloadTooLarge")
+	}
+	if !errors.Is(err, ErrBadRequest) {
+		t.Error("expected errors.Is ErrBadRequest")
+	}
+	if IsRetryable(err) {
+		t.Error("payload-too-large must not be retryable")
+	}
+}
+
 func TestProfileInUseActiveSessionIDAbsentIsEmpty(t *testing.T) {
 	t.Parallel()
 	body := []byte(`{"type":"https://errors.driftstack.dev/profile-in-use","title":"Profile already in use","status":409}`)

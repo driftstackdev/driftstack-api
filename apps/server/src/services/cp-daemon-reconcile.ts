@@ -31,6 +31,7 @@
 
 import type { AgentSessionsRepo } from './agent-sessions.js';
 import type { Logger } from '../lib/logger.js';
+import { DeviceFrameTooLargeError } from './device-frame-guard.js';
 
 export interface ReconcileWorkerReportedOrphansDeps {
   readonly agentSessions: AgentSessionsRepo;
@@ -71,7 +72,9 @@ export async function reconcileWorkerReportedOrphans(
       }
     } catch (err) {
       // Per-session try/catch: one bad lookup must not abort the rest, and a throw
-      // must never escape into the fleet WS receive loop.
+      // must never escape into the fleet WS receive loop. A sessionEnd too large
+      // for the device was refused and logged by the device frame guard already.
+      if (err instanceof DeviceFrameTooLargeError) continue;
       logger.warn?.(
         {
           component: 'cp-daemon-reconcile',

@@ -84,6 +84,11 @@ type AgentSession struct {
 	// CapabilityReport is the latest report of what this live session can
 	// do; nil when no report has arrived.
 	CapabilityReport *AgentSessionCapabilityReport `json:"capability_report,omitempty"`
+	// UploadMaxFileBytes is the largest file, in bytes, one upload to this
+	// session can carry right now. Each device takes a file up to its own size,
+	// so this can be smaller than the 64 MiB per-file maximum. Set by Get while
+	// the session is running on a connected device; nil means not known.
+	UploadMaxFileBytes *int64 `json:"upload_max_file_bytes,omitempty"`
 	// The structured reason a session degraded or failed. nil when nothing has
 	// gone wrong. Carries Severity, CustomerActionable and Retryable, which is
 	// what a caller needs to decide whether to surface the failure to a human or

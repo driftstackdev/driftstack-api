@@ -18,6 +18,7 @@
 // reviews this constant before flipping the gate on.
 
 import { binarySizeLabel } from '../lib/binary-size-label.js';
+import { DeviceFrameTooLargeError } from '../services/device-frame-guard.js';
 import { MAX_SSE_BUFFER_BYTES, MAX_SSE_HEARTBEAT_BUFFER_BYTES } from '../lib/sse-backpressure.js';
 import {
   SESSION_UPLOAD_MAX_LIFETIME_BYTES_DEFAULT,
@@ -193,6 +194,7 @@ import {
   NotFoundError,
   PairModeConflictError,
   PairModeStateInvalidTransitionRouteError,
+  PayloadTooLargeError,
   ProxyValidationFailedError,
   RateLimitedError,
   ValidationError,
@@ -500,6 +502,10 @@ interface PublicAgentSession {
   /** Latest validated harness capability/health state. Omitted until a report
    * arrives (or when the fleet control plane is disabled). */
   capability_report?: CustomerSafeCapabilityReport;
+  /** The largest file one upload to this session can carry right now: the
+   * device's message limit after base64 and the envelope, capped at the per-file
+   * ceiling. GET /:id only, and only while a device is connected for it. */
+  upload_max_file_bytes?: number;
   /** Latest authenticated harness failure. Durable so the producer's
    * post-terminal errorEvent remains available after close/restart. */
   error_event: {
@@ -1648,14 +1654,17 @@ export async function dispatchSessionAssignOnCreate(args: {
       'dispatched sessionAssign to fleet node',
     );
   } catch (err) {
-    logger?.warn(
-      {
-        component: 'fleet-session-dispatch',
-        sessionId,
-        err: err instanceof Error ? err.message : String(err),
-      },
-      'sessionAssign dispatch failed (session create unaffected)',
-    );
+    // A frame too large for the device is logged once, by the device frame guard.
+    if (!(err instanceof DeviceFrameTooLargeError)) {
+      logger?.warn(
+        {
+          component: 'fleet-session-dispatch',
+          sessionId,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        'sessionAssign dispatch failed (session create unaffected)',
+      );
+    }
     // A logger failure after sendSessionAssign returned is not a dispatch
     // failure. Do not close a live, successfully-dispatched session merely
     // because best-effort observability threw.
@@ -1740,15 +1749,17 @@ async function closeFailedSessionAssign(args: {
     claimedConnection.sendSessionEnd(serializeSessionEnd(sessionId));
   } catch (teardownErr) {
     fleetControlRegistry.recordPendingTeardown(claimedNodeId, sessionId);
-    logger?.warn(
-      {
-        component: 'fleet-session-dispatch',
-        sessionId,
-        nodeId: claimedNodeId,
-        err: teardownErr instanceof Error ? teardownErr.message : String(teardownErr),
-      },
-      'immediate dispatch-failure teardown failed; queued bounded sessionEnd for reconnect',
-    );
+    if (!(teardownErr instanceof DeviceFrameTooLargeError)) {
+      logger?.warn(
+        {
+          component: 'fleet-session-dispatch',
+          sessionId,
+          nodeId: claimedNodeId,
+          err: teardownErr instanceof Error ? teardownErr.message : String(teardownErr),
+        },
+        'immediate dispatch-failure teardown failed; queued bounded sessionEnd for reconnect',
+      );
+    }
     return;
   }
   logger?.info(
@@ -2112,16 +2123,18 @@ export async function dispatchSessionEndOnClose(args: {
       }
     }
     try {
-      logger?.warn(
-        {
-          component: 'fleet-session-dispatch',
-          sessionId,
-          nodeId: targetNodeId,
-          queued,
-          err: err instanceof Error ? err.message : String(err),
-        },
-        'sessionEnd dispatch failed (session close unaffected)',
-      );
+      if (!(err instanceof DeviceFrameTooLargeError)) {
+        logger?.warn(
+          {
+            component: 'fleet-session-dispatch',
+            sessionId,
+            nodeId: targetNodeId,
+            queued,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          'sessionEnd dispatch failed (session close unaffected)',
+        );
+      }
     } catch {
       /* close-never-throws includes observability failures */
     }
@@ -2175,6 +2188,7 @@ export async function dispatchResumeSession(args: {
       'dispatched resumeSession to fleet node',
     );
   } catch (err) {
+    if (err instanceof DeviceFrameTooLargeError) return; // the guard logged it
     logger?.warn(
       {
         component: 'fleet-session-dispatch',
@@ -3963,13 +3977,21 @@ export function registerAgentSessionsRoutes(
       }
       await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       const osFingerprint = await readSessionProxyOsFingerprint(rec);
-      return publicAgentSession(
+      const body = publicAgentSession(
         rec,
         undefined,
         sessionLivenessStore,
         sessionCapabilityReportStore,
         osFingerprint,
       );
+      // The upload limit of the device running this session, so a client can
+      // check a file before reading it (same number POST /:id/files enforces).
+      const device =
+        rec.status === 'active' && rec.nodeId ? fleetControlRegistry?.get(rec.nodeId) : undefined;
+      if (device !== undefined) {
+        body.upload_max_file_bytes = device.maxUploadFileBytes(rec.id, uploadMaxFileBytes);
+      }
+      return body;
     },
   );
 
@@ -4386,6 +4408,16 @@ export function registerAgentSessionsRoutes(
           status: 'unavailable' as const,
           reason: 'This session cannot be reached right now. Try again shortly.',
         };
+      }
+      // The jar goes to the device as one message, and a message larger than the
+      // device reads closes its whole control socket — refuse before relaying.
+      const cookieFrameBytes = conn.setCookiesFrameBytes(rec.id, parsed.data.cookies);
+      const deviceFrameLimit = conn.deviceFrameLimitBytes();
+      if (cookieFrameBytes > deviceFrameLimit) {
+        throw new PayloadTooLargeError(
+          `This cookie jar is too large to send to this device (limit ${binarySizeLabel(deviceFrameLimit)}).`,
+          { limitBytes: deviceFrameLimit, sizeBytes: cookieFrameBytes },
+        );
       }
       // Hardening: shed the request (discriminated error, no relay) when this
       // account already has RELAY_MAX_ACCOUNT_INFLIGHT relays awaiting; otherwise
@@ -4833,8 +4865,11 @@ export function registerAgentSessionsRoutes(
   // Mirrors POST semantics of the cookies pull: same control-auth + ownership, a
   // DISCRIMINATED 200 body in every relay case (ok / unavailable / timeout / error)
   // so the GUI renders expected-inert states without HTTP-error noise. Client-side
-  // validation failures (malformed body / empty / >64 MiB) are 400s.
-  const UPLOAD_MAX_FILE_BYTES = uploadMaxFileBytes; // harness cap (W2851), test-injectable
+  // validation failures (malformed body / empty / >64 MiB) are 400s; a file larger
+  // than the session's device takes in one message is a 413, and is never sent.
+  // The absolute per-file ceiling (test-injectable). Not a device cap: what a
+  // device can take is per device and usually smaller — see the 413 below.
+  const UPLOAD_MAX_FILE_BYTES = uploadMaxFileBytes;
   // 64 MiB raw → ~85.4 MiB base64; allow that + the JSON envelope with margin.
   // Beyond this Fastify 413s before the handler; the handler is the authoritative
   // 64-MiB-decoded enforcer.
@@ -5051,6 +5086,15 @@ export function registerAgentSessionsRoutes(
             status: 'unavailable' as const,
             reason: 'This session cannot be reached right now. Try again shortly.',
           };
+        }
+        // The file goes to the device as one message, and a message larger than
+        // the device reads closes its whole control socket — refuse before relaying.
+        const deviceMaxFileBytes = conn.maxUploadFileBytes(rec.id, UPLOAD_MAX_FILE_BYTES);
+        if (bytes.length > deviceMaxFileBytes) {
+          throw new PayloadTooLargeError(
+            `This file is too large to send to this device (limit ${binarySizeLabel(deviceMaxFileBytes)}).`,
+            { limitBytes: deviceMaxFileBytes, sizeBytes: bytes.length },
+          );
         }
         const outcome = await conn.requestUpload(
           randomUUID(),

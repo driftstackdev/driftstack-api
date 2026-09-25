@@ -118,6 +118,12 @@ export const PROBLEM_TYPES = {
   // session is NOT a new bind and is never blocked; a profile with only TERMINAL
   // sessions is free to bind again; a create without a profile_id is never gated.
   ProfileInUse: 'https://errors.driftstack.dev/profile-in-use',
+  // 413 — the request is too large for where it has to go, and nothing was
+  // sent there. A request body over the route's limit, or a file or cookie jar
+  // larger than the device running the session takes at once (the
+  // device's own limit, usually well under the route's). When the device is the
+  // limit, `limit_bytes` and `size_bytes` extensions carry the two sizes.
+  PayloadTooLarge: 'https://errors.driftstack.dev/payload-too-large',
 } as const;
 
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES];

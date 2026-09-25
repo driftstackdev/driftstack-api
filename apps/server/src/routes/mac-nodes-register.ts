@@ -36,6 +36,7 @@ import {
   ValidationError,
 } from '../lib/errors.js';
 import { serializeControlCommand } from '../services/harness-control-codec.js';
+import { DeviceFrameTooLargeError } from '../services/device-frame-guard.js';
 import { CONTROL_COMMANDS } from '../schemas/harness-control-protocol.js';
 import type { AdminAuditService } from '../services/admin-audit.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
@@ -480,15 +481,19 @@ export function registerMacNodesRoutes(
           }),
         );
       } catch (err) {
-        req.log?.warn(
-          {
-            component: 'fleet-node-control',
-            nodeId,
-            command: parsed.data.command,
-            err: err instanceof Error ? err.message : String(err),
-          },
-          'controlCommand transport send failed; answering 409 rather than 500',
-        );
+        // A frame too large for the device was refused and logged by the guard,
+        // with its type and size; one refusal is one WARN line.
+        if (!(err instanceof DeviceFrameTooLargeError)) {
+          req.log?.warn(
+            {
+              component: 'fleet-node-control',
+              nodeId,
+              command: parsed.data.command,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            'controlCommand transport send failed; answering 409 rather than 500',
+          );
+        }
         throw new ConflictError(
           `Machine ${nodeId} could not be reached — the command was not delivered.`,
         );

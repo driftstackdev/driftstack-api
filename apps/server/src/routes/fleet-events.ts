@@ -93,6 +93,11 @@ export function assertFleetOutboundCapacity(bufferedAmount: number, frameBytes: 
   }
 }
 
+// The ONE raw write to a device's control socket. It is handed only to
+// `registry.register`, whose connection wraps it in its DeviceFrameGuard at
+// once: the device closes this whole socket on a message larger than it reads,
+// so every frame is measured there first (services/device-frame-guard.ts; the
+// scanner only-the-device-frame-guard-writes-to-a-device-socket keeps it so).
 function sendFleetFrame(socket: FleetSocket, data: string): void {
   assertFleetSocketOpen(socket.readyState);
   assertFleetOutboundCapacity(socket.bufferedAmount, Buffer.byteLength(data, 'utf8'));

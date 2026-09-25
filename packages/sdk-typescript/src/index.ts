@@ -151,6 +151,7 @@ export {
   NotFoundError,
   PairModeConflictError,
   PairModeStateInvalidTransitionError,
+  PayloadTooLargeError,
   ProfileInUseError,
   ProxyValidationFailedError,
   RateLimitError,

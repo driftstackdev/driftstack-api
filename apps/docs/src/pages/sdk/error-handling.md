@@ -73,6 +73,7 @@ Agent sessions add these typed errors to the table above:
 | `bundled-llm-consent-required` | `BundledLlmConsentRequiredError`      | `BundledLlmConsentRequiredError`      | `*BundledLlmConsentRequiredError`      | no        |
 | `byok-anthropic-required`      | `ByokAnthropicRequiredError`          | `ByokAnthropicRequiredError`          | `*ByokAnthropicRequiredError`          | no        |
 | `feature-unavailable`          | `FeatureUnavailableError`             | `FeatureUnavailableError`             | `*FeatureUnavailableError`             | no        |
+| `payload-too-large`            | `PayloadTooLargeError`                | `PayloadTooLargeError`                | `*PayloadTooLargeError`                | no        |
 | `profile-in-use`               | `ProfileInUseError`                   | `ProfileInUseError`                   | `*ProfileInUseError`                   | no        |
 | `proxy-validation-failed`      | `ProxyValidationFailedError`          | `ProxyValidationFailedError`          | `*ProxyValidationFailedError`          | no        |
 | `storage-quota-exceeded`       | `StorageQuotaExceededError`           | `StorageQuotaExceededError`           | `*StorageQuotaExceededError`           | no        |

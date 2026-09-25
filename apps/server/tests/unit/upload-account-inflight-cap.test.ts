@@ -476,6 +476,10 @@ function makeUploadRegistry(
   opts: { relayed?: string[]; fail?: boolean } = {},
 ): FleetControlRegistry {
   const conn = {
+    // A device that takes any file up to the route's own per-file ceiling: the
+    // caps under test here are the account and session ones, not the device's
+    // message size (that is an-upload-or-cookie-import-too-large-for-the-device).
+    maxUploadFileBytes: (_sessionId: string, ceilingBytes: number) => ceilingBytes,
     requestUpload: (
       _requestId: string,
       _sessionId: string,
@@ -778,6 +782,8 @@ describe('POST /v1/agent-sessions/:id/files — the LIFETIME cap holds under CON
     entered: string[],
   ): FleetControlRegistry {
     const conn = {
+      // Takes any file up to the route's ceiling — see makeUploadRegistry.
+      maxUploadFileBytes: (_sessionId: string, ceilingBytes: number) => ceilingBytes,
       requestUpload: async (
         _requestId: string,
         _sessionId: string,

@@ -113,7 +113,7 @@ describe('W394.A apps/server/src/middleware/error-handler.ts content parity', ()
   // summary of the TYPE, so that named a different class than the URI beside
   // it. Source now picks both from one tuple; behaviour is covered by
   // `problem-title-agrees-with-problem-type`, which drives the real handler.
-  it('normaliseError: FastifyError <500 with numeric statusCode → typed ApiError, type and title paired (401→unauthorized/Unauthorized, 403→forbidden/Forbidden, else→bad-request/Bad Request)', () => {
+  it('normaliseError: FastifyError <500 with numeric statusCode → typed ApiError, type and title paired (401→unauthorized/Unauthorized, 403→forbidden/Forbidden, 413→payload-too-large/Payload Too Large, else→bad-request/Bad Request)', () => {
     expect(body).toMatch(
       /Fastify's body-parser \/ validator throws errors with a numeric statusCode\s*\/\/\s*and a code like 'FST_ERR_VALIDATION'\. Treat those as 400s\./,
     );
@@ -121,7 +121,7 @@ describe('W394.A apps/server/src/middleware/error-handler.ts content parity', ()
       /if \(typeof fastifyErr\.statusCode === 'number' && fastifyErr\.statusCode < 500\) \{/,
     );
     expect(body).toMatch(
-      /fastifyErr\.statusCode === 401\s*\?\s*\(\[PROBLEM_TYPES\.Unauthorized, 'Unauthorized'\] as const\)\s*:\s*fastifyErr\.statusCode === 403\s*\?\s*\(\[PROBLEM_TYPES\.Forbidden, 'Forbidden'\] as const\)\s*:\s*\(\[PROBLEM_TYPES\.BadRequest, 'Bad Request'\] as const\);/,
+      /fastifyErr\.statusCode === 401\s*\?\s*\(\[PROBLEM_TYPES\.Unauthorized, 'Unauthorized'\] as const\)\s*:\s*fastifyErr\.statusCode === 403\s*\?\s*\(\[PROBLEM_TYPES\.Forbidden, 'Forbidden'\] as const\)\s*:\s*fastifyErr\.statusCode === 413\s*\?\s*\(\[PROBLEM_TYPES\.PayloadTooLarge, 'Payload Too Large'\] as const\)\s*:\s*\(\[PROBLEM_TYPES\.BadRequest, 'Bad Request'\] as const\);/,
     );
     expect(body).toMatch(/const \[type, title\] =/);
     expect(body).toMatch(/^\s*type,\s*$/m);

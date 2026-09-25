@@ -174,6 +174,12 @@ import {
 import { pageErrorCopy, pageErrorInfoEqual, type PageErrorInfo } from '../lib/page-error-copy';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import { downloadBlob, downloadJson, downloadResponse } from '../lib/download';
+import {
+  cookieImportRefusalNote,
+  uploadFailureNote,
+  uploadLimitLabel,
+  uploadRefusalNote,
+} from '../lib/upload-size-limit';
 import { startGuardedPoll } from '../lib/guarded-poll';
 import {
   loadSimulatorWindowSize,
@@ -3542,7 +3548,12 @@ export function CookiesPane({
           // an invalid field); a 404 = the session is gone; only a 503 (gated/not-live)
           // gets the calm pending copy. authedFetch throws AgentSessionControlError(status).
           const status = err instanceof AgentSessionControlError ? err.status : 0;
-          if (status === 422) {
+          // A 413 = the jar is larger than this session's device takes. Trying
+          // again cannot work, so say what is wrong instead of "try again".
+          const tooLarge = cookieImportRefusalNote(err);
+          if (tooLarge !== null) {
+            setImportNote(tooLarge);
+          } else if (status === 422) {
             setImportNote('That cookies file was rejected (too many cookies or an invalid field).');
           } else if (status === 404) {
             setImportNote('Session is no longer live.');
@@ -7835,6 +7846,15 @@ function SimulatorWindowInner({
     navInFlight,
   ]);
 
+  // The device's per-file upload limit for THIS session, as the lifecycle poll
+  // below last read it (`upload_max_file_bytes`). Keyed by session so a swapped-in
+  // session never inherits the previous device's limit. State, not a ref: the
+  // drop zone names it before a file is picked, and the picker checks against it.
+  const [uploadLimit, setUploadLimit] = useState<{
+    sessionId: string;
+    bytes: number | null;
+  } | null>(null);
+
   // P1a — TERMINAL session-end poll. The freeze cluster's auto-reconnect/resubscribe/
   // rebuild machinery treated a session that ACTUALLY ENDED (the worker browser
   // closed, the session was destroyed/errored, the orphan sweeper reaped it) the same
@@ -7860,6 +7880,16 @@ function SimulatorWindowInner({
         heartbeatClientId: clientIdRef.current,
       })
         .then((s) => {
+          // The upload limit rides this read; keep the latest for the drop zone
+          // and the file picker (an unchanged value keeps the same state object).
+          if (!cancelled && reqSessionId === sessionIdRef.current) {
+            const bytes = s.uploadMaxFileBytes ?? null;
+            setUploadLimit((prev) =>
+              prev !== null && prev.sessionId === reqSessionId && prev.bytes === bytes
+                ? prev
+                : { sessionId: reqSessionId, bytes },
+            );
+          }
           // One-way: only LATCH terminal — never clear it (a non-terminal read after a
           // real end can't happen for the same id, and we must not let a stale/racing
           // poll un-end a closed session). A fresh session swap resets sessionEnded.
@@ -8482,9 +8512,16 @@ function SimulatorWindowInner({
   // Visual-only: highlight the drop-zone while a file is dragged over it.
   const [fileDragOver, setFileDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // This session's device limit, or null when not known yet (or an older server).
+  const sessionUploadLimit =
+    uploadLimit !== null && uploadLimit.sessionId === sessionId ? uploadLimit.bytes : null;
   const onUploadFile = (file: File): void => {
-    if (file.size > 64 * 1024 * 1024) {
-      setUploadNote(`${file.name} is too large (max 64 MB).`);
+    // Checked BEFORE reading the file: the device takes a file up to its own size
+    // (often well under 64 MiB), and the server would refuse a larger one anyway.
+    const limitAtPick = sessionUploadLimit;
+    const refusal = uploadRefusalNote(file, limitAtPick);
+    if (refusal !== null) {
+      setUploadNote(refusal);
       return;
     }
     // Own the upload at SELECTION time, before FileReader's async boundary. Capturing
@@ -8540,11 +8577,13 @@ function SimulatorWindowInner({
             );
           }
         })
-        .catch(() => {
+        .catch((err: unknown) => {
           if (reqSessionId !== sessionIdRef.current) return; // session swapped — drop stale note
-          // Gated 503 / 404 / network — a transient reachability gap, not a missing
-          // feature. Retry by picking the file again once the session is reachable.
-          setUploadNote("Couldn't upload — the device isn't reachable right now.");
+          // A 413 is the server refusing the file's size: say so in the client's own
+          // words, with the limit the refusal carried. Anything else — gated 503 /
+          // 404 / network — is a transient reachability gap; retry by picking the
+          // file again once it is reachable.
+          setUploadNote(uploadFailureNote(err, limitAtPick));
         })
         .finally(() => {
           if (reqSessionId !== sessionIdRef.current) return; // new session owns its own uploading flag
@@ -12532,7 +12571,7 @@ function SimulatorWindowInner({
 
                         {/* The hidden native input is the upload mechanism — the
                           drop-zone below is a styled trigger over it. Behavior
-                          (onUploadFile, 64 MiB guard, opaque-handle list) unchanged. */}
+                          (onUploadFile, device size guard, opaque-handle list) unchanged. */}
                         <input
                           ref={fileInputRef}
                           type="file"
@@ -12588,7 +12627,8 @@ function SimulatorWindowInner({
                                   : 'Drop a file or click to upload'}
                           </span>
                           <span className="text-[10px] text-white/50">
-                            Available to the page&apos;s file picker · max 64 MB
+                            Available to the page&apos;s file picker · max{' '}
+                            {uploadLimitLabel(sessionUploadLimit)}
                           </span>
                         </button>
 

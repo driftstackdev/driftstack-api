@@ -285,6 +285,10 @@ class AgentSession(BaseModel):
     livekit: Livekit | None = None
     liveness: Liveness | None = None
     capability_report: CapabilityReport | None = None
+    upload_max_file_bytes: conint(ge=0) | None = None
+    """
+    The largest file, in bytes, one upload to this session can carry right now. Absent when not known.
+    """
     error_event: ErrorEvent | None = None
     """
     The most recent failure recorded for this session, at launch or while running. Null when none has been reported.
@@ -1889,6 +1893,10 @@ class Session1(BaseModel):
     livekit: Livekit | None = None
     liveness: Liveness | None = None
     capability_report: CapabilityReport | None = None
+    upload_max_file_bytes: conint(ge=0) | None = None
+    """
+    The largest file, in bytes, one upload to this session can carry right now. Absent when not known.
+    """
     error_event: ErrorEvent | None = None
     """
     The most recent failure recorded for this session, at launch or while running. Null when none has been reported.
@@ -2135,6 +2143,10 @@ class Session2(BaseModel):
     livekit: Livekit | None = None
     liveness: Liveness | None = None
     capability_report: CapabilityReport | None = None
+    upload_max_file_bytes: conint(ge=0) | None = None
+    """
+    The largest file, in bytes, one upload to this session can carry right now. Absent when not known.
+    """
     error_event: ErrorEvent | None = None
     """
     The most recent failure recorded for this session, at launch or while running. Null when none has been reported.
@@ -2176,6 +2188,10 @@ class Session3(BaseModel):
     livekit: Livekit | None = None
     liveness: Liveness | None = None
     capability_report: CapabilityReport | None = None
+    upload_max_file_bytes: conint(ge=0) | None = None
+    """
+    The largest file, in bytes, one upload to this session can carry right now. Absent when not known.
+    """
     error_event: ErrorEvent | None = None
     """
     The most recent failure recorded for this session, at launch or while running. Null when none has been reported.
@@ -2217,6 +2233,10 @@ class Session4(BaseModel):
     livekit: Livekit | None = None
     liveness: Liveness | None = None
     capability_report: CapabilityReport | None = None
+    upload_max_file_bytes: conint(ge=0) | None = None
+    """
+    The largest file, in bytes, one upload to this session can carry right now. Absent when not known.
+    """
     error_event: ErrorEvent | None = None
     """
     The most recent failure recorded for this session, at launch or while running. Null when none has been reported.
@@ -2435,6 +2455,10 @@ class Session5(BaseModel):
     livekit: Livekit | None = None
     liveness: Liveness | None = None
     capability_report: CapabilityReport | None = None
+    upload_max_file_bytes: conint(ge=0) | None = None
+    """
+    The largest file, in bytes, one upload to this session can carry right now. Absent when not known.
+    """
     error_event: ErrorEvent | None = None
     """
     The most recent failure recorded for this session, at launch or while running. Null when none has been reported.

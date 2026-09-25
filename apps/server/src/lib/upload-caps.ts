@@ -16,7 +16,14 @@
 // (AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES → config → bootstrap → app →
 // route); these are the values that apply when it is unset.
 
-/** Decoded size of a single uploaded file. Matches the harness cap (W2851). */
+/**
+ * Decoded size of a single uploaded file — the absolute CEILING, not what a
+ * device takes. An upload reaches the device as one message, and each device
+ * reads messages up to its own limit (4 MiB unless its heartbeat advertises
+ * more), so the size a session actually accepts is the smaller of this and what
+ * fits that device's message after base64 and the envelope. See
+ * services/device-frame-guard.ts; the route answers 413 above that.
+ */
 export const UPLOAD_MAX_FILE_BYTES_DEFAULT = 64 * 1024 * 1024;
 
 /** Concurrent in-flight upload volume per ACCOUNT, across sessions. */

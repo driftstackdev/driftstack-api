@@ -131,6 +131,13 @@ export const ERROR_PAGES = {
       'A session-create carried a profile_id that already has a live (non-terminal) session. A profile can run only one session at a time — two sessions on the same profile would both restore and then overwrite the same saved cookies and logins, losing your data. The body carries active_session_id, the live session you already have running. Sessions without a profile_id are never affected.',
     fix: 'End the session named in active_session_id (or wait for it to finish), then launch again. If you need parallel runs, use separate profiles.',
   },
+  'payload-too-large': {
+    status: 413,
+    title: 'Payload too large',
+    meaning:
+      'The request is too large for where it has to go, and nothing was sent there. Either the request body is over the endpoint’s size limit, or a file or cookie jar is larger than the device running your session takes at once — each device has its own limit, usually well under the endpoint’s. When the device is the limit, the body carries limit_bytes (the most that fits) and size_bytes (what you sent).',
+    fix: 'Send less: a smaller file or cookie jar. Before an upload, check the file against the session’s upload_max_file_bytes (GET /v1/agent-sessions/{id}), which is the exact limit for the device running it.',
+  },
   'session-destroyed': {
     status: 410,
     title: 'Session destroyed',
@@ -256,6 +263,7 @@ export const RELATED = {
   'tier-limit': ['concurrency-limit', 'rate-limited', 'storage-quota-exceeded'],
   'storage-quota-exceeded': ['tier-limit', 'conflict'],
   'profile-in-use': ['conflict', 'concurrency-limit', 'storage-quota-exceeded'],
+  'payload-too-large': ['bad-request', 'validation-failed'],
   unauthorized: ['invalid-key', 'invalid-credentials', 'forbidden'],
   forbidden: ['unauthorized', 'mfa-step-up-required'],
   'mfa-step-up-required': ['forbidden', 'unauthorized'],

@@ -31,6 +31,7 @@
 //   https://errors.driftstack.dev/mfa-step-up-required → MfaStepUpRequiredError
 //   https://errors.driftstack.dev/proxy-validation-failed → ProxyValidationFailedError
 //   https://errors.driftstack.dev/profile-in-use        → ProfileInUseError
+//   https://errors.driftstack.dev/payload-too-large     → PayloadTooLargeError
 //
 // Anything else (network failure, parse error, etc.) surfaces as a
 // `DriftstackError` with `kind: 'transport'` set on the instance.
@@ -106,6 +107,27 @@ export class BadRequestError extends DriftstackError {
   constructor(p: Problem) {
     super(toOpts('bad_request', p));
     this.name = 'BadRequestError';
+  }
+}
+
+/**
+ * 413 — the request is too large for where it has to go, and nothing was sent
+ * there: a body over the endpoint's size limit, or a file or cookie jar larger
+ * than the device running the session takes at once. When the device is the
+ * limit, `limitBytes` is the most that fits and `sizeBytes` what was sent;
+ * both are undefined otherwise. For uploads, check a file against the session's
+ * `upload_max_file_bytes` first. Extends BadRequestError (a 413 used to arrive
+ * as the `bad-request` type), so `catch (BadRequestError)` still catches it.
+ */
+export class PayloadTooLargeError extends BadRequestError {
+  readonly limitBytes: number | undefined;
+  readonly sizeBytes: number | undefined;
+  constructor(p: Problem) {
+    super(p);
+    this.name = 'PayloadTooLargeError';
+    const ext = p as { limit_bytes?: unknown; size_bytes?: unknown };
+    this.limitBytes = typeof ext.limit_bytes === 'number' ? ext.limit_bytes : undefined;
+    this.sizeBytes = typeof ext.size_bytes === 'number' ? ext.size_bytes : undefined;
   }
 }
 
@@ -646,6 +668,8 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
   'https://errors.driftstack.dev/proxy-validation-failed': (p) => new ProxyValidationFailedError(p),
   // Single-active-session-per-profile guard (409 at launch).
   'https://errors.driftstack.dev/profile-in-use': (p) => new ProfileInUseError(p),
+  // Too large for the endpoint or for the session's device (413).
+  'https://errors.driftstack.dev/payload-too-large': (p) => new PayloadTooLargeError(p),
   'https://errors.driftstack.dev/session-destroyed': (p) => new SessionDestroyedError(p),
   'https://errors.driftstack.dev/session-timeout': (p) => new SessionTimeoutError(p),
   'https://errors.driftstack.dev/legal-acceptance-required': (p) =>

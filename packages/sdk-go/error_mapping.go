@@ -51,6 +51,8 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	"https://errors.driftstack.dev/proxy-validation-failed": buildProxyValidationFailed,
 	// Single-active-session-per-profile guard (409 at launch).
 	"https://errors.driftstack.dev/profile-in-use": buildProfileInUse,
+	// Too large for the endpoint or for the session's device (413).
+	"https://errors.driftstack.dev/payload-too-large": buildPayloadTooLarge,
 }
 
 // errorFromResponse parses an HTTP response body as RFC 7807
@@ -242,6 +244,14 @@ func buildProfileInUse(base apiError, problem map[string]any, _ string) error {
 	return &ProfileInUseError{apiError: base, ActiveSessionID: activeSessionID}
 }
 
+func buildPayloadTooLarge(base apiError, problem map[string]any, _ string) error {
+	return &PayloadTooLargeError{
+		apiError:   base,
+		LimitBytes: int64FromProblem(problem, "limit_bytes"),
+		SizeBytes:  int64FromProblem(problem, "size_bytes"),
+	}
+}
+
 func intFromProblem(m map[string]any, key string) int {
 	v, ok := m[key]
 	if !ok {
@@ -393,6 +403,7 @@ var (
 	_ error = (*LegalAcceptanceRequiredError)(nil)
 	_ error = (*DriverError)(nil)
 	_ error = (*ProfileInUseError)(nil)
+	_ error = (*PayloadTooLargeError)(nil)
 	_ error = (*StorageQuotaExceededError)(nil)
 	_ error = (*ProxyValidationFailedError)(nil)
 	_ error = (*UnknownError)(nil)

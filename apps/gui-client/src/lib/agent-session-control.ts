@@ -193,6 +193,10 @@ export interface AgentSessionControlState {
   capabilityReport?: AgentSessionCapabilityReport;
   /** Latest authenticated harness launch/runtime failure. */
   errorEvent?: AgentSessionErrorEvent;
+  /** The largest file one upload to this session can carry right now — the
+   *  device's own limit, often well under 64 MiB. Present only when the server
+   *  sent a positive integer; absent means not known (older server, no device). */
+  uploadMaxFileBytes?: number;
 }
 
 export class AgentSessionControlError extends Error {
@@ -205,6 +209,10 @@ export class AgentSessionControlError extends Error {
     /** GUI audit #12 — the response's Retry-After in ms, when it carried one,
      *  so a poller can back off by what the server asked (lib/guarded-poll). */
     readonly retryAfterMs: number | null = null,
+    /** A `payload-too-large` refusal's `limit_bytes`: the most the device running
+     *  the session takes. A number the server documents, not prose, so the client
+     *  can name it in its own sentence (lib/upload-size-limit). Null otherwise. */
+    readonly limitBytes: number | null = null,
   ) {
     super(message);
     this.name = 'AgentSessionControlError';
@@ -221,6 +229,7 @@ interface ApiSession {
   closed_at?: string | null;
   capability_report?: unknown;
   error_event?: unknown;
+  upload_max_file_bytes?: unknown;
 }
 
 function isMode(v: unknown): v is SessionMode {
@@ -440,18 +449,29 @@ export async function authedResponse(
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
     let kind = 'unknown';
+    let limitBytes: number | null = null;
     try {
       const body = await readBoundedDiagnosticJson<{
         detail?: string;
         title?: string;
         type?: string;
+        limit_bytes?: unknown;
       }>(res);
       detail = body.detail ?? body.title ?? detail;
       if (typeof body.type === 'string') kind = body.type.split('/').pop() ?? 'unknown';
+      const limit = body.limit_bytes;
+      if (
+        kind === 'payload-too-large' &&
+        typeof limit === 'number' &&
+        Number.isSafeInteger(limit) &&
+        limit > 0
+      ) {
+        limitBytes = limit;
+      }
     } catch {
       // Non-JSON error body — keep the HTTP-status defaults.
     }
-    throw new AgentSessionControlError(detail, res.status, kind, retryAfterMs(res));
+    throw new AgentSessionControlError(detail, res.status, kind, retryAfterMs(res), limitBytes);
   }
   return res;
 }
@@ -563,6 +583,10 @@ export async function getAgentSession(
   if (capabilityReport !== undefined) state.capabilityReport = capabilityReport;
   const errorEvent = errorEventOf(body);
   if (errorEvent !== undefined) state.errorEvent = errorEvent;
+  const uploadMax = body.upload_max_file_bytes;
+  if (typeof uploadMax === 'number' && Number.isSafeInteger(uploadMax) && uploadMax > 0) {
+    state.uploadMaxFileBytes = uploadMax;
+  }
   // The simulator already polls this lifecycle endpoint every five seconds.
   // When that exact window owns pair-mode control, reuse the poll to refresh
   // the API heartbeat. Keep it best-effort so liveness telemetry can never make
@@ -847,8 +871,9 @@ export interface UploadFileResult {
 /** Upload a file's bytes (base64) into the running session's isolated upload jail
  *  and get back an opaque handle to drive a page's <input type=file> (W2851).
  *  Throws (via authedFetch) on a non-2xx — the gated 503 / a 404 / a 400 (empty or
- *  >64 MiB) — so the caller surfaces those; a 200 always carries a discriminated body.
- *  Pre-validate size client-side to avoid the 64 MiB 400. */
+ *  >64 MiB) / a 413 (larger than the session's device takes) — so the caller
+ *  surfaces those; a 200 always carries a discriminated body. Pre-validate size
+ *  client-side against `uploadMaxFileBytes` (lib/upload-size-limit). */
 export async function uploadAgentSessionFile(
   id: string,
   file: { name: string; mime: string; dataB64: string },

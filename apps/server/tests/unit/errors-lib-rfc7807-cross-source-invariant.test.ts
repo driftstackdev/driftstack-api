@@ -168,10 +168,10 @@ describe('W965 errors lib RFC 7807 cross-source invariant', () => {
 
   // ─── 25 ApiError subclasses cardinality ──────────────────────
 
-  it('CRITICAL errors.ts declares EXACTLY 33 ApiError subclasses — covers BadRequest + Validation + auth (5x 401) + Forbidden + NotFound + Conflict + 2x rate-limit + Tier + domain-specific errors + Internal. Q.1.d added ByokAnthropicRequiredError (2026-05-17); subsequent additions through 2026-05-20 (egress + agent + activation-gate family) grew the taxonomy; doc-150 item 6 added StorageQuotaExceededError (2026-06-25); founder directive #63 added ProxyValidationFailedError (2026-06-25); finding #7 added ProfileInUseError (2026-06-27); S12 added AiCreditsExhaustedError (dark) → 33 subclasses + 1 base.', () => {
+  it('CRITICAL errors.ts declares EXACTLY 34 ApiError subclasses — covers BadRequest + Validation + auth (5x 401) + Forbidden + NotFound + Conflict + 2x rate-limit + Tier + domain-specific errors + Internal. Q.1.d added ByokAnthropicRequiredError (2026-05-17); subsequent additions through 2026-05-20 (egress + agent + activation-gate family) grew the taxonomy; doc-150 item 6 added StorageQuotaExceededError (2026-06-25); founder directive #63 added ProxyValidationFailedError (2026-06-25); finding #7 added ProfileInUseError (2026-06-27); S12 added AiCreditsExhaustedError (dark); the device message-size limit added PayloadTooLargeError (413, 2026-09-24) → 34 subclasses + 1 base.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'));
     const classes = p.match(/export class \w+Error extends ApiError/g) ?? [];
-    expect(classes.length).toBe(33); // 33 subclasses, plus ApiError base = 34 total
+    expect(classes.length).toBe(34); // 34 subclasses, plus ApiError base = 35 total
   });
 
   // ─── Each subclass sets name field ───────────────────────────
