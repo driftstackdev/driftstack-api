@@ -3,7 +3,10 @@ import type { Logger } from '../../src/lib/logger.js';
 import type { CapabilityReport } from '../../src/schemas/harness-control-protocol.js';
 import { makeSessionCapabilityReportRelay } from '../../src/services/session-capability-report-relay.js';
 import { SessionCapabilityReportStore } from '../../src/services/session-capability-report-store.js';
-import { unmappedEgressWarnings } from '../../src/services/customer-safe-egress-warnings.js';
+import {
+  customerSafeEgressWarnings,
+  unmappedEgressWarnings,
+} from '../../src/services/customer-safe-egress-warnings.js';
 
 function report(sessionId = 'agt_1', overrides: Partial<CapabilityReport> = {}): CapabilityReport {
   return {
@@ -87,7 +90,10 @@ describe('makeSessionCapabilityReportRelay', () => {
         // fixture also declares no `safeguardLayersExpected`.
         safeguards: 'failed',
         warnings: [
-          'udp_unsupported_by_proxy',
+          // proxyId null: no proxy of its own, so the UDP gap is the connection
+          // Driftstack provides (published as quic_unavailable — see the last
+          // describe in this file), not `udp_unsupported_by_proxy`.
+          'udp_unsupported_by_default_connection',
           'safeguard_failed:dns',
           // ⛔ This fixture declares no `safeguardLayersExpected`, so the control
           // plane has not been told what a complete set of safeguards looks like
@@ -96,7 +102,10 @@ describe('makeSessionCapabilityReportRelay', () => {
           // looking for a check that was never expected in the first place.
           'safeguards_expectation_unreported',
           'streaming_blank',
-          'dead_proxy',
+          // This fixture's session has proxyId null — no proxy of its own — so
+          // the device's `dead_proxy` is the connection Driftstack provides and
+          // is warned as ours (see the describe at the end of this file).
+          'default_connection_down',
         ],
       },
       raw: expect.objectContaining({ sessionId: 'agt_1', manualInputAvailable: false }),
@@ -544,5 +553,171 @@ describe('makeSessionCapabilityReportRelay — early notice of an unworded safeg
     expect(derived.derived.warnings.some((w) => w.startsWith('safeguard_layer_unworded:'))).toBe(
       false,
     );
+  });
+});
+
+// A /v1/sessions driver session linked to an agent session on the connection
+// Driftstack provides (the agent session's proxyId is NULL). When that
+// connection stops carrying traffic the device reports `egressState:
+// 'dead_proxy'` — it cannot tell our connection from a customer's proxy — and
+// this relay passed `dead_proxy` into the driver session's warnings and the
+// `session.egress_capability_changed` webhook, which the docs render as "Your
+// proxy stopped answering" — for a customer who chose no proxy. The same
+// proxyId-null projection the agent-session read makes, applied where the
+// warning is derived. The raw frame is still stored as the device sent it; the
+// public edge projects its egressState from this warning.
+describe('a dead connection on a session with no proxy of its own is warned as ours on /v1/sessions', () => {
+  function relayFor(proxyId: string | null | undefined) {
+    const ingest = vi.fn((_args: unknown) => Promise.resolve());
+    const owned: Record<string, unknown> = {
+      nodeId: 'node-1',
+      driftstackSessionId: 'ses_driver_1',
+      accountId: 'acc_1',
+      status: 'active',
+    };
+    // `undefined` = a caller whose record does not carry the field at all.
+    if (proxyId !== undefined) owned.proxyId = proxyId;
+    const relay = makeSessionCapabilityReportRelay(
+      {
+        get: vi.fn(() => Promise.resolve(owned as never)),
+        ...stopPolicyStubs(),
+      },
+      { ingestEgressCapabilityReport: ingest },
+      new SessionCapabilityReportStore(),
+      logger(),
+    );
+    return { relay, ingest };
+  }
+
+  async function ingested(
+    proxyId: string | null | undefined,
+    egressState: CapabilityReport['egressState'],
+  ): Promise<{ warnings: string[]; raw: Record<string, unknown> }> {
+    const { relay, ingest } = relayFor(proxyId);
+    relay(report('agt_1', { egressState }), 'node-1');
+    await vi.waitFor(() => expect(ingest).toHaveBeenCalledTimes(1));
+    const args = ingest.mock.calls[0]?.[0] as {
+      derived: { warnings: string[] };
+      raw: Record<string, unknown>;
+    };
+    return { warnings: args.derived.warnings, raw: args.raw };
+  }
+
+  it('CRITICAL proxyId null + dead_proxy → default_connection_down, and never dead_proxy', async () => {
+    const { warnings, raw } = await ingested(null, 'dead_proxy');
+    expect(warnings).toContain('default_connection_down');
+    expect(warnings).not.toContain('dead_proxy');
+    // The stored frame keeps the device's word; the public edge projects it.
+    expect(raw.egressState).toBe('dead_proxy');
+  });
+
+  it("CRITICAL proxyId set + dead_proxy stays dead_proxy: that is the customer's own proxy", async () => {
+    const { warnings } = await ingested('prx_customer_own', 'dead_proxy');
+    expect(warnings).toContain('dead_proxy');
+    expect(warnings).not.toContain('default_connection_down');
+  });
+
+  it('a record with no proxyId at all is NOT read as no proxy — the device word stands', async () => {
+    const { warnings } = await ingested(undefined, 'dead_proxy');
+    expect(warnings).toContain('dead_proxy');
+    expect(warnings).not.toContain('default_connection_down');
+  });
+
+  it('a live connection warns nothing either way', async () => {
+    for (const proxyId of [null, 'prx_customer_own']) {
+      const { warnings } = await ingested(proxyId, 'live');
+      expect(warnings).not.toContain('dead_proxy');
+      expect(warnings).not.toContain('default_connection_down');
+    }
+  });
+});
+
+// The same defect one layer over. On a session with no proxy of its own,
+// `udp_unsupported_by_proxy` (documented as "Your proxy refused the SOCKS5 UDP
+// ASSOCIATE command … Use a proxy that carries UDP") and
+// `safeguard_failed:per_spawn_verification` (published as
+// `safeguard_failed:proxy_egress_verification`, "confirm your proxy") still
+// blamed a proxy the customer does not have, on /v1/sessions and the webhook.
+// The UDP gap is the connection Driftstack provides: published as
+// `quic_unavailable` (what the customer can see — QUIC was not used). The route
+// check is published as the bare `safeguard_failed` (a safeguard did not pass —
+// contact support). Both are members of the published vocabulary already, so no
+// new public code ships; operators keep a distinct internal code for each.
+describe('a UDP gap or a failed route check on a session with no proxy of its own does not blame a proxy', () => {
+  async function derivedFor(proxyId: string | null | undefined): Promise<{
+    internal: string[];
+    safeguards: string | undefined;
+    published: string[];
+    unmapped: string[];
+  }> {
+    const ingest = vi.fn((_args: unknown) => Promise.resolve());
+    const owned: Record<string, unknown> = {
+      nodeId: 'node-1',
+      driftstackSessionId: 'ses_driver_1',
+      accountId: 'acc_1',
+      status: 'active',
+    };
+    // `undefined` = a caller whose record does not carry the field at all.
+    if (proxyId !== undefined) owned.proxyId = proxyId;
+    const relay = makeSessionCapabilityReportRelay(
+      { get: vi.fn(() => Promise.resolve(owned as never)), ...stopPolicyStubs() },
+      { ingestEgressCapabilityReport: ingest },
+      new SessionCapabilityReportStore(),
+      logger(),
+    );
+    relay(
+      report('agt_1', {
+        transportModeRequested: 'h2-and-h3',
+        transportModeActive: 'h2-only',
+        safeguardChecks: [
+          { layer: 'per_spawn_verification', passed: false, detail: 'x', timestamp: 't' },
+          { layer: 'webkit_gate', passed: false, detail: 'x', timestamp: 't' },
+          { layer: 'network_firewall', passed: true, detail: 'ok', timestamp: 't' },
+        ],
+        streamingState: 'live',
+        egressState: 'live',
+      }),
+      'node-1',
+    );
+    await vi.waitFor(() => expect(ingest).toHaveBeenCalledTimes(1));
+    const derived = (
+      ingest.mock.calls[0]?.[0] as { derived: { warnings: string[]; safeguards?: string } }
+    ).derived;
+    const { warnings: published, unmapped } = customerSafeEgressWarnings(derived.warnings);
+    return { internal: derived.warnings, safeguards: derived.safeguards, published, unmapped };
+  }
+
+  it('CRITICAL proxyId null → quic_unavailable and the bare safeguard_failed, never a proxy form', async () => {
+    const { internal, safeguards, published, unmapped } = await derivedFor(null);
+    expect(internal).toContain('udp_unsupported_by_default_connection');
+    expect(internal).toContain('default_connection_verification_failed');
+    expect(internal).not.toContain('udp_unsupported_by_proxy');
+    expect(internal).not.toContain('safeguard_failed:per_spawn_verification');
+    // Every other failing layer is named exactly as before.
+    expect(internal).toContain('safeguard_failed:webkit_gate');
+    // The failed check still fails the session's safeguards.
+    expect(safeguards).toBe('failed');
+    expect(unmapped, 'both new internal codes are classified').toEqual([]);
+    expect(published).toContain('quic_unavailable');
+    expect(published).toContain('safeguard_failed');
+    expect(published).toContain('safeguard_failed:browser_integrity');
+    expect(published).not.toContain('udp_unsupported_by_proxy');
+    expect(published).not.toContain('safeguard_failed:proxy_egress_verification');
+  });
+
+  it("proxyId set: the customer's own proxy keeps both proxy forms", async () => {
+    const { internal, published } = await derivedFor('prx_customer_own');
+    expect(internal).toContain('udp_unsupported_by_proxy');
+    expect(internal).toContain('safeguard_failed:per_spawn_verification');
+    expect(internal).not.toContain('udp_unsupported_by_default_connection');
+    expect(internal).not.toContain('default_connection_verification_failed');
+    expect(published).toContain('udp_unsupported_by_proxy');
+    expect(published).toContain('safeguard_failed:proxy_egress_verification');
+  });
+
+  it('a record with no proxyId at all is NOT read as no proxy — the proxy forms stand', async () => {
+    const { internal } = await derivedFor(undefined);
+    expect(internal).toContain('udp_unsupported_by_proxy');
+    expect(internal).toContain('safeguard_failed:per_spawn_verification');
   });
 });

@@ -62,6 +62,10 @@ import type { SessionStatus } from '../schemas/harness-control-protocol.js';
 import type { Logger } from '../lib/logger.js';
 import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import { isCrossNodeSpoof } from './fleet-session-ownership.js';
+import {
+  DEFAULT_EGRESS_UNAVAILABLE_CODE,
+  isDefaultEgressFailure,
+} from './session-error-event-relay.js';
 
 export interface CloseAgentSessionOnTerminalStatusDeps {
   readonly agentSessions: AgentSessionsRepo;
@@ -116,9 +120,24 @@ export async function closeAgentSessionOnTerminalStatus(
     sessionPageStateStore,
     sessionCapabilityReportStore,
   } = deps;
-  const reason = frame.reason ?? `session-${frame.status}`;
+  const deviceReason = frame.reason ?? `session-${frame.status}`;
   try {
     const existing = await agentSessions.get(frame.sessionId);
+    // The SAME correction the errorEvent relay makes, at the other place the
+    // device's words become customer-visible. The desktop app shows
+    // `preferTypedEndReason(error_event.code, closed_reason)`, and the device
+    // sends this terminal status BEFORE its errorEvent, so a read between the two
+    // shows closed_reason alone — and the chat panel latches that first terminal
+    // read. The reverify sweep closes with `egress_lost`, which the app renders
+    // "Proxy connection failed"; on a session with no proxy of its own (proxyId
+    // NULL: dispatched through the operator default) that is our connection
+    // failing, not theirs. proxyId is set in the same claim as node_id, before
+    // the node is ever told about the session, and rewritten only by an accepted
+    // mid-session egress swap — so it names the proxy the session is on.
+    const reason =
+      existing !== null && existing.proxyId === null && isDefaultEgressFailure(deviceReason)
+        ? DEFAULT_EGRESS_UNAVAILABLE_CODE
+        : deviceReason;
     // #5 — only the session's exact OWNING node may terminate it. An authenticated
     // fleet frame targeting a NULL-owner row has no ownership proof and fails closed;
     // dispatch persists node_id before sending the assignment. An absent reporting
@@ -153,6 +172,9 @@ export async function closeAgentSessionOnTerminalStatus(
             component: 'agent-session-terminal-close',
             sessionId: frame.sessionId,
             reason,
+            // What the device said, when the row records something else (a
+            // clean snake_case token — the schema admits nothing more).
+            ...(reason !== deviceReason ? { deviceReason } : {}),
             // ⛔ SPREAD, NOT `?? null`. These two are emitted only on
             // `renderer_crashed`, and only when a reading was actually taken —
             // the node sends NEITHER key when the sweep never sampled the

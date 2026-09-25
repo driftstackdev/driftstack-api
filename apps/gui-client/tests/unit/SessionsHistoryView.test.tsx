@@ -210,7 +210,7 @@ describe('a history row names the session instead of showing only its id', () =>
     // stored, and rendered nowhere, so a leaking session looked exactly like a
     // clean one. The line reads in the customer's words (no 'UDP associate').
     const line = await screen.findByText(/DNS resolved outside the proxy/);
-    expect(line.textContent).toContain('Proxy limits: UDP not supported');
+    expect(line.textContent).toContain('Connection limits: UDP not supported');
     expect(line.textContent).not.toMatch(/associate|egress/i);
     // ⛔ THE BRANCH THAT WAS DEAD. `quic_route` is a string enum and the check
     // compared it against `false`, so this warning could not appear for any
@@ -238,5 +238,122 @@ describe('a history row names the session instead of showing only its id', () =>
     render(<SessionsHistoryView />);
     await screen.findByText('Unreported run');
     expect(screen.queryByText(/^Egress:/)).toBeNull();
+  });
+});
+
+// ⛔ GET /v1/sessions carries `egress_capabilities.warnings` as CODES, and this
+// view printed them raw after the label "Proxy limits:". A /v1/sessions session
+// linked to an agent session with no proxy of its own now carries
+// `default_connection_down` (the connection Driftstack provides dropped), so the
+// row read "Proxy limits: default_connection_down" — a raw code, filed under a
+// proxy the customer does not have. It is also the view a stopped-session
+// notification opens. Every code is now words, and only connection facts sit
+// under the limits label.
+describe('a history row says what each warning means, in words, under the right label', () => {
+  // The published vocabulary, read from the api-types description the server's
+  // parity guard holds equal to the mapping function's closed set — so a code the
+  // server starts publishing reds HERE until this view has words for it.
+  const PUBLISHED = [
+    ...new Set(
+      (EgressCapabilitiesSchema.shape.warnings.description ?? '').match(
+        /(?<=`)[a-z0-9_:]+(?=`)/g,
+      ) ?? [],
+    ),
+  ];
+  const BANNED =
+    /\b(fleet|nodes?|harness|control plane|observer|vantage|interpose|macworker|undetectable|egress)\b/i;
+
+  async function rowText(warnings: string[], over: Record<string, unknown> = {}): Promise<string> {
+    sessionsList.mockResolvedValue({
+      data: [
+        session({
+          id: 'ses_warned',
+          label: 'Warned run',
+          status: 'destroyed',
+          destroyed_at: '2026-08-31T10:00:00.000Z',
+          egress_capabilities: EgressCapabilitiesSchema.parse({
+            udp_associate: true,
+            quic_route: 'proxy',
+            dns_remote_resolve: true,
+            warnings,
+            ...over,
+          }),
+        }),
+      ],
+    });
+    const { container } = render(<SessionsHistoryView />);
+    await screen.findByText('Warned run');
+    const li = container.querySelector('li');
+    return li?.textContent ?? '';
+  }
+
+  it('positive control: the vocabulary is really read (every published code, both connection codes)', () => {
+    expect(PUBLISHED.length).toBeGreaterThanOrEqual(12);
+    expect(PUBLISHED).toContain('dead_proxy');
+    expect(PUBLISHED).toContain('default_connection_down');
+    expect(PUBLISHED).toContain('safeguard_failed:proxy_egress_verification');
+  });
+
+  it("CRITICAL default_connection_down reads as Driftstack's connection, on our side — no code, no proxy label", async () => {
+    const text = await rowText(['default_connection_down']);
+    expect(text).toContain("Driftstack's connection for this session dropped");
+    expect(text).toContain('on our side');
+    expect(text).not.toContain('default_connection_down');
+    // The customer has no proxy on this session: nothing on the row may name one.
+    expect(text).not.toMatch(/proxy/i);
+  });
+
+  it("dead_proxy is the customer's own proxy, said in words", async () => {
+    const text = await rowText(['dead_proxy']);
+    expect(text).toContain('Your proxy stopped answering');
+    expect(text).not.toContain('dead_proxy');
+  });
+
+  it('the live-view codes say what happened to the live view, not to a proxy', async () => {
+    const blank = await rowText(['streaming_blank']);
+    expect(blank).toContain('The live view showed no picture');
+    expect(blank).not.toMatch(/proxy/i);
+    cleanup();
+    const failed = await rowText(['streaming_failed']);
+    expect(failed).toContain('The live view stopped');
+    expect(failed).not.toMatch(/proxy/i);
+  });
+
+  it.each(PUBLISHED.map((code) => [code]))(
+    'published code %s reads as words: never the token, never a banned word',
+    async (code) => {
+      const text = await rowText([code]);
+      expect(text).not.toContain(code);
+      // Every published code says SOMETHING — a reported problem must not vanish.
+      expect(text).toMatch(/Connection limits: |live view|safeguard|check|proxy|connection/i);
+      expect(text).not.toMatch(BANNED);
+    },
+  );
+
+  it('an unknown code reads as a generic line, never the token', async () => {
+    const text = await rowText(['zz_brand_new_code', 'constructor', '__proto__']);
+    expect(text).toContain('Another issue was reported for this session');
+    expect(text).not.toContain('zz_brand_new_code');
+    expect(text).not.toContain('constructor');
+    expect(text).not.toContain('__proto__');
+    // Said once, however many unknown codes there were.
+    expect(text.split('Another issue was reported for this session').length - 1).toBe(1);
+    // A code that names a property every object has is still just an unknown code.
+    for (const inherited of ['constructor', '__proto__', 'toString']) {
+      cleanup();
+      const alone = await rowText([inherited]);
+      expect(alone, inherited).toContain('Another issue was reported for this session');
+      expect(alone, inherited).not.toContain(inherited);
+    }
+  });
+
+  it('a limit reported twice (the capability flag and its warning) is said once', async () => {
+    const text = await rowText(['udp_unsupported_by_proxy', 'quic_unavailable'], {
+      udp_associate: false,
+      quic_route: 'disabled',
+    });
+    expect(text).toContain('Connection limits: UDP not supported · HTTP/3 not available');
+    expect(text.split('UDP not supported').length - 1).toBe(1);
+    expect(text.split('HTTP/3 not available').length - 1).toBe(1);
   });
 });

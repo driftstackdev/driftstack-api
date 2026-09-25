@@ -422,6 +422,7 @@ const EGRESS_WARNINGS_DESCRIPTION =
   '`udp_unsupported_by_proxy` (the proxy refused UDP, so QUIC cannot travel through it — use a UDP-capable proxy if you need HTTP/3); ' +
   '`quic_unavailable` (QUIC was asked for but could not be used, and traffic fell back to HTTP/2 — retry on a new session if HTTP/3 matters); ' +
   '`dead_proxy` (the proxy stopped answering mid-session — check it is reachable before starting another); ' +
+  '`default_connection_down` (the session has no proxy of its own, and the connection Driftstack provides for it stopped carrying traffic mid-session — this is on our side and there is nothing to fix at yours; to run now, start a session with one of your own proxies); ' +
   '`streaming_blank` (the live view produced no picture; the session itself kept running — reopen the view); ' +
   '`streaming_failed` (the live view stopped — start a new session if you need to watch it); ' +
   '`safeguards_unverified` (we could not confirm every egress safeguard ran — treat the egress as unverified and start a new session if that matters); ' +
@@ -509,6 +510,10 @@ const EGRESS_SAFEGUARDS_DESCRIPTION =
  *       new session if HTTP/3 matters to you.
  *     - `dead_proxy` — the proxy stopped answering while the session was
  *       running. Check that it is reachable before starting another session.
+ *     - `default_connection_down` — the session has no proxy of its own, and
+ *       the connection Driftstack provides for it stopped carrying traffic
+ *       while it was running. This is on our side; there is nothing to fix at
+ *       yours. To run now, start a session with one of your own proxies.
  *     - `streaming_blank` — the live view of the session produced no
  *       picture. The session itself kept running; reopen the view, or read
  *       the session's results without it.

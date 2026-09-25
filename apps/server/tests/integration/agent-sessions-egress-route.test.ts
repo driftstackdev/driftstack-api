@@ -244,7 +244,14 @@ describe('POST /v1/agent-sessions/:id/egress (wired)', () => {
     nodeId: string,
     applyPointEcho: 'next_navigation' | 'immediate' | undefined,
     body: Record<string, unknown>,
-  ): Promise<{ res: EgressBody; sent: Record<string, unknown> | null }> {
+    // What the device answers: ok (the default) or a refusal carrying `error`.
+    reply: { ok: true } | { ok: false; error: string } = { ok: true },
+  ): Promise<{
+    res: EgressBody;
+    sent: Record<string, unknown> | null;
+    id: string;
+    proxyId: string;
+  }> {
     fx = await buildTestApp({
       enableAgentRuntime: true,
       enableFleetControlPlane: true,
@@ -264,7 +271,7 @@ describe('POST /v1/agent-sessions/:id/egress (wired)', () => {
             type: 'setEgressResult',
             requestId: frame.requestId,
             sessionId: frame.sessionId,
-            ok: true,
+            ...reply,
             ...(applyPointEcho !== undefined ? { applyPoint: applyPointEcho } : {}),
           }),
         );
@@ -277,7 +284,7 @@ describe('POST /v1/agent-sessions/:id/egress (wired)', () => {
       payload: { proxy_id: proxyId, ...body },
     });
     expect(res.statusCode).toBe(200);
-    return { res: res.json<EgressBody>(), sent };
+    return { res: res.json<EgressBody>(), sent, id, proxyId };
   }
 
   it('CRITICAL a deferred swap the device confirms → ok + next_navigation, and the wire carries the measured exit', async () => {
@@ -316,5 +323,69 @@ describe('POST /v1/agent-sessions/:id/egress (wired)', () => {
     // Vacuity control: the confirmed case above returns a non-null apply_point, so
     // this arm measures the missing echo and not "apply_point is always null".
     expect(res.apply_point).not.toBe('next_navigation');
+  });
+
+  // ⛔ The session row's proxy_id is what every "whose connection failed?"
+  // decision reads: the error-event relay and the terminal close rewrite a proxy
+  // failure on a proxyId-NULL session to default_egress_unavailable, the
+  // capability projection publishes default_connection_down for it, and the
+  // desktop app badges accordingly. A swap that moved a session from no proxy
+  // onto the customer's own proxy while proxy_id stayed NULL made every one of
+  // those call the customer's proxy failing "ours". The swap writes it.
+  it("CRITICAL a swap the device confirms writes the session's proxy_id", async () => {
+    const { res, id, proxyId } = await swapAgainstLiveNode(
+      'node-egress-writes-proxy',
+      'next_navigation',
+      {},
+    );
+    expect(res.status).toBe('ok');
+    expect((await fx.agentSessionsRepo!.get(id))?.proxyId).toBe(proxyId);
+  });
+
+  it('a swap confirmed without an apply point still writes it — the device says the proxy may already be in use', async () => {
+    const { res, id, proxyId } = await swapAgainstLiveNode(
+      'node-egress-unconfirmed-write',
+      undefined,
+      {},
+    );
+    expect(res.apply_point).toBeNull();
+    expect((await fx.agentSessionsRepo!.get(id))?.proxyId).toBe(proxyId);
+  });
+
+  it('CRITICAL a swap the device refuses leaves proxy_id as it was', async () => {
+    const { res, id } = await swapAgainstLiveNode(
+      'node-egress-refused',
+      undefined,
+      {},
+      { ok: false, error: 'upstream refused' },
+    );
+    expect(res.status).toBe('error');
+    // The session was dispatched with no proxy of its own and still has none.
+    expect((await fx.agentSessionsRepo!.get(id))?.proxyId ?? null).toBeNull();
+  });
+});
+
+describe("the swap's proxy_id write (in-memory repository — the twin the route arms run on)", () => {
+  it('writes only the live row the confirming node owns, and back to null for the default', async () => {
+    const { InMemoryAgentSessionsRepo } = await import('../../src/services/agent-sessions.js');
+    const repo = new InMemoryAgentSessionsRepo();
+    const session = await repo.create({ accountId: 'acc_swap', tokenBudgetTotal: 100 });
+    await repo.setNodeId(session.id, 'node-owner', null);
+    const proxyId = '00000000-0000-4000-8000-0000000000b1';
+    expect(
+      await repo.setProxyIdForOwnedActiveSession(session.id, 'node-stranger', proxyId),
+    ).toBeNull();
+    expect((await repo.get(session.id))?.proxyId).toBeNull();
+    expect(
+      (await repo.setProxyIdForOwnedActiveSession(session.id, 'node-owner', proxyId))?.proxyId,
+    ).toBe(proxyId);
+    expect(
+      (await repo.setProxyIdForOwnedActiveSession(session.id, 'node-owner', null))?.proxyId,
+    ).toBeNull();
+    await repo.closeWithReason(session.id, 'customer-closed');
+    expect(
+      await repo.setProxyIdForOwnedActiveSession(session.id, 'node-owner', proxyId),
+    ).toBeNull();
+    expect((await repo.get(session.id))?.proxyId).toBeNull();
   });
 });

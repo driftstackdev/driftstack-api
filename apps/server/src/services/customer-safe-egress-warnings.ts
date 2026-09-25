@@ -120,6 +120,10 @@ const UNPARAMETERISED: Readonly<Record<string, string>> = {
   // ── Pass through unchanged: already WHAT, already documented ───────────
   udp_unsupported_by_proxy: 'udp_unsupported_by_proxy',
   dead_proxy: 'dead_proxy',
+  /** `dead_proxy` on a session with no proxy of its own: the connection
+   *  Driftstack provides stopped carrying traffic. Derived by the capability
+   *  relay, which holds the agent session's proxyId; ours, not the customer's. */
+  default_connection_down: 'default_connection_down',
   streaming_blank: 'streaming_blank',
   streaming_failed: 'streaming_failed',
 
@@ -127,6 +131,11 @@ const UNPARAMETERISED: Readonly<Record<string, string>> = {
   /** "interpose" is a dyld mechanism of ours. What the customer sees is that
    *  QUIC did not carry for this session. */
   h3_interpose_unavailable: 'quic_unavailable',
+  /** `udp_unsupported_by_proxy` on a session with no proxy of its own (the
+   *  capability relay decides it, holding the agent session's proxyId): the
+   *  connection Driftstack provides carried no UDP. There is no proxy of the
+   *  customer's to have refused it; what they can see is that QUIC was not used. */
+  udp_unsupported_by_default_connection: 'quic_unavailable',
 
   // ── Merged: three internal gaps, one customer fact ─────────────────────
   /** The device reported no safeguard checks at all. */
@@ -135,6 +144,15 @@ const UNPARAMETERISED: Readonly<Record<string, string>> = {
    *  completeness could not be checked. Names our producer/consumer protocol;
    *  the customer's half of the fact is identical to the two beside it. */
   safeguards_expectation_unreported: SAFEGUARDS_UNVERIFIED,
+
+  // ── Generalised: the published layer word would blame a proxy ──────────
+  /** `safeguard_failed:per_spawn_verification` on a session with no proxy of its
+   *  own: the check that its traffic left through the connection Driftstack
+   *  provides did not pass. The layer's published word
+   *  (`proxy_egress_verification`) says "your proxy", which this session does
+   *  not have, so the customer learns that a safeguard failed and contacts
+   *  support — the same action either way. */
+  default_connection_verification_failed: SAFEGUARD_FAILED,
 
   // ── Already-public codes, accepted so the map is IDEMPOTENT ────────────
   //

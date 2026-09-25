@@ -1,3 +1,4 @@
+import { sessionStoppedTitle } from '@driftstack/api-types';
 import type { NotificationEvent } from './notifications';
 
 /**
@@ -66,7 +67,12 @@ export function notificationTitle(e: NotificationEvent): string {
     case 'audit.high_severity':
       return `Security event: ${e.action}`;
     case 'session.errored':
-      return `A session stopped: ${e.errorClass}`;
+      // ⛔ Never the code itself. `errorClass` is a device or server token
+      // (`default_egress_unavailable`, `proxy_connection_failed`, …) that names
+      // how the product is built, and printing it verbatim is what this title
+      // did. The mapping is the one the dashboard's banner reads too, so the two
+      // surfaces say the same thing; an unknown code reads as the generic title.
+      return sessionStoppedTitle(e.errorClass);
   }
 }
 

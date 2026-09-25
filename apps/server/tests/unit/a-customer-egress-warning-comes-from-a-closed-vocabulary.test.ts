@@ -47,6 +47,12 @@ const INTERNAL_CODES = [
   'streaming_blank',
   'streaming_failed',
   'dead_proxy',
+  // On a session with no proxy of its own (the agent session's proxyId is null):
+  // `dead_proxy`, the UDP gap and the failed route check are the connection
+  // Driftstack provides, not a proxy of the customer's.
+  'default_connection_down',
+  'udp_unsupported_by_default_connection',
+  'default_connection_verification_failed',
 ] as const;
 
 /**

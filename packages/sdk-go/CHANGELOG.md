@@ -23,6 +23,24 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
   with a challenge cannot be collected without the verifier, so the code and
   state in `BrowserURL` are no longer enough on their own. All three are
   `omitempty`: leaving them unset sends exactly the previous request.
+- **`AgentSessionCapabilityReport.EgressState` can read
+  `"default_connection_down"`.** A session started without a proxy of its own
+  runs on the connection Driftstack provides; this value means that connection
+  stopped carrying traffic while the session ran. It is on our side: there is
+  nothing to fix at yours, and a session started with one of your own proxies
+  runs now. `"dead_proxy"` keeps its meaning — your own proxy stopped. On
+  `GET /v1/sessions/{id}` the same fact arrives as the
+  `default_connection_down` code in `EgressCapabilities.Warnings`, and for
+  that session a connection without UDP reads `quic_unavailable` and a failed
+  check that its traffic left the right way reads `safeguard_failed` — never
+  `udp_unsupported_by_proxy` or `safeguard_failed:proxy_egress_verification`,
+  which name a proxy it does not have.
+- **Error code `"default_egress_unavailable"`** in `AgentSessionErrorEvent.Code`,
+  and as `AgentSession.ClosedReason`: a session with no proxy of its own could
+  not connect through Driftstack's connection. It arrives with
+  `CustomerActionable` `false` — ours to fix — and a session started with one
+  of your own proxies runs now. `Code` stays a `string`, so nothing to change
+  unless you branch on it.
 
 ### Deprecated
 

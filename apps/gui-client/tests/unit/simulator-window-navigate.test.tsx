@@ -373,6 +373,76 @@ describe('SimulatorWindow — address bar navigate', () => {
     expect(stillLoadingLeaves(container)).toHaveLength(0);
   });
 
+  // The 9s rung said "this proxy is slow" for EVERY session — including one with
+  // no proxy of its own, which runs on the connection Driftstack provides and has
+  // no proxy to be slow. The window says "this proxy" only when it KNOWS the
+  // session has one: it was opened naming the proxy it launched through (the
+  // `proxy` handoff, set by every profile launch and reopen — a profile launch
+  // cannot start without one), or the server has said the customer's own proxy
+  // stopped (`dead_proxy`, published only for a session with a proxy_id). The
+  // server's `default_connection_down` says the opposite and wins. Otherwise —
+  // the session-open link and any window opened without the handoff — it says
+  // "the connection", which is true of every session and blames nothing.
+  function slowHintAt10s(query: string): string {
+    vi.useFakeTimers();
+    window.history.pushState(
+      {},
+      '',
+      `/?window=simulator&ws=wss://lk&token=tok&session=agt_x${query}`,
+    );
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: 'slow.example.com' } });
+    fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    const leaves = stillLoadingLeaves(container);
+    expect(leaves).toHaveLength(1);
+    return leaves[0]?.textContent ?? '';
+  }
+
+  it('CRITICAL a window opened without a proxy of its own says the connection is slow, never "this proxy"', () => {
+    const text = slowHintAt10s('');
+    expect(text).toBe('Still loading — the connection is slow. The page is on its way.');
+    expect(text).not.toMatch(/proxy/i);
+  });
+
+  it('a window opened naming the proxy it launched through still says "this proxy is slow"', () => {
+    expect(slowHintAt10s(`&proxy=${encodeURIComponent('Residential JP · 203.0.113.9:1080')}`)).toBe(
+      'Still loading — this proxy is slow. The page is on its way.',
+    );
+  });
+
+  it("CRITICAL the server's default_connection_down outranks a proxy label: it is the connection, not a proxy", () => {
+    const usual = getAgentSession.getMockImplementation();
+    getAgentSession.mockImplementation(() =>
+      immediateControl({
+        mode: 'manual' as const,
+        pairKind: null,
+        status: 'active' as const,
+        terminal: false,
+        closedReason: null,
+        capabilityReport: {
+          manual_input_available: true,
+          egress_state: 'default_connection_down',
+        } as never,
+      }),
+    );
+    try {
+      expect(slowHintAt10s(`&proxy=${encodeURIComponent('Stale label · 203.0.113.9:1080')}`)).toBe(
+        'Still loading — the connection is slow. The page is on its way.',
+      );
+    } finally {
+      // mockClear in beforeEach keeps implementations; put the usual one back.
+      if (usual !== undefined) getAgentSession.mockImplementation(usual);
+    }
+  });
+
   it('gives a changed box target its own load deadline', () => {
     vi.useFakeTimers();
     const { container } = renderSim();

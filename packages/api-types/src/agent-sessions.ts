@@ -71,7 +71,12 @@ export const AgentSessionSchema = z.object({
       streaming_state: z
         .enum(['provisioning', 'live', 'blank', 'failed', 'permission_denied'])
         .nullable(),
-      egress_state: z.enum(['live', 'dead_proxy']).nullable(),
+      /** Whether the session's traffic is getting out. `dead_proxy`: the
+       *  session's own proxy stopped carrying traffic while it ran.
+       *  `default_connection_down`: the session has no proxy of its own and the
+       *  connection Driftstack provides stopped carrying traffic — nothing for
+       *  the customer to fix, and a session on one of their own proxies runs. */
+      egress_state: z.enum(['live', 'dead_proxy', 'default_connection_down']).nullable(),
       proxy_kind: z.enum(['socks5', 'openvpn', 'wireguard']),
       proxy_udp_supported: z.boolean(),
       transport_mode_requested: z.enum(['h2-only', 'h2-and-h3']),
@@ -262,3 +267,78 @@ export const StopAgentTurnResponseSchema = z
   })
   .strict();
 export type StopAgentTurnResponse = z.infer<typeof StopAgentTurnResponseSchema>;
+
+/**
+ * The one-line title a customer reads when a session stops with an error — the
+ * `session.errored` notification's `errorClass`, as the desktop app's
+ * notification centre and the dashboard's banner both show it.
+ *
+ * ⛔ WHY IT LIVES HERE. Both surfaces used to print the code itself
+ * (`A session stopped: ${errorClass}`), so a customer read tokens such as
+ * `default_egress_unavailable` or `proxy_connection_failed` that name how the
+ * product is built. They are two apps in two frameworks — the desktop app is
+ * React, the dashboard banner is an inline script in an Astro layout that cannot
+ * import a module — and both already depend on this package. The dashboard
+ * hands this table to its inline script through `define:vars` (serialised at
+ * build time), the desktop app imports it, and one table means the two cannot
+ * say different things about the same stop.
+ *
+ * Keys are the codes a stopped session reports: the device's error codes (and
+ * the server's corrections of them, such as `default_egress_unavailable`), and
+ * the `/v1/sessions` failure names (`DriverError`, …). An unknown code — one
+ * added later, or anything malformed — reads as {@link SESSION_STOPPED_FALLBACK_TITLE},
+ * never as the raw token. Look codes up as OWN keys only
+ * ({@link sessionStoppedTitle}); `titles[code]` would answer `constructor`
+ * with a function.
+ *
+ * Titles say WHAT happened, in the customer's words.
+ */
+export const SESSION_STOPPED_FALLBACK_TITLE = 'A session stopped';
+
+export const SESSION_STOPPED_TITLES: Readonly<Record<string, string>> = {
+  // ── The connection the session's traffic runs through ────────────────────
+  /** A session with no proxy of its own: the connection Driftstack provides failed. */
+  default_egress_unavailable: "A session stopped: Driftstack's connection failed",
+  /** The customer's proxy refused the username or password saved for it. */
+  proxy_auth_failed: 'A session stopped: your proxy refused its sign-in',
+  proxy_connection_failed: 'A session stopped: it could not connect through its proxy',
+  egress_verification_unavailable: 'A session stopped: we could not confirm its proxy was in use',
+  egress_unreachable: "A session stopped: its proxy's location could not be confirmed",
+  egress_invariant_violation: 'A session stopped to keep its traffic on its proxy',
+  proxy_udp_unsupported: 'A session stopped: its proxy cannot carry HTTP/3',
+  egress_bind_failed: 'A session stopped: its VPN could not be started',
+  /** Ours: the local half of the connection stopped or did not start. */
+  egress_lost: 'A session stopped: its connection dropped on our side',
+  proxy_boot_failed: 'A session stopped: its connection could not start on our side',
+  network_shim_boot_failed: 'A session stopped: its connection could not start on our side',
+  /** Refused: started with no proxy where sessions run only through the customer's. */
+  proxy_required: 'A session could not start: it needs a proxy of your own',
+  exit_ip_changed: 'A session stopped: its exit IP changed',
+  // ── The browser and the session itself ─────────────────────────────────────
+  launch_timeout: 'A session stopped: it did not start in time',
+  render_failed: 'A session stopped: the browser did not start',
+  webkit_spawn_failed: 'A session stopped: the browser did not start',
+  webdriver_connect_failed: 'A session stopped: the browser did not start',
+  browser_crashed: 'A session stopped: the browser stopped unexpectedly',
+  session_resource_overuse: 'A session stopped: a page used too much memory',
+  provisioning_interrupted: 'A session stopped before it finished starting',
+  archetype_lookup_failed: 'A session stopped: its device is not available',
+  session_config_invalid: 'A session stopped: its configuration could not be used',
+  session_refused_at_capacity: 'A session could not start: no device was free',
+  unknown_error: 'A session stopped unexpectedly',
+  // ── `/v1/sessions` failures ────────────────────────────────────────────────
+  SessionTimeoutError: 'A session stopped: an operation took too long',
+  DriverError: 'A session stopped: a browser operation failed',
+  DriverNotIntegratedError: 'A session stopped: the browser was not available',
+};
+
+/** The title for a stopped session's code — own-key lookup, exact token after
+ *  trimming, and {@link SESSION_STOPPED_FALLBACK_TITLE} for anything else. */
+export function sessionStoppedTitle(code: string | null | undefined): string {
+  const token = typeof code === 'string' ? code.trim() : '';
+  if (token !== '' && Object.prototype.hasOwnProperty.call(SESSION_STOPPED_TITLES, token)) {
+    const title = SESSION_STOPPED_TITLES[token];
+    if (typeof title === 'string') return title;
+  }
+  return SESSION_STOPPED_FALLBACK_TITLE;
+}

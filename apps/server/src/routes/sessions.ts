@@ -143,7 +143,13 @@ function publicSession(s: SessionRecord, logger?: EgressWarningLogger): Record<s
     // /v1/profiles/:id/launch). The FULL frame is still stored, and the
     // admin-only GET /v1/admin/sessions still returns it — the filter belongs at
     // the edge, not at rest.
-    egress_capability_report: customerSafeEgressCapabilityReport(s.egressCapabilityReport),
+    // The row's stored warnings ride along for ONE projection: a `dead_proxy`
+    // the relay recorded as `default_connection_down` (a session with no proxy
+    // of its own) is published as that, not as the customer's proxy dying.
+    egress_capability_report: customerSafeEgressCapabilityReport(
+      s.egressCapabilityReport,
+      s.egressCapabilities,
+    ),
     created_at: s.createdAt.toISOString(),
     updated_at: s.updatedAt.toISOString(),
     last_state_at: s.lastStateAt ? s.lastStateAt.toISOString() : null,

@@ -108,6 +108,15 @@ country and timezone, and whether live video is streaming). Both are absent
 until the browser has reported; treat an absent field as "not known yet", never
 as "not running".
 
+`capability_report.egress_state` says whether the session's traffic is getting
+out: `live`; `dead_proxy` — your proxy stopped carrying traffic while the
+session ran, so check it before starting another; or `default_connection_down`
+— the session has no proxy of its own, and the connection Driftstack provides
+for it stopped carrying traffic. That one is on our side: there is nothing to
+fix at yours, and a session started with one of your own proxies runs now.
+`null` means it has not been reported. Read a value you do not recognise as
+`null`.
+
 `capability_report.os_fingerprint` is the last OS reading Driftstack took of the
 session's proxy — the same reading as the proxy's own `os_fingerprint` (see
 [Proxies](/api/proxies/)): `os`, `confidence`, `at` (when it was taken; it can be
@@ -134,6 +143,14 @@ call is worth trying. `detail` is `null` when the server has nothing to add
 beyond `summary`, and `severity` is one of `info`, `warn`, `error`, `fatal`.
 An `error_event` does not by itself close the session — read `status` for
 that.
+
+Two codes concern a session started without a proxy of your own.
+`default_egress_unavailable` means the connection Driftstack provides for it
+failed; `customer_actionable` is `false`, because it is ours to fix, and a
+session started with one of your own proxies runs now. The same value can
+appear as `closed_reason`. `proxy_required` means the session was refused
+because sessions on this deployment run only through a proxy you have added;
+start it again with one.
 
 The `livekit` field is **optional** — auto-populated on the
 session-create response when live video is available on the

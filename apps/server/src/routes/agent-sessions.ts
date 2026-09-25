@@ -698,7 +698,11 @@ function publicAgentSession(
     // ⛔ Projected, never spread — see customerSafeCapabilityReport. Assigning
     // the store record directly made every internal field a public one.
     if (capabilityReport !== null) {
-      base.capability_report = customerSafeCapabilityReport(capabilityReport, osFingerprint);
+      // The session's own proxyId goes with it: a dead connection on a session
+      // with no proxy of its own is ours, and is published as such.
+      base.capability_report = customerSafeCapabilityReport(capabilityReport, osFingerprint, {
+        proxyId: rec.proxyId,
+      });
     }
   }
   return base;
@@ -4731,6 +4735,43 @@ export function registerAgentSessionsRoutes(
           exitIdentity,
           applyPoint,
         );
+        // ⛔ THE ROW RECORDS THE SWAP, in the same request, the moment the device
+        // accepts it. `proxy_id` is what every "whose connection failed?"
+        // decision reads — the error-event relay and the terminal close rewrite a
+        // proxy failure on a proxyId-NULL session to default_egress_unavailable,
+        // and the capability projection publishes default_connection_down — so a
+        // session moved from no proxy onto the customer's own and left NULL would
+        // have their proxy's failures reported as ours. Written only on an
+        // accepted swap (a refusal or a timeout leaves the row as it was: the
+        // device said no, or said nothing), and only while the row is still
+        // active and still owned by the node that accepted it
+        // (setProxyIdForOwnedActiveSession). The row's canonical id, not the
+        // caller's spelling of it. This route only ever swaps ONTO a stored
+        // proxy — `proxy_id` is required — so the value is never null here; a
+        // swap back to the connection Driftstack provides would write null
+        // through the same call.
+        //
+        // ⚠️ A `next_navigation` swap is recorded at acceptance, not when the
+        // device applies it at the next navigation — the device reports no such
+        // moment. Until then a failure of the connection still in use is
+        // attributed to the proxy the customer just chose.
+        if (
+          outcome.status === 'applied' ||
+          outcome.status === 'accepted_pending_navigation' ||
+          outcome.status === 'ok_apply_point_unconfirmed'
+        ) {
+          const recorded = await sessions.setProxyIdForOwnedActiveSession(
+            rec.id,
+            rec.nodeId,
+            swapRow?.id ?? proxyId,
+          );
+          if (recorded === null) {
+            req.log.warn(
+              { component: 'agent-session-egress-swap', sessionId: rec.id },
+              'egress swap accepted, but the session closed or moved before its proxy could be recorded',
+            );
+          }
+        }
         if (outcome.status === 'applied') {
           return { status: 'ok' as const, apply_point: 'immediate' as const };
         }

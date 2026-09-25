@@ -162,8 +162,13 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     //
     // This mapper is the SINGLE echo site behind all four public session
     // responses, so a revert of either call re-opens all four.
+    //
+    // The report call also carries the row's stored `egress_capabilities`: a
+    // `dead_proxy` the capability relay recorded as `default_connection_down`
+    // (a session with no proxy of its own) is published as that value, not as
+    // the customer's proxy dying (customer-safe-egress-capability-report.ts).
     expect(body).toMatch(
-      /function publicSession\(s: SessionRecord, logger\?: EgressWarningLogger\): Record<string, unknown> \{[\s\S]*?const egress = customerSafeEgressCapabilities\(s\.egressCapabilities\);[\s\S]*?unmappedEgressWarnings\.record\(egress\.unmapped, logger\);\s*return \{\s*id: prefixId\('ses', s\.id\),\s*account_id: prefixId\('acc', s\.accountId\),\s*api_key_id: prefixId\('key', s\.apiKeyId\),\s*status: s\.status,\s*archetype: s\.archetype,\s*purpose: s\.purpose,\s*label: s\.label,\s*metadata: s\.metadata,[\s\S]*?egress_capabilities: egress\.capabilities,[\s\S]*?egress_capability_report: customerSafeEgressCapabilityReport\(s\.egressCapabilityReport\),\s*created_at: s\.createdAt\.toISOString\(\),\s*updated_at: s\.updatedAt\.toISOString\(\),\s*last_state_at: s\.lastStateAt \? s\.lastStateAt\.toISOString\(\) : null,\s*destroyed_at: s\.destroyedAt \? s\.destroyedAt\.toISOString\(\) : null,\s*\};\s*\}/,
+      /function publicSession\(s: SessionRecord, logger\?: EgressWarningLogger\): Record<string, unknown> \{[\s\S]*?const egress = customerSafeEgressCapabilities\(s\.egressCapabilities\);[\s\S]*?unmappedEgressWarnings\.record\(egress\.unmapped, logger\);\s*return \{\s*id: prefixId\('ses', s\.id\),\s*account_id: prefixId\('acc', s\.accountId\),\s*api_key_id: prefixId\('key', s\.apiKeyId\),\s*status: s\.status,\s*archetype: s\.archetype,\s*purpose: s\.purpose,\s*label: s\.label,\s*metadata: s\.metadata,[\s\S]*?egress_capabilities: egress\.capabilities,[\s\S]*?egress_capability_report: customerSafeEgressCapabilityReport\(\s*s\.egressCapabilityReport,\s*s\.egressCapabilities,\s*\),\s*created_at: s\.createdAt\.toISOString\(\),\s*updated_at: s\.updatedAt\.toISOString\(\),\s*last_state_at: s\.lastStateAt \? s\.lastStateAt\.toISOString\(\) : null,\s*destroyed_at: s\.destroyedAt \? s\.destroyedAt\.toISOString\(\) : null,\s*\};\s*\}/,
     );
   });
 

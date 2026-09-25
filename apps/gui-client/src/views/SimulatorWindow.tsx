@@ -452,6 +452,45 @@ function normalizeNavUrl(url: unknown): string {
 function isNewTabLoadError(url: unknown): boolean {
   return typeof url === 'string' && url !== '' && isBlankTabUrl(url);
 }
+/** A session with no proxy of its own whose connection — the one Driftstack
+ *  provides — stopped carrying traffic (capability_report.egress_state
+ *  `default_connection_down`). Says whose it is and what runs instead, and names
+ *  no proxy of the customer's, because there is none. */
+const DEFAULT_CONNECTION_DOWN_BADGE =
+  "Driftstack's connection isn't working right now, so pages can't load. This is on our side — a session with one of your own proxies will run.";
+/** The start-page notice for that same session. */
+const START_PAGE_DEFAULT_CONNECTION_DOWN_NOTICE =
+  "Start page couldn't load — Driftstack's connection isn't working right now";
+
+/**
+ * Whether this window KNOWS the session runs through a proxy of the customer's
+ * own — the only case where copy may say "this proxy". Pure.
+ *
+ * What the window holds, and why these three:
+ *  - The session read carries no proxy field (the public agent session has no
+ *    `proxy_id`), and `egress_state` reads `live` for a healthy session either
+ *    way, so it cannot answer the question on its own.
+ *  - `egress_state` CAN answer it once the connection has stopped: the server
+ *    publishes `dead_proxy` only for a session WITH a proxy_id and
+ *    `default_connection_down` only for one without (session-capability-report-
+ *    store customerEgressState). Those are the server's word and win.
+ *  - Otherwise, the launch handoff: `proxyLabel` (the `proxy` query param) is set
+ *    by every profile launch and reopen (ProfilesView → openSimulatorWindow),
+ *    and a profile launch cannot start without a proxy. It is EMPTY for the
+ *    session-open link (openSessionById), which also opens sessions that do have
+ *    one — so empty means "not known", not "none".
+ * The failure direction is therefore chosen: when the window does not know, it
+ * says "the connection", which is true of every session and blames nothing. The
+ * opposite mistake told a customer with no proxy that "this proxy" was slow.
+ */
+export function windowKnowsOwnProxy(
+  proxyLabel: string,
+  egressState: AgentSessionCapabilityReport['egress_state'] | undefined,
+): boolean {
+  if (egressState === 'default_connection_down') return false;
+  if (egressState === 'dead_proxy') return true;
+  return proxyLabel !== '';
+}
 // Tab-switch ack handling (founder 2026-06-25 "could not switch tab" softening).
 // If the harness MISSES an activateTab ack (a dropped data-channel frame) within
 // this backoff, re-issue the activateTab — up to ACTIVATE_MAX_ATTEMPTS total (the
@@ -2418,6 +2457,7 @@ function BrowserBar({
   loadProgress,
   navInFlight,
   loadFailed,
+  ownProxyKnown = false,
   downloadsStore,
   onOpenDownloads,
   vpnTunnelUp = null,
@@ -2445,6 +2485,11 @@ function BrowserBar({
   // T-10 — the box reported the active tab's page failed to load ('errored'); the bar
   // says so instead of silently keeping the old url.
   loadFailed: boolean;
+  /** Whether the window KNOWS the session runs through a proxy of the customer's
+   *  own (windowKnowsOwnProxy). Only then may the load-error line name "the proxy";
+   *  otherwise it names the connection, which is true of every session. Absent
+   *  means not known. */
+  ownProxyKnown?: boolean;
   // Mocked iOS download-bar indicator — GUI chrome only (like the address bar; it
   // never touches the rendered iPhone/fingerprint). Count of the session's downloads
   // (reuses the Downloads pane's shared store — no second fetch).
@@ -2966,7 +3011,10 @@ function BrowserBar({
       )}
       {/* T-10 — the box reported the page did not load. Say so on the bar, in plain
           words, instead of silently keeping the old url. The copy names the likely
-          cause without inventing an error string the box didn't send. */}
+          cause without inventing an error string the box didn't send — and names a
+          proxy only when the window knows the session has one of its own. A session
+          with none runs on the connection Driftstack provides, and "the proxy" was a
+          proxy it does not have. */}
       {loadFailed && (
         <div
           data-component="simulator-bar-load-error"
@@ -2986,7 +3034,9 @@ function BrowserBar({
             <circle cx="12" cy="12" r="9" />
             <path d="M12 8v4M12 16h.01" />
           </svg>
-          Page didn&apos;t load — the proxy may be slow or blocking it.
+          {ownProxyKnown
+            ? "Page didn't load — the proxy may be slow or blocking it."
+            : "Page didn't load — the connection may be slow, or the site may be blocking it."}
         </div>
       )}
     </div>
@@ -4270,6 +4320,13 @@ function SimulatorWindowInner({
     const safeSearch = safeSimulatorSearch(sessionId, controlGeneration);
     if (window.location.search !== safeSearch) window.history.replaceState({}, '', safeSearch);
   }, [sessionId, controlGeneration]);
+  // The launch handoff's proxy label, for copy raised from timers and the data
+  // channel (see windowKnowsOwnProxy). A ref so a callback reads the CURRENT
+  // session's label after an in-place relaunch, not the one it closed over.
+  const proxyLabelRef = useRef(proxyLabel);
+  useEffect(() => {
+    proxyLabelRef.current = proxyLabel;
+  }, [proxyLabel]);
   // Founder 2026-06-23 — the separate Simulator app starts with an empty settings
   // store (baseUrl → localhost:3000 default), so its control HTTP calls fail. The
   // launch hands off the real API host via `base=`; persist it so authedFetch
@@ -6715,6 +6772,10 @@ function SimulatorWindowInner({
 
     // Local slow-load hint, well before the give-up deadline. Cleared by the
     // same cancelLoadWatchdog path, so a page that arrives never shows it.
+    // It says "this proxy" only when the window knows the session has one
+    // (windowKnowsOwnProxy): a session with no proxy of its own runs on the
+    // connection Driftstack provides. Read at fire time, through refs — the
+    // capability report can arrive after the ladder was armed.
     const hint = window.setTimeout(() => {
       if (loadWatchdogRef.current.target !== target) return;
       setPageLoadStalled((prev) =>
@@ -6722,7 +6783,12 @@ function SimulatorWindowInner({
           ? prev
           : {
               url: '',
-              message: 'Still loading — this proxy is slow. The page is on its way.',
+              message: windowKnowsOwnProxy(
+                proxyLabelRef.current,
+                manualInputControlRef.current.capabilityReport?.egress_state,
+              )
+                ? 'Still loading — this proxy is slow. The page is on its way.'
+                : 'Still loading — the connection is slow. The page is on its way.',
               local: true,
             },
       );
@@ -7500,8 +7566,17 @@ function SimulatorWindowInner({
           !newTabLoadNoticedRef.current.has(activeTabIdRef.current)
         ) {
           newTabLoadNoticedRef.current.add(activeTabIdRef.current);
+          // On a session with no proxy of its own there is no "this proxy": when the
+          // server has said the connection Driftstack provides is down, that is
+          // the reason, and it is ours. Read through the ref — this runs in the
+          // data-channel callback, not in render.
+          const egressNow = manualInputControlRef.current.capabilityReport?.egress_state;
           showNotice(
-            "Start page couldn't load through this proxy — type an address to continue",
+            egressNow === 'default_connection_down'
+              ? START_PAGE_DEFAULT_CONNECTION_DOWN_NOTICE
+              : windowKnowsOwnProxy(proxyLabelRef.current, egressNow)
+                ? "Start page couldn't load through this proxy — type an address to continue"
+                : "Start page couldn't load — type an address to continue",
             5000,
           );
         }
@@ -11050,6 +11125,7 @@ function SimulatorWindowInner({
               // raises the center overlay) is the definitive "page didn't load", so the
               // bar surfaces it too — near the url the operator is watching.
               loadFailed={pageError !== null}
+              ownProxyKnown={windowKnowsOwnProxy(proxyLabel, egressHealth)}
               downloadsStore={downloadsStore}
               onOpenDownloads={() => openPane('downloads')}
             />
@@ -11311,6 +11387,21 @@ function SimulatorWindowInner({
                       className="pointer-events-auto rounded-full bg-status-error px-3 py-1 text-[10px] font-semibold text-white shadow"
                     >
                       Proxy connection failed — browsing is unavailable
+                    </div>
+                  )}
+                  {/* The same stop on a session with NO proxy of its own: the server
+                      publishes it as `default_connection_down`, because the connection
+                      that died is the one Driftstack provides and there is no proxy of
+                      the customer's to blame. Mutually exclusive with the badge above
+                      (one field, two values). An app without this branch narrows the
+                      value to null and shows nothing, which is silent but not false. */}
+                  {egressHealth === 'default_connection_down' && (
+                    <div
+                      role="alert"
+                      data-component="default-connection-down-capability-badge"
+                      className="pointer-events-auto max-w-[min(90%,22rem)] rounded-lg bg-status-error px-3 py-1.5 text-center text-[10.5px] font-semibold leading-snug text-white shadow"
+                    >
+                      {DEFAULT_CONNECTION_DOWN_BADGE}
                     </div>
                   )}
                   {/* #135 — SOFT load-stall advisory (harness box 5eeaf794a: a main-frame

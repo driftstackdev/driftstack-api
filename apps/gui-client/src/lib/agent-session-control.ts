@@ -66,7 +66,10 @@ function guiControlCredentialFrom(body: {
 export interface AgentSessionCapabilityReport {
   manual_input_available: boolean | null;
   streaming_state: 'provisioning' | 'live' | 'blank' | 'failed' | 'permission_denied' | null;
-  egress_state: 'live' | 'dead_proxy' | null;
+  /** `default_connection_down` is the server's word for `dead_proxy` on a
+   *  session with no proxy of its own: the connection Driftstack provides
+   *  stopped carrying traffic, so no proxy of the customer's is at fault. */
+  egress_state: 'live' | 'dead_proxy' | 'default_connection_down' | null;
   /** T-27 — the live QUIC signal, present ONLY when the report carried one:
    *  `true` once a real HTTP/3 connection completed this session (latched
    *  node-side — it never returns to false, so it answers "ever", not "now").
@@ -356,7 +359,10 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
       streaming === 'failed'
         ? streaming
         : null,
-    egress_state: egress === 'live' || egress === 'dead_proxy' ? egress : null,
+    egress_state:
+      egress === 'live' || egress === 'dead_proxy' || egress === 'default_connection_down'
+        ? egress
+        : null,
     ...(h3 !== null ? { h3_connection_observed: true as const } : {}),
     ...(h3Count !== undefined ? { h3_connection_count: h3Count } : {}),
     ...(h3?.at !== undefined ? { reported_at: h3.at } : {}),

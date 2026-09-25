@@ -203,7 +203,13 @@ describe('agent-sessions read shape — capability_report', () => {
       timestamp: '2026-07-13T06:00:00.000Z',
       manual_input_available: false,
       streaming_state: 'blank',
-      egress_state: 'dead_proxy',
+      // The device said `dead_proxy`, but this record has no proxy of its own
+      // (makeRecord's proxyId is null), so the connection that died is the one
+      // Driftstack provides and the customer projection says so
+      // (session-capability-report-store customerEgressState). A session on the
+      // customer's own proxy still reads `dead_proxy`:
+      // session-capability-report-store.test.ts pins both over this same route.
+      egress_state: 'default_connection_down',
       proxy_kind: 'socks5',
       proxy_udp_supported: false,
       transport_mode_requested: 'h2-and-h3',

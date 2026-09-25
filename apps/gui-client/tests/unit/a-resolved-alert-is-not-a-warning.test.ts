@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SESSION_STOPPED_TITLES } from '@driftstack/api-types';
 import type { NotificationEvent } from '../../src/lib/notifications';
 import {
   digestNotifications,
@@ -82,7 +83,9 @@ describe('notificationLevel', () => {
 
 describe('notificationTitle', () => {
   it('says what happened rather than naming the event kind', () => {
-    expect(notificationTitle(errored)).toBe('A session stopped: harness_unreachable');
+    // `harness_unreachable` is no code this product sends, so it reads as the
+    // generic title — and never as the raw token, which names our machinery.
+    expect(notificationTitle(errored)).toBe('A session stopped');
     expect(notificationTitle(audit)).toBe('Security event: account.api_key_revoked');
     expect(notificationTitle(incident('minor'))).toBe('Elevated error rates in eu-central');
   });
@@ -94,6 +97,45 @@ describe('notificationTitle', () => {
     for (const s of ['resolved', 'critical', 'warn'] as const) {
       expect(notificationTitle(cost(s))).not.toContain('threshold_alert');
     }
+  });
+
+  // ⛔ A stopped session's title used to be `A session stopped: ${errorClass}` —
+  // the raw code, verbatim. On a session with no proxy of its own that printed
+  // `default_egress_unavailable`, and every proxy/connection code before it
+  // leaked the same way. The code is now read through the ONE mapping the
+  // dashboard's banner also reads (api-types `sessionStoppedTitle`).
+  const stopped = (errorClass: string): NotificationEvent => ({ ...errored, errorClass });
+
+  it('⛔ a failure of the connection Driftstack provides says so, not the code', () => {
+    const title = notificationTitle(stopped('default_egress_unavailable'));
+    expect(title).toBe("A session stopped: Driftstack's connection failed");
+    expect(title).not.toContain('default_egress_unavailable');
+  });
+
+  it('a proxy that refused its sign-in is named as that', () => {
+    expect(notificationTitle(stopped('proxy_auth_failed'))).toBe(
+      'A session stopped: your proxy refused its sign-in',
+    );
+  });
+
+  it('⛔ an unknown code falls back to the generic title, never the raw token', () => {
+    for (const code of ['zz_internal_thing', 'constructor', '__proto__', 'toString', '']) {
+      expect(notificationTitle(stopped(code))).toBe('A session stopped');
+    }
+  });
+
+  it('no mapped title leaks a raw code or a word about how the product is built', () => {
+    // Every code the mapping knows, through the title builder itself.
+    for (const code of Object.keys(SESSION_STOPPED_TITLES)) {
+      const title = notificationTitle(stopped(code));
+      expect(title, code).not.toContain(code);
+      expect(title, code).not.toMatch(/_/);
+      expect(title, code).not.toMatch(
+        /\b(fleet|nodes?|harness|control plane|observer|vantage|interpose|macworker|undetectable|egress)\b/i,
+      );
+    }
+    // Positive control: the scan above really sees a banned word.
+    expect('its egress failed').toMatch(/\begress\b/i);
   });
 });
 

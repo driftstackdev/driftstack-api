@@ -27,6 +27,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+// @ts-expect-error — jsdom ships no types in this workspace; every dashboard page test imports it this way
+import { JSDOM } from 'jsdom';
+import { SESSION_STOPPED_FALLBACK_TITLE, SESSION_STOPPED_TITLES } from '@driftstack/api-types';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -303,5 +306,125 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     const hashIdx = body.indexOf("u.hash = '#token=' + encodeURIComponent(t)");
     expect(guardIdx).toBeGreaterThan(-1);
     expect(hashIdx).toBeGreaterThan(guardIdx);
+  });
+});
+
+// ⛔ The banner for a stopped session printed its raw code:
+// `'Session ' + id + ' stopped with an error: ' + event.errorClass`. A session
+// with no proxy of its own now stops with `default_egress_unavailable`, and
+// every proxy and connection code before it leaked the same way. The banner
+// reads the SAME mapping the desktop app's notification title reads — the
+// api-types table, handed to the inline script through `define:vars` — so the
+// two surfaces cannot say different things about one stop.
+//
+// This arm RUNS the layout's own subscriber script, with the define:vars
+// values the build would inject, against a fake EventSource, and reads what
+// the banner shows. A source-text regex could not tell a mapped title from a
+// raw token rendered next to one.
+describe('the stopped-session banner says what happened, never the raw code', () => {
+  const layout = read(LAYOUT);
+
+  /** Every `<script is:inline define:vars={{ … }}>` block, with its var names. */
+  function defineVarScripts(): { vars: string[]; body: string }[] {
+    const out: { vars: string[]; body: string }[] = [];
+    const re = /<script is:inline define:vars=\{\{([^}]*)\}\}>([\s\S]*?)<\/script>/g;
+    for (let m = re.exec(layout); m !== null; m = re.exec(layout)) {
+      out.push({
+        vars: (m[1] ?? '')
+          .split(',')
+          .map((v) => v.trim())
+          .filter((v) => v !== ''),
+        body: m[2] ?? '',
+      });
+    }
+    return out;
+  }
+
+  function subscriberScript(): { vars: string[]; body: string } {
+    const found = defineVarScripts().filter((s) => s.body.includes('data-notification-banner'));
+    expect(found, 'exactly one inline script subscribes the banner').toHaveLength(1);
+    return found[0]!;
+  }
+
+  /** Run the subscriber as the build would (define:vars → consts in an IIFE)
+   *  and return what the banner shows for one `session.errored` event. */
+  function bannerFor(errorClass: string): { title: string; body: string; hidden: boolean } {
+    const { vars, body } = subscriberScript();
+    // The values the frontmatter hands over. A define:vars name this table does
+    // not know is a wiring change this arm has not been taught — fail loudly.
+    const known: Record<string, unknown> = {
+      apiBaseUrl: 'https://api.example.test',
+      SESSION_STOPPED_TITLES,
+      SESSION_STOPPED_FALLBACK_TITLE,
+    };
+    for (const v of vars) expect(Object.keys(known), `define:vars name ${v}`).toContain(v);
+    const dom = new JSDOM(
+      '<!doctype html><div data-notification-banner class="hidden"><p data-notification-title></p><p data-notification-body></p><button data-notification-dismiss></button></div>',
+      { runScripts: 'outside-only', url: 'https://dashboard.example.test/' },
+    );
+    const w = dom.window as unknown as {
+      localStorage: Storage;
+      EventSource: unknown;
+      eval: (src: string) => unknown;
+      document: Document;
+    };
+    w.localStorage.setItem('ds_web_session_token', 'tok');
+    const listeners: Record<string, (e: { data: string }) => void> = {};
+    w.EventSource = class {
+      addEventListener(kind: string, fn: (e: { data: string }) => void): void {
+        listeners[kind] = fn;
+      }
+      close(): void {}
+    };
+    const preamble = vars.map((v) => `const ${v} = ${JSON.stringify(known[v])};`).join('\n');
+    w.eval(`(function () {\n${preamble}\n${body}\n})();`);
+    const fire = listeners['session.errored'];
+    expect(fire, 'the subscriber listens for session.errored').toBeTypeOf('function');
+    fire!({
+      data: JSON.stringify({
+        kind: 'session.errored',
+        accountId: 'acc_1',
+        sessionId: 'as_1',
+        errorClass,
+        at: '2026-09-25T12:00:00.000Z',
+      }),
+    });
+    const doc = w.document;
+    return {
+      title: doc.querySelector('[data-notification-title]')?.textContent ?? '',
+      body: doc.querySelector('[data-notification-body]')?.textContent ?? '',
+      hidden: doc.querySelector('[data-notification-banner]')?.classList.contains('hidden') ?? true,
+    };
+  }
+
+  it('⛔ a failure of the connection Driftstack provides reads as that, not as its code', () => {
+    const shown = bannerFor('default_egress_unavailable');
+    expect(shown.hidden).toBe(false);
+    expect(shown.title).toBe("A session stopped: Driftstack's connection failed");
+    expect(`${shown.title} ${shown.body}`).not.toContain('default_egress_unavailable');
+    expect(`${shown.title} ${shown.body}`).not.toMatch(/egress/i);
+  });
+
+  it('a refused proxy sign-in is named as that', () => {
+    expect(bannerFor('proxy_auth_failed').title).toBe(
+      'A session stopped: your proxy refused its sign-in',
+    );
+  });
+
+  it('⛔ an unknown code reads as the generic title, never the raw token', () => {
+    for (const code of ['zz_internal_thing', 'constructor', '__proto__']) {
+      const shown = bannerFor(code);
+      expect(shown.title, code).toBe('A session stopped');
+      expect(shown.body, code).not.toContain(code);
+    }
+  });
+
+  it('the banner and the desktop app read the SAME table — the layout imports it from api-types', () => {
+    expect(layout).toMatch(
+      /import \{[^}]*\bSESSION_STOPPED_TITLES\b[^}]*\} from '@driftstack\/api-types';/,
+    );
+    expect(subscriberScript().vars).toEqual(
+      expect.arrayContaining(['SESSION_STOPPED_TITLES', 'SESSION_STOPPED_FALLBACK_TITLE']),
+    );
   });
 });

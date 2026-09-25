@@ -1331,6 +1331,34 @@ describe('AgentSessionPanel overlay UX', () => {
       'Could not confirm your proxy was carrying traffic',
       'nothing to fix at your end',
     ],
+    // The server's rewrite of a proxy failure on a session that used no proxy of
+    // its own (session-error-event-relay / agent-session-terminal-close). The
+    // customer chose no proxy, so the errand is ours and the way out is theirs.
+    ['default_egress_unavailable', "Driftstack's connection failed", 'ours to fix, not yours'],
+    // The refusal of a session started with no proxy where no connection of ours
+    // is offered. Nothing failed to connect: the session needed a proxy of theirs.
+    ['proxy_required', 'This session needs a proxy of your own', 'Pick a saved proxy'],
+    ['no_proxy_configured', 'This session needs a proxy of your own', 'Pick a saved proxy'],
+    // Failures of the part of the connection WE run, on a session with a proxy of
+    // its own (on one with none the server rewrites them to
+    // default_egress_unavailable). Checked against the device: proxy_boot_failed
+    // is our local relay not booting, network_shim_boot_failed our per-session
+    // network process not starting, and egress_lost our local relay or tunnel
+    // process dying mid-session — a local liveness check that, by the device's
+    // own note, cannot see the customer's proxy at all.
+    ['proxy_boot_failed', 'Connection could not start on our side', 'Nothing is wrong at your end'],
+    [
+      'network_shim_boot_failed',
+      'Connection could not start on our side',
+      'Nothing is wrong at your end',
+    ],
+    ['egress_lost', 'Connection dropped on our side', 'Nothing is wrong at your end'],
+    // The customer's proxy refused the saved username or password.
+    [
+      'proxy_auth_failed',
+      'Your proxy refused its sign-in',
+      'Check the username and password saved for this proxy',
+    ],
   ])('renders truthful bounded recap copy for %s', async (reason, outcome, explanation) => {
     connectMock.mockReset();
     connectMock.mockResolvedValue(undefined);
@@ -1373,6 +1401,7 @@ describe('AgentSessionPanel overlay UX', () => {
     'browser_crashed',
     'browser_exited',
     'control_plane_unreachable',
+    'default_egress_unavailable',
     'egress_verification_unavailable',
     'egress_lost',
     'idle_timeout',
@@ -1380,6 +1409,7 @@ describe('AgentSessionPanel overlay UX', () => {
     'launch_timeout',
     'max_duration',
     'node_shutting_down',
+    'proxy_required',
     'reaped_during_provisioning',
     'renderer_crashed',
     'session_resource_overuse',
@@ -1764,6 +1794,97 @@ describe('AgentSessionPanel overlay UX', () => {
       await Promise.resolve();
     });
     expect(container.querySelector('[data-summary="session-end-detail"]')).toBeNull();
+  });
+
+  it("CRITICAL a failure on Driftstack's own connection is not a proxy failure, sends them to their own proxies, and sits above the server's line without echoing it", async () => {
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(undefined);
+    createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    // What the server persists for this code (DEFAULT_EGRESS_UNAVAILABLE_SUMMARY).
+    // The server's own suite checks the app's branch against the real constant.
+    const summary =
+      'This session did not use a proxy of your own, so it used the connection Driftstack provides, and that connection failed. This is on our side. To run now, start a new session with one of your own proxies.';
+    const { container } = render(
+      <AgentSessionPanel
+        info={INFO}
+        sessionEnded={{ reason: 'default_egress_unavailable', summary, lastPhase: null }}
+        onClose={() => undefined}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const overlay = container.querySelector('[data-overlay="session-ended"]');
+    const text = overlay?.textContent ?? '';
+    const outcome = container.querySelector('[data-summary="session-outcome"]')?.textContent ?? '';
+    expect(outcome).toBe("Driftstack's connection failed");
+    // Not the sentence a customer's own proxy gets, and it names no proxy of theirs.
+    expect(text).not.toMatch(/Proxy connection failed|could not connect through its proxy/);
+    expect(text).toMatch(/ours to fix, not yours/);
+    expect(text).toMatch(/one of your saved proxies will run now/);
+    // The server line renders verbatim, AFTER the explanation, and the
+    // explanation is not a copy of it.
+    const detail = overlay?.querySelector('[data-summary="session-end-detail"]');
+    expect(detail?.textContent).toBe(summary);
+    const explanationAt = text.indexOf('No proxy was chosen for this session');
+    expect(explanationAt).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf(summary)).toBeGreaterThan(explanationAt);
+    expect(text.split(summary)).toHaveLength(2);
+    // No internal word, in either line.
+    expect(text).not.toMatch(
+      /\b(fleet|nodes?|harness|control plane|observer|vantage|interpose|macworker|undetectable|egress)\b/i,
+    );
+    // The coarse proxy failure is untouched: it still says so.
+    expect(await outcomeFor('proxy_connection_failed')).toMatch(/Proxy connection failed/);
+  });
+
+  it('CRITICAL a session refused for having no proxy of its own is not told its proxy failed to connect', async () => {
+    // The device refuses a session started with no proxy when no connection of
+    // ours is offered (errorEvent code proxy_required; its own end reason is
+    // no_proxy_configured). `proxy_` put it in the proxy-failure branch, which told
+    // a customer who chose no proxy that "its proxy" could not connect.
+    for (const reason of ['proxy_required', 'no_proxy_configured']) {
+      const text = await outcomeFor(reason);
+      expect(text).not.toMatch(/Proxy connection failed|could not connect through its proxy/);
+      expect(text).toMatch(/This session needs a proxy of your own/);
+      expect(text).toMatch(/Pick a saved proxy/);
+      expect(text).not.toMatch(
+        /\b(fleet|nodes?|harness|control plane|observer|vantage|interpose|macworker|undetectable|egress)\b/i,
+      );
+    }
+    // The branch is whole-token: every other proxy_ code still reads as before.
+    expect(await outcomeFor('proxy_connection_failed')).toMatch(/Proxy connection failed/);
+    expect(await outcomeFor('proxy_udp_unsupported')).toMatch(/Proxy connection failed/);
+  });
+
+  it("CRITICAL a failure on our side, on a session with the customer's own proxy, is not blamed on that proxy", async () => {
+    // These codes all start `proxy_` / `egress_` or sat beside that prefix, so the
+    // panel said "Proxy connection failed / could not connect through its proxy" —
+    // sending a customer to debug a proxy that was working while our side had
+    // failed. Whole tokens, above the prefix.
+    for (const reason of ['proxy_boot_failed', 'network_shim_boot_failed', 'egress_lost']) {
+      const text = await outcomeFor(reason);
+      expect(text, reason).not.toMatch(
+        /Proxy connection failed|could not connect through its proxy/,
+      );
+      expect(text, reason).toMatch(/on our side/);
+      expect(text, reason).toMatch(/new session usually clears it/);
+      expect(text, reason).not.toMatch(
+        /\b(fleet|nodes?|harness|control plane|observer|vantage|interpose|macworker|undetectable|egress)\b/i,
+      );
+    }
+    // Hyphenated and upper-cased spellings normalise onto the same branch.
+    expect(await outcomeFor('EGRESS-LOST')).toMatch(/Connection dropped on our side/);
+  });
+
+  it('CRITICAL a proxy that refused its sign-in says so, not that it could not connect', async () => {
+    // A device code shipping later. Until it has a branch it falls into the
+    // `proxy_` prefix, which names the wrong errand: the proxy answered and said no.
+    const text = await outcomeFor('proxy_auth_failed');
+    expect(text).toMatch(/Your proxy refused its sign-in/);
+    expect(text).toMatch(/Check the username and password saved for this proxy/);
+    expect(text).toMatch(/provider may be limiting this account for now/);
+    expect(text).not.toMatch(/Proxy connection failed|could not connect through its proxy/);
   });
 
   it('vpnBringupPhaseRoute is an own-key, exact-spelling lookup over the eight routable phases, and the copy refinement is scoped to the timeout code alone', () => {

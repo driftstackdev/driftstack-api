@@ -576,6 +576,47 @@ describe.skipIf(!RUN_DB_TESTS)(
       expect(await repo.get(session.id)).toEqual(closed);
     });
 
+    it('CRITICAL the mid-session egress swap re-attributes proxy_id only on the live row the confirming node owns — and back to null for the connection Driftstack provides', async () => {
+      // Every "whose connection failed?" decision reads proxy_id (the error-event
+      // relay, the terminal close, the capability projection). The swap's write
+      // must not land on a row another node now owns, nor on a closed one.
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-swap-${accountId}@test.local`})`;
+      const session = await repo.create({ accountId, tokenBudgetTotal: 1000 });
+      expect(await repo.setNodeId(session.id, 'node-swap-owner', null)).toMatchObject({
+        proxyId: null,
+      });
+      const proxyId = randomUUID();
+
+      await expect(
+        repo.setProxyIdForOwnedActiveSession(session.id, 'node-stranger', proxyId),
+      ).resolves.toBeNull();
+      expect((await repo.get(session.id))?.proxyId).toBeNull();
+
+      expect(
+        await repo.setProxyIdForOwnedActiveSession(session.id, 'node-swap-owner', proxyId),
+      ).toMatchObject({ proxyId, nodeId: 'node-swap-owner' });
+      expect((await repo.get(session.id))?.proxyId).toBe(proxyId);
+
+      expect(
+        await repo.setProxyIdForOwnedActiveSession(session.id, 'node-swap-owner', null),
+      ).toMatchObject({ proxyId: null });
+
+      await repo.closeWithReason(session.id, 'customer-closed');
+      await expect(
+        repo.setProxyIdForOwnedActiveSession(session.id, 'node-swap-owner', proxyId),
+      ).resolves.toBeNull();
+      expect((await repo.get(session.id))?.proxyId).toBeNull();
+    });
+
     it('CRITICAL recordErrorEvent refuses a session owned by a DIFFERENT fleet node, and writes nothing. The second parameter is the reporting node, and `eq(node_id, reportingNodeId)` is the entire authorisation on this write: without it any registered Mac could stamp its own error frame onto another node’s session, which is what the customer is shown as the reason their run failed.', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;

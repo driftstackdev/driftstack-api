@@ -158,6 +158,23 @@ describe('agent-session-control transport', () => {
     });
   });
 
+  it("getAgentSession keeps default_connection_down: the server's word for Driftstack's own connection dying on a session with no proxy of its own", async () => {
+    mockFetch.mockResolvedValue(
+      ok({
+        mode: 'manual',
+        status: 'active',
+        capability_report: {
+          manual_input_available: true,
+          streaming_state: 'live',
+          egress_state: 'default_connection_down',
+        },
+      }),
+    );
+    expect((await getAgentSession('agt_1')).capabilityReport?.egress_state).toBe(
+      'default_connection_down',
+    );
+  });
+
   it('getAgentSession omits a malformed capability envelope and nulls unknown nested states', async () => {
     mockFetch.mockResolvedValue(
       ok({ mode: 'manual', status: 'active', capability_report: 'not-an-object' }),

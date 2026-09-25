@@ -174,13 +174,15 @@ export interface AgentSession {
    * Latest report of what this live session can do. Absent until reported (and
    * on closed sessions). A false `manual_input_available` means the video is
    * view-only; blank/failed and dead_proxy are explicit degraded states, not
-   * successful input/video.
+   * successful input/video. `default_connection_down` is `dead_proxy` for a
+   * session with no proxy of its own: the connection Driftstack provides stopped
+   * carrying traffic, and there is nothing on your side to fix.
    */
   capability_report?: {
     timestamp: string;
     manual_input_available: boolean | null;
     streaming_state: 'provisioning' | 'live' | 'blank' | 'failed' | null;
-    egress_state: 'live' | 'dead_proxy' | null;
+    egress_state: 'live' | 'dead_proxy' | 'default_connection_down' | null;
     proxy_kind: 'socks5' | 'openvpn' | 'wireguard';
     proxy_udp_supported: boolean;
     transport_mode_requested: 'h2-only' | 'h2-and-h3';

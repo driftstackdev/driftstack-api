@@ -174,7 +174,13 @@ export type CustomerSafeCapabilityReport = Omit<
   | 'webkit_fork_build'
   | 'webkit_framework_sha256'
   | 'reporting_node_id'
+  // Re-declared below: the customer vocabulary has one value the device's lacks.
+  | 'egress_state'
 > & {
+  /** The device's `live` / `dead_proxy`, except that a dead connection on a
+   *  session with no proxy of its own is published as
+   *  {@link DEFAULT_CONNECTION_DOWN_EGRESS_STATE} (see {@link customerEgressState}). */
+  egress_state: CustomerEgressState | null;
   /**
    * N-2 — the customer-safe subset {os, confidence, at} of the exit proxy's cached
    * passive TCP/IP OS fingerprint. `at` is WHEN it was measured (ISO, the proxy
@@ -256,15 +262,60 @@ export function missingSafeguardLayers(frame: CapabilityReport): string[] {
   return expected.filter((layer) => !reported.has(layer));
 }
 
+// ─── A dead connection on a session that used no proxy of its own ───────────
+//
+// A session created with no `proxy_id` runs on the connection Driftstack provides
+// (the operator-default upstream; its row keeps `proxyId: null`). When that
+// connection stops carrying traffic mid-session, the device marks the session
+// `dead_proxy` and keeps it running — the same word it uses for a customer's own
+// proxy going silent, because from the phone the two are indistinguishable. The
+// desktop app turned it into a red "Proxy connection failed" badge, for a customer
+// who chose no proxy and cannot fix ours. Only this server knows which it was, so
+// the customer projection publishes the difference. The store itself keeps the
+// device's word: operator surfaces read the record, not this projection.
+//
+// A distinct VALUE rather than a new field, so an app that predates it reads
+// correctly too: the desktop app narrows any egress_state it does not know to
+// null and shows no badge, which is silent but true, where the old value would
+// keep blaming a proxy the customer does not have.
+
+/** What `dead_proxy` is published as on a session with no proxy of its own. */
+export const DEFAULT_CONNECTION_DOWN_EGRESS_STATE = 'default_connection_down';
+
+/** The egress_state vocabulary a customer can read. */
+export type CustomerEgressState =
+  | NonNullable<CapabilityReport['egressState']>
+  | typeof DEFAULT_CONNECTION_DOWN_EGRESS_STATE;
+
+/**
+ * The customer's egress_state for a session. `proxyId` is the session row's:
+ * `null` means no proxy of its own. An `undefined` proxyId (a caller that did not
+ * say) is NOT read as null — the device's word stands, the same fail-safe the
+ * error-event relay uses.
+ */
+export function customerEgressState(
+  egressState: SessionCapabilityReport['egress_state'],
+  session: { proxyId: string | null } | undefined,
+): CustomerEgressState | null {
+  if (egressState === undefined || egressState === null) return null;
+  if (egressState === 'dead_proxy' && session?.proxyId === null) {
+    return DEFAULT_CONNECTION_DOWN_EGRESS_STATE;
+  }
+  return egressState;
+}
+
 export function customerSafeCapabilityReport(
   report: SessionCapabilityReport,
   osFingerprint?: SessionOsFingerprint | null,
+  // The session the report is about. The GET projection always passes it;
+  // without it egress_state is published as the device sent it.
+  session?: { proxyId: string | null },
 ): CustomerSafeCapabilityReport {
   return {
     timestamp: report.timestamp,
     manual_input_available: report.manual_input_available,
     streaming_state: report.streaming_state,
-    egress_state: report.egress_state,
+    egress_state: customerEgressState(report.egress_state, session),
     proxy_kind: report.proxy_kind,
     proxy_udp_supported: report.proxy_udp_supported,
     transport_mode_requested: report.transport_mode_requested,

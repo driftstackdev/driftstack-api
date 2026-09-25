@@ -153,6 +153,7 @@ export function SessionsHistoryView(): JSX.Element {
             // teardown); fall back to the last state transition so the row
             // still shows *when* it ended rather than a bare em dash.
             const endedIso = s.destroyed_at ?? s.last_state_at;
+            const warned = historyWarnings(s);
             return (
               <li key={s.id} className="flex items-center justify-between gap-4 px-5 py-3">
                 <div className="min-w-0">
@@ -190,12 +191,25 @@ export function SessionsHistoryView(): JSX.Element {
                   {/* The harness already reports what the egress could not do. It was
                       collected, stored and never shown, so a session that browsed with
                       no UDP associate or with DNS resolved locally looked identical to
-                      a clean one. */}
-                  {egressWarnings(s).length > 0 && (
-                    <p className="mt-0.5 text-2xs text-status-warn">
-                      Proxy limits: {egressWarnings(s).join(' · ')}
+                      a clean one. Connection facts share one line; every other
+                      warning is its own sentence (see historyWarnings). */}
+                  {warned.limits.length > 0 && (
+                    <p
+                      data-component="history-connection-limits"
+                      className="mt-0.5 text-2xs text-status-warn"
+                    >
+                      Connection limits: {warned.limits.join(' · ')}
                     </p>
                   )}
+                  {warned.notes.map((note) => (
+                    <p
+                      key={note}
+                      data-component="history-session-note"
+                      className="mt-0.5 text-2xs text-status-warn"
+                    >
+                      {note}
+                    </p>
+                  ))}
                   {s.status === 'errored' && (
                     <p className="mt-0.5 text-2xs text-ink-muted italic">
                       No error details were recorded
@@ -213,7 +227,61 @@ export function SessionsHistoryView(): JSX.Element {
 }
 
 /**
- * What the harness said this session's egress could NOT do.
+ * Where a published `egress_capabilities.warnings` code goes on a history row, and
+ * the words it says there. A `limit` is a connection fact and joins the one
+ * "Connection limits" line; a `note` is something that happened to the session and
+ * is its own sentence.
+ */
+type HistoryWarningWords = { readonly limit: string } | { readonly note: string };
+
+/**
+ * ⛔ THE ROW NEVER PRINTS A CODE. GET /v1/sessions carries `warnings` as codes, and
+ * this view used to print them raw after "Proxy limits:" — so a session with no
+ * proxy of its own, whose connection (the one Driftstack provides) dropped, read
+ * "Proxy limits: default_connection_down": a code, filed under a proxy the
+ * customer does not have. Every code in the published vocabulary (the one the
+ * api-types `warnings` description lists, which the server's parity guard holds
+ * equal to its closed set) has words here; a code this build does not know yet
+ * reads as UNKNOWN_WARNING_NOTE, never as the token. The test reads that
+ * description, so a newly published code reds until it has words.
+ *
+ * Whose fault each one is follows the server: `dead_proxy` is published only for a
+ * session on the customer's own proxy, `default_connection_down` only for one with
+ * none (session-capability-report-relay deriveWarnings), so the words can say so.
+ * The two limits stay neutral ("not supported"), because a row written before the
+ * server split them by proxy can carry the proxy form on a session without one.
+ */
+const WARNING_WORDS: Readonly<Record<string, HistoryWarningWords>> = {
+  udp_unsupported_by_proxy: { limit: 'UDP not supported' },
+  quic_unavailable: { limit: 'HTTP/3 not available' },
+  dead_proxy: { note: 'Your proxy stopped answering while the session ran.' },
+  default_connection_down: {
+    note: "Driftstack's connection for this session dropped. That was on our side; nothing to fix at your end.",
+  },
+  streaming_blank: { note: 'The live view showed no picture. The session itself kept running.' },
+  streaming_failed: { note: 'The live view stopped.' },
+  safeguards_unverified: { note: "We couldn't confirm every safeguard ran for this session." },
+  safeguard_failed: { note: "A safeguard check didn't pass. Contact support with the session id." },
+  'safeguard_failed:direct_internet_block': {
+    note: "The check that nothing left outside the session's connection didn't pass. Contact support with the session id.",
+  },
+  'safeguard_failed:browser_integrity': {
+    note: "The check on the session's browser build didn't pass. Contact support with the session id.",
+  },
+  'safeguard_failed:proxy_egress_verification': {
+    note: "The check that traffic left through your proxy didn't pass. Confirm your proxy works, and contact support with the session id.",
+  },
+  'safeguard_failed:live_view_capture': {
+    note: "The live view couldn't be captured. Browsing was unaffected.",
+  },
+};
+
+/** A code this build has no words for. Said once per row, however many there are. */
+const UNKNOWN_WARNING_NOTE = 'Another issue was reported for this session.';
+
+/**
+ * What this session's connection could NOT do (`limits`), and what else went
+ * wrong in it (`notes`), in the customer's words.
  *
  * `egress_capabilities` is stored on every session and was rendered nowhere, so a
  * session that browsed without UDP associate, without a QUIC route, or resolving
@@ -221,19 +289,26 @@ export function SessionsHistoryView(): JSX.Element {
  * naming plainly: it is the classic proxy leak.
  *
  * Absent capabilities mean the harness never reported — NOT that everything passed
- * — so this returns [] and says nothing rather than implying health.
+ * — so this returns nothing and says nothing rather than implying health.
+ *
+ * Both lists are de-duplicated: the capability flag and its warning can say the
+ * same thing (`udp_associate: false` and `udp_unsupported_by_proxy`).
  */
-function egressWarnings(s: { egress_capabilities: unknown }): string[] {
+function historyWarnings(s: { egress_capabilities: unknown }): {
+  limits: string[];
+  notes: string[];
+} {
   const cap = s.egress_capabilities;
-  if (cap === null || typeof cap !== 'object') return [];
+  if (cap === null || typeof cap !== 'object') return { limits: [], notes: [] };
   const c = cap as {
     udp_associate?: unknown;
     quic_route?: unknown;
     dns_remote_resolve?: unknown;
     warnings?: unknown;
   };
-  const out: string[] = [];
-  if (c.udp_associate === false) out.push('UDP not supported');
+  const limits = new Set<string>();
+  const notes = new Set<string>();
+  if (c.udp_associate === false) limits.add('UDP not supported');
   // ⛔ THIS LINE WAS `c.quic_route === false` AND COULD NEVER BE TRUE.
   // `quic_route` is 'proxy' | 'direct' | 'disabled' — a string enum — so the
   // comparison against a boolean is a type error the fixture hid: the test
@@ -241,7 +316,7 @@ function egressWarnings(s: { egress_capabilities: unknown }): string[] {
   // `quic_route: true`, which is not a member of the enum and cannot be produced
   // by anything upstream. A test that can express what the writer cannot emit
   // certifies a branch that never runs.
-  if (c.quic_route === 'disabled') out.push('HTTP/3 not available');
+  if (c.quic_route === 'disabled') limits.add('HTTP/3 not available');
   // ⚠️ THIS ONE IS CORRECT CODE ABOVE A BROKEN WRITER, and is left alone
   // deliberately. Local DNS resolution is named in this function's own doc as
   // the classic proxy leak, and the branch is right — but the sole writer
@@ -251,11 +326,21 @@ function egressWarnings(s: { egress_capabilities: unknown }): string[] {
   // producer, not here. The measurement is being added as a per-PROXY fact
   // (ATYP=DOMAINNAME support, measured at validation) plus a per-session
   // structural fact; this stays ready for the day the value becomes real.
-  if (c.dns_remote_resolve === false) out.push('DNS resolved outside the proxy');
+  if (c.dns_remote_resolve === false) limits.add('DNS resolved outside the proxy');
   if (Array.isArray(c.warnings)) {
-    for (const w of c.warnings) if (typeof w === 'string' && w.length > 0) out.push(w);
+    for (const w of c.warnings) {
+      if (typeof w !== 'string' || w.length === 0) continue;
+      // Own keys only: `constructor` or `__proto__` is an unknown code, not a
+      // property of every object.
+      const words = Object.prototype.hasOwnProperty.call(WARNING_WORDS, w)
+        ? WARNING_WORDS[w]
+        : undefined;
+      if (words === undefined) notes.add(UNKNOWN_WARNING_NOTE);
+      else if ('limit' in words) limits.add(words.limit);
+      else notes.add(words.note);
+    }
   }
-  return out;
+  return { limits: [...limits], notes: [...notes] };
 }
 
 // Mirrors SessionsView.formatTime — wall-clock of the last refresh.

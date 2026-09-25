@@ -457,6 +457,27 @@ export interface AgentSessionsRepo {
   ): Promise<AgentSessionRecord | null>;
 
   /**
+   * The mid-session egress swap's record of which proxy the session now browses
+   * through: `proxyId` for one of the customer's own proxies, `null` for the
+   * connection Driftstack provides. One conditional UPDATE, applied only while
+   * the row is still `active` AND still owned by `nodeId` — the node that just
+   * confirmed the swap — so a session that closed, or was re-dispatched to
+   * another node, in the meantime is never re-attributed. Returns null when it
+   * matched no row.
+   *
+   * ⛔ Every "whose connection failed?" decision reads this column: the
+   * error-event relay and the terminal close rewrite a proxy failure on a
+   * proxyId-NULL session to `default_egress_unavailable`, and the capability
+   * projection publishes `default_connection_down` for it. A swap that leaves it
+   * stale makes those call the customer's proxy "ours", or ours theirs.
+   */
+  setProxyIdForOwnedActiveSession(
+    id: string,
+    nodeId: string,
+    proxyId: string | null,
+  ): Promise<AgentSessionRecord | null>;
+
+  /**
    * T-26 (migration 0118) — record the FIRST exit IP a stop-on-change session
    * was observed leaving through, atomically only-if-unset so the baseline the
    * change comparison uses is written exactly once even if two capabilityReports
@@ -1208,6 +1229,19 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       ...(opts?.refuseProfileSaveBack === true ? { profileSaveBackRefused: true } : {}),
       updatedAt: this.clock(),
     };
+    this.records.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
+  setProxyIdForOwnedActiveSession(
+    id: string,
+    nodeId: string,
+    proxyId: string | null,
+  ): Promise<AgentSessionRecord | null> {
+    const rec = this.records.get(id);
+    // Mirrors the Drizzle WHERE: active AND owned by exactly this node.
+    if (!rec || rec.status !== 'active' || rec.nodeId !== nodeId) return Promise.resolve(null);
+    const updated: AgentSessionRecord = { ...rec, proxyId, updatedAt: this.clock() };
     this.records.set(id, updated);
     return Promise.resolve(updated);
   }

@@ -129,6 +129,58 @@ describe('Arc 5 EGRESS eg.1.e — egress_capability_report end-to-end persist→
     });
   });
 
+  // A driver session linked to an agent session on the connection Driftstack
+  // provides: the relay derived `default_connection_down` from the device's
+  // `dead_proxy` (the agent session had no proxy of its own). The raw report is
+  // stored as the device sent it, so its `egressState` still says dead_proxy at
+  // rest — and published that way it contradicted the warning beside it and told
+  // the customer their (non-existent) proxy died. The public edge projects the
+  // value from the warning written with it, in the same row.
+  it.each([
+    [['default_connection_down'], 'default_connection_down'],
+    [['dead_proxy'], 'dead_proxy'],
+    [[], 'dead_proxy'],
+  ] as const)(
+    'CRITICAL warnings %j → egress_capability_report.egressState %s; the stored frame keeps the device word',
+    async (warnings, published) => {
+      fx = await buildTestApp();
+      const create = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/sessions',
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+        payload: {},
+      });
+      expect(create.statusCode).toBe(201);
+      const sessionPublicId = create.json<{ id: string }>().id;
+      const sessionInternalId = sessionPublicId.replace(/^ses_/, '');
+      await fx.sessionsRepo.setEgressCapabilityReport({
+        sessionId: sessionInternalId,
+        derived: {
+          udp_associate: false,
+          quic_route: 'disabled',
+          dns_remote_resolve: true,
+          warnings: [...warnings],
+        },
+        raw: { proxyKind: 'socks5', egressState: 'dead_proxy' },
+      });
+      const res = await fx.app.inject({
+        method: 'GET',
+        url: `/v1/sessions/${sessionPublicId}`,
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json<{
+        egress_capabilities: { warnings: string[] } | null;
+        egress_capability_report: Record<string, unknown> | null;
+      }>();
+      expect(body.egress_capability_report?.egressState).toBe(published);
+      expect(body.egress_capabilities?.warnings).toEqual([...warnings]);
+      expect(
+        fx.sessionsRepo.getSession(sessionInternalId)?.egressCapabilityReport?.egressState,
+      ).toBe('dead_proxy');
+    },
+  );
+
   it('cross-account: GET on a session belonging to another account → 404; capability fields never leak', async () => {
     fx = await buildTestApp();
     // Use a properly-shaped but non-existent session id — the route

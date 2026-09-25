@@ -509,3 +509,102 @@ describe('makeAgentSessionTerminalStatusRelay', () => {
     expect(closeWithReason).toHaveBeenNthCalledWith(2, 'agt_1', 'latest_reason');
   });
 });
+
+// ⛔ THE SECOND DOOR THE SAME WORDS COME THROUGH. The desktop app shows
+// `preferTypedEndReason(error_event.code, closed_reason)` — the error code when
+// there is one, else closed_reason — and the device sends its terminal status
+// FIRST and the errorEvent SECOND. The chat panel latches the first terminal
+// read it sees and stops polling, so a read landing between the two frames shows
+// closed_reason alone. The device's reverify sweep closes with reason
+// `egress_lost` (HarnessCoordinator.sweepEgressReverification), which the app
+// renders as "Proxy connection failed". On a session with no proxy of its own
+// that must read as the same `default_egress_unavailable` the relay persists.
+describe('a proxy-failure close reason on a session with no proxy of its own', () => {
+  async function ownedSession(
+    proxyId: string | null,
+  ): Promise<{ repo: InMemoryAgentSessionsRepo; id: string }> {
+    const repo = new InMemoryAgentSessionsRepo();
+    const created = await repo.create({ accountId: 'acct_1', tokenBudgetTotal: 1000 });
+    await repo.setNodeId(created.id, 'node-1', proxyId);
+    return { repo, id: created.id };
+  }
+
+  async function closeWith(
+    repo: InMemoryAgentSessionsRepo,
+    id: string,
+    reason: string,
+  ): Promise<string | null | undefined> {
+    await closeAgentSessionOnTerminalStatus({
+      agentSessions: repo,
+      frame: terminalFrame(id, 'errored', reason),
+      reportingNodeId: 'node-1',
+      logger: noopLogger,
+    });
+    return (await repo.get(id))?.closedReason;
+  }
+
+  // Every member of the family, written out here rather than imported so the test
+  // cannot agree with the code by construction. egress_lost is the one the device
+  // sends as a close reason today (the reverify sweep); the probe end reasons are
+  // the ones the device calls end reasons, and the rest are listed so a close
+  // reason that ever carries one is covered too.
+  it.each([
+    'egress_lost',
+    'proxy_connection_failed',
+    'egress_verification_unavailable',
+    'egress_unreachable',
+    'egress_invariant_violation',
+    'proxy_udp_unsupported',
+    'proxy_boot_failed',
+    'network_shim_boot_failed',
+    'egress_probe_failed',
+    'egress_probe_unverifiable',
+    // A device code shipping later: the proxy refused its sign-in. On a session
+    // with no proxy of its own the sign-in that was refused is ours.
+    'proxy_auth_failed',
+  ])('CRITICAL proxyId null + %s closes as default_egress_unavailable', async (reason) => {
+    const { repo, id } = await ownedSession(null);
+    expect(await closeWith(repo, id, reason)).toBe('default_egress_unavailable');
+  });
+
+  it("proxyId set + egress_lost keeps the device's reason", async () => {
+    const { repo, id } = await ownedSession('prx_customer_own');
+    expect(await closeWith(repo, id, 'egress_lost')).toBe('egress_lost');
+  });
+
+  it.each(['idle_timeout', 'renderer_crashed', 'no_proxy_configured', 'remote_unresolved'])(
+    'proxyId null + %s keeps the device reason',
+    async (reason) => {
+      const { repo, id } = await ownedSession(null);
+      expect(await closeWith(repo, id, reason)).toBe(reason);
+    },
+  );
+
+  it('the close log carries the device reason beside the persisted one, and a non-owning node still closes nothing', async () => {
+    const { repo, id } = await ownedSession(null);
+    const info = vi.fn();
+    const warn = vi.fn();
+    const logger = { info, warn } as unknown as Logger;
+    await closeAgentSessionOnTerminalStatus({
+      agentSessions: repo,
+      frame: terminalFrame(id, 'errored', 'egress_lost'),
+      reportingNodeId: 'node-stranger',
+      logger,
+    });
+    expect((await repo.get(id))?.status).toBe('active');
+    await closeAgentSessionOnTerminalStatus({
+      agentSessions: repo,
+      frame: terminalFrame(id, 'errored', 'egress_lost'),
+      reportingNodeId: 'node-1',
+      logger,
+    });
+    expect(info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: id,
+        reason: 'default_egress_unavailable',
+        deviceReason: 'egress_lost',
+      }),
+      expect.stringContaining('closed agent session on terminal worker status'),
+    );
+  });
+});

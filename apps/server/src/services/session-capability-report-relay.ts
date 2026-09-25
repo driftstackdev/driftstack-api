@@ -9,7 +9,12 @@ import type { Logger } from '../lib/logger.js';
 import type { CapabilityReport } from '../schemas/harness-control-protocol.js';
 import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import type { SessionCapabilityReportStore } from './session-capability-report-store.js';
-import { missingSafeguardLayers, safeguardsPassed } from './session-capability-report-store.js';
+import {
+  customerEgressState,
+  DEFAULT_CONNECTION_DOWN_EGRESS_STATE,
+  missingSafeguardLayers,
+  safeguardsPassed,
+} from './session-capability-report-store.js';
 import {
   PUBLIC_SAFEGUARD_LAYERS,
   safeToken,
@@ -95,10 +100,33 @@ interface CapabilityReportSessionsService {
   }): Promise<unknown>;
 }
 
-function deriveWarnings(frame: CapabilityReport): string[] {
+/** `udp_unsupported_by_proxy` on a session with no proxy of its own: the
+ *  connection Driftstack provides carried no UDP. Published as `quic_unavailable`
+ *  (customer-safe-egress-warnings), because there is no proxy of the customer's to
+ *  have refused anything. */
+const UDP_UNSUPPORTED_BY_DEFAULT_CONNECTION = 'udp_unsupported_by_default_connection';
+/** `safeguard_failed:per_spawn_verification` on a session with no proxy of its
+ *  own: the check that traffic left through the connection Driftstack provides did
+ *  not pass. Its published layer word says "your proxy", so it is published as the
+ *  bare `safeguard_failed`. */
+const DEFAULT_CONNECTION_VERIFICATION_FAILED = 'default_connection_verification_failed';
+/** The safeguard layer whose published word (`proxy_egress_verification`) names
+ *  the customer's proxy. */
+const ROUTE_VERIFICATION_LAYER = 'per_spawn_verification';
+
+function deriveWarnings(frame: CapabilityReport, session: { proxyId: string | null }): string[] {
   const warnings: string[] = [];
+  // ⛔ A session with NO proxy of its own (proxyId null) runs on the connection
+  // Driftstack provides, so the two warnings whose published words blame "your
+  // proxy" — the UDP gap and the route check — are ours on it, the same as
+  // `dead_proxy` below. Only an explicit null counts: a record without the field
+  // is NOT read as no proxy, the fail-safe customerEgressState uses (there the
+  // device's word stands; here the proxy form does).
+  const noProxyOfItsOwn = session.proxyId === null;
   if (frame.transportModeRequested === 'h2-and-h3' && frame.transportModeActive !== 'h2-and-h3') {
-    warnings.push('udp_unsupported_by_proxy');
+    warnings.push(
+      noProxyOfItsOwn ? UDP_UNSUPPORTED_BY_DEFAULT_CONNECTION : 'udp_unsupported_by_proxy',
+    );
   }
   if (frame.transportModeActive === 'h2-and-h3' && !frame.h3InterposeLoaded) {
     warnings.push('h3_interpose_unavailable');
@@ -110,7 +138,12 @@ function deriveWarnings(frame: CapabilityReport): string[] {
     warnings.push('safeguards_unreported');
   }
   for (const check of frame.safeguardChecks) {
-    if (!check.passed) warnings.push(`safeguard_failed:${check.layer}`);
+    if (check.passed) continue;
+    warnings.push(
+      noProxyOfItsOwn && check.layer === ROUTE_VERIFICATION_LAYER
+        ? DEFAULT_CONNECTION_VERIFICATION_FAILED
+        : `safeguard_failed:${check.layer}`,
+    );
   }
   // ⛔ THE CASE THAT USED TO PASS SILENTLY. A layer the node never checked is
   // omitted rather than reported false — right at the source, and it arrives here
@@ -132,7 +165,23 @@ function deriveWarnings(frame: CapabilityReport): string[] {
   }
   if (frame.streamingState === 'blank') warnings.push('streaming_blank');
   if (frame.streamingState === 'failed') warnings.push('streaming_failed');
-  if (frame.egressState === 'dead_proxy') warnings.push('dead_proxy');
+  // A dead connection on a session with NO proxy of its own (proxyId null: it
+  // runs on the connection Driftstack provides) is ours, not the customer's
+  // proxy — the same projection the agent-session read makes
+  // (customerEgressState). It is decided HERE, where the session row is in hand,
+  // because nothing downstream of this list knows the agent session's proxy:
+  // the /v1/sessions responses and the `session.egress_capability_changed`
+  // webhook both read this warning, and the public edge projects the raw
+  // frame's `egressState` from it (customerSafeEgressCapabilityReport). A
+  // record without a proxyId at all is NOT read as null — the device's word
+  // stands, the same fail-safe customerEgressState uses.
+  if (frame.egressState === 'dead_proxy') {
+    warnings.push(
+      customerEgressState(frame.egressState, session) === DEFAULT_CONNECTION_DOWN_EGRESS_STATE
+        ? DEFAULT_CONNECTION_DOWN_EGRESS_STATE
+        : 'dead_proxy',
+    );
+  }
   return warnings;
 }
 
@@ -451,7 +500,7 @@ export function makeSessionCapabilityReportRelay(
         // hostnames to the upstream proxy (ProxyChain.swift H3.exec.116).
         dns_remote_resolve: true,
         safeguards: deriveSafeguardsTriState(frame),
-        warnings: deriveWarnings(frame),
+        warnings: deriveWarnings(frame, session),
       },
       raw,
     });

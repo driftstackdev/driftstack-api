@@ -92,6 +92,22 @@ describe('agent-session response schema parity', () => {
         capability_report: { ...capabilityReport, streaming_state: 'fine' },
       }).success,
     ).toBe(false);
+    // What the server publishes instead of `dead_proxy` for a session with no
+    // proxy of its own (session-capability-report-store customerSafeCapabilityReport):
+    // the connection that died is ours. The contract must admit it, and still
+    // refuse a value nobody sends.
+    expect(
+      AgentSessionSchema.safeParse({
+        ...base,
+        capability_report: { ...capabilityReport, egress_state: 'default_connection_down' },
+      }).success,
+    ).toBe(true);
+    expect(
+      AgentSessionSchema.safeParse({
+        ...base,
+        capability_report: { ...capabilityReport, egress_state: 'maybe' },
+      }).success,
+    ).toBe(false);
   });
 
   it('types the optional durable error_event with a closed severity vocabulary', () => {

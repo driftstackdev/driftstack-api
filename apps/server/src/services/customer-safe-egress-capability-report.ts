@@ -28,7 +28,10 @@
 // everywhere (see the `?? null` contract all over the schema and the store), and
 // a filter that materialised `exitIp: null` would turn "nobody looked" into
 // "there is no exit". Keys are copied through under their own camelCase names,
-// present only when the stored blob actually carried them.
+// present only when the stored blob actually carried them. ONE VALUE is the
+// exception, and only a value: `egressState` `dead_proxy` reads
+// `default_connection_down` when the same row's warnings say the dead connection
+// was the one Driftstack provides (see the note in the function).
 //
 // ⚠️ THE OTHER LIST. `customerSafeCapabilityReport` in
 // `session-capability-report-store.ts` guards the OTHER way out of this same
@@ -46,6 +49,7 @@
 // opaque object is not a break in that contract.
 
 import type { CapabilityReport } from '../schemas/harness-control-protocol.js';
+import { DEFAULT_CONNECTION_DOWN_EGRESS_STATE } from './session-capability-report-store.js';
 
 /** Every key the capabilityReport frame can carry, minus the `type` discriminator
  *  the relay already strips (it names the wire envelope, not the session). */
@@ -198,6 +202,10 @@ const PUBLIC_KEY_SET: ReadonlySet<string> = new Set<string>(PUBLIC_EGRESS_CAPABI
  */
 export function customerSafeEgressCapabilityReport(
   stored: Record<string, unknown> | null | undefined,
+  // The SAME row's stored `egress_capabilities` (the internal vocabulary). Read
+  // for one fact only — see the `egressState` note below. Omitted, the blob is
+  // filtered and nothing else.
+  derived?: unknown,
 ): Record<string, unknown> | null {
   if (stored === null || stored === undefined) return null;
   if (typeof stored !== 'object' || Array.isArray(stored)) return null;
@@ -208,5 +216,28 @@ export function customerSafeEgressCapabilityReport(
     if (value === undefined) continue;
     out[key] = value;
   }
+  // ⚠️ THE ONE VALUE THIS FILTER PROJECTS, and why it cannot be done at rest.
+  // The device says `dead_proxy` whether the connection that died is the
+  // customer's proxy or the one Driftstack provides for a session with no proxy
+  // of its own — it cannot tell them apart. The capability relay CAN (it holds
+  // the agent session's proxyId) and records the difference as the
+  // `default_connection_down` warning, in the same row, written with this blob
+  // from the same frame. The blob itself stays the device's frame at rest
+  // (operators read it), so the customer's copy is projected here, from that
+  // warning: publishing `dead_proxy` beside `default_connection_down` would
+  // contradict the warning and blame a proxy the customer does not have. Only
+  // the VALUE changes — no key is renamed, derived or inserted, and a blob with
+  // no `egressState` still has none.
+  if (out.egressState === 'dead_proxy' && warnsDefaultConnectionDown(derived)) {
+    out.egressState = DEFAULT_CONNECTION_DOWN_EGRESS_STATE;
+  }
   return out;
+}
+
+/** Whether a stored `egress_capabilities` object carries the relay's
+ *  `default_connection_down` warning. Anything malformed reads as no. */
+function warnsDefaultConnectionDown(derived: unknown): boolean {
+  if (derived === null || typeof derived !== 'object' || Array.isArray(derived)) return false;
+  const warnings = (derived as Record<string, unknown>)['warnings'];
+  return Array.isArray(warnings) && warnings.includes(DEFAULT_CONNECTION_DOWN_EGRESS_STATE);
 }

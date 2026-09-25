@@ -468,6 +468,92 @@ function friendlySessionEndCopy(
         'Something went wrong and this session could not continue. Starting a new session usually clears it.',
     };
   }
+  // A proxy failure on a session that used NO proxy of its own. The server
+  // rewrites the device's proxy-family code to this one for such a session
+  // (session-error-event-relay / agent-session-terminal-close), because the
+  // device cannot tell our connection failing from the customer's proxy failing,
+  // and the customer chose no proxy — "could not connect through its proxy"
+  // names something they do not have and cannot fix.
+  //
+  // ⚠️ The server's own summary renders VERBATIM as the quieter line under this
+  // explanation, so this must say the same thing in different words — the
+  // server suite pins that no five-word run is shared. It must also stand alone:
+  // a read that lands before the error event carries no summary at all.
+  //
+  // An app WITHOUT this branch falls through every prefix below (`default_`
+  // starts none of them) to "Session closed / This session has stopped." with
+  // the server's sentence under it — generic, but true and complete.
+  if (normalized === 'default_egress_unavailable') {
+    return {
+      outcome: "Driftstack's connection failed",
+      explanation:
+        'No proxy was chosen for this session, so it ran on the connection we provide, and that connection stopped working. That is ours to fix, not yours. A session started with one of your saved proxies will run now.',
+    };
+  }
+  // The device's refusal of a session started with no proxy when no connection of
+  // ours is offered: errorEvent code `proxy_required`, device end reason
+  // `no_proxy_configured`. Nothing failed to connect — the session needed a proxy
+  // of the customer's and was given none — so the `proxy_` prefix below, which says
+  // "could not connect through its proxy", named a proxy they do not have. Whole
+  // tokens, above that prefix, for the same reason as the branch that follows.
+  //
+  // ⚠️ The server now sends its own summary for this refusal
+  // (session-error-event-relay NO_PROXY_REFUSAL_SUMMARY), rendered VERBATIM as
+  // the quieter line under this explanation — so the two must say it in
+  // different words (the server suite pins that no five-word run is shared), and
+  // this one must still stand alone for a read that carries only the end reason.
+  if (normalized === 'proxy_required' || normalized === 'no_proxy_configured') {
+    return {
+      outcome: 'This session needs a proxy of your own',
+      explanation:
+        'Nothing failed to connect: there was no proxy of yours for it to go through, so it was not started. Pick a saved proxy when you start the next one, or add a proxy first.',
+    };
+  }
+  // Failures of the part of the connection WE run, reported on a session WITH a
+  // proxy of its own (on one with none the server rewrites them to
+  // default_egress_unavailable). Each was checked against the device source
+  // (HarnessCoordinator.errorEventForStatus and its producers):
+  //   proxy_boot_failed         our local relay for the session did not boot
+  //                             ("LOCAL infra, not the customer's upstream proxy")
+  //   network_shim_boot_failed  our per-session network process did not start
+  //   egress_lost               our local relay or tunnel PROCESS died mid-session.
+  //                             Decided by a local liveness check
+  //                             (sweepEgressReverification → isAlive: is our
+  //                             process running?), which by the device's own note
+  //                             cannot see a dead upstream proxy at all — that is
+  //                             `dead_proxy`, a different signal. So despite the
+  //                             device's comment, it is ours.
+  // All three used to fall into the `/^(proxy_|egress_)/` prefix (or sit beside
+  // it) and read "Proxy connection failed / could not connect through its proxy",
+  // sending the customer to debug a proxy that was working. Whole tokens, above
+  // the prefix. The server's own summary for them renders under this, in
+  // different words (session-error-event-relay OUR_SIDE_CONNECTION_SUMMARY).
+  if (normalized === 'proxy_boot_failed' || normalized === 'network_shim_boot_failed') {
+    return {
+      outcome: 'Connection could not start on our side',
+      explanation:
+        "The part of this session's connection that we run did not start, so the session never ran. Nothing is wrong at your end, and a new session usually clears it.",
+    };
+  }
+  if (normalized === 'egress_lost') {
+    return {
+      outcome: 'Connection dropped on our side',
+      explanation:
+        "The part of this session's connection that we run stopped while it was running, so the session was ended. Nothing is wrong at your end, and a new session usually clears it.",
+    };
+  }
+  // The customer's proxy answered and refused the username or password saved for
+  // it. A device code shipping later: until this branch it fell into the `proxy_`
+  // prefix and read "could not connect", which names the wrong errand. (On a
+  // session with no proxy of its own the server rewrites it to
+  // default_egress_unavailable: there, the sign-in that was refused is ours.)
+  if (normalized === 'proxy_auth_failed') {
+    return {
+      outcome: 'Your proxy refused its sign-in',
+      explanation:
+        'Check the username and password saved for this proxy. If they are right, the provider may be limiting this account for now; try again later, or ask them.',
+    };
+  }
   // ⛔ THIS BRANCH MUST STAY ABOVE THE `/^(proxy_|egress_)/` PREFIX BELOW, and the
   // ordering is the whole fix rather than a style choice: `egress_verification_
   // unavailable` starts with `egress_`, so the prefix would swallow it and hand

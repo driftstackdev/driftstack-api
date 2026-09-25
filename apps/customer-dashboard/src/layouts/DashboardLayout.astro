@@ -24,6 +24,13 @@ const pathname = Astro.url.pathname;
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
 
+// The notification banner's title for a stopped session. The inline script
+// below cannot import a module, so the table it reads is handed over through
+// `define:vars` (serialised into the page at build time). It is the SAME table
+// the desktop app's notification centre reads, so the two never disagree, and it
+// means the banner never prints a raw code such as `default_egress_unavailable`.
+import { SESSION_STOPPED_FALLBACK_TITLE, SESSION_STOPPED_TITLES } from '@driftstack/api-types';
+
 // 2026-07-02 — account-portal IA (dashboard redesign slice 2): the
 // operational surfaces (profiles / snapshots / sessions / agent
 // sessions / recipes / proxies) belong to the desktop GUI; the web
@@ -1776,7 +1783,7 @@ const navSections: NavSection[] = [
             });
         })();
       </script>
-      <script is:inline define:vars={{ apiBaseUrl }}>
+      <script is:inline define:vars={{ apiBaseUrl, SESSION_STOPPED_TITLES, SESSION_STOPPED_FALLBACK_TITLE }}>
         // 2026-05-20 — notification SSE subscriber. Opens an
         // EventSource against /v1/account/me/notifications and
         // surfaces the most-recent event in the dashboard's top
@@ -1883,16 +1890,24 @@ const navSections: NavSection[] = [
                     '. If you don’t recognise this, check your account settings.',
                 };
               }
-              case 'session.errored':
+              case 'session.errored': {
+                // ⛔ Never the code itself: `errorClass` is a token such as
+                // `default_egress_unavailable` that names how the product is
+                // built. Own-key lookup in the shared table (a code spelled
+                // like `constructor` must not reach the prototype), and the
+                // generic title for anything it does not know.
+                const code = typeof event.errorClass === 'string' ? event.errorClass.trim() : '';
+                const title =
+                  code !== '' &&
+                  Object.prototype.hasOwnProperty.call(SESSION_STOPPED_TITLES, code) &&
+                  typeof SESSION_STOPPED_TITLES[code] === 'string'
+                    ? SESSION_STOPPED_TITLES[code]
+                    : SESSION_STOPPED_FALLBACK_TITLE;
                 return {
-                  title: 'Session error',
-                  body:
-                    'Session ' +
-                    event.sessionId +
-                    ' stopped with an error: ' +
-                    event.errorClass +
-                    '.',
+                  title: title,
+                  body: 'Session ' + event.sessionId + ' stopped with an error.',
                 };
+              }
               default:
                 return null;
             }

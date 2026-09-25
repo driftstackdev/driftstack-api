@@ -104,7 +104,9 @@ type AgentSessionCapabilityReport struct {
 	ManualInputAvailable *bool  `json:"manual_input_available"`
 	// "provisioning" | "live" | "blank" | "failed", or nil when unreported.
 	StreamingState *string `json:"streaming_state"`
-	// "live" | "dead_proxy", or nil when unreported.
+	// "live" | "dead_proxy" | "default_connection_down", or nil when
+	// unreported. "default_connection_down" is "dead_proxy" for a session with
+	// no proxy of its own: the connection Driftstack provides stopped.
 	EgressState *string `json:"egress_state"`
 	// "socks5" | "openvpn" | "wireguard".
 	ProxyKind         string `json:"proxy_kind"`

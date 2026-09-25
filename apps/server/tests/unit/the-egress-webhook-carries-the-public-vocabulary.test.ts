@@ -111,6 +111,26 @@ describe('session.egress_capability_changed publishes the mapped vocabulary', ()
     });
   });
 
+  it("CRITICAL a dead connection on a session with no proxy of its own reaches the webhook as ours, not as the customer's proxy", async () => {
+    // The capability relay derives `default_connection_down` for exactly that
+    // session; the public map must carry it through rather than drop it as an
+    // unclassified code — dropping it would tell a subscriber nothing went wrong.
+    const repo = new InMemorySessionsRepo();
+    const sessionId = await seedSession(repo);
+    const enqueueEvent = vi.fn().mockResolvedValue(1);
+    const svc = new SessionsService({ repo, driver: new MockDriver(), webhooks: { enqueueEvent } });
+    await svc.ingestEgressCapabilityReport({
+      sessionId,
+      derived: { ...DERIVED, warnings: ['default_connection_down'] },
+      raw: { proxyKind: 'socks5', egressState: 'dead_proxy' },
+    });
+    const payload = enqueueEvent.mock.calls[0]?.[2] as {
+      egress_capabilities: { warnings: string[] };
+    };
+    expect(payload.egress_capabilities.warnings).toEqual(['default_connection_down']);
+    expect(isPublicEgressWarning('default_connection_down')).toBe(true);
+  });
+
   it('reports the unclassified code through the logger, at most once, with no customer data', async () => {
     const repo = new InMemorySessionsRepo();
     const sessionId = await seedSession(repo);

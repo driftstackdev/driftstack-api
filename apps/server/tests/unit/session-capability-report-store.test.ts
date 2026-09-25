@@ -1,7 +1,13 @@
+import { AgentSessionSchema } from '@driftstack/api-types';
+import Fastify, { type FastifyRequest } from 'fastify';
 import { describe, expect, it } from 'vitest';
+import { registerAgentSessionsRoutes } from '../../src/routes/agent-sessions.js';
 import type { CapabilityReport } from '../../src/schemas/harness-control-protocol.js';
+import type { AgentRuntime } from '../../src/services/agent-runtime.js';
+import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import {
   SessionCapabilityReportStore,
+  customerEgressState,
   customerSafeCapabilityReport,
 } from '../../src/services/session-capability-report-store.js';
 
@@ -179,5 +185,127 @@ describe('SessionCapabilityReportStore', () => {
     expect(safeNone.os_fingerprint).toBeNull();
     // A null arg is treated the same as absent.
     expect(customerSafeCapabilityReport(stored!, null).os_fingerprint).toBeNull();
+  });
+});
+
+// A session created with no proxy of its own runs on the connection Driftstack
+// provides (proxyId NULL). When that connection stops carrying traffic mid-session
+// the device reports `egressState: 'dead_proxy'` — it cannot tell our connection
+// from a customer's proxy — and the desktop app turned that into a red "Proxy
+// connection failed" badge for a customer who chose no proxy. Only the server knows
+// which it was, so the customer projection publishes it under its own value.
+describe("a dead connection on a session with no proxy of its own is published as ours, not as the customer's proxy", () => {
+  function storedWith(egressState: CapabilityReport['egressState']) {
+    const store = new SessionCapabilityReportStore();
+    store.set(report('agt_1', { egressState }));
+    const stored = store.get('agt_1');
+    expect(stored).not.toBeNull();
+    return stored!;
+  }
+
+  it('CRITICAL proxyId null + dead_proxy projects default_connection_down', () => {
+    expect(
+      customerSafeCapabilityReport(storedWith('dead_proxy'), null, { proxyId: null }).egress_state,
+    ).toBe('default_connection_down');
+  });
+
+  it("CRITICAL proxyId set + dead_proxy stays dead_proxy: that is the customer's own proxy", () => {
+    expect(
+      customerSafeCapabilityReport(storedWith('dead_proxy'), null, { proxyId: 'prx_own' })
+        .egress_state,
+    ).toBe('dead_proxy');
+  });
+
+  it('CRITICAL an undefined proxyId is NOT read as null — without the session, the device word stands', () => {
+    // The fail-safe direction. A caller that does not say which session this is
+    // (no third argument), or hands over a record whose proxyId is undefined
+    // (a fake or a partial type that dropped the field), must publish what the
+    // device said: calling a customer's dead proxy "ours" would send them away
+    // from the one thing they can fix. Only an explicit null is "no proxy of its
+    // own". Kills `(session?.proxyId ?? null) === null`, which read all three as null.
+    expect(customerSafeCapabilityReport(storedWith('dead_proxy'), null).egress_state).toBe(
+      'dead_proxy',
+    );
+    expect(customerSafeCapabilityReport(storedWith('dead_proxy')).egress_state).toBe('dead_proxy');
+    expect(customerEgressState('dead_proxy', undefined)).toBe('dead_proxy');
+    expect(customerEgressState('dead_proxy', {} as unknown as { proxyId: string | null })).toBe(
+      'dead_proxy',
+    );
+    // Control: the explicit null still projects, so the arm above is not vacuous.
+    expect(customerEgressState('dead_proxy', { proxyId: null })).toBe('default_connection_down');
+  });
+
+  it('proxyId null leaves live and an unreported state as they are', () => {
+    expect(
+      customerSafeCapabilityReport(storedWith('live'), null, { proxyId: null }).egress_state,
+    ).toBe('live');
+    expect(
+      customerSafeCapabilityReport(storedWith(undefined), null, { proxyId: null }).egress_state,
+    ).toBeNull();
+  });
+
+  it('the store keeps what the device said; only the customer projection changes it', () => {
+    // The operator surfaces (fleet build drift, diagnostics) read the stored record,
+    // and for them the device's own word is the fact.
+    expect(storedWith('dead_proxy').egress_state).toBe('dead_proxy');
+  });
+
+  const ACC = 'acc_default_connection';
+
+  async function readOverTheWire(
+    proxyId: string | null,
+    egressState: CapabilityReport['egressState'],
+  ): Promise<Record<string, unknown>> {
+    const repo = new InMemoryAgentSessionsRepo();
+    const session = await repo.create({ accountId: ACC, tokenBudgetTotal: 100 });
+    await repo.setNodeId(session.id, 'node-1', proxyId);
+    const store = new SessionCapabilityReportStore();
+    store.set(report(session.id, { egressState }));
+
+    const app = Fastify({ logger: false });
+    app.decorateRequest('account', null);
+    app.addHook('onRequest', (req: FastifyRequest, _reply, done) => {
+      (req as { account: unknown }).account = {
+        account: { id: ACC, tier: 'starter' },
+        apiKey: { id: 'key_default_connection', scopes: ['read', 'write'] },
+      };
+      done();
+    });
+    app.decorate('requireAuth', () => Promise.resolve());
+    app.decorate('requireScope', (_scope: string) => () => Promise.resolve());
+    app.decorate('rateLimit', (_bucket: string) => () => Promise.resolve());
+    registerAgentSessionsRoutes(app, {
+      runtime: {} as unknown as AgentRuntime,
+      sessions: repo,
+      sessionCapabilityReportStore: store,
+    });
+    await app.ready();
+    try {
+      const byId = await app.inject({ method: 'GET', url: `/v1/agent-sessions/${session.id}` });
+      expect(byId.statusCode).toBe(200);
+      const list = await app.inject({ method: 'GET', url: '/v1/agent-sessions' });
+      expect(list.statusCode).toBe(200);
+      const body = byId.json<Record<string, unknown>>();
+      // The list projects through the same function, so it must say the same thing.
+      const listed = list.json<{ data: Array<Record<string, unknown>> }>().data;
+      expect(listed).toHaveLength(1);
+      expect(listed[0]?.capability_report).toEqual(body.capability_report);
+      // And the published contract admits what the server sends.
+      const parsed = AgentSessionSchema.safeParse(body);
+      expect(parsed.success, JSON.stringify(parsed.error?.issues ?? [])).toBe(true);
+      return body.capability_report as Record<string, unknown>;
+    } finally {
+      await app.close();
+    }
+  }
+
+  it('CRITICAL GET /v1/agent-sessions/:id and the list publish default_connection_down for a session with no proxy of its own, and the published schema accepts it', async () => {
+    expect((await readOverTheWire(null, 'dead_proxy')).egress_state).toBe(
+      'default_connection_down',
+    );
+  });
+
+  it("CRITICAL the same read for a session on the customer's own proxy still says dead_proxy", async () => {
+    expect((await readOverTheWire('prx_own', 'dead_proxy')).egress_state).toBe('dead_proxy');
   });
 });

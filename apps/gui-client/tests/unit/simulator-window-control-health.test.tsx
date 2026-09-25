@@ -323,6 +323,152 @@ describe('SimulatorWindow — harness capability health', () => {
     expect(container.querySelector('[data-component="simulator-keyboard-toggle"]')).toBeDisabled();
     expect(container.querySelector('[data-component="touch-cursor-overlay"]')).toBeNull();
   });
+
+  // The server publishes `default_connection_down` instead of `dead_proxy` for a
+  // session that used no proxy of its own: the connection that stopped carrying
+  // traffic is the one Driftstack provides. This window can be opened on such a
+  // session (the session-open link, or "Live view" on an AI-chat session started
+  // with no proxy), and it used to show the red "Proxy connection failed" badge
+  // to a customer who has no proxy to fix.
+  const INTERNAL_WORDS =
+    /\b(fleet|nodes?|harness|control plane|observer|vantage|interpose|macworker|undetectable|egress)\b/i;
+
+  function renderOnDefaultConnection(egressState: 'default_connection_down' | 'dead_proxy') {
+    getAgentSession.mockImplementation(() =>
+      immediateControl({
+        mode: 'manual',
+        pairKind: null,
+        terminal: false,
+        status: 'active',
+        closedReason: null,
+        capabilityReport: {
+          manual_input_available: true,
+          streaming_state: 'live',
+          egress_state: egressState,
+        },
+      }),
+    );
+    return renderSim();
+  }
+
+  it("CRITICAL default_connection_down says the connection is ours and that their own proxy runs now, never 'Proxy connection failed'", async () => {
+    const { container } = renderOnDefaultConnection('default_connection_down');
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector('[data-component="default-connection-down-capability-badge"]'),
+      ).not.toBeNull();
+    });
+    const badge = container.querySelector(
+      '[data-component="default-connection-down-capability-badge"]',
+    );
+    expect(badge).toHaveAttribute('role', 'alert');
+    const text = badge?.textContent ?? '';
+    expect(text).toMatch(/Driftstack's connection/);
+    expect(text).toMatch(/on our side/);
+    expect(text).toMatch(/one of your own proxies/);
+    expect(text).not.toMatch(INTERNAL_WORDS);
+    // The customer-proxy badge is not shown beside it, and nothing on the page
+    // blames a proxy they do not have.
+    expect(container.querySelector('[data-component="dead-proxy-capability-badge"]')).toBeNull();
+    expect(container.textContent ?? '').not.toMatch(/Proxy connection failed/);
+  });
+
+  it("dead_proxy on a customer's own proxy still reads 'Proxy connection failed', with no our-side badge", async () => {
+    const { container } = renderOnDefaultConnection('dead_proxy');
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector('[data-component="dead-proxy-capability-badge"]'),
+      ).toHaveTextContent('Proxy connection failed');
+    });
+    expect(
+      container.querySelector('[data-component="default-connection-down-capability-badge"]'),
+    ).toBeNull();
+  });
+
+  async function startPageNoticeOn(
+    egressState: 'default_connection_down' | 'dead_proxy',
+  ): Promise<string> {
+    const { container } = renderOnDefaultConnection(egressState);
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector(
+          egressState === 'default_connection_down'
+            ? '[data-component="default-connection-down-capability-badge"]'
+            : '[data-component="dead-proxy-capability-badge"]',
+        ),
+      ).not.toBeNull();
+    });
+    act(() => {
+      panelCbs.onRoom?.(fakeRoom, fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
+      panelCbs.onPublisher?.('publishing', fakeRoom);
+    });
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({ state: 'errored', url: 'https://driftstack.io/newtab/' }),
+        ),
+      );
+    });
+    const notice = [...container.querySelectorAll('[data-component="top-advisory-stack"] *')]
+      .map((el) => el.textContent ?? '')
+      .find((t) => /^Start page couldn't load/.test(t));
+    expect(notice, 'the start-page notice was shown').toBeDefined();
+    return notice ?? '';
+  }
+
+  it("CRITICAL the start-page notice on a session with no proxy of its own does not say 'through this proxy'", async () => {
+    const notice = await startPageNoticeOn('default_connection_down');
+    expect(notice).not.toMatch(/proxy/i);
+    expect(notice).toMatch(/Driftstack's connection/);
+    expect(notice).not.toMatch(INTERNAL_WORDS);
+  });
+
+  it("the start-page notice on a customer's own proxy is unchanged", async () => {
+    expect(await startPageNoticeOn('dead_proxy')).toBe(
+      "Start page couldn't load through this proxy — type an address to continue",
+    );
+  });
+
+  // A HEALTHY session (egress `live`) opened without the launch's proxy label —
+  // the session-open link, or any window that did not name one. Nothing tells
+  // this window the session has a proxy of its own, and one with none runs on
+  // the connection Driftstack provides; "through this proxy" named something the
+  // customer may not have (windowKnowsOwnProxy).
+  it("CRITICAL a healthy session the window knows no proxy for is not told 'through this proxy'", async () => {
+    getAgentSession.mockImplementation(() =>
+      immediateControl({
+        mode: 'manual',
+        pairKind: null,
+        terminal: false,
+        status: 'active',
+        closedReason: null,
+        capabilityReport: {
+          manual_input_available: true,
+          streaming_state: 'live',
+          egress_state: 'live',
+        },
+      }),
+    );
+    const { container } = renderSim();
+    await vi.waitFor(() => expect(getAgentSession).toHaveBeenCalled());
+    act(() => {
+      panelCbs.onRoom?.(fakeRoom, fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
+      panelCbs.onPublisher?.('publishing', fakeRoom);
+    });
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({ state: 'errored', url: 'https://driftstack.io/newtab/' }),
+        ),
+      );
+    });
+    const notice = [...container.querySelectorAll('[data-component="top-advisory-stack"] *')]
+      .map((el) => el.textContent ?? '')
+      .find((t) => /^Start page couldn't load/.test(t));
+    expect(notice).toBe("Start page couldn't load — type an address to continue");
+  });
 });
 
 describe('SimulatorWindow — temporary input congestion feedback', () => {

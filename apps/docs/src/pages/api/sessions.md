@@ -109,6 +109,13 @@ Driftstack's own infrastructure rather than your session — build
 identifiers, internal endpoints, internal diagnostics — are not part
 of it and never will be.
 
+Its `egressState`, when present, is `live` (traffic is getting out),
+`dead_proxy` (your proxy stopped carrying traffic while the session
+ran), or `default_connection_down` (the session has no proxy of its
+own, and the connection Driftstack provides for it stopped carrying
+traffic — this is on our side, and the matching warning below says
+the same).
+
 ### `egress_capabilities.safeguards`
 
 `safeguards` is whether every egress safeguard held for this session:
@@ -148,6 +155,7 @@ These are the codes the API publishes, and what you can do about each:
 | `udp_unsupported_by_proxy`                   | Your proxy refused the SOCKS5 UDP ASSOCIATE command, so QUIC cannot travel through it.               | Use a proxy that carries UDP if you need HTTP/3.                                      |
 | `quic_unavailable`                           | QUIC was asked for but could not be used for this session, and traffic fell back to HTTP/2 over TCP. | Retry on a new session if HTTP/3 matters to you.                                      |
 | `dead_proxy`                                 | Your proxy stopped answering while the session was running.                                          | Check that it is reachable before starting another session.                           |
+| `default_connection_down`                    | The session has no proxy of its own, and Driftstack's connection for it stopped carrying traffic.    | Nothing to fix at your end. To run now, use one of your own proxies.                  |
 | `streaming_blank`                            | The live view of the session produced no picture. The session itself kept running.                   | Reopen the live view, or read the session's results without it.                       |
 | `streaming_failed`                           | The live view of the session stopped.                                                                | Start a new session if you need to watch it.                                          |
 | `safeguards_unverified`                      | We could not confirm that every egress safeguard ran for this session.                               | Treat the session's egress as unverified; start a new session if that matters to you. |
@@ -156,6 +164,14 @@ These are the codes the API publishes, and what you can do about each:
 | `safeguard_failed:browser_integrity`         | The check that the session ran the expected browser build did not pass.                              | Contact support with the session id.                                                  |
 | `safeguard_failed:proxy_egress_verification` | The check that the session's traffic actually left through your proxy did not pass.                  | Confirm your proxy is working, and contact support with the session id.               |
 | `safeguard_failed:live_view_capture`         | The live view of the session could not be captured.                                                  | Nothing — the session's own browsing is unaffected.                                   |
+
+A session with no proxy of its own runs on a connection Driftstack
+provides, so the codes that name your proxy — `udp_unsupported_by_proxy`,
+`dead_proxy` and `safeguard_failed:proxy_egress_verification` — never
+appear on it. For that session, a connection that carries no UDP reads
+`quic_unavailable`, a connection that stopped reads
+`default_connection_down`, and a failed check that its traffic left the
+right way reads `safeguard_failed`.
 
 Every safeguard code starts with `safeguard_failed`, so matching on
 that prefix catches all of them in one branch, including any added

@@ -29,6 +29,9 @@ import { render, act, fireEvent } from '@testing-library/react';
 
 const sendNavigate = vi.fn(() => Promise.resolve());
 const pageStateMock = vi.fn(() => Promise.resolve<unknown>(null));
+// The capability report the control read returns. Reset before every arm; the
+// load-error arms below set `egress_state` to say whose connection it is.
+let controlCapabilityReport: Record<string, unknown> = { manual_input_available: true };
 // A synchronous thenable so getAgentSession resolves during the initial render's
 // control-read effect — the path that confirms manual input (humanInputEnabled), the
 // gate a forwarded tap must pass. Mirrors simulator-window-pagestate-poll.test.tsx.
@@ -91,7 +94,7 @@ vi.mock('../../src/lib/agent-session-control', () => ({
       pairKind: null,
       status: 'active',
       terminal: false,
-      capabilityReport: { manual_input_available: true },
+      capabilityReport: controlCapabilityReport,
     }),
   getAgentSessionPageState: () => pageStateMock(),
   getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),
@@ -106,8 +109,12 @@ vi.mock('../../src/lib/agent-session-control', () => ({
 const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
 
-function renderSim() {
-  window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&session=agt_x');
+function renderSim(query = '') {
+  window.history.pushState(
+    {},
+    '',
+    `/?window=simulator&ws=wss://lk&token=tok&session=agt_x${query}`,
+  );
   return render(
     <RecordingsProvider>
       <SimulatorWindow />
@@ -173,6 +180,7 @@ describe('SimulatorWindow — URL bar in-flight on a slow tap-navigation (T-10)'
     sendNavigate.mockClear();
     pageStateMock.mockReset();
     pageStateMock.mockResolvedValue(null);
+    controlCapabilityReport = { manual_input_available: true };
   });
   afterEach(() => {
     vi.runOnlyPendingTimers();
@@ -237,6 +245,62 @@ describe('SimulatorWindow — URL bar in-flight on a slow tap-navigation (T-10)'
     const line = loadErrorLine(container);
     expect(line).not.toBeNull();
     expect(line?.textContent).toMatch(/didn't load/i);
+  });
+
+  // ⛔ The line said "the proxy may be slow or blocking it" for EVERY session —
+  // including one with no proxy of its own, which runs on the connection
+  // Driftstack provides and has no proxy to be slow. It follows the same rule as
+  // the slow-load hint (windowKnowsOwnProxy): "the proxy" only when the window
+  // KNOWS the session has one — the launch handoff named it, or the server said the
+  // customer's own proxy stopped (`dead_proxy`) — and the server's
+  // `default_connection_down` wins over a label. Otherwise "the connection", which
+  // is true of every session and blames nothing.
+  async function loadErrorText(query: string): Promise<string> {
+    const { container } = renderSim(query);
+    await flush();
+    act(() => {
+      fireDataFrame({ state: 'loading', url: 'https://blocked.example/' });
+      fireDataFrame({
+        state: 'errored',
+        url: 'https://blocked.example/',
+        error: { kind: 'connection', message: 'refused' },
+      });
+    });
+    const line = loadErrorLine(container);
+    expect(line, 'the load-error line renders').not.toBeNull();
+    return line?.textContent ?? '';
+  }
+
+  it('CRITICAL arm 3b: a window that does not know of a proxy of its own names the connection, never a proxy', async () => {
+    const text = await loadErrorText('');
+    expect(text).toBe(
+      "Page didn't load — the connection may be slow, or the site may be blocking it.",
+    );
+    expect(text).not.toMatch(/proxy/i);
+  });
+
+  it('arm 3c: a window opened naming the proxy it launched through still says the proxy may be slow', async () => {
+    expect(
+      await loadErrorText(`&proxy=${encodeURIComponent('Residential JP · 203.0.113.9:1080')}`),
+    ).toBe("Page didn't load — the proxy may be slow or blocking it.");
+  });
+
+  it("CRITICAL arm 3d: the server's default_connection_down outranks a proxy label", async () => {
+    controlCapabilityReport = {
+      manual_input_available: true,
+      egress_state: 'default_connection_down',
+    };
+    const text = await loadErrorText(
+      `&proxy=${encodeURIComponent('Stale label · 203.0.113.9:1080')}`,
+    );
+    expect(text).not.toMatch(/proxy/i);
+  });
+
+  it("arm 3e: the server's dead_proxy says the session has its own proxy, with no label", async () => {
+    controlCapabilityReport = { manual_input_available: true, egress_state: 'dead_proxy' };
+    expect(await loadErrorText('')).toBe(
+      "Page didn't load — the proxy may be slow or blocking it.",
+    );
   });
 
   it('VACUITY CONTROL: an address-bar navigate is optimistic — it shows NO in-flight indicator', async () => {

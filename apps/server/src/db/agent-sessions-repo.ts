@@ -965,6 +965,30 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
   }
 
+  async setProxyIdForOwnedActiveSession(
+    id: string,
+    nodeId: string,
+    proxyId: string | null,
+  ): Promise<AgentSessionRecord | null> {
+    // The mid-session egress swap's write (see the interface): one conditional
+    // UPDATE, so the row is re-attributed only while it is still active AND still
+    // owned by the node that confirmed the swap. A NULL node_id never matches `eq`.
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({ proxyId, updatedAt: now })
+      .where(
+        and(
+          eq(agentSessions.id, id),
+          eq(agentSessions.nodeId, nodeId),
+          eq(agentSessions.status, 'active'),
+        ),
+      )
+      .returning();
+    const row = updated[0];
+    return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
+  }
+
   async setFirstExitIpIfUnset(id: string, exitIp: string): Promise<AgentSessionRecord | null> {
     // T-26 — record the baseline exit IP exactly once. `WHERE first_exit_ip IS
     // NULL` makes the FIRST observation win even if two capabilityReports race
