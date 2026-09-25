@@ -510,6 +510,19 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       onEdit: noop,
     }),
   },
+  {
+    // Proxy-accuracy audit G2 — the card's own "fails from Driftstack" pill: this
+    // Mac's check says healthy (its UDP relays), Driftstack's says the proxy does
+    // not work. The pill outranks the local verdict and carries the sentence.
+    label: 'failed · socks5 · fails from Driftstack (healthy from this Mac)',
+    props: base({
+      name: 'porto marketplace',
+      monogram: 'PM',
+      hue: 20,
+      vpnFailure: 'The proxy did not answer. Check the host and port, and that it is online.',
+      onEdit: noop,
+    }),
+  },
   { label: 'healthy · testing', props: base({ testing: true }) },
   {
     label: 'vpn · idle (latency from Driftstack)',
