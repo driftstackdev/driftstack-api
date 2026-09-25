@@ -71,13 +71,19 @@ describe('docs layouts/DocLayout content parity', () => {
     expect(body).not.toMatch(/max-w-6xl gap-8/);
   });
 
-  it('S22.2 left tree pinned: sticky independently-scrolling pane (md-scoped so the mobile overlay stays the scroll container) + <details open> collapsible sections with chevron summary (no-JS-safe) + active item nudged into the pane view (block: nearest)', () => {
+  // P4 (2026-09-25) — the nudge moved from scrollIntoView({ block: 'nearest' })
+  // to a quarter of the way down the pane: 'nearest' parked a reference page's
+  // entry on the pane's last line with its own endpoint list hidden below it.
+  it('S22.2 left tree pinned: sticky independently-scrolling pane (md-scoped so the mobile overlay stays the scroll container) + <details open> collapsible sections with chevron summary (no-JS-safe) + an out-of-view active item brought a quarter of the way down the pane (P4)', () => {
     expect(body).toMatch(/md:sticky md:top-6 md:max-h-\[calc\(100vh-3rem\)\] md:overflow-y-auto/);
     expect(body).toMatch(/<details open class="group" data-nav-section>/);
     expect(body).toMatch(/\[&::-webkit-details-marker\]:hidden/);
     expect(body).toMatch(/group-open:rotate-90/);
     expect(body).toMatch(/aside\[data-doc-mobile-nav\] a\[aria-current="page"\]/);
-    expect(body).toMatch(/scrollIntoView\(\{ block: 'nearest' \}\)/);
+    expect(body).toMatch(
+      /navPane\.scrollTop \+= itemRect\.top - paneRect\.top - paneRect\.height \/ 4;/,
+    );
+    expect(body).not.toMatch(/scrollIntoView\(\{ block: 'nearest' \}\)/);
   });
 
   it('S22.2 breadcrumbs pinned: layout-rendered "section › page" from the DOC_NAV lookup, above the article (never injected into .md)', () => {
@@ -111,23 +117,37 @@ describe('docs layouts/DocLayout content parity', () => {
     expect(body).not.toMatch(/article\.insertBefore\(nav, firstH2\)/);
   });
 
-  it('tk-token prose styling pinned (S22.1 2026-07-06, brand-parity port — SUPERSEDES the R11 "prose-slate + prose-pre:bg-[#16171c]" pin; S22.2 dropped flex-1 since the grid column sizes the pane): single `prose` class set whose color hooks are un-layered --tw-prose-* overrides in base.css reading the mode-scoped tk tokens. Still NOT prose-invert (no mode-flip class swap), and fenced code stays a DARK terminal in BOTH modes via --tw-prose-pre-bg: var(--code-bg) — the founder flagged light code backgrounds as ugly, so that invariant carries over from the light theme unchanged', () => {
+  // P4 (2026-09-25) — inline code is no longer an accent-wash chip set by
+  // prose-code: classes (they also reached the <code> inside every fenced
+  // block and striped the dark island); base.css draws a neutral chip scoped
+  // to code outside a pre, and repaints the island itself, so the
+  // prose-pre:border classes went too.
+  it('tk-token prose styling pinned (S22.1 2026-07-06, brand-parity port — SUPERSEDES the R11 "prose-slate + prose-pre:bg-[#16171c]" pin; S22.2 dropped flex-1 since the grid column sizes the pane; P4 moved the inline-code chip and the island border into base.css): single `prose` class set whose color hooks are un-layered --tw-prose-* overrides in base.css reading the mode-scoped tk tokens. Still NOT prose-invert (no mode-flip class swap), and fenced code stays a DARK terminal in BOTH modes via --tw-prose-pre-bg: var(--code-bg) — light code backgrounds were flagged as ugly, so that invariant carries over unchanged', () => {
     expect(body).toMatch(/S22\.1 \(2026-07-06, brand-parity port\) — tk-token-driven prose/);
     expect(body).toMatch(/prose max-w-3xl/);
     expect(body).not.toMatch(/prose-invert/);
     expect(body).not.toMatch(/prose-slate/);
-    // inline code = accent-soft WASH chip (background token only, never text).
-    expect(body).toMatch(/prose-code:bg-tk-accent-soft/);
+    // inline code: the chip lives in base.css, never a prose-code: wash here
+    // (a prose-code: class reaches a fenced block's own <code> too).
+    expect(body).not.toMatch(/prose-code:bg-/);
+    expect(body).toMatch(/prose-code:before:content-none/);
     // fenced code dark in BOTH modes (hook lives in base.css; the layout
     // documents it and must not reintroduce a light pre background).
     expect(body).toMatch(/--tw-prose-pre-bg: var\(--code-bg\)/);
-    expect(body).toMatch(/prose-pre:border prose-pre:border-tk-border/);
+    expect(body).toMatch(/prose-pre:shadow-inset-divider/);
     expect(body).not.toMatch(/prose-pre:bg-\[#f/);
   });
 
-  it('S22.1 (2026-07-06) — tk sidebar + mobile chrome pinned: active item = accent-soft wash bg + AA-safe accent-text ink (never raw accent as text); inactive hover = tk-hover; mode-aware mobile overlay scrim rgb(var(--bg-rgb) / 0.95) (was a baked near-black rgba)', () => {
-    expect(body).toMatch(/'bg-tk-accent-soft text-tk-accent-text'/);
-    expect(body).toMatch(/'text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink'/);
+  // P4 (2026-09-25) — the desktop app's sidebar item: active = accent-soft
+  // wash + PRIMARY ink (12.1:1 light, 13.6:1 dark) with a 2px accent bar; rows
+  // hover to the raised surface (tk-surface), which is also what keeps the
+  // endpoint rows' method chips over 4.5:1 (docs-styles-base measures them).
+  it('S22.1 (2026-07-06) — tk sidebar + mobile chrome pinned: active item = accent-soft wash bg + primary ink + accent bar (P4, the app’s sidebar item; never raw accent as text); inactive hover = the raised surface; mode-aware mobile overlay scrim rgb(var(--bg-rgb) / 0.95) (was a baked near-black rgba)', () => {
+    expect(body).toMatch(
+      /'bg-tk-accent-soft text-tk-ink shadow-\[inset_2px_0_0_var\(--accent\)\]'/,
+    );
+    expect(body).toMatch(/'text-tk-ink-2 hover:bg-tk-surface hover:text-tk-ink'/);
+    expect(body).not.toMatch(/hover:bg-tk-hover hover:text-tk-ink"/);
     expect(body).toMatch(/background: rgb\(var\(--bg-rgb\) \/ 0\.95\);/);
     expect(body).not.toMatch(/rgba\(11, 11, 13/);
   });

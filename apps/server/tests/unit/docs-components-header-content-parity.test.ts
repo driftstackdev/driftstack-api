@@ -21,8 +21,11 @@ function hasAccessibleThemeAndActiveNav(source: string): boolean {
       source,
     ) &&
     (source.match(/^\s+data-theme-toggle$/gm)?.length ?? 0) === 2 &&
-    (source.match(/aria-label="Switch to light theme"/g)?.length ?? 0) === 2 &&
-    (source.match(/aria-pressed="false"/g)?.length ?? 0) === 2
+    // P4 (2026-09-25) — light is the default, so each toggle's truthful
+    // initial action is "Switch to dark theme", pressed (the values
+    // BaseLayout's syncThemeControls writes for light).
+    (source.match(/aria-label="Switch to dark theme"/g)?.length ?? 0) === 2 &&
+    (source.match(/aria-pressed="true"/g)?.length ?? 0) === 2
   );
 }
 
@@ -54,7 +57,7 @@ describe('docs components/Header content parity', () => {
       "isActive(item.href) && 'text-tk-accent-text'",
       "isActive(item.href) && 'text-tk-accent'",
     );
-    const unnamedToggle = body.replace('aria-label="Switch to light theme"', '');
+    const unnamedToggle = body.replace('aria-label="Switch to dark theme"', '');
     expect(hasAccessibleThemeAndActiveNav(unsafeActiveTone)).toBe(false);
     expect(hasAccessibleThemeAndActiveNav(unnamedToggle)).toBe(false);
   });

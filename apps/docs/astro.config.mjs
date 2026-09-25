@@ -25,6 +25,9 @@ export default defineConfig({
     // WCAG AA; github-dark-default (GitHub's current production dark
     // code theme) keeps the founder-pinned dark-terminal look with
     // AA-readable comments (#8b949e ≈ 6.2:1 on #0d1117).
+    // P4 (2026-09-25) — base.css repaints the block to the app's one
+    // dark-island colour (#0f172a on the light page, #050811 on the dark
+    // one); comments measure 5.80:1 and 6.51:1 there.
     shikiConfig: {
       theme: 'github-dark-default',
     },

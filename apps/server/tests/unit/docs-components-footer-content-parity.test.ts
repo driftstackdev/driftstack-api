@@ -35,12 +35,14 @@ describe('docs components/Footer content parity', () => {
     expect(body).toMatch(/width="24"/);
   });
 
+  // P4 (2026-09-25) — light is the default, so the truthful initial action is
+  // "Switch to dark theme", pressed (BaseLayout's syncThemeControls for light).
   it('S22.1 — token chrome + meta-row theme toggle pins its truthful initial action, pressed state, and paired icons', () => {
     expect(body).toMatch(/<footer class="border-t border-tk-border bg-tk-surface">/);
     expect(body).toMatch(/data-theme-toggle/);
-    expect(body).toMatch(/aria-label="Switch to light theme"/);
-    expect(body).toMatch(/aria-pressed="false"/);
-    expect(body).toMatch(/title="Switch to light theme"/);
+    expect(body).toMatch(/aria-label="Switch to dark theme"/);
+    expect(body).toMatch(/aria-pressed="true"/);
+    expect(body).toMatch(/title="Switch to dark theme"/);
     expect(body).not.toMatch(/aria-label="Toggle light and dark theme"/);
     expect(body).toMatch(/class="hidden dark:block"/);
     expect(body).toMatch(/class="block dark:hidden"/);

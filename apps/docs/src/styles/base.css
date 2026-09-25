@@ -1,21 +1,30 @@
 @import 'tailwindcss';
 
+/* P4 (2026-09-25) — the colours, radii, shadows and font stacks come from
+   the shared package, which takes them from the desktop app's own theme
+   (packages/design-tokens; its tests fail if the two ever disagree). This
+   file no longer declares a single token VALUE: tokens.css holds the app's
+   light and dark modes on the data-mode axis, web-aliases.css maps the web
+   names this site's markup already uses (--bg, --ink-2, --accent-soft, …)
+   onto them, and theme-v4.css is the Tailwind v4 @theme for both sets. */
+@import '@driftstack/design-tokens/tokens.css';
+@import '@driftstack/design-tokens/web-aliases.css';
+@import '@driftstack/design-tokens/theme-v4.css';
+
 @plugin '@tailwindcss/typography';
 
 /* S22.1 (2026-07-06) — `dark:` variants follow the data-mode axis set on
    <html> (was the scaffold-era `.dark` class variant, which nothing set). */
 @custom-variant dark (&:where([data-mode='dark'], [data-mode='dark'] *));
 
-/* S22.1 (2026-07-06) — Fleet two-axis tk-* token port. The R11 static
-   light+violet surface (legacy 'oxblood'/'glow-red' token names carrying
-   violet values) is RETIRED; docs now consumes the same two-axis token
-   system as apps/marketing-site + apps/customer-dashboard (dark+oxblood
-   default, light toggle, S20 dark surface ladder) so the product reads
-   as one site. Token VALUES are byte-identical to
-   apps/marketing-site/src/styles/base.css (post-S20); the Tailwind v4
-   CSS-first adaptation maps them into the `tk` utility namespace via
-   `@theme inline` below (docs has no tailwind.config — marketing's v3 JS
-   config `tk` color table becomes --color-tk-* theme vars here). */
+/* Light is the default (P4, owner decision 2026-09-25): the docs take the
+   desktop app's light theme, with its slate dark mode behind the toggle.
+   Two web-only additions live here, both read per data-mode:
+     --glow      the faint accent wash at the top of the page, lower than
+                 the old marketing glow (owner: keep the atmosphere, calmer)
+     --code-bg   fenced code: a DARK island in both modes, in the app's one
+                 dark-island colour (--island: #0f172a on the light page,
+                 #050811 on the dark one) */
 
 /* Self-hosted font faces (Fleet v2 port, S22.1 2026-07-06): Geist VF +
    JetBrains Mono Regular/Bold vendored at public/fonts/ (both
@@ -23,7 +32,8 @@
    in the mono stack for licensed local installs but is NEVER vendored
    (commercial license) — JetBrains Mono is what actually ships.
    font-display: swap so text renders in the system fallback until the
-   woff2 arrives. */
+   woff2 arrives. The stacks themselves (--font-sans / --font-mono) come
+   from theme-v4.css. */
 @font-face {
   font-family: 'Geist';
   src: url('/fonts/geist/GeistVF.woff2') format('woff2');
@@ -47,29 +57,25 @@
 }
 
 @theme {
-  --font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
-
   --container-prose: 65ch;
 
-  /* Fleet card radius (spec §3: 12–16px cards; blueprint uses 14px). */
-  --radius-card: 14px;
-
+  /* The lit top rim of a code island. */
   --shadow-inset-divider: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-/* Fleet token namespace (2026-06-12 rework — see the internal
-   2026-06-12 design-system spec). Resolves to the
-   two-axis CSS custom properties below, so tk-* classes flip with
-   <html data-mode>/<html data-accent>. `@theme inline` makes the
-   utilities reference the mode-scoped vars directly (bg-tk-surface →
-   background-color: var(--surface)); opacity modifiers (e.g.
+/* The docs' tk namespace (2026-06-12 rework, kept): each tk colour reads
+   its web alias, so tk-* classes flip with <html data-mode>. The package's
+   theme-v4.css declares the same names (and the canonical surface-*,
+   ink-*, accent-*, status-* groups); this map stays as the docs' own list
+   of what its markup uses. `@theme inline` makes each utility reference the
+   mode-scoped variable where it is used; opacity modifiers (e.g.
    border-tk-accent/40) resolve via color-mix. */
 @theme inline {
   --color-tk-bg: var(--bg);
   --color-tk-surface: var(--surface);
   --color-tk-raised: var(--raised);
   --color-tk-hover: var(--hover);
+  --color-tk-inset: var(--inset);
   --color-tk-ink: var(--ink);
   --color-tk-ink-2: var(--ink-2);
   --color-tk-ink-3: var(--ink-3);
@@ -82,35 +88,20 @@
   --color-tk-ready: var(--ready);
   --color-tk-busy: var(--busy);
   --color-tk-err: var(--err);
-  /* AA-safe accent-toned TEXT (mode × accent pair; see the
-     --accent-text blocks below). */
+  /* AA-safe accent-toned TEXT (#8f3241 light / #e8a0ab dark). */
   --color-tk-accent-text: var(--accent-text);
-  /* S24 — AA-safe status-toned TEXT (per data-mode block below). */
+  /* S24 — AA-safe status-toned TEXT. */
   --color-tk-ready-text: var(--ready-text);
   --color-tk-busy-text: var(--busy-text);
   --color-tk-err-text: var(--err-text);
 }
 
-/* Fleet v2 — calm ambient card shadows. S20: mode-aware vars — the
-   original gray shadows are a measured no-op on the near-black dark bg
-   (composite to 1.0000:1), so dark mode supplies a lit top rim +
-   true-black drop instead (values live in the data-mode blocks below).
-   Custom @utility rather than a --shadow-* theme key so the utility
-   tracks the mode-scoped var without a self-referential theme token. */
-@utility shadow-ambient {
-  box-shadow: var(--shadow-ambient);
-}
-@utility shadow-ambient-lg {
-  box-shadow: var(--shadow-ambient-lg);
-}
-
 /*
   The default border color has changed to `currentcolor` in Tailwind CSS v4,
   so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
+  looks the same as it did with Tailwind CSS v3. The fallback is the app's
+  hairline (surface-divider), which follows the mode — a fixed light grey
+  drew bright lines on the dark theme.
 */
 @layer base {
   *,
@@ -118,54 +109,58 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
+    border-color: rgb(var(--surface-divider-rgb, 205 211 220));
   }
 }
 
-/* Primary CTA — flat accent, Fleet v2: calm ambient shadow instead of
-   the glow ring + hover lift. Color change only on hover keeps it
-   tactile without motion. */
+/* Primary CTA — the app's .btn-primary: flat accent fill, white label. The
+   hover DARKENS (accent-fill-hover, white 7.11:1) and pressed goes one step
+   further (accent-active, 8.20:1): the lighter rose accent-hover would drop
+   the white label to 3.9:1. No shadow — the app's primary has none, and the
+   light lift's white inset rim would draw a line across the fill. */
 @utility btn-primary {
   @apply inline-flex items-center justify-center rounded-lg bg-tk-accent
            px-4 py-2 text-sm font-semibold text-tk-accent-ink
            transition-colors duration-150
-           hover:bg-tk-accent-strong
+           hover:bg-tk-accent-fill-hover active:bg-tk-accent-strong
            focus-visible:outline-solid focus-visible:outline-2
            focus-visible:outline-offset-2 focus-visible:outline-tk-accent;
-  box-shadow: var(--shadow-ambient);
 }
 
-/* Secondary CTA — solid surface (Fleet v2: glass/backdrop-blur retired)
-   with subtle border + soft hover. */
+/* Secondary CTA — the app's .btn-secondary face (elevated surface, primary
+   ink) with a hairline, which a button needs on the light page ground. */
 @utility btn-secondary {
   @apply inline-flex items-center justify-center rounded-lg
-           border border-tk-border bg-tk-surface px-4 py-2 text-sm
+           border border-tk-border bg-tk-raised px-4 py-2 text-sm
            font-medium text-tk-ink
            transition-colors duration-150
-           hover:border-tk-ink-3 hover:bg-tk-hover
+           hover:border-tk-ink-3/40 hover:bg-tk-hover
            focus-visible:outline-solid focus-visible:outline-2
            focus-visible:outline-offset-2 focus-visible:outline-tk-accent;
 }
 
-/* Nav link — muted by default, readable accent on hover (accent-text
-   is the AA-safe text tone; raw --accent is ~3.0:1 on the dark bg). */
+/* Nav link — secondary ink by default, the AA accent-text tone on hover
+   (the raw accent is for fills, never text). */
 @utility nav-link {
   @apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent-text;
 }
 
-/* S22.1 / Fleet brand-parity port (2026-07-06) — dark+oxblood default +
-   light toggle. Synced with the marketing-site + customer-dashboard
-   Fleet two-axis tokens so the product reads as one site. Supersedes
-   the R11 light+violet posture (legacy 'oxblood'/'glow-red' names are
-   gone; markup consumes tk-* utilities). */
-
 @layer base {
   :root {
-    /* Fleet rework: color-scheme follows the data-mode axis (set on <html>). */
+    /* color-scheme follows the data-mode axis (tokens.css sets it per mode). */
     color-scheme: light;
   }
   [data-mode='dark'] {
     color-scheme: dark;
+  }
+
+  [data-mode='light'] {
+    --glow: rgb(var(--accent-rgb) / 0.07);
+    --code-bg: var(--island);
+  }
+  [data-mode='dark'] {
+    --glow: rgb(var(--accent-rgb) / 0.12);
+    --code-bg: var(--island);
   }
 
   html {
@@ -183,13 +178,13 @@
     @apply min-h-screen flex flex-col;
     max-width: 100vw;
     overflow-x: clip;
-    /* S22.1 — the brand wash follows the accent axis (was a static red
-       rgba radial left over from the pre-Fleet palette); marketing's
-       ambient pattern: accent glow at the top, accent-soft at the foot. */
-    background-image:
-      radial-gradient(ellipse 90% 60% at 50% -10%, var(--glow), transparent 70%),
-      radial-gradient(ellipse 80% 50% at 50% 100%, var(--accent-soft), transparent 75%);
-    background-attachment: fixed;
+    /* One faint accent wash at the top of the page, the app's .cc-hero
+       idea at low alpha. Sized to the first screen and scrolling with the
+       page (not fixed, not the body's full height), so a long read is on
+       the plain ground. */
+    background-image: radial-gradient(ellipse 90% 60% at 50% -10%, var(--glow), transparent 70%);
+    background-size: 100% 56rem;
+    background-repeat: no-repeat;
   }
 
   code,
@@ -208,19 +203,18 @@
   }
 
   ::selection {
-    /* Fleet rework: selection follows the accent axis. */
-    @apply bg-tk-accent-strong text-white;
+    /* Selection follows the accent axis. */
+    @apply bg-tk-accent-strong text-tk-accent-ink;
   }
 }
 
-/* S22.1 — tk-token-driven prose (single class set, no prose-invert
-   mode-flip): the typography plugin's color hooks read the mode-scoped
-   custom properties, so body copy / headings / links / bullets flip
-   with <html data-mode> while fenced code stays a DARK terminal in
-   BOTH modes (--code-bg; founder-pinned — light code backgrounds were
-   flagged "ugly / barely readable"). Un-layered so it wins over the
-   plugin's utilities-layer prose defaults. Links use --accent-text
-   (the AA-safe tone), never the raw accent. */
+/* tk-token-driven prose (single class set, no prose-invert mode-flip): the
+   typography plugin's colour hooks read the mode-scoped custom properties,
+   so body copy / headings / links / bullets flip with <html data-mode>,
+   while fenced code stays a DARK island in BOTH modes (--code-bg, the app's
+   dark-island colour). Un-layered so it wins over the plugin's
+   utilities-layer prose defaults. Links use --accent-text (the AA-safe
+   tone), never the raw accent. */
 .prose {
   --tw-prose-body: var(--ink-2);
   --tw-prose-headings: var(--ink);
@@ -241,24 +235,133 @@
   --tw-prose-td-borders: var(--border);
 }
 
+/* Headings: a hairline above every section, so a long reference page
+   reads as a sequence of sections, the way the app groups its panels. */
+.prose h2 {
+  border-top: 1px solid var(--border);
+  padding-top: 1.75rem;
+  letter-spacing: -0.01em;
+}
+.prose h1 {
+  letter-spacing: -0.02em;
+}
+
+/* Inline code: a neutral chip (inset surface, primary ink — 13.1:1 light,
+   16.8:1 dark), not an accent wash: in a manual, code is information, not
+   emphasis. Scoped to code OUTSIDE a pre, so a fenced block's own <code>
+   never picks up the chip and paints stripes across the dark island. */
+.prose :where(:not(pre) > code):not(:where([class~='not-prose'] *)) {
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  padding: 0.0625rem 0.3125rem;
+  font-size: 0.875em;
+  font-weight: 500;
+  /* A chip that wraps keeps its rim on every line. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.prose :where(pre code) {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+/* Fenced code: Shiki writes its own theme background inline, so the dark
+   island colour needs !important to reach it. Every token colour
+   github-dark-default emits was measured on it: the dimmest (comments,
+   #8b949e) is 5.80:1 on #0f172a and 6.51:1 on #050811. */
+.prose pre.astro-code {
+  background-color: var(--tw-prose-pre-bg) !important;
+  border: 1px solid rgb(var(--island-rgb));
+  border-radius: 0.75rem;
+}
+
+/* A language-tab group (DocLayout's script) is one code window: the tab bar
+   and the panel sit flush. The panel's pre loses its prose margins and top
+   radius here, un-layered, because the plugin's pre margin outranks a
+   utility class added at runtime. */
+[data-langtabs] pre,
+[data-langtabs] pre.astro-code {
+  margin-top: 0;
+  margin-bottom: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* Tables: a card (raised surface, hairline, the app's 12px card radius)
+   with a quiet header row, so a reference table reads as one unit instead
+   of floating rules on the page ground. Separate borders so the radius
+   holds; the row rules move onto the cells (a row's own border does not
+   paint in that model). */
+.prose table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+.prose thead {
+  border-bottom-width: 0;
+}
+.prose thead th {
+  /* A neutral wash of the muted ink: a quiet grey on the light card, a
+     lifted slate on the dark one (the inset well read as a black band). */
+  background: rgb(var(--ink-muted-rgb) / 0.1);
+  color: var(--ink);
+  font-weight: 600;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+}
+.prose thead th:first-child {
+  border-top-left-radius: calc(0.75rem - 1px);
+}
+.prose thead th:last-child {
+  border-top-right-radius: calc(0.75rem - 1px);
+}
+.prose tbody tr {
+  border-bottom-width: 0;
+}
+.prose tbody td {
+  border-top: 1px solid var(--border);
+  vertical-align: top;
+}
+.prose table th:first-child,
+.prose table td:first-child {
+  padding-left: 0.875rem;
+}
+.prose table th:last-child,
+.prose table td:last-child {
+  padding-right: 0.875rem;
+}
+
 /* S22.2 (2026-07-06, Stoplight relayout) — blockquote = info callout.
    Docs .md pages use plain markdown `>` blockquotes for notes/caveats;
    the default typography treatment (bare left rule + auto curly quote
    marks) read as pull-quotes, not callouts. Restyled at the prose level
-   so ZERO .md edits are needed: accent-2 left rule (the
-   --tw-prose-quote-borders hook above), raised surface, rounded right
-   edge, normal weight, and the plugin's open/close quote marks removed.
-   Un-layered for the same reason as the .prose hook block. */
+   so ZERO .md edits are needed: an accent-2 left rule (the
+   --tw-prose-quote-borders hook above) on the elevated surface with a
+   hairline and the app's 12px card radius, normal weight, and the
+   plugin's open/close quote marks removed. Un-layered for the same reason
+   as the .prose hook block. */
 .prose blockquote {
   background: var(--raised);
-  border-top-right-radius: 0.5rem;
-  border-bottom-right-radius: 0.5rem;
-  padding: 0.75rem 1.25rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-2);
+  border-radius: 0.75rem;
+  padding: 0.875rem 1.25rem;
   font-weight: 400;
+  box-shadow: var(--shadow-lift);
 }
 .prose blockquote p:first-of-type::before,
 .prose blockquote p:last-of-type::after {
   content: none;
+}
+.prose blockquote > :first-child {
+  margin-top: 0;
+}
+.prose blockquote > :last-child {
+  margin-bottom: 0;
 }
 
 /* Global reduced-motion baseline (marketing parity). Un-layered +
@@ -275,205 +378,27 @@
   }
 }
 
-/* ── Fleet design-system token layer (2026-06-12 rework; token contract per
-   the internal 2026-06-12 design-system spec). Two independent axes on
-   <html>: data-mode (light|dark) × data-accent (violet|oxblood|teal). Fleet
-   markup consumes these via the `tk` utility namespace. The shipped default
-   is dark+oxblood ("Fleet Mission Control — Dark + Red", founder-locked
-   2026-06-15) — set on <html> in BaseLayout.astro; the other axis values
-   stay selectable machinery. Values byte-identical to
-   apps/marketing-site/src/styles/base.css (S22.1 brand-parity port). */
-[data-accent='violet'] {
-  --accent-rgb: 109 94 252;
-  --accent-2-rgb: 139 125 255;
-  --accent-strong-rgb: 88 71 224;
-  --accent: #6d5efc;
-  --accent-2: #8b7dff;
-  --accent-strong: #5847e0;
-  --accent-ink: #fff;
-  --accent-soft: rgba(109, 94, 252, 0.13);
-  --glow: rgba(109, 94, 252, 0.32);
-}
-[data-accent='oxblood'] {
-  --accent-rgb: 155 59 70;
-  --accent-2-rgb: 192 75 88;
-  --accent-strong-rgb: 114 47 55;
-  --accent: #9b3b46;
-  --accent-2: #c04b58;
-  --accent-strong: #722f37;
-  --accent-ink: #fff;
-  --accent-soft: rgba(155, 59, 70, 0.13);
-  --glow: rgba(155, 59, 70, 0.32);
-}
-[data-accent='teal'] {
-  --accent-rgb: 16 154 130;
-  --accent-2-rgb: 27 199 168;
-  --accent-strong-rgb: 12 125 105;
-  --accent: #109a82;
-  --accent-2: #1bc7a8;
-  --accent-strong: #0c7d69;
-  --accent-ink: #fff;
-  --accent-soft: rgba(16, 154, 130, 0.13);
-  --glow: rgba(16, 154, 130, 0.28);
-}
-[data-mode='light'] {
-  --bg-rgb: 242 243 246;
-  --surface-rgb: 255 255 255;
-  --raised-rgb: 255 255 255;
-  --hover-rgb: 241 242 245;
-  --ink-rgb: 15 16 20;
-  --ink-2-rgb: 71 74 85;
-  --ink-3-rgb: 106 109 122;
-  --border-rgb: 228 230 236;
-  --ready-rgb: 12 154 93;
-  --busy-rgb: 201 138 18;
-  --err-rgb: 216 69 60;
-  --bg: #f2f3f6;
-  --surface: #fff;
-  --raised: #fff;
-  --hover: #f1f2f5;
-  --ink: #0f1014;
-  --ink-2: #474a55;
-  /* S23 2026-07-06 — light ink-3 darkened for AA: #8a8d99 measured only
-     2.98:1 on --bg #f2f3f6 / 3.31:1 on #fff / 2.95:1 on --hover #f1f2f5,
-     failing WCAG AA for the small muted print it carries (tree section
-     labels, Copy buttons, footer meta, status lines). #6a6d7a is
-     4.64 / 5.15 / 4.60 on those surfaces (all ≥4.5:1) while staying
-     clearly lighter than ink-2 #474a55 (7.96:1) so hierarchy holds. */
-  --ink-3: #6a6d7a;
-  --border: #e4e6ec;
-  --ready: #0c9a5d;
-  --busy: #c98a12;
-  --err: #d8453c;
-  /* S24 2026-07-06 — AA-safe status-toned TEXT (the S22.4 method-chip
-     precedent promoted to shared tokens; values byte-identical with
-     marketing/dashboard base.css). The raw status tokens above are FILL
-     tones and fail WCAG AA as small text in light mode (--err #d8453c
-     3.91/4.34/3.88 on bg/surface/hover; --ready #0c9a5d 3.27/3.62/3.24;
-     --busy #c98a12 2.66/2.95/2.63). Status-colored TEXT consumes the
-     *-text pair; dots/fills/washes/borders keep the raw tokens. All three
-     verified ≥4.5:1 on --bg #f2f3f6 / --surface #fff / --hover #f1f2f5
-     AND over their own 15%-alpha washes (the method chips below ride
-     them): ready-text #097245 5.40/5.99/5.35 · busy-text #845a09
-     5.49/6.09/5.44 · err-text #ad3229 5.80/6.43/5.75. */
-  --ready-text: #097245;
-  --busy-text: #845a09;
-  --err-text: #ad3229;
-  --sync: #2563eb;
-  --code-bg: #16171c;
-  /* S20 — mode-aware elevation: the light values are the original v2
-     ambient shadows (they work on light surfaces). */
-  --shadow-ambient: 0 1px 2px rgb(15 16 20 / 0.04), 0 10px 28px -18px rgb(15 16 20 / 0.12);
-  --shadow-ambient-lg: 0 2px 4px rgb(15 16 20 / 0.05), 0 24px 56px -24px rgb(15 16 20 / 0.2);
-}
-[data-mode='dark'] {
-  --bg-rgb: 6 6 8;
-  --surface-rgb: 20 20 26;
-  --raised-rgb: 28 28 36;
-  --hover-rgb: 36 37 47;
-  --ink-rgb: 245 245 247;
-  --ink-2-rgb: 176 176 187;
-  --ink-3-rgb: 140 140 150;
-  --border-rgb: 44 44 56;
-  --ready-rgb: 47 227 154;
-  --busy-rgb: 255 194 77;
-  --err-rgb: 255 107 97;
-  --bg: #060608;
-  /* S20 2026-07-06 (founder: "boxes might not even be visible") — the dark
-     surface ladder was compressed ~4x below the GUI's (surface vs bg was
-     1.05:1, below perceptibility; every layer boundary hung on a 1.16:1
-     hairline border). Bumped for SEPARATION while the near-black brand bg
-     stays locked: surface 1.10:1 / raised 1.20:1 vs bg / border 1.47:1. */
-  --surface: #14141a;
-  --raised: #1c1c24;
-  --hover: #24252f;
-  --ink: #f5f5f7;
-  --ink-2: #b0b0bb;
-  /* ink-3 carries small muted print at reading distance;
-     #8c8c96 clears WCAG AA on #060608 where the old dashboard #73737f
-     (≈4.2:1) did not. Unified across marketing + dashboard + docs as of
-     S21/S22.1 (2026-07-06). */
-  --ink-3: #8c8c96;
-  --border: #2c2c38;
-  --ready: #2fe39a;
-  --busy: #ffc24d;
-  --err: #ff6b61;
-  /* S24 2026-07-06 — AA-safe status-toned TEXT (see the light block). The
-     dark raw ready/busy tones already clear AA as text everywhere, so the
-     pairs reuse them (ready-text #2fe39a 12.12/10.99/9.11 on
-     bg/surface/hover; busy-text #ffc24d 12.61/11.42/9.47). Raw --err
-     #ff6b61 passes plain surfaces (7.26/6.58/5.45) but measures 4.35:1
-     over its own 15% wash on a hovered row (the S22.4 DELETE-chip
-     finding), so err-text lifts to #ff7d74: 8.13/7.37/6.11 plain,
-     6.91/4.88 over the wash on bg/hover. */
-  --ready-text: #2fe39a;
-  --busy-text: #ffc24d;
-  --err-text: #ff7d74;
-  --sync: #60a5fa;
-  --code-bg: #0c0c11;
-  /* S20 — dark elevation: the light-mode gray shadows composite to
-     EXACTLY the bg on near-black (a mathematical no-op, measured
-     1.0000:1), so dark cards had zero elevation cue. Dark uses the
-     standard dark-UI cue instead: a lit top rim (inset white ~5%)
-     + a true-black drop for overlap depth. */
-  --shadow-ambient: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 10px 28px -18px rgb(0 0 0 / 0.7);
-  --shadow-ambient-lg: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 24px 56px -24px rgb(0 0 0 / 0.85);
-}
-
-/* ── AA-safe accent-toned TEXT (Fleet v2 2026-07-03). The raw --accent fails
-   WCAG AA as text on the dark bg (oxblood #9b3b46 on #060608 ≈ 3.0:1 — fine
-   for button FILLS with white ink, not for colored text). --accent-text is
-   the readable tone per mode × accent pair (all ≥4.5:1 on --bg, verified):
-   dark oxblood #d4626e 5.56 / violet #8b7dff 6.24 / teal #1bc7a8 9.43;
-   light oxblood #8d2c3e 7.39 / violet #5847e0 5.58 / teal #0c7d69 4.56.
-   Text-on-background accent roles (nav-link hover, prose links, active
-   sidebar items) use tk-accent-text; fills/borders keep the raw accent.
-   The accent-soft wash is a BACKGROUND token only — never text. */
-[data-mode='dark'][data-accent='violet'] {
-  --accent-text: #8b7dff;
-}
-[data-mode='dark'][data-accent='oxblood'] {
-  --accent-text: #d4626e;
-}
-[data-mode='dark'][data-accent='teal'] {
-  --accent-text: #1bc7a8;
-}
-[data-mode='light'][data-accent='violet'] {
-  --accent-text: #5847e0;
-}
-[data-mode='light'][data-accent='oxblood'] {
-  --accent-text: #8d2c3e;
-}
-[data-mode='light'][data-accent='teal'] {
-  --accent-text: #0c7d69;
-}
-
 /* ── S22.4 (2026-07-06, Stoplight reference furniture) — HTTP method chips.
    Tiny mono uppercase method badges on the docs tree's per-endpoint
-   sub-nodes. Wash background = 15%-alpha of the mode's status token
+   sub-nodes. Wash background = 12%-alpha of the mode's status token
    (plain rgb()/alpha compositing — matches the AA computation below);
-   text follows the readable direction per mode:
-     - DARK uses the raw bright status tokens, except DELETE which
-       lightens --err to #ff7d74 (raw #ff6b61 is 4.35:1 over a hovered
-       row — just under AA for this tiny text).
-     - LIGHT needs DARKER tones than the raw tokens (raw
-       ready/busy/err/sync measure only 2.3–3.8:1 as text on the light
-       bg — they are fill tokens, not text tokens).
-   S24 2026-07-06 — this chip precedent got promoted to the shared
-   --ready-text/--busy-text/--err-text tokens (per data-mode blocks
-   above), so GET/PUT/PATCH/DELETE now consume the tokens and flip per
-   mode with no light overrides. POST stays hardcoded (no --sync-text
-   token; sync is docs-chip-only). Light GET/PUT/DELETE tones moved to
-   the shared token values (#06663d→#097245 · #7a540b→#845a09 ·
-   #a23028→#ad3229), re-verified ≥4.5:1 against the wash composited
-   over BOTH --bg and --hover (chips sit on hoverable rows):
-     dark : GET var(--ready-text) #2fe39a 9.49/6.50 · POST var(--sync)
-            #60a5fa 6.60/4.63 · PUT/PATCH var(--busy-text) #ffc24d
-            9.76/6.64 · DELETE var(--err-text) #ff7d74 6.91/4.88
-     light: GET #097245 4.58/4.54 · POST #1d4ed8 4.92/4.91 ·
-            PUT/PATCH #845a09 4.79/4.74 · DELETE #ad3229 4.77/4.72
-   GET = ready tint · POST = sync/blue tint · PUT/PATCH = busy/amber
-   tint · DELETE = err/red tint. */
+   text = the app's status token, which it already sets per mode as a
+   TEXT-safe tone.
+   P4 (2026-09-25): GET/PUT/PATCH/DELETE read the app's status tokens
+   (ready #086a40 / busy #7b540b / error #a6352e light; #34d399 / #fbbf24 /
+   #fd8c8c dark). POST keeps its own blue per mode (the app has no sync
+   token): #1d4ed8 light, #93c5fd dark (the old #60a5fa was 4.42:1 over the
+   dark hover). The wash went from 15% to 12%, the least that keeps every
+   pair over 4.5 in light. Each pair measured over the wash composited on
+   BOTH grounds a chip sits on — the page ground and the row's hover
+   (surface-raised, DocLayout's endpoint rows):
+     light: GET 4.80/5.30 · POST 4.89/5.40 · PUT/PATCH 4.87/5.38 ·
+            DELETE 4.73/5.23
+     dark : GET 7.44/5.97 · POST 8.17/6.59 · PUT/PATCH 8.47/6.78 ·
+            DELETE 6.76/5.49
+   GET = ready tint · POST = blue tint · PUT/PATCH = busy/amber tint ·
+   DELETE = error/red tint. The method word is the signal; the tint only
+   groups them. */
 .method-chip {
   display: inline-block;
   flex-shrink: 0;
@@ -490,31 +415,25 @@
 }
 /* Washes ride the mode-scoped --*-rgb triplets (rgb()/alpha — NOT
    color-mix, whose Lightning-CSS fallback degrades to a SOLID status
-   background with same-color text on pre-color-mix browsers). The two
-   axes have no --sync-rgb triplet (and the docs mode blocks stay
-   byte-identical to marketing's, so none is added here); the POST wash
-   hardcodes the --sync hex triplets per mode (#60a5fa dark / #2563eb
-   light — same values customer-dashboard exposes as --sync-rgb). */
+   background with same-color text on pre-color-mix browsers). */
 .method-chip--get {
   color: var(--ready-text);
-  background: rgb(var(--ready-rgb) / 0.15);
+  background: rgb(var(--ready-rgb) / 0.12);
 }
 .method-chip--post {
-  color: var(--sync);
-  background: rgb(96 165 250 / 0.15);
+  color: #93c5fd;
+  background: rgb(96 165 250 / 0.12);
 }
 .method-chip--put,
 .method-chip--patch {
   color: var(--busy-text);
-  background: rgb(var(--busy-rgb) / 0.15);
+  background: rgb(var(--busy-rgb) / 0.12);
 }
 .method-chip--delete {
   color: var(--err-text);
-  background: rgb(var(--err-rgb) / 0.15);
-}
-[data-mode='light'] .method-chip--post {
-  background: rgb(37 99 235 / 0.15);
+  background: rgb(var(--err-rgb) / 0.12);
 }
 [data-mode='light'] .method-chip--post {
   color: #1d4ed8;
+  background: rgb(37 99 235 / 0.12);
 }

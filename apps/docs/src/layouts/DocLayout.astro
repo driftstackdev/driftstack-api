@@ -85,15 +85,18 @@ const nextItem =
       backdrop-filter: blur(8px);
     }
   </style>
-  <div class="md:hidden flex items-center justify-between border-b border-tk-border px-4 py-3">
-    <span class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Docs</span>
+  {/* P4 (2026-09-25) — the tree toggle wears a sidebar-panel icon, not a
+      second hamburger: the header's site menu already uses one directly
+      above it, and two identical icons read as a duplicate. */}
+  <div class="md:hidden flex items-center justify-between border-b border-tk-border bg-tk-surface px-4 py-2.5">
+    <span class="text-xs font-semibold uppercase tracking-wider text-tk-ink-3">Docs</span>
     <button
       type="button"
       data-doc-mobile-nav-toggle
       aria-label="Open docs navigation"
       aria-controls="docs-mobile-navigation"
       aria-expanded="false"
-      class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 hover:text-tk-ink"
+      class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-tk-border bg-tk-raised text-tk-ink-2 hover:text-tk-ink"
     >
       <svg
         data-doc-mobile-nav-icon="closed"
@@ -103,10 +106,12 @@ const nextItem =
         aria-hidden="true"
         fill="none"
         stroke="currentColor"
-        stroke-width="1.6"
+        stroke-width="1.4"
         stroke-linecap="round"
+        stroke-linejoin="round"
       >
-        <path d="M2.5 4h11 M2.5 8h11 M2.5 12h11" />
+        <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
+        <path d="M6 2.5v11 M3.75 5.5h0.5 M3.75 7.5h0.5 M3.75 9.5h0.5" />
       </svg>
       <svg
         data-doc-mobile-nav-icon="open"
@@ -143,7 +148,7 @@ const nextItem =
         {
           DOC_NAV.map((section) => (
             <details open class="group" data-nav-section>
-              <summary class="flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded-sm px-2 py-1.5 font-mono text-xs uppercase tracking-wide text-tk-ink-3 hover:text-tk-ink [&::-webkit-details-marker]:hidden">
+              <summary class="flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs font-semibold uppercase tracking-wider text-tk-ink-3 hover:text-tk-ink [&::-webkit-details-marker]:hidden">
                 {section.label}
                 <svg
                   viewBox="0 0 16 16"
@@ -171,12 +176,15 @@ const nextItem =
                         // keeps text width constant across active /
                         // inactive; otherwise clicking shifted other
                         // items (same fix as DashboardLayout 50b0dd7a).
-                        'block rounded-sm px-2 py-1 text-sm font-medium transition-colors',
-                        // S22.1 — active = accent-soft WASH bg (background
-                        // token only) + AA-safe accent-text ink.
+                        'block rounded-md px-2 py-1 text-sm font-medium transition-colors',
+                        // P4 (2026-09-25) — the desktop app's sidebar item:
+                        // active = accent-soft WASH + primary ink (12.1:1
+                        // light, 13.6:1 dark) with a 2px accent bar at the
+                        // leading edge; inactive rows hover to the raised
+                        // surface, the way the app's rows lift.
                         isActive(item.href)
-                          ? 'bg-tk-accent-soft text-tk-accent-text'
-                          : 'text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink',
+                          ? 'bg-tk-accent-soft text-tk-ink shadow-[inset_2px_0_0_var(--accent)]'
+                          : 'text-tk-ink-2 hover:bg-tk-surface hover:text-tk-ink',
                       ]}
                     >
                       {item.label}
@@ -196,7 +204,7 @@ const nextItem =
                           <li>
                             <a
                               href={child.href}
-                              class="flex items-center gap-2 rounded-sm px-2 py-0.5 text-[0.8125rem] text-tk-ink-2 transition-colors hover:bg-tk-hover hover:text-tk-ink"
+                              class="flex items-center gap-2 rounded-md px-2 py-0.5 text-[0.8125rem] text-tk-ink-2 transition-colors hover:bg-tk-surface hover:text-tk-ink"
                             >
                               {child.method && (
                                 <span class={'method-chip method-chip--' + child.method.toLowerCase()}>
@@ -224,7 +232,7 @@ const nextItem =
       {
         active && (
           <nav aria-label="Breadcrumb" class="mb-4 flex items-center gap-1.5 text-xs">
-            <span class="font-mono uppercase tracking-wide text-tk-ink-3">{active.section}</span>
+            <span class="font-semibold uppercase tracking-wider text-tk-ink-3">{active.section}</span>
             <span aria-hidden="true" class="text-tk-ink-3">
               ›
             </span>
@@ -242,14 +250,15 @@ const nextItem =
            explicitly:
              - links: --accent-text via base.css (AA-safe accent TEXT
                tone — never the raw accent, never a wash token as text)
-             - inline code: accent-soft WASH chip (background token
-               only) with tk-ink text
-             - fenced pre: a DARK code surface in BOTH modes
-               (--tw-prose-pre-bg: var(--code-bg) — #16171c light /
-               #0c0c11 dark; founder-pinned: light code backgrounds were
-               flagged "ugly / barely readable", so fenced code stays a
-               dark terminal even on the light docs theme)
-             - tables/hr: tk-border via the base.css hooks
+             - inline code: a neutral inset chip with primary ink
+               (base.css, scoped to code outside a pre)
+             - fenced pre: a DARK code island in BOTH modes
+               (--tw-prose-pre-bg: var(--code-bg) — the app's dark-island
+               colour, #0f172a on the light page / #050811 on the dark
+               one; light code backgrounds were flagged "ugly / barely
+               readable", so fenced code stays a dark terminal)
+             - tables: a raised card with a quiet header row (base.css
+               .table-wrap); hr: tk-border via the base.css hooks
            S22.2 — flex-1 dropped (the grid column sizes the pane now);
            max-w-3xl keeps the ~72ch reading measure inside the wider
            shell. Blockquote callout restyle lives in base.css.
@@ -263,16 +272,13 @@ const nextItem =
       <article
         data-pagefind-body
         class="prose max-w-3xl
-               prose-headings:font-semibold
-               prose-a:no-underline prose-a:hover:underline
-               prose-code:font-mono prose-code:text-[0.875em] prose-code:rounded-sm
-               prose-code:bg-tk-accent-soft prose-code:px-1.5 prose-code:py-0.5
+               prose-headings:font-semibold prose-headings:tracking-tight
+               prose-a:font-medium prose-a:no-underline prose-a:hover:underline
+               prose-code:font-mono
                prose-code:before:content-none
                prose-code:after:content-none
-               prose-pre:border prose-pre:border-tk-border
                prose-pre:shadow-inset-divider
-               prose-blockquote:not-italic
-               prose-th:bg-tk-surface"
+               prose-blockquote:not-italic"
       >
         <slot />
       </article>
@@ -287,12 +293,12 @@ const nextItem =
             {prevItem ? (
               <a
                 href={prevItem.href}
-                class="group rounded-lg border border-tk-border bg-tk-surface px-4 py-3 transition-colors hover:border-tk-ink-3 hover:bg-tk-hover"
+                class="group rounded-xl border border-tk-border bg-tk-surface px-4 py-3 shadow-lift transition-colors hover:border-tk-accent/40"
               >
                 <span class="block text-xs text-tk-ink-3">
                   <span aria-hidden="true">←</span> Previous
                 </span>
-                <span class="mt-1 block text-sm font-medium text-tk-ink-2 transition-colors group-hover:text-tk-ink">
+                <span class="mt-1 block text-sm font-medium text-tk-ink transition-colors group-hover:text-tk-accent-text">
                   {prevItem.label}
                 </span>
               </a>
@@ -302,12 +308,12 @@ const nextItem =
             {nextItem && (
               <a
                 href={nextItem.href}
-                class="group rounded-lg border border-tk-border bg-tk-surface px-4 py-3 text-right transition-colors hover:border-tk-ink-3 hover:bg-tk-hover"
+                class="group rounded-xl border border-tk-border bg-tk-surface px-4 py-3 text-right shadow-lift transition-colors hover:border-tk-accent/40"
               >
                 <span class="block text-xs text-tk-ink-3">
                   Next <span aria-hidden="true">→</span>
                 </span>
-                <span class="mt-1 block text-sm font-medium text-tk-ink-2 transition-colors group-hover:text-tk-ink">
+                <span class="mt-1 block text-sm font-medium text-tk-ink transition-colors group-hover:text-tk-accent-text">
                   {nextItem.label}
                 </span>
               </a>
@@ -325,7 +331,7 @@ const nextItem =
         aria-label="On this page"
         class="sticky top-6 hidden max-h-[calc(100vh-3rem)] overflow-y-auto pb-10"
       >
-        <p class="mb-2 text-xs font-medium uppercase tracking-widest text-tk-ink-3">On this page</p>
+        <p class="mb-2 text-xs font-semibold uppercase tracking-wider text-tk-ink-3">On this page</p>
         <ul data-toc-list class="space-y-0.5 border-l border-tk-border text-sm"></ul>
       </nav>
     </aside>
@@ -392,11 +398,15 @@ const nextItem =
         navPane.addEventListener('click', saveNavScroll);
       }
       var current = document.querySelector('aside[data-doc-mobile-nav] a[aria-current="page"]');
-      if (current && navPane && current.scrollIntoView) {
+      if (current && navPane) {
         var paneRect = navPane.getBoundingClientRect();
         var itemRect = current.getBoundingClientRect();
         if (itemRect.top < paneRect.top || itemRect.bottom > paneRect.bottom) {
-          current.scrollIntoView({ block: 'nearest' });
+          /* P4 (2026-09-25) — bring the entry in a quarter of the way down
+             the pane, not to its nearest edge: scrollIntoView 'nearest'
+             parked a reference page's entry on the pane's last line, with
+             its own endpoint list (the method chips) hidden below it. */
+          navPane.scrollTop += itemRect.top - paneRect.top - paneRect.height / 4;
         }
       }
     })();
@@ -418,10 +428,15 @@ const nextItem =
         btn.setAttribute('aria-live', 'polite');
         btn.setAttribute('aria-atomic', 'true');
         btn.textContent = 'Copy';
+        /* The button sits ON the dark code island in both page modes, so it
+           takes the dark mode's tokens (data-mode="dark" re-declares them on
+           the element): secondary ink on the dark raised surface, 9.85:1.
+           Fully opaque — a translucent label loses its contrast. */
+        btn.setAttribute('data-mode', 'dark');
         btn.className =
-          'absolute right-2 top-2 rounded-sm border border-tk-border bg-tk-raised ' +
-          'px-2 py-1 text-xs font-medium text-tk-ink-3 opacity-70 transition ' +
-          'hover:text-tk-ink hover:opacity-100 focus-visible:opacity-100';
+          'absolute right-2 top-2 rounded-md border border-tk-border bg-tk-surface ' +
+          'px-2 py-1 text-xs font-medium text-tk-ink-2 transition ' +
+          'hover:text-tk-ink hover:border-tk-ink-3';
         var copyInFlight = false;
         var resetTimer = null;
         function resetCopyButton() {
@@ -758,11 +773,14 @@ const nextItem =
         var wrapper = document.createElement('div');
         wrapper.className = 'my-6';
         wrapper.setAttribute('data-langtabs', '');
+        /* The tab bar is the header of the code window, so the whole group
+           is a dark island (the dark mode's tokens) on either page mode. */
+        wrapper.setAttribute('data-mode', 'dark');
         var bar = document.createElement('div');
         bar.setAttribute('role', 'tablist');
         bar.setAttribute('aria-label', 'Code sample language');
         bar.className =
-          'flex flex-wrap items-center gap-1 rounded-t-lg border border-b-0 ' +
+          'flex flex-wrap items-center gap-1 rounded-t-xl border border-b-0 ' +
           'border-tk-border bg-tk-surface px-2 py-1.5';
         wrapper.appendChild(bar);
         var first = run[0].pre;

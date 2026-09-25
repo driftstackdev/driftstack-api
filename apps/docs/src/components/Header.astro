@@ -3,10 +3,16 @@
 // for brand consistency: oxblood D-badge + lowercase font-mono
 // "driftstack" wordmark, "docs" subtitle to disambiguate cross-app.
 //
-// S22.1 (2026-07-06) — tk-* token migration (dark+oxblood default +
-// light toggle): legacy border-white/ink-*/glow-red classes swapped for
-// the two-axis tokens; theme-toggle button added (marketing pattern —
-// active nav text uses tk-accent-text, the AA-safe accent text tone).
+// S22.1 (2026-07-06) — tk-* token migration: legacy border-white/ink-*/
+// glow-red classes swapped for the two-axis tokens; theme-toggle button
+// added (marketing pattern — active nav text uses tk-accent-text, the
+// AA-safe accent text tone).
+//
+// P4 (2026-09-25) — light is the default, so the toggles' initial state is
+// "light on": label "Switch to dark theme", aria-pressed true (the same
+// values BaseLayout's syncThemeControls writes for light). The search pill
+// takes the desktop app's sidebar search recipe (inset well, hairline
+// ring, muted label, the shortcut on a raised key).
 //
 // S22.3 (2026-07-06) — [data-search-open] buttons (desktop nav pill +
 // mobile icon) open the Pagefind search modal wired in BaseLayout
@@ -58,7 +64,7 @@ function isActive(href: string): boolean {
           </a>
         ))
       }
-      <span aria-hidden="true" class="h-4 w-px bg-tk-hover"></span>
+      <span aria-hidden="true" class="h-4 w-px bg-tk-border"></span>
       {/* S22.3 — search trigger, styled as an input pill (Stoplight-style
           prominent top search). Opens the BaseLayout Pagefind modal. */}
       <button
@@ -67,7 +73,7 @@ function isActive(href: string): boolean {
         aria-label="Search docs"
         aria-haspopup="dialog"
         aria-keyshortcuts="Meta+K Control+K /"
-        class="flex h-9 items-center gap-2 rounded-md border border-tk-border px-3 text-sm text-tk-ink-3 transition-colors hover:border-tk-ink-3/40 hover:text-tk-ink"
+        class="flex h-9 items-center gap-2 rounded-md border border-tk-border bg-tk-inset px-3 lg:w-56 text-sm text-tk-ink-3 transition-colors hover:border-tk-ink-3/40 hover:text-tk-ink"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="11" cy="11" r="8"></circle>
@@ -76,7 +82,7 @@ function isActive(href: string): boolean {
         <span>Search</span>
         <kbd
           data-search-kbd
-          class="rounded-sm border border-tk-border bg-tk-raised px-1 font-mono text-[0.625rem] leading-4 text-tk-ink-3"
+          class="ml-auto rounded-sm border border-tk-border bg-tk-surface px-1 font-mono text-[0.625rem] leading-4 text-tk-ink-3"
           >⌘K</kbd
         >
       </button>
@@ -84,9 +90,9 @@ function isActive(href: string): boolean {
         type="button"
         data-theme-toggle
         class="flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 transition-colors hover:border-tk-ink-3/40 hover:text-tk-ink"
-        aria-label="Switch to light theme"
-        aria-pressed="false"
-        title="Switch to light theme"
+        aria-label="Switch to dark theme"
+        aria-pressed="true"
+        title="Switch to dark theme"
       >
         <svg class="hidden dark:block" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="4"></circle>
@@ -116,9 +122,9 @@ function isActive(href: string): boolean {
         type="button"
         data-theme-toggle
         class="flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 transition-colors hover:border-tk-ink-3/40 hover:text-tk-ink"
-        aria-label="Switch to light theme"
-        aria-pressed="false"
-        title="Switch to light theme"
+        aria-label="Switch to dark theme"
+        aria-pressed="true"
+        title="Switch to dark theme"
       >
         <svg class="hidden dark:block" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="4"></circle>

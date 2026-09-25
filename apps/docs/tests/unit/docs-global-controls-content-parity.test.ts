@@ -14,12 +14,14 @@ const BUILT_API_ACCOUNT = resolve(REPO_ROOT, 'apps/docs/dist/api/account/index.h
 const BUILT_GUIDE = resolve(REPO_ROOT, 'apps/docs/dist/guides/concurrency/index.html');
 
 describe('docs global control accessibility', () => {
+  // P4 (2026-09-25) — the docs open LIGHT by default, so every control starts
+  // as "Switch to dark theme", pressed, and the first click goes to dark.
   it('exposes all three theme controls with synchronized next-action labels', () => {
     const controls = `${HEADER}\n${FOOTER}`.match(/data-theme-toggle/g) ?? [];
     expect(controls).toHaveLength(3);
-    expect(`${HEADER}\n${FOOTER}`.match(/aria-label="Switch to light theme"/g)).toHaveLength(3);
-    expect(`${HEADER}\n${FOOTER}`.match(/aria-pressed="false"/g)).toHaveLength(3);
-    expect(`${HEADER}\n${FOOTER}`.match(/title="Switch to light theme"/g)).toHaveLength(3);
+    expect(`${HEADER}\n${FOOTER}`.match(/aria-label="Switch to dark theme"/g)).toHaveLength(3);
+    expect(`${HEADER}\n${FOOTER}`.match(/aria-pressed="true"/g)).toHaveLength(3);
+    expect(`${HEADER}\n${FOOTER}`.match(/title="Switch to dark theme"/g)).toHaveLength(3);
     expect(LAYOUT).toMatch(/function syncThemeControls\(mode\)/);
     expect(LAYOUT).toMatch(/control\.setAttribute\('aria-pressed', light \? 'true' : 'false'\)/);
     expect(LAYOUT).toMatch(
@@ -46,16 +48,6 @@ describe('docs global control accessibility', () => {
       dom.window.document.querySelectorAll<HTMLButtonElement>('[data-theme-toggle]'),
     );
     expect(controls).toHaveLength(3);
-    expect(
-      controls.every(
-        (control) =>
-          control.getAttribute('aria-label') === 'Switch to light theme' &&
-          control.getAttribute('title') === 'Switch to light theme' &&
-          control.getAttribute('aria-pressed') === 'false',
-      ),
-    ).toBe(true);
-
-    controls[0]?.click();
     expect(dom.window.document.documentElement.getAttribute('data-mode')).toBe('light');
     expect(
       controls.every(
@@ -63,6 +55,17 @@ describe('docs global control accessibility', () => {
           control.getAttribute('aria-label') === 'Switch to dark theme' &&
           control.getAttribute('title') === 'Switch to dark theme' &&
           control.getAttribute('aria-pressed') === 'true',
+      ),
+    ).toBe(true);
+
+    controls[0]?.click();
+    expect(dom.window.document.documentElement.getAttribute('data-mode')).toBe('dark');
+    expect(
+      controls.every(
+        (control) =>
+          control.getAttribute('aria-label') === 'Switch to light theme' &&
+          control.getAttribute('title') === 'Switch to light theme' &&
+          control.getAttribute('aria-pressed') === 'false',
       ),
     ).toBe(true);
     dom.window.close();

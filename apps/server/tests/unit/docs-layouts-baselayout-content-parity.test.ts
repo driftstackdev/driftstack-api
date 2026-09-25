@@ -77,17 +77,33 @@ describe('docs layouts/BaseLayout content parity', () => {
     );
   });
 
-  it('S22.1 (2026-07-06) — Fleet mode/accent axes LIVE on <html>: dark+oxblood founder-locked default + dark theme-color meta (#060608; iOS Safari status-bar tint). Drift to dropping either attribute would strand every tk-* token on its fallback', () => {
-    expect(body).toMatch(/<html lang="en" data-mode="dark" data-accent="oxblood">/);
-    expect(body).toMatch(/<meta name="theme-color" content="#060608" \/>/);
+  // P4 (2026-09-25) — light is the default (owner decision: the desktop app's
+  // light theme everywhere, the toggle stays, nothing follows the system). The
+  // theme-color values moved with it: they are the page ground of each mode,
+  // read here from the token package rather than typed, so the meta cannot
+  // drift from the ground it tints (#060608 / #f2f3f6 were the retired web
+  // palette's grounds).
+  const groundOf = (mode: 'light' | 'dark'): string =>
+    (
+      JSON.parse(
+        readFileSync(resolve(REPO_ROOT, 'packages/design-tokens/tokens.json'), 'utf8'),
+      ) as { modes: Record<string, Record<string, string>> }
+    ).modes[mode]?.['surface-base'] as string;
+
+  it('P4 (2026-09-25) — mode/accent axes LIVE on <html> with LIGHT+oxblood as the default, and the theme-color meta is the light page ground (surface-base, iOS Safari status-bar tint). Drift to dropping either attribute would strand every tk-* token on its fallback', () => {
+    expect(groundOf('light')).toBe('#ebedf2');
+    expect(body).toMatch(/<html lang="en" data-mode="light" data-accent="oxblood">/);
+    expect(body).toContain(`<meta name="theme-color" content="${groundOf('light')}" />`);
   });
 
-  it('S22.1 — pre-paint theme script pinned: is:inline, reads ds_theme_mode, WHITELISTED value check (never raw localStorage into a DOM attribute), swaps theme-color to #f2f3f6 on light, no prefers-color-scheme (dark first impression is the brand). Body must be RAW code — a template-literal-wrapped body ships as a dead no-op string (2026-07-02 bug class)', () => {
+  it('S22.1 — pre-paint theme script pinned: is:inline, reads ds_theme_mode, WHITELISTED value check (never raw localStorage into a DOM attribute), swaps theme-color to the DARK ground on a saved dark choice (P4: light is the default), no prefers-color-scheme. Body must be RAW code — a template-literal-wrapped body ships as a dead no-op string (2026-07-02 bug class)', () => {
     expect(body).toMatch(/<script is:inline>/);
     expect(body).toMatch(/var m = localStorage\.getItem\('ds_theme_mode'\);/);
     expect(body).toMatch(/if \(m === 'light' \|\| m === 'dark'\) \{/);
     expect(body).toMatch(/document\.documentElement\.setAttribute\('data-mode', m\);/);
-    expect(body).toMatch(/mt\.setAttribute\('content', '#f2f3f6'\);/);
+    expect(body).toMatch(/if \(m === 'dark'\) \{/);
+    expect(body).toContain(`mt.setAttribute('content', '${groundOf('dark')}');`);
+    expect(body).not.toMatch(/matchMedia\('\(prefers-color-scheme/);
     // The dead-inline-script trap: no template-literal expression wrapper.
     expect(body).not.toMatch(/<script is:inline>\s*\{`/);
     expect(body).not.toMatch(/is:inline>\s*\{\s*`/);
@@ -99,8 +115,8 @@ describe('docs layouts/BaseLayout content parity', () => {
       /document\.documentElement\.getAttribute\('data-mode'\) === 'dark' \? 'light' : 'dark';/,
     );
     expect(body).toMatch(/document\.documentElement\.setAttribute\('data-mode', next\);/);
-    expect(body).toMatch(
-      /mt\.setAttribute\('content', next === 'light' \? '#f2f3f6' : '#060608'\);/,
+    expect(body).toContain(
+      `mt.setAttribute('content', next === 'light' ? '${groundOf('light')}' : '${groundOf('dark')}');`,
     );
     expect(body).toMatch(/localStorage\.setItem\('ds_theme_mode', next\);/);
   });

@@ -40,9 +40,11 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
       expect(body).not.toMatch(/<code>@driftstack\/api-types<\/code>/);
     });
 
-    it('TypeScript card — @driftstack/sdk, npm install command + status "published, pre-1.0" (the only one of the 3 SDKs in actual public production). S22.1 (2026-07-06): card chrome re-pinned on tk-* tokens (tk-border/tk-surface/tk-ink ladder + ambient shadow). Drift here would mislead customers about which SDK is safe to depend on today.', () => {
+    // P4 (2026-09-25) — the card takes the desktop app's card recipe: the 12px
+    // card radius (rounded-xl) and the app's lift shadow (shadow-lift).
+    it('TypeScript card — @driftstack/sdk, npm install command + status "published, pre-1.0" (the only one of the 3 SDKs in actual public production). S22.1 (2026-07-06): card chrome re-pinned on tk-* tokens (tk-border/tk-surface/tk-ink ladder); P4: the app\'s card radius + lift. Drift here would mislead customers about which SDK is safe to depend on today.', () => {
       expect(body).toMatch(
-        /<article class="rounded-md border border-tk-border bg-tk-surface p-5 shadow-ambient">\s*\n\s*<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">TypeScript<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">@driftstack\/sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">npm install @driftstack\/sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: published, pre-1\.0<\/p>\s*\n\s*<\/article>/,
+        /<article class="rounded-xl border border-tk-border bg-tk-surface p-5 shadow-lift">\s*\n\s*<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">TypeScript<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">@driftstack\/sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">npm install @driftstack\/sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: published, pre-1\.0<\/p>\s*\n\s*<\/article>/,
       );
     });
 

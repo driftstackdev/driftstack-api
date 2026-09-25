@@ -4,11 +4,15 @@
 // since docs pages don't have their own social cards yet.
 //
 // S22.1 (2026-07-06) — Fleet brand-parity port: the data-mode/data-accent
-// axes on <html> are now LIVE (they were vestigial under the static R11
-// light theme). dark+oxblood is the founder-locked default (2026-06-15
-// "Fleet Mission Control — Dark + Red"); a pre-paint script applies the
-// visitor's saved mode and [data-theme-toggle] buttons (Header + Footer)
-// flip it, matching marketing's implementation.
+// axes on <html> are LIVE; a pre-paint script applies the visitor's saved
+// mode and [data-theme-toggle] buttons (Header + Footer) flip it, matching
+// marketing's implementation.
+//
+// P4 (2026-09-25) — LIGHT is the default (owner: "white light theme in GUI
+// is now absolutely amazing, we want this everywhere now"): the docs take
+// the desktop app's light theme, and its slate dark mode stays one click
+// away. A visitor who chose dark keeps it (ds_theme_mode). The 2026-06-15
+// dark first impression is retired.
 import '../styles/base.css';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
@@ -30,15 +34,15 @@ const canonical = new URL(pathname, Astro.site).toString();
 ---
 
 <!doctype html>
-<html lang="en" data-mode="dark" data-accent="oxblood">
+<html lang="en" data-mode="light" data-accent="oxblood">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- Dark to match the dark-mode-default page (data-mode="dark", --bg
-         #060608) — without it iOS Safari tints the status-bar area
-         near-white = a white strip above the dark page. The pre-paint
-         script + toggle keep it in sync when the mode flips. -->
-    <meta name="theme-color" content="#060608" />
+    <!-- The light page ground (surface-base #ebedf2), so iOS Safari tints
+         the status-bar area to match the default light page. The pre-paint
+         script + toggle switch it to the dark ground (#0f172a) when the
+         mode flips. -->
+    <meta name="theme-color" content="#ebedf2" />
     <script is:inline>
       {
         /*
@@ -47,11 +51,12 @@ const canonical = new URL(pathname, Astro.site).toString();
          * so there is no flash of the default theme. Docs exposes the
          * mode axis only (dark ↔ light; oxblood is the brand's face, the
          * accent axis stays machinery) and the value is WHITELISTED —
-         * never write raw localStorage into a DOM attribute. Default
-         * (dark + oxblood, founder-locked 2026-06-15) lives on the
-         * <html> attrs; the [data-theme-toggle] buttons (wired at body
-         * end) write ds_theme_mode. Deliberately does NOT honor
-         * prefers-color-scheme — the dark first impression is the brand.
+         * never write raw localStorage into a DOM attribute. The default
+         * (light + oxblood, P4 2026-09-25) lives on the <html> attrs; the
+         * [data-theme-toggle] buttons (wired at body end) write
+         * ds_theme_mode. Deliberately does NOT honor prefers-color-scheme:
+         * light is the default on every surface, and dark is an explicit
+         * choice the visitor makes (the desktop app's model).
          *
          * NOTE: plain code in a brace-comment block — never a template
          * literal inside an expression container: Astro emits that wrapper
@@ -64,9 +69,9 @@ const canonical = new URL(pathname, Astro.site).toString();
           var m = localStorage.getItem('ds_theme_mode');
           if (m === 'light' || m === 'dark') {
             document.documentElement.setAttribute('data-mode', m);
-            if (m === 'light') {
+            if (m === 'dark') {
               var mt = document.querySelector('meta[name="theme-color"]');
-              if (mt) mt.setAttribute('content', '#f2f3f6');
+              if (mt) mt.setAttribute('content', '#0f172a');
             }
           }
         } catch (_) {
@@ -118,12 +123,12 @@ const canonical = new URL(pathname, Astro.site).toString();
         ARIA: dialog + the combobox/listbox aria-activedescendant pattern
         — focus stays trapped in the input; arrows drive the results. */}
     <div data-search-modal hidden class="fixed inset-0 z-50">
-      <div data-search-backdrop class="absolute inset-0 bg-black/60"></div>
+      <div data-search-backdrop class="absolute inset-0 bg-black/40 backdrop-blur-[2px]"></div>
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Search documentation"
-        class="relative mx-auto mt-[10vh] flex max-h-[70vh] w-[min(40rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-tk-border bg-tk-surface shadow-ambient-lg"
+        class="relative mx-auto mt-[10vh] flex max-h-[70vh] w-[min(40rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-xl border border-tk-border bg-tk-surface shadow-ambient-lg"
       >
         <div class="flex items-center gap-3 border-b border-tk-border px-4">
           <svg
@@ -159,7 +164,7 @@ const canonical = new URL(pathname, Astro.site).toString();
             class="h-12 w-full min-w-0 bg-transparent text-sm text-tk-ink outline-none placeholder:text-tk-ink-3"
           />
           <kbd
-            class="shrink-0 rounded-sm border border-tk-border bg-tk-raised px-1.5 py-0.5 font-mono text-[0.625rem] text-tk-ink-3"
+            class="shrink-0 rounded-sm border border-tk-border bg-tk-inset px-1.5 py-0.5 font-mono text-[0.625rem] text-tk-ink-3"
             >Esc</kbd
           >
         </div>
@@ -214,7 +219,7 @@ const canonical = new URL(pathname, Astro.site).toString();
           document.documentElement.setAttribute('data-mode', next);
           syncThemeControls(next);
           var mt = document.querySelector('meta[name="theme-color"]');
-          if (mt) mt.setAttribute('content', next === 'light' ? '#f2f3f6' : '#060608');
+          if (mt) mt.setAttribute('content', next === 'light' ? '#ebedf2' : '#0f172a');
           try {
             localStorage.setItem('ds_theme_mode', next);
           } catch (_) {

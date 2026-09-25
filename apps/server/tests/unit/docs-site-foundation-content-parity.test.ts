@@ -129,9 +129,14 @@ describe('W599 apps/docs foundation modules content parity', () => {
     expect(body).toMatch(/<details open class="group" data-nav-section>/);
     expect(body).not.toMatch(/prose-invert/);
     expect(body).not.toMatch(/prose-slate/);
-    expect(body).toMatch(/prose-code:bg-tk-accent-soft/);
+    // P4 (2026-09-25) — the inline-code chip moved to base.css (scoped to
+    // code outside a pre) and the active tree item takes the desktop app's
+    // sidebar recipe: accent-soft wash + primary ink + a 2px accent bar.
+    expect(body).not.toMatch(/prose-code:bg-/);
     expect(body).toMatch(/--tw-prose-pre-bg: var\(--code-bg\)/);
-    expect(body).toMatch(/'bg-tk-accent-soft text-tk-accent-text'/);
+    expect(body).toMatch(
+      /'bg-tk-accent-soft text-tk-ink shadow-\[inset_2px_0_0_var\(--accent\)\]'/,
+    );
     expect(existsSync(DOC)).toBe(true);
   });
 

@@ -1,12 +1,16 @@
 // Drift guard for apps/docs/src/styles/base.css.
 //
-// S22.1 (2026-07-06, brand-parity port) — SUPERSEDES the R11 static
-// light+violet pins: docs now ships the Fleet two-axis tk-* token system
-// (dark+oxblood default, light toggle, S20 dark surface ladder) with
-// values byte-identical to apps/marketing-site/src/styles/base.css,
-// adapted to Tailwind v4 CSS-first (@theme inline tk namespace). Pins
-// the token values + the F-1 mobile-scroll prevention + the 3 utility
-// atoms + the self-hosted fonts + the tk-driven prose hooks.
+// P4 (2026-09-25) — SUPERSEDES the S22.1 pins, which held this file's own copy
+// of the marketing site's token VALUES (dark+oxblood default, #060608 ground,
+// #9b3b46 accent, violet/teal axes) byte-identical to marketing. The docs now
+// take every colour, radius, shadow and font stack from packages/design-tokens,
+// which is the desktop app's own theme (its tests fail when the two disagree),
+// and light is the default. What this file still owns, and what is pinned here:
+// the package imports, the rule that it declares no token value itself, the
+// light-first wash and the dark code island, the prose hooks, the self-hosted
+// fonts, the F-1 overflow guards, the three utility atoms, the callout, table
+// and inline-code recipes, and the method chips — whose contrast is MEASURED
+// here from the package's values, over both grounds a chip sits on.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -16,11 +20,39 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/docs/src/styles/base.css');
-const MARKETING = resolve(REPO_ROOT, 'apps/marketing-site/src/styles/base.css');
+const TOKENS_JSON = resolve(REPO_ROOT, 'packages/design-tokens/tokens.json');
+const TOKENS_CSS = resolve(REPO_ROOT, 'packages/design-tokens/dist/tokens.css');
+const ALIASES_CSS = resolve(REPO_ROOT, 'packages/design-tokens/dist/web-aliases.css');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
+
+type Rgb = readonly [number, number, number];
+const rgb = (hex: string): Rgb => [
+  parseInt(hex.slice(1, 3), 16),
+  parseInt(hex.slice(3, 5), 16),
+  parseInt(hex.slice(5, 7), 16),
+];
+function luminance([r, g, b]: Rgb): number {
+  const lin = (c: number): number => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+function contrast(a: Rgb, b: Rgb): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+  return (hi + 0.05) / (lo + 0.05);
+}
+const wash = (fg: Rgb, alpha: number, bg: Rgb): Rgb => [
+  fg[0] * alpha + bg[0] * (1 - alpha),
+  fg[1] * alpha + bg[1] * (1 - alpha),
+  fg[2] * alpha + bg[2] * (1 - alpha),
+];
+
+type ModeTokens = Record<string, string>;
+const tokens = JSON.parse(read(TOKENS_JSON)) as { modes: { light: ModeTokens; dark: ModeTokens } };
 
 describe('docs styles/base content parity', () => {
   const body = read(PAGE);
@@ -41,105 +73,76 @@ describe('docs styles/base content parity', () => {
     expect(body).not.toMatch(/&:is\(\.dark \*\)/);
   });
 
-  it('S22.1 two-axis posture pinned: dark+oxblood default synced with marketing/dashboard Fleet tokens, color-scheme follows the mode axis. Drift back to a static single-mode palette would break cross-app brand consistency', () => {
-    expect(body).toMatch(/Fleet two-axis tk-\* token port/);
+  it('P4 — the tokens come from the shared package: tokens.css, web-aliases.css and theme-v4.css are imported right after tailwindcss, in that order', () => {
+    const imports = [...body.matchAll(/^@import '([^']+)';$/gm)].map((m) => m[1]);
+    expect(imports).toEqual([
+      'tailwindcss',
+      '@driftstack/design-tokens/tokens.css',
+      '@driftstack/design-tokens/web-aliases.css',
+      '@driftstack/design-tokens/theme-v4.css',
+    ]);
+  });
+
+  it('P4 — the file declares no token VALUE of its own: no canonical token and no web alias the package defines is re-declared here (a redeclaration is how the five hand-kept palettes drifted apart)', () => {
+    const packageNames = new Set(
+      [...`${read(TOKENS_CSS)}\n${read(ALIASES_CSS)}`.matchAll(/^\s*(--[a-z0-9-]+):/gm)].map(
+        (m) => m[1] as string,
+      ),
+    );
+    // Vacuity: the package really does define the names this looks for.
+    for (const name of ['--surface-base-rgb', '--accent', '--bg', '--ink-2', '--accent-soft']) {
+      expect(packageNames.has(name), name).toBe(true);
+    }
+    const declaredHere = [...body.matchAll(/^\s*(--[a-z0-9-]+):/gm)].map((m) => m[1] as string);
+    expect(declaredHere.filter((name) => packageNames.has(name))).toEqual([]);
+    // CONTROL — the same scan does see a redeclaration.
+    const planted = `${body}\n[data-mode='light'] {\n  --bg: #f2f3f6;\n}\n`;
+    const plantedHere = [...planted.matchAll(/^\s*(--[a-z0-9-]+):/gm)].map((m) => m[1] as string);
+    expect(plantedHere.filter((name) => packageNames.has(name))).toEqual(['--bg']);
+    // The retired palettes are gone, not just unused.
+    for (const retired of ['#060608', '#9b3b46', '#f2f3f6', '#6d5efc', '#109a82', '#d4626e']) {
+      expect(body, retired).not.toContain(retired);
+    }
+    expect(body).not.toMatch(/\[data-accent='(violet|teal)'\]/);
+  });
+
+  it('P4 — light-first posture: color-scheme follows the mode axis, the page ground is tk-bg, and the two web-only additions are set per mode — a faint accent glow and fenced code on the app’s dark-island colour in BOTH modes', () => {
     expect(body).toMatch(/color-scheme: light;/);
     expect(body).toMatch(/\[data-mode='dark'\] \{\s*\n\s*color-scheme: dark;/);
     expect(body).toMatch(/@apply bg-tk-bg text-tk-ink;/);
+    expect(body).toMatch(
+      /\[data-mode='light'\] \{\s*\n\s*--glow: rgb\(var\(--accent-rgb\) \/ 0\.07\);\s*\n\s*--code-bg: var\(--island\);/,
+    );
+    expect(body).toMatch(
+      /\[data-mode='dark'\] \{\s*\n\s*--glow: rgb\(var\(--accent-rgb\) \/ 0\.12\);\s*\n\s*--code-bg: var\(--island\);/,
+    );
   });
 
-  it('S22.1 @theme inline tk namespace pinned (Tailwind v4 CSS-first adaptation of the marketing v3 JS-config tk table): every tk color token resolves to a mode-scoped custom property', () => {
+  it('the docs tk namespace map is kept: every tk colour the markup uses resolves to a web alias, which the package points at the app’s tokens', () => {
     expect(body).toMatch(/@theme inline \{/);
-    expect(body).toMatch(/--color-tk-bg: var\(--bg\);/);
-    expect(body).toMatch(/--color-tk-surface: var\(--surface\);/);
-    expect(body).toMatch(/--color-tk-raised: var\(--raised\);/);
-    expect(body).toMatch(/--color-tk-hover: var\(--hover\);/);
-    expect(body).toMatch(/--color-tk-ink: var\(--ink\);/);
-    expect(body).toMatch(/--color-tk-ink-2: var\(--ink-2\);/);
-    expect(body).toMatch(/--color-tk-ink-3: var\(--ink-3\);/);
-    expect(body).toMatch(/--color-tk-border: var\(--border\);/);
-    expect(body).toMatch(/--color-tk-accent: var\(--accent\);/);
-    expect(body).toMatch(/--color-tk-accent-strong: var\(--accent-strong\);/);
-    expect(body).toMatch(/--color-tk-accent-soft: var\(--accent-soft\);/);
-    expect(body).toMatch(/--color-tk-accent-text: var\(--accent-text\);/);
+    for (const [tk, alias] of [
+      ['bg', 'bg'],
+      ['surface', 'surface'],
+      ['raised', 'raised'],
+      ['hover', 'hover'],
+      ['inset', 'inset'],
+      ['ink', 'ink'],
+      ['ink-2', 'ink-2'],
+      ['ink-3', 'ink-3'],
+      ['border', 'border'],
+      ['accent', 'accent'],
+      ['accent-strong', 'accent-strong'],
+      ['accent-soft', 'accent-soft'],
+      ['accent-text', 'accent-text'],
+      ['ready-text', 'ready-text'],
+      ['busy-text', 'busy-text'],
+      ['err-text', 'err-text'],
+    ]) {
+      expect(body, tk).toContain(`--color-tk-${tk}: var(--${alias});`);
+    }
   });
 
-  it('S20 dark surface ladder pinned BYTE-IDENTICAL to marketing (bg #060608 / surface #14141a / raised #1c1c24 / hover #24252f / border #2c2c38 + rgb triplets + ink ladder + AA ink-3 unification note — S21 unified #8c8c96 across all three apps). Drift would fork the brand dark theme across apps', () => {
-    expect(body).toMatch(/--bg: #060608;/);
-    expect(body).toMatch(/--surface: #14141a;/);
-    expect(body).toMatch(/--raised: #1c1c24;/);
-    expect(body).toMatch(/--hover: #24252f;/);
-    expect(body).toMatch(/--border: #2c2c38;/);
-    expect(body).toMatch(/--ink: #f5f5f7;/);
-    expect(body).toMatch(/--ink-2: #b0b0bb;/);
-    expect(body).toMatch(/--ink-3: #8c8c96;/);
-    expect(body).toMatch(/--bg-rgb: 6 6 8;/);
-    expect(body).toMatch(/--surface-rgb: 20 20 26;/);
-    expect(body).toMatch(/--raised-rgb: 28 28 36;/);
-    expect(body).toMatch(/--border-rgb: 44 44 56;/);
-    expect(body).toMatch(/surface 1\.10:1 \/ raised 1\.20:1 vs bg \/ border 1\.47:1/);
-    expect(body).toMatch(/#8c8c96 clears WCAG AA on #060608/);
-  });
-
-  it('light-mode block pinned BYTE-IDENTICAL to marketing (bg #f2f3f6 / surface #fff / ink #0f1014 / border #e4e6ec) — the light toggle target. S23 2026-07-06: light ink-3 darkened #8a8d99→#6a6d7a for AA (old value was 2.98:1 on #f2f3f6, below the 4.5:1 small-text floor; #6a6d7a = 4.64/5.15/4.60 on bg/surface/hover)', () => {
-    expect(body).toMatch(/--bg: #f2f3f6;/);
-    expect(body).toMatch(/--ink: #0f1014;/);
-    expect(body).toMatch(/--ink-2: #474a55;/);
-    expect(body).toMatch(/--ink-3: #6a6d7a;/);
-    expect(body).toMatch(/--ink-3-rgb: 106 109 122;/);
-    expect(body).not.toMatch(/--ink-3: #8a8d99/);
-    expect(body).toMatch(/--border: #e4e6ec;/);
-    expect(body).toMatch(/--bg-rgb: 242 243 246;/);
-  });
-
-  it('3 accent axes pinned (oxblood is the shipped default; violet/teal stay selectable machinery): raw accent + accent-soft wash + glow per axis', () => {
-    expect(body).toMatch(/\[data-accent='oxblood'\] \{/);
-    expect(body).toMatch(/--accent: #9b3b46;/);
-    expect(body).toMatch(/--accent-strong: #722f37;/);
-    expect(body).toMatch(/--accent-soft: rgba\(155, 59, 70, 0\.13\);/);
-    expect(body).toMatch(/--glow: rgba\(155, 59, 70, 0\.32\);/);
-    expect(body).toMatch(/\[data-accent='violet'\] \{/);
-    expect(body).toMatch(/--accent: #6d5efc;/);
-    expect(body).toMatch(/\[data-accent='teal'\] \{/);
-    expect(body).toMatch(/--accent: #109a82;/);
-  });
-
-  it('all 6 AA-safe --accent-text mode × accent pairs pinned (raw accent ≈3.0:1 on the dark bg fails AA as text; these are the readable tones, all ≥4.5:1 verified). Accent-colored TEXT must consume tk-accent-text, never the raw accent', () => {
-    expect(body).toMatch(
-      /\[data-mode='dark'\]\[data-accent='oxblood'\] \{\s*\n\s*--accent-text: #d4626e;/,
-    );
-    expect(body).toMatch(
-      /\[data-mode='dark'\]\[data-accent='violet'\] \{\s*\n\s*--accent-text: #8b7dff;/,
-    );
-    expect(body).toMatch(
-      /\[data-mode='dark'\]\[data-accent='teal'\] \{\s*\n\s*--accent-text: #1bc7a8;/,
-    );
-    expect(body).toMatch(
-      /\[data-mode='light'\]\[data-accent='oxblood'\] \{\s*\n\s*--accent-text: #8d2c3e;/,
-    );
-    expect(body).toMatch(
-      /\[data-mode='light'\]\[data-accent='violet'\] \{\s*\n\s*--accent-text: #5847e0;/,
-    );
-    expect(body).toMatch(
-      /\[data-mode='light'\]\[data-accent='teal'\] \{\s*\n\s*--accent-text: #0c7d69;/,
-    );
-    expect(body).toMatch(/The accent-soft wash is a BACKGROUND token only — never text\./);
-  });
-
-  it('S20 mode-aware ambient shadows pinned: light = the original gray ambients; dark = lit-top-rim + true-black drop (gray shadows measured a 1.0000:1 no-op on near-black). Exposed as @utility shadow-ambient/-lg reading the mode-scoped vars', () => {
-    expect(body).toMatch(
-      /--shadow-ambient: 0 1px 2px rgb\(15 16 20 \/ 0\.04\), 0 10px 28px -18px rgb\(15 16 20 \/ 0\.12\);/,
-    );
-    expect(body).toMatch(
-      /--shadow-ambient: inset 0 1px 0 rgb\(255 255 255 \/ 0\.05\), 0 10px 28px -18px rgb\(0 0 0 \/ 0\.7\);/,
-    );
-    expect(body).toMatch(/@utility shadow-ambient \{\s*\n\s*box-shadow: var\(--shadow-ambient\);/);
-    expect(body).toMatch(
-      /@utility shadow-ambient-lg \{\s*\n\s*box-shadow: var\(--shadow-ambient-lg\);/,
-    );
-  });
-
-  it('S22.1 self-hosted fonts pinned: Geist VF + JetBrains Mono Regular/Bold @font-face at public/fonts/ (OFL, license files ship alongside); Berkeley Mono first in the mono stack but NEVER vendored (commercial). Sans stack Geist-first', () => {
+  it('S22.1 self-hosted fonts pinned: Geist VF + JetBrains Mono Regular/Bold @font-face at public/fonts/ (OFL, license files ship alongside); Berkeley Mono first in the mono stack but NEVER vendored (commercial). The stacks themselves now come from the package', () => {
     expect(body).toMatch(/url\('\/fonts\/geist\/GeistVF\.woff2'\) format\('woff2'\)/);
     expect(body).toMatch(
       /url\('\/fonts\/jetbrains-mono\/JetBrainsMono-Regular\.woff2'\) format\('woff2'\)/,
@@ -149,13 +152,10 @@ describe('docs styles/base content parity', () => {
     );
     expect(body).toMatch(/font-display: swap;/);
     expect(body).toMatch(/NEVER vendored/);
-    expect(body).toMatch(/--font-sans: Geist, ui-sans-serif, system-ui, sans-serif;/);
-    expect(body).toMatch(
-      /--font-mono: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;/,
-    );
     expect(body).toMatch(
       /font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;/,
     );
+    expect(body).not.toMatch(/--font-sans:/);
   });
 
   it('F-1 code-overflow containment pinned: base.css keeps code/pre from pushing the page width (overflow-wrap:anywhere + pre overflow-x:auto) — the iPhone-Safari horizontal-scroll guard', () => {
@@ -171,145 +171,143 @@ describe('docs styles/base content parity', () => {
     expect(body).toMatch(/max-width: 100vw;/);
   });
 
-  it('S22.1 accent-axis body wash pinned (replaces the static red rgba radial): two ambient radials reading var(--glow) + var(--accent-soft), background-attachment fixed. Any reintroduced baked-red rgba(226,56,71) would fork the brand', () => {
+  it('P4 page wash: ONE faint radial reading var(--glow), sized to the first screen and scrolling with the page (a fixed or full-height wash tinted a whole long read); no baked red', () => {
     expect(body).toMatch(
-      /radial-gradient\(ellipse 90% 60% at 50% -10%, var\(--glow\), transparent 70%\)/,
+      /background-image: radial-gradient\(ellipse 90% 60% at 50% -10%, var\(--glow\), transparent 70%\);\s*\n\s*background-size: 100% 56rem;\s*\n\s*background-repeat: no-repeat;/,
     );
-    expect(body).toMatch(
-      /radial-gradient\(ellipse 80% 50% at 50% 100%, var\(--accent-soft\), transparent 75%\)/,
-    );
-    expect(body).toMatch(/background-attachment: fixed;/);
+    expect(body).not.toMatch(/background-attachment: fixed;/);
     expect(body).not.toMatch(/226, 56, 71/);
   });
 
-  it('3 utility atoms pinned: btn-primary (flat accent, ambient shadow, NO glow ring / NO hover lift — Fleet v2 accent discipline) + btn-secondary (solid surface) + nav-link (hover = AA-safe tk-accent-text)', () => {
+  it('3 utility atoms pinned — the app’s recipes: btn-primary (flat accent, hover DARKENS to accent-fill-hover, pressed accent-strong, no shadow) + btn-secondary (raised face + hairline) + nav-link (hover = AA-safe tk-accent-text)', () => {
     expect(body).toMatch(/@utility btn-primary \{/);
-    expect(body).toMatch(/bg-tk-accent/);
-    expect(body).toMatch(/hover:bg-tk-accent-strong/);
+    expect(body).toMatch(/bg-tk-accent\s/);
+    expect(body).toMatch(/hover:bg-tk-accent-fill-hover active:bg-tk-accent-strong/);
+    const primary = body.slice(body.indexOf('@utility btn-primary {'));
+    expect(primary.slice(0, primary.indexOf('}'))).not.toMatch(/box-shadow/);
     expect(body).toMatch(/@utility btn-secondary \{/);
-    expect(body).toMatch(/border border-tk-border bg-tk-surface/);
+    expect(body).toMatch(/border border-tk-border bg-tk-raised/);
     expect(body).toMatch(/@utility nav-link \{/);
     expect(body).toMatch(
       /@apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent-text;/,
     );
-    // Fleet v2 accent discipline: the R11 glow ring + hover lift are gone.
     expect(body).not.toMatch(/shadow-glow-red/);
     expect(body).not.toMatch(/hover:-translate-y-0\.5/);
   });
 
-  it('S22.1 tk-driven prose hooks pinned: un-layered .prose --tw-prose-* overrides read the mode-scoped tokens (single class set, no prose-invert flip); links = --accent-text; fenced pre bg = var(--code-bg) so code stays a DARK terminal in BOTH modes (founder-pinned)', () => {
+  it('tk-driven prose hooks pinned: un-layered .prose --tw-prose-* overrides read the mode-scoped tokens (single class set, no prose-invert flip); links = --accent-text; fenced pre bg = var(--code-bg), a DARK island in BOTH modes', () => {
     expect(body).toMatch(/\.prose \{/);
     expect(body).toMatch(/--tw-prose-body: var\(--ink-2\);/);
     expect(body).toMatch(/--tw-prose-headings: var\(--ink\);/);
     expect(body).toMatch(/--tw-prose-links: var\(--accent-text\);/);
     expect(body).toMatch(/--tw-prose-pre-bg: var\(--code-bg\);/);
     expect(body).toMatch(/--tw-prose-th-borders: var\(--border\);/);
-    expect(body).toMatch(/--code-bg: #16171c;/);
-    expect(body).toMatch(/--code-bg: #0c0c11;/);
-    expect(body).toMatch(/fenced code stays a DARK terminal in\s*BOTH modes/);
+    expect(body).toMatch(/fenced code stays a DARK island in BOTH modes/);
   });
 
-  it('S22.2 (2026-07-06, Stoplight relayout) — blockquote info-callout pinned: raised surface + rounded right edge + normal weight at the prose level (accent-2 left rule comes from the --tw-prose-quote-borders hook), and the typography plugin auto quote marks removed — ZERO .md edits, every markdown `>` note renders as a callout', () => {
+  it('P4 fenced code: Shiki’s inline theme background is repainted to the dark island (!important is the only way past an inline style), and every token colour github-dark-default emits that the comment cites clears AA on the island in both modes', () => {
+    expect(body).toMatch(
+      /\.prose pre\.astro-code \{\s*\n\s*background-color: var\(--tw-prose-pre-bg\) !important;/,
+    );
+    const comment = rgb('#8b949e');
+    expect(contrast(comment, rgb(tokens.modes.light.island as string))).toBeCloseTo(5.8, 1);
+    expect(contrast(comment, rgb(tokens.modes.dark.island as string))).toBeCloseTo(6.51, 1);
+    expect(body).toMatch(/#8b949e\) is 5\.80:1 on #0f172a and 6\.51:1 on #050811/);
+  });
+
+  it('P4 inline code is a neutral chip scoped to code OUTSIDE a pre, so a fenced block’s own <code> never paints stripes across the island; a language-tab group sits flush (un-layered, because the plugin’s pre margin outranks a runtime utility)', () => {
+    expect(body).toMatch(
+      /\.prose :where\(:not\(pre\) > code\):not\(:where\(\[class~='not-prose'\] \*\)\) \{\s*\n\s*background: var\(--inset\);/,
+    );
+    expect(body).toMatch(/\.prose :where\(pre code\) \{\s*\n\s*background: transparent;/);
+    expect(body).toMatch(
+      /\[data-langtabs\] pre,\s*\n\[data-langtabs\] pre\.astro-code \{\s*\n\s*margin-top: 0;\s*\n\s*margin-bottom: 0;/,
+    );
+  });
+
+  it('P4 tables are one card (raised surface, hairline, the app’s 12px radius) with separate borders so the radius holds, and the row rules moved onto the cells', () => {
+    expect(body).toMatch(
+      /\.prose table \{\s*\n\s*border-collapse: separate;\s*\n\s*border-spacing: 0;\s*\n\s*border: 1px solid var\(--border\);\s*\n\s*border-radius: 0\.75rem;\s*\n\s*background: var\(--surface\);/,
+    );
+    expect(body).toMatch(/\.prose tbody td \{\s*\n\s*border-top: 1px solid var\(--border\);/);
+  });
+
+  it('S22.2 (2026-07-06, Stoplight relayout) — blockquote = info callout: an accent-2 left rule on the elevated surface with a hairline and the 12px card radius, normal weight, the plugin’s auto quote marks removed — ZERO .md edits, every markdown `>` note renders as a callout', () => {
     expect(body).toMatch(/S22\.2 \(2026-07-06, Stoplight relayout\) — blockquote = info callout/);
     expect(body).toMatch(
-      /\.prose blockquote \{\s*\n\s*background: var\(--raised\);\s*\n\s*border-top-right-radius: 0\.5rem;\s*\n\s*border-bottom-right-radius: 0\.5rem;\s*\n\s*padding: 0\.75rem 1\.25rem;\s*\n\s*font-weight: 400;\s*\n\}/,
+      /\.prose blockquote \{\s*\n\s*background: var\(--raised\);\s*\n\s*border: 1px solid var\(--border\);\s*\n\s*border-left: 3px solid var\(--accent-2\);\s*\n\s*border-radius: 0\.75rem;/,
     );
     expect(body).toMatch(
       /\.prose blockquote p:first-of-type::before,\s*\n\s*\.prose blockquote p:last-of-type::after \{\s*\n\s*content: none;\s*\n\}/,
     );
-    // the accent-2 quote-border hook the callout rule leans on.
     expect(body).toMatch(/--tw-prose-quote-borders: var\(--accent-2\);/);
   });
 
-  it('S22.4 (2026-07-06, Stoplight reference furniture) — .method-chip recipes pinned: tiny mono uppercase badges; wash = 15%-alpha rgb() of the mode status token (NOT color-mix — its Lightning-CSS fallback degrades to a solid same-color background on pre-color-mix browsers); text = readable direction per mode, all pairs AA-verified ≥4.5:1 over BOTH --bg and --hover composites. S24 2026-07-06: the chip precedent got promoted to the shared --ready-text/--busy-text/--err-text tokens, so GET/PUT/PATCH/DELETE consume the tokens and flip per mode with NO light overrides (light tones moved to the shared values #097245/#845a09/#ad3229, re-verified over the washes). POST stays hardcoded per mode (no --sync-text token; sync is docs-chip-only, and no --sync-rgb exists because the mode blocks stay byte-identical to marketing)', () => {
-    expect(body).toMatch(
-      /S22\.4 \(2026-07-06, Stoplight reference furniture\) — HTTP method chips/,
+  // The method chips: GET/PUT/PATCH/DELETE read the app's status tokens through
+  // the web aliases (--ready-text → status-ready, --busy-text → status-busy,
+  // --err-text → status-error-text; the washes → the status fill), POST keeps a
+  // blue of its own per mode. A chip sits on the page ground at rest and on the
+  // raised surface when its row is hovered (DocLayout's endpoint rows).
+  const chipAlpha = (): number => {
+    const m = body.match(
+      /\.method-chip--get \{\s*\n\s*color: var\(--ready-text\);\s*\n\s*background: rgb\(var\(--ready-rgb\) \/ ([0-9.]+)\);/,
     );
+    return Number(m?.[1]);
+  };
+  const chips = (mode: 'light' | 'dark'): Array<[string, string, string]> => {
+    const t = tokens.modes[mode] as Record<string, string>;
+    return [
+      ['GET', t['status-ready'] as string, t['status-ready'] as string],
+      ['PUT/PATCH', t['status-busy'] as string, t['status-busy'] as string],
+      ['DELETE', t['status-error-text'] as string, t['status-error'] as string],
+      mode === 'light' ? ['POST', '#1d4ed8', '#2563eb'] : ['POST', '#93c5fd', '#60a5fa'],
+    ];
+  };
+
+  it('S22.4 .method-chip recipes pinned: tiny mono uppercase badges, wash = rgb()/alpha of the mode’s status triplet (NOT color-mix — its Lightning-CSS fallback degrades to a solid same-colour background), text = the status token; POST keeps its own blue per mode', () => {
     expect(body).toMatch(
       /\.method-chip \{\s*\n\s*display: inline-block;\s*\n\s*flex-shrink: 0;\s*\n\s*min-width: 2\.75rem;/,
     );
     expect(body).toMatch(/font-size: 0\.625rem;/);
     expect(body).toMatch(/text-transform: uppercase;/);
-    // S24 — status-text tokens carry the text tone; washes stay rgb()/alpha.
+    expect(chipAlpha()).toBe(0.12);
     expect(body).toMatch(
-      /\.method-chip--get \{\s*\n\s*color: var\(--ready-text\);\s*\n\s*background: rgb\(var\(--ready-rgb\) \/ 0\.15\);/,
+      /\.method-chip--post \{\s*\n\s*color: #93c5fd;\s*\n\s*background: rgb\(96 165 250 \/ 0\.12\);/,
     );
     expect(body).toMatch(
-      /\.method-chip--post \{\s*\n\s*color: var\(--sync\);\s*\n\s*background: rgb\(96 165 250 \/ 0\.15\);/,
+      /\.method-chip--put,\s*\n\s*\.method-chip--patch \{\s*\n\s*color: var\(--busy-text\);\s*\n\s*background: rgb\(var\(--busy-rgb\) \/ 0\.12\);/,
     );
     expect(body).toMatch(
-      /\.method-chip--put,\s*\n\s*\.method-chip--patch \{\s*\n\s*color: var\(--busy-text\);\s*\n\s*background: rgb\(var\(--busy-rgb\) \/ 0\.15\);/,
+      /\.method-chip--delete \{\s*\n\s*color: var\(--err-text\);\s*\n\s*background: rgb\(var\(--err-rgb\) \/ 0\.12\);/,
     );
-    // DELETE rides --err-text (raw #ff6b61 is 4.35:1 over a hovered row —
-    // the S22.4 finding that seeded the token).
     expect(body).toMatch(
-      /\.method-chip--delete \{\s*\n\s*color: var\(--err-text\);\s*\n\s*background: rgb\(var\(--err-rgb\) \/ 0\.15\);/,
+      /\[data-mode='light'\] \.method-chip--post \{\s*\n\s*color: #1d4ed8;\s*\n\s*background: rgb\(37 99 235 \/ 0\.12\);/,
     );
-    // POST keeps its per-mode hardcoded pair (wash triplet + text tone);
-    // the GET/PUT/PATCH/DELETE light overrides are GONE (tokens flip).
-    expect(body).toMatch(/\[data-mode='light'\] \.method-chip--post \{\s*\n\s*color: #1d4ed8;/);
-    expect(body).toMatch(
-      /\[data-mode='light'\] \.method-chip--post \{\s*\n\s*background: rgb\(37 99 235 \/ 0\.15\);/,
-    );
-    expect(body).not.toMatch(/\[data-mode='light'\] \.method-chip--get/);
-    expect(body).not.toMatch(/\[data-mode='light'\] \.method-chip--delete/);
-    expect(body).not.toMatch(/color: #06663d;/);
-    // The AA evidence table ships in the comment (S24 values).
-    expect(body).toMatch(/dark : GET var\(--ready-text\) #2fe39a 9\.49\/6\.50/);
-    expect(body).toMatch(/light: GET #097245 4\.58\/4\.54/);
-    expect(body).toMatch(/DELETE var\(--err-text\) #ff7d74 6\.91\/4\.88/);
-    // color-mix must not come back for the chip washes.
     expect(body).not.toMatch(/color-mix\([^)]*--ready/);
   });
 
-  it('cross-app token-value parity: every dark/light ladder hex + all 6 accent-text pairs + all 6 S24 status-text pairs in the docs file also appear in the marketing source of truth (S22.1 byte-identical port)', () => {
-    const marketing = read(MARKETING);
-    for (const token of [
-      '--bg: #060608;',
-      '--surface: #14141a;',
-      '--raised: #1c1c24;',
-      '--hover: #24252f;',
-      '--border: #2c2c38;',
-      '--ink: #f5f5f7;',
-      '--ink-2: #b0b0bb;',
-      '--ink-3: #8c8c96;',
-      // S23 2026-07-06 — AA light ink-3, unified same-commit in all three apps.
-      '--ink-3: #6a6d7a;',
-      '--ink-3-rgb: 106 109 122;',
-      '--bg: #f2f3f6;',
-      '--accent: #9b3b46;',
-      '--accent-text: #d4626e;',
-      '--accent-text: #8d2c3e;',
-      '--accent-text: #8b7dff;',
-      '--accent-text: #5847e0;',
-      '--accent-text: #1bc7a8;',
-      '--accent-text: #0c7d69;',
-      // S24 2026-07-06 — AA status-text pairs (light needs darker-than-token
-      // tones; dark reuses ready/busy and lifts err to the S22.4 DELETE
-      // value), unified same-commit in all three apps.
-      '--ready-text: #097245;',
-      '--busy-text: #845a09;',
-      '--err-text: #ad3229;',
-      '--ready-text: #2fe39a;',
-      '--busy-text: #ffc24d;',
-      '--err-text: #ff7d74;',
-      '--code-bg: #16171c;',
-      '--code-bg: #0c0c11;',
-    ]) {
-      expect(body).toContain(token);
-      expect(marketing).toContain(token);
+  it('P4 — every method chip clears AA (4.5:1) over its wash composited on BOTH grounds it sits on (page ground at rest, raised surface on hover), in both modes, measured from the package’s values', () => {
+    // The hover ground measured here IS the one DocLayout's endpoint rows use.
+    const layout = read(resolve(REPO_ROOT, 'apps/docs/src/layouts/DocLayout.astro'));
+    const row = layout.match(/<a\s+href=\{child\.href\}\s+class="([^"]+)"/);
+    expect(row?.[1]).toMatch(/\bhover:bg-tk-surface\b/);
+    const alpha = chipAlpha();
+    for (const mode of ['light', 'dark'] as const) {
+      const t = tokens.modes[mode] as Record<string, string>;
+      for (const ground of ['surface-base', 'surface-raised']) {
+        for (const [name, text, fill] of chips(mode)) {
+          const ratio = contrast(rgb(text), wash(rgb(fill), alpha, rgb(t[ground] as string)));
+          expect(ratio, `${mode} ${name} on ${ground}`).toBeGreaterThanOrEqual(4.5);
+        }
+      }
     }
-  });
-
-  it('S24 (2026-07-06) — AA-safe status-toned TEXT tokens pinned: --ready-text/--busy-text/--err-text per data-mode block (raw ready/busy/err are FILL tones — light err #d8453c is 3.91:1 on --bg, ready 3.27:1, busy 2.66:1 as small text; dark err #ff6b61 is 4.35:1 over its 15% wash on hover) + the @theme inline tk mapping so text-tk-*-text utilities exist. Status-colored TEXT consumes the *-text pair; dots/fills/washes/borders keep the raw tokens', () => {
-    expect(body).toMatch(
-      /--ready-text: #097245;\s*\n\s*--busy-text: #845a09;\s*\n\s*--err-text: #ad3229;/,
+    // CONTROL — the measurement does fail a real near-miss: the old 15% wash on
+    // the old hover ground (surface-inset) put the light DELETE chip at 4.14.
+    const light = tokens.modes.light as Record<string, string>;
+    const nearMiss = contrast(
+      rgb(light['status-error-text'] as string),
+      wash(rgb(light['status-error'] as string), 0.15, rgb(light['surface-inset'] as string)),
     );
-    expect(body).toMatch(
-      /--ready-text: #2fe39a;\s*\n\s*--busy-text: #ffc24d;\s*\n\s*--err-text: #ff7d74;/,
-    );
-    expect(body).toMatch(/--color-tk-ready-text: var\(--ready-text\);/);
-    expect(body).toMatch(/--color-tk-busy-text: var\(--busy-text\);/);
-    expect(body).toMatch(/--color-tk-err-text: var\(--err-text\);/);
+    expect(nearMiss).toBeLessThan(4.5);
   });
 });

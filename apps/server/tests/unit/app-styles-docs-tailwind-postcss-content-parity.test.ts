@@ -110,7 +110,13 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     );
   });
 
-  it('S22.1 docs/src/styles/base.css (2026-07-06 brand-parity port — supersedes the R11 light+violet pins): Tailwind v4 @import + mode-axis color-scheme + tk token bg + Geist/JetBrains-Mono self-hosted fonts + 3 utility atoms (btn-primary flat accent + btn-secondary solid + nav-link accent-text hover) so the docs read as one product with driftstack.io (dark+oxblood default, light toggle)', () => {
+  // P4 (2026-09-25) — the docs now take their tokens from packages/design-tokens
+  // (the desktop app's own theme, light by default); the two docs arms below
+  // moved with it: the primary CTA hovers to accent-fill-hover (the app's
+  // darkening hover — white stays 7.11:1), the secondary face is the raised
+  // surface, and @theme no longer declares fonts or a 14px card radius (the
+  // package's theme-v4.css carries the app's stacks and its 12px card radius).
+  it('S22.1 docs/src/styles/base.css (2026-07-06 brand-parity port — supersedes the R11 light+violet pins; P4 2026-09-25 tokens from the shared package, light default): Tailwind v4 @import + mode-axis color-scheme + tk token bg + Geist/JetBrains-Mono self-hosted fonts + 3 utility atoms (btn-primary flat accent + btn-secondary solid + nav-link accent-text hover) so the docs read as one product with the desktop app', () => {
     const body = read('apps/docs/src/styles/base.css');
     // W368 — Tailwind v4: @import + typography @plugin (was the 3-directive header);
     // component atoms are @utility (was @layer components).
@@ -124,9 +130,10 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     expect(body).toMatch(
       /font-family: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;/,
     );
+    expect(body).toMatch(/@import '@driftstack\/design-tokens\/tokens\.css';/);
     expect(body).toMatch(/@utility btn-primary \{/);
     expect(body).toMatch(/bg-tk-accent/);
-    expect(body).toMatch(/hover:bg-tk-accent-strong/);
+    expect(body).toMatch(/hover:bg-tk-accent-fill-hover active:bg-tk-accent-strong/);
     expect(body).toMatch(/@utility btn-secondary \{/);
     expect(body).toMatch(/border border-tk-border/);
     expect(body).toMatch(/@utility nav-link \{/);
@@ -143,7 +150,7 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/docs/src/styles/base.css'))).toBe(true);
   });
 
-  it('apps/docs/src/styles/base.css @theme (S22.1 — the W368 legacy palette ramps are RETIRED: the violet-valued oxblood ladder + baked slate scale are gone; the Tailwind v4 CSS-first adaptation now maps the Fleet two-axis custom properties into the tk namespace via @theme inline, values byte-identical to marketing). Geist/Berkeley+JetBrains font vars + prose 65ch container + 14px card radius pinned', () => {
+  it('apps/docs/src/styles/base.css @theme (S22.1 — the W368 legacy palette ramps are RETIRED; P4 2026-09-25 — the values come from the shared package: the docs keep their own tk map (reading the web aliases) and the prose 65ch container, while the font stacks and the 12px card radius come from theme-v4.css)', () => {
     const body = read('apps/docs/src/styles/base.css');
     expect(body).toMatch(/@plugin '@tailwindcss\/typography';/);
     // Legacy single-axis ramps are gone (tk-* replaces them).
@@ -156,12 +163,10 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     expect(body).toMatch(/--color-tk-bg: var\(--bg\);/);
     expect(body).toMatch(/--color-tk-ink: var\(--ink\);/);
     expect(body).toMatch(/--color-tk-accent-text: var\(--accent-text\);/);
-    expect(body).toMatch(/--font-sans: Geist, ui-sans-serif, system-ui, sans-serif;/);
-    expect(body).toMatch(
-      /--font-mono: 'Berkeley Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;/,
-    );
+    expect(body).toMatch(/@import '@driftstack\/design-tokens\/theme-v4\.css';/);
+    expect(body).not.toMatch(/--font-sans:/);
+    expect(body).not.toMatch(/--radius-card:/);
     expect(body).toMatch(/--container-prose: 65ch;/);
-    expect(body).toMatch(/--radius-card: 14px;/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/docs/src/styles/base.css'))).toBe(true);
   });
 

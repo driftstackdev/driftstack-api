@@ -5,7 +5,8 @@
 // Cross-links back to marketing for the full company navigation.
 //
 // S22.1 (2026-07-06) — tk-* token migration + theme-toggle button in the
-// meta row (marketing Footer parity).
+// meta row (marketing Footer parity). P4 (2026-09-25): light is the
+// default, so the toggle starts as "Switch to dark theme", pressed.
 const year = new Date().getUTCFullYear();
 ---
 
@@ -51,9 +52,9 @@ const year = new Date().getUTCFullYear();
         type="button"
         data-theme-toggle
         class="flex h-7 w-7 items-center justify-center rounded-md border border-tk-border text-tk-ink-3 transition-colors hover:border-tk-ink-3/40 hover:text-tk-ink"
-        aria-label="Switch to light theme"
-        aria-pressed="false"
-        title="Switch to light theme"
+        aria-label="Switch to dark theme"
+        aria-pressed="true"
+        title="Switch to dark theme"
       >
         <svg class="hidden dark:block" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="4"></circle>
