@@ -34,6 +34,10 @@ on:
     branches: [main]
     paths:
       - 'apps/errors-site/**'
+      # The shared design tokens (colours, radii, type). A token change must
+      # redeploy every site built on them; without this line it would merge and
+      # redeploy nothing.
+      - 'packages/design-tokens/**'
       - '.github/workflows/deploy-errors-site.yml'
       - 'package.json'
       - 'package-lock.json'

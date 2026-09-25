@@ -69,7 +69,7 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     expect(pkg.scripts['dev:status']).toBe('npm run dev --workspace @driftstack/status-site');
   });
 
-  it("test + pretest + lint + typecheck framing pinned: 'pretest: npm run build' (ordered fresh-build hook, build:packages then build:apps, before vitest) + 'test: vitest run' + 'test:watch: vitest' + 'bench: vitest bench --run' + 'bench:check-regression: node scripts/check-bench-regression.mjs' + 'typecheck: npm run typecheck --workspaces --if-present' + 'lint: eslint + check-subprocessor-mirror + gen-archetype-registry --check' + format/format:check running prettier through node with an explicit heap — pinned so the pretest-build-hook + test/bench/typecheck/lint workspace propagation + check-subprocessor-mirror lint-companion commitment survives", () => {
+  it("test + pretest + lint + typecheck framing pinned: 'pretest: npm run build' (ordered fresh-build hook, build:packages then build:apps, before vitest) + 'test: vitest run' + 'test:watch: vitest' + 'bench: vitest bench --run' + 'bench:check-regression: node scripts/check-bench-regression.mjs' + 'typecheck: npm run typecheck --workspaces --if-present' + 'lint: eslint + check-subprocessor-mirror + gen-archetype-registry --check + design-tokens --check' + format/format:check running prettier through node with an explicit heap — pinned so the pretest-build-hook + test/bench/typecheck/lint workspace propagation + check-subprocessor-mirror lint-companion commitment survives", () => {
     // 2026-05-20 — pretest wraps the workspace build in a
     // PUBLIC_API_BASE_URL default so astro builds don't crash when
     // the env var is unset (pre-push gate guarantee per task #45);
@@ -107,8 +107,13 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     // how a gate and CI come to disagree. The ceiling lives in the SCRIPT so
     // every invoker gets the same one. ⚠️ Exit 134 from this step means "could
     // not run"; read it as a memory problem before reading it as a lint problem.
+    // 2026-09-25 — `packages/design-tokens/build.mjs --check` joined the chain the
+    // same way. The package commits its generated CSS/preset (no deploy workflow
+    // runs a build step), so a tokens.json edit without a regenerated dist/ would
+    // ship the OLD colours while the source said the new ones; the check exits 1
+    // on any stale, missing or unexpected file in dist/.
     expect(pkg.scripts.lint).toBe(
-      'node --max-old-space-size=8192 ./node_modules/eslint/bin/eslint.js . && node scripts/check-subprocessor-mirror.mjs && node scripts/gen-archetype-registry.mjs --check',
+      'node --max-old-space-size=8192 ./node_modules/eslint/bin/eslint.js . && node scripts/check-subprocessor-mirror.mjs && node scripts/gen-archetype-registry.mjs --check && node packages/design-tokens/build.mjs --check',
     );
     // Both format scripts invoke prettier's CJS entry through node with an
     // explicit --max-old-space-size. Bare `prettier --check .` ABORTS with a

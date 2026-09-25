@@ -1,0 +1,32 @@
+{
+  "name": "@driftstack/design-tokens",
+  "version": "0.0.1",
+  "description": "The design tokens every Driftstack surface builds on: the desktop app's light and dark themes, the oxblood accent, radii, type and motion, as CSS variables, a Tailwind v3 preset, a Tailwind v4 theme and hex constants.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    "./tokens.css": "./dist/tokens.css",
+    "./web-aliases.css": "./dist/web-aliases.css",
+    "./theme-v4.css": "./dist/theme-v4.css",
+    "./tailwind-preset": "./dist/tailwind-preset.mjs",
+    "./hex": {
+      "types": "./dist/hex.d.mts",
+      "import": "./dist/hex.mjs"
+    },
+    "./tokens.json": "./tokens.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "tokens.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  // Typecheck this package's TESTS (scripts/typecheck-test-backlog.mjs pins it at
+  // zero errors). The package has no TypeScript source of its own: build.mjs is
+  // plain JS, typed for its callers by build.d.mts, and dist/hex.d.mts types the
+  // generated constants. Extends the base, not a sibling config, so no inherited
+  // `exclude` can drop the tests (see packages/recipe-library/tsconfig.test.json).
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["tests/**/*", "build.d.mts", "dist/*.d.mts"],
+  "exclude": ["node_modules"]
+}

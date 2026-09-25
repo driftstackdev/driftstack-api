@@ -36,6 +36,9 @@ on:
     paths:
       - 'apps/gui-client/**'
       - 'packages/api-types/**'
+      # The web's design tokens are taken from the app's theme; a change to them is
+      # measured against the app it must match.
+      - 'packages/design-tokens/**'
       - 'scripts/gui-visual-check.mjs'
       - 'scripts/gui-text-quality.mjs'
       - '.github/workflows/gui-gates.yml'

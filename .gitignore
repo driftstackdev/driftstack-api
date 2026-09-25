@@ -82,3 +82,10 @@ AGENTS.md
 # never reach a commit.
 apps/gui-client/src-tauri/Driftstack Simulator.app/
 apps/gui-client/src-tauri/Driftstack Simulator.app.zip
+
+# The design tokens COMMIT their generated outputs (CSS, the Tailwind preset and
+# theme, hex constants): no deploy workflow runs a build step, and a reviewer sees
+# the exact CSS a token change ships. `node packages/design-tokens/build.mjs --check`
+# (in `npm run lint`) keeps them in step with tokens.json. Re-includes the one
+# dist/ the `dist/` rule above would otherwise hide.
+!packages/design-tokens/dist/

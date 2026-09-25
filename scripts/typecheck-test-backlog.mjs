@@ -67,6 +67,9 @@ const BACKLOG = [
   { project: 'packages/recipe-library/tsconfig.test.json', pinned: 0, minTestFiles: 6 },
   { project: 'packages/webhook-delivery/tsconfig.test.json', pinned: 0, minTestFiles: 3 },
   { project: 'packages/webrtc-streaming/tsconfig.test.json', pinned: 0, minTestFiles: 4 },
+  // 2026-09-25 — the design tokens joined at zero, like the packages above: its tests
+  // are typed against build.d.mts and dist/hex.d.mts from their first commit.
+  { project: 'packages/design-tokens/tsconfig.test.json', pinned: 0, minTestFiles: 4 },
   // W-12, 2026-08-26 (second pass) — the packages sweep fixed the family in front
   // of it and never asked the same question one directory up. FIVE apps drive
   // their typecheck through `astro check`, whose tsconfig `include` is

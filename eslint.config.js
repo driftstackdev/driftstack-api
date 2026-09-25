@@ -51,6 +51,11 @@ export default tseslint.config(
       // tsconfig: the same standalone-JS case as `scripts/**` above. Its shape
       // is pinned by apps/server/tests/unit/the-dev-hosts-redirect-to-io.test.ts.
       'functions/**',
+      // The design-token generator — the same standalone-.mjs case as `scripts/**`
+      // above (outside any tsconfig; its callers are typed by build.d.mts, and its
+      // output is checked by `build.mjs --check` and the package's own tests).
+      'packages/design-tokens/build.mjs',
+      'packages/design-tokens/build.d.mts',
     ],
   },
   js.configs.recommended,
