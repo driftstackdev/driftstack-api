@@ -76,8 +76,11 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     expect(body).toMatch(
       /class:list=\{\[\s*(?:\/\/[^\n]*\n\s*)*'nav-link font-medium',\s*(?:\/\/[^\n]*\n\s*)*isActiveItem\(item\) && 'text-tk-accent-text',?\s*\]\}/,
     );
+    // 2026-09-25: the menu link takes ONE text tone — accent when current,
+    // ink-2 otherwise. With both utilities on the current link, ink-2 (later
+    // in the stylesheet) won and the current page never showed the accent.
     expect(body).toMatch(
-      /'rounded px-3 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink',\s*(?:\/\/[^\n]*\n\s*)*isActiveItem\(item\) && 'text-tk-accent-text',?\s*\]\}/,
+      /'rounded px-3 py-2 text-sm font-medium hover:bg-tk-hover hover:text-tk-ink',\s*(?:\/\/[^\n]*\n\s*)*isActiveItem\(item\) \? 'text-tk-accent-text' : 'text-tk-ink-2',?\s*\]\}/,
     );
     expect(body).toMatch(/href=\{item\.external \? item\.href : `\$\{item\.href\}\/`\}/);
   });

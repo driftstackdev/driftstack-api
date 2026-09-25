@@ -157,7 +157,13 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     expect(body.match(/aria-current=\{isActiveItem\(item\) \? 'page' : undefined\}/g)).toHaveLength(
       2,
     );
-    expect(body.match(/isActiveItem\(item\) && 'text-tk-accent-text'/g)).toHaveLength(2);
+    // 2026-09-25: the desktop nav adds the accent over nav-link's component-
+    // layer tone; the menu picks one tone or the other, because two colour
+    // utilities resolve by stylesheet order and ink-2 came later (2 → 1).
+    expect(body.match(/isActiveItem\(item\) && 'text-tk-accent-text'/g)).toHaveLength(1);
+    expect(
+      body.match(/isActiveItem\(item\) \? 'text-tk-accent-text' : 'text-tk-ink-2'/g),
+    ).toHaveLength(1);
     expect(body).toMatch(/'nav-link font-medium'/);
   });
 
@@ -173,6 +179,18 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     expect(pricing.match(/href="\/pricing\/" aria-current="page"/g)).toHaveLength(2);
     expect(qa.match(/href="\/use-cases\/" aria-current="page"/g)).toHaveLength(2);
     expect(pricing).not.toMatch(/href="https:\/\/docs\.driftstack\.io" aria-current="page"/);
+  });
+
+  it('the built menu shows the current page in the accent tone (2026-09-25): its link carried text-tk-ink-2 AND text-tk-accent-text, and ink-2 comes later in the stylesheet, so the accent never showed', () => {
+    const pricing = read(BUILT_PRICING);
+    const current = [
+      ...pricing.matchAll(/<a href="\/pricing\/" aria-current="page" class="([^"]*)"/g),
+    ].map((m) => m[1]!.split(/\s+/));
+    expect(current).toHaveLength(2);
+    for (const classes of current) {
+      expect(classes).toContain('text-tk-accent-text');
+      expect(classes).not.toContain('text-tk-ink-2');
+    }
   });
 });
 

@@ -170,8 +170,11 @@ function isActiveItem(item: { href: string; external?: boolean }): boolean {
                   // desktop nav (above) so the mobile popup doesn't reflow
                   // when the active item is tapped. S24: same AA-safe
                   // accent-text active tone as the desktop nav.
-                  'rounded px-3 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink',
-                  isActiveItem(item) && 'text-tk-accent-text',
+                  // 2026-09-25: one text tone OR the other. Given both as
+                  // utilities, the later one in the stylesheet (ink-2) won, so
+                  // this menu never showed the current page in the accent.
+                  'rounded px-3 py-2 text-sm font-medium hover:bg-tk-hover hover:text-tk-ink',
+                  isActiveItem(item) ? 'text-tk-accent-text' : 'text-tk-ink-2',
                 ]}
                 target={'external' in item && item.external ? '_blank' : undefined}
                 rel={'external' in item && item.external ? 'noopener noreferrer' : undefined}
