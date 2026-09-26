@@ -1842,7 +1842,7 @@ export function saveServerProbeResult(
     const all = await loadProbeCache();
     const prior = all[proxyId];
     if (prior === undefined) return all;
-    const quic = cleanMeasuredQuic(server.quicMeasured) ?? undefined;
+    let quic = cleanMeasuredQuic(server.quicMeasured) ?? undefined;
     const vantage = cleanServerVantage(server.measuredFrom, server.nodeId);
     // (h) finding 3 — a server VERDICT replaces the fleet-failure sentence
     // too: this is the "next fleet answer" that clears it.
@@ -1869,19 +1869,34 @@ export function saveServerProbeResult(
     // masked by an OLDER live verdict, which outranks it in the chip, until that
     // verdict expires half an hour later.
     //
+    // ⛔⛔ (G8 / logic-07) — and the live verdict it is weighed against is BOTH the
+    // one already in the cache AND the one this very reply carries back. account-me
+    // echoes the row's stored `quic_measured` on the /test response (it is a dated
+    // reading, not a fresh measurement), so a fresh relay `quic_ok:false` used to
+    // land beside an h3 measured 20 min earlier and the h3 — re-stored from the
+    // reply — won the chip. It used to guard on `quic === undefined`, which is
+    // exactly the case where the reply carries no live verdict; a reply that DID
+    // carry one skipped this rule and re-seeded the stale green. Treat the incoming
+    // `quic_measured` as the dated reading it is and let the LATER date win, a tie
+    // keeping the live one, exactly as `seedServerCapabilityReadings` does.
+    //
     // Only when THIS result actually measured the relay (`server.quicProbe` a
-    // boolean -- a carried verdict re-measured nothing and retires nothing), only
-    // when this result does not itself carry a newer live verdict, and only when
-    // the stored live verdict is not NEWER than this test: a live observation
-    // that landed while the server test was in flight is the later evidence and
-    // must not be retired by it.
+    // boolean -- a carried verdict re-measured nothing and retires nothing), and
+    // only when the relay is STRICTLY newer than the live verdict: a live
+    // observation that landed while the server test was in flight (dated after
+    // `at`), or one dated at the same instant, is the later evidence and must not
+    // be retired by it.
+    const liveValue = quic ?? kept.quicMeasured;
+    const liveAt = quic !== undefined ? (server.quicMeasuredAt ?? at) : kept.quicMeasuredAt;
     const liveContradicted =
-      quic === undefined &&
       typeof server.quicProbe === 'boolean' &&
-      (kept.quicMeasuredAt === undefined || kept.quicMeasuredAt <= at) &&
-      ((server.quicProbe && kept.quicMeasured === 'h2-only') ||
-        (!server.quicProbe && kept.quicMeasured === 'h3'));
+      (liveAt === undefined || liveAt < at) &&
+      ((server.quicProbe && liveValue === 'h2-only') || (!server.quicProbe && liveValue === 'h3'));
     if (liveContradicted) {
+      // Drop the loser whether it came from the cache (`kept`) or from this reply
+      // (`quic`): the write below spreads `kept` and then the incoming `quic`, so
+      // both sources must be cleared or the reply's copy would still be stored.
+      quic = undefined;
       delete kept.quicMeasured;
       delete kept.quicMeasuredAt;
     }

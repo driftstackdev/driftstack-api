@@ -280,3 +280,56 @@ describe('the cache', () => {
     expect(view.quicMeasured).toEqual({});
   });
 });
+
+describe('G8 (logic-07) — a fresh relay verdict outranks an OLDER live one the reply carried back', () => {
+  // account-me echoes the row's STORED live verdict (`quic_measured`) back on the
+  // /test reply, beside the fleet's FRESH relay handshake (`quic_ok`). Until this
+  // fix `saveServerProbeResult` only weighed a fresh relay against a verdict ALREADY
+  // in the cache (`quic === undefined`), so an h3 measured 20 min ago and echoed
+  // back showed a green "HTTP/3 verified in a live session" beside a relay that had
+  // just measured no QUIC. The later reading must win; a tie keeps the live one,
+  // exactly as `seedServerCapabilityReadings` does.
+  it('CRITICAL retires an echoed h3 dated 20 min earlier when the Test measured quic_ok:false now', async () => {
+    const now = 1_700_000_000_000;
+    const twentyMinAgo = now - 20 * 60 * 1000;
+    await saveProbeResult('p1', OK, twentyMinAgo);
+    await saveServerProbeResult(
+      'p1',
+      {
+        quicMeasured: 'h3',
+        quicMeasuredAt: twentyMinAgo,
+        quicProbe: false,
+        measuredFrom: 'fleet',
+        nodeId: 'n1',
+      },
+      now,
+    );
+    const c = (await loadProbeCache()).p1;
+    expect(c?.quicMeasured, 'the older live h3 is retired, not stored').toBeUndefined();
+    expect(c?.quicProbe, 'the fresh relay false stands').toBe(false);
+    const view = deriveProbeViewState(await loadProbeCache(), now);
+    expect(view.quicMeasured.p1, 'no green live verdict survives the reply').toBeUndefined();
+    expect(view.quicProbe.p1, 'the QUIC chip reads ⤵ from the relay').toBe(false);
+  });
+
+  it('CONTROL — a live h3 NEWER than the reply relay false wins the tie-break and stays green', async () => {
+    // The mirror the fix must not break: an h3 observed while the Test was in flight
+    // (dated after `at`) is the later evidence and keeps its green chip.
+    const now = 1_700_000_000_000;
+    const fiveMinAhead = now + 5 * 60 * 1000;
+    await saveProbeResult('p1', OK, now - 1000);
+    await saveServerProbeResult(
+      'p1',
+      {
+        quicMeasured: 'h3',
+        quicMeasuredAt: fiveMinAhead,
+        quicProbe: false,
+        measuredFrom: 'fleet',
+        nodeId: 'n1',
+      },
+      now,
+    );
+    const c = (await loadProbeCache()).p1;
+    expect(c?.quicMeasured, 'the newer live h3 is kept').toBe('h3');
+  });
+});
