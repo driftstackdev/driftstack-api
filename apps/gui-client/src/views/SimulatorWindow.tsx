@@ -65,6 +65,11 @@ import {
 import { reportSimulatorPreviousRun } from '../lib/simulator-previous-run';
 import { admitTabIncarnation, type TabIncarnations } from '../lib/simulator-tab-incarnation';
 import {
+  heldRoomFramesFor,
+  holdRoomFrame,
+  type HeldRoomFrames,
+} from '../lib/simulator-room-frame-handoff';
+import {
   SESSION_ACCESS_EXPIRED_NOTICE,
   isControlKeyRefused,
   queryAfterHandoff,
@@ -6982,11 +6987,19 @@ function SimulatorWindowInner({
       resetInputReceipts(room);
     };
   }, [room, sessionId, manualInputControl.epoch]);
+  // Frames that reached the listener below after its authority epoch moved on,
+  // held for the next one (lib/simulator-room-frame-handoff.ts).
+  const heldRoomFramesRef = useRef<HeldRoomFrames<Room> | null>(null);
   useEffect(() => {
-    if (room === null) return;
+    if (room === null) {
+      // No listener is coming for the room they were held for.
+      heldRoomFramesRef.current = null;
+      return;
+    }
     const listenerRoom = room;
     const listenerSessionId = sessionId;
     const listenerAuthorityEpoch = manualInputControl.epoch;
+    let subscribed = false;
     const onData = (payload: Uint8Array): void => {
       if (
         sessionIdRef.current !== listenerSessionId ||
@@ -6994,6 +7007,26 @@ function SimulatorWindowInner({
         roomBindingRef.current.room !== listenerRoom ||
         manualInputControlRef.current.epoch !== listenerAuthorityEpoch
       ) {
+        // The same session's same room, a NEWER epoch: React has not yet
+        // subscribed that epoch's listener, so this frame is its — hold it
+        // rather than drop it (a focus report the phone sends once was lost
+        // here, and the keyboard waited for a second tap). A frame for a room
+        // or session the window has left, or one reaching a listener already
+        // unsubscribed, stays dropped.
+        if (
+          subscribed &&
+          sessionIdRef.current === listenerSessionId &&
+          roomBindingRef.current?.sessionId === listenerSessionId &&
+          roomBindingRef.current.room === listenerRoom &&
+          manualInputControlRef.current.epoch > listenerAuthorityEpoch
+        ) {
+          heldRoomFramesRef.current = holdRoomFrame(
+            heldRoomFramesRef.current,
+            listenerSessionId,
+            listenerRoom,
+            payload,
+          );
+        }
         return;
       }
       // ⭐ Any inbound frame refutes "the device did not confirm the last input".
@@ -7672,7 +7705,15 @@ function SimulatorWindowInner({
     } catch {
       return;
     }
+    subscribed = true;
+    // Apply what the previous listener held for this one, oldest first, before
+    // any newer frame can reach it. A frame that is still ahead of this epoch
+    // (the epoch moved again before this commit) is held once more by onData.
+    const held = heldRoomFramesFor(heldRoomFramesRef.current, listenerSessionId, listenerRoom);
+    heldRoomFramesRef.current = null;
+    for (const payload of held) onData(payload);
     return () => {
+      subscribed = false;
       try {
         r.off?.(RoomEvent.DataReceived, onData);
       } catch {

@@ -61,21 +61,27 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
 }));
 
 // The session read. `reported` flips the phone's capability report on and off,
-// which is what grants or withholds manual control here.
+// which is what grants or withholds manual control here. `grant.held` holds
+// every read back until a test releases it; `grant.reads` are the reads made.
 const phone = { reported: true };
+const grant: { held: Promise<void> | null; reads: Promise<unknown>[] } = { held: null, reads: [] };
 vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
   fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
-  getAgentSession: () =>
-    Promise.resolve({
+  getAgentSession: () => {
+    const session = {
       mode: 'manual',
       pairKind: null,
       terminal: false,
       status: 'active',
       closedReason: null,
       ...(phone.reported ? { capabilityReport: { manual_input_available: true } } : {}),
-    }),
+    };
+    const read = grant.held === null ? Promise.resolve(session) : grant.held.then(() => session);
+    grant.reads.push(read);
+    return read;
+  },
   getAgentSessionPageState: () => Promise.resolve(null),
   getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),
   setSessionMode: vi.fn(),
@@ -114,12 +120,13 @@ const PAGE = 'https://shop.example.com/';
 beforeEach(() => {
   latestDataHandler = null;
   phone.reported = true;
+  grant.held = null;
+  grant.reads = [];
 });
 const TAB_A = 'tab_a';
 const TAB_B = 'tab_b';
 
-async function twoTabs(container: HTMLElement): Promise<void> {
-  await waitFor(() => expect(toggle(container)).not.toBeDisabled());
+function restoreTwoTabs(): void {
   push({
     type: 'tabListRestore',
     tabs: [
@@ -128,6 +135,11 @@ async function twoTabs(container: HTMLElement): Promise<void> {
     ],
     activeTabId: TAB_A,
   });
+}
+
+async function twoTabs(container: HTMLElement): Promise<void> {
+  await waitFor(() => expect(toggle(container)).not.toBeDisabled());
+  restoreTwoTabs();
 }
 
 /** Every value the keyboard toggle's aria-pressed takes, in order. */
@@ -150,6 +162,36 @@ describe('(1) a focus frame that names its tab', () => {
     // Straight after the restore (inside the 2.5 s switch grace a tab-less frame waits out).
     push({ state: 'loaded', url: PAGE, tabId: TAB_A, inputFocused: true });
     await waitFor(() => expect(pressed(container)).toBe('true'));
+  });
+
+  // The read that grants manual control moves the window's authority at once,
+  // but the room listener for it is subscribed only when React commits that —
+  // a render later. The phone's restore and its focus report can land in
+  // between (the case above hit it about one run in seven under load). They
+  // are applied when the window can apply them, not dropped: the phone sends
+  // that focus once, so dropping it left the keyboard down until a second tap.
+  it('for the ACTIVE tab, sent while the window is still taking control, it still shows the keyboard', async () => {
+    let release = (): void => undefined;
+    grant.held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { container } = renderSim();
+    await waitFor(() => expect(latestDataHandler).not.toBeNull());
+    expect(toggle(container)).toBeDisabled();
+    const reads = [...grant.reads];
+    expect(reads.length).toBeGreaterThan(0);
+    release();
+    // Every read's own handler runs before this continuation: the grant is
+    // applied. No task has run since, so it is not yet rendered.
+    await Promise.all(reads);
+    expect(toggle(container), 'the grant is not rendered yet').toBeDisabled();
+    restoreTwoTabs();
+    push({ state: 'loaded', url: PAGE, tabId: TAB_A, inputFocused: true });
+    await waitFor(() => expect(pressed(container)).toBe('true'));
+    expect(
+      container.querySelectorAll('[data-component="simulator-tab"]'),
+      'the restore landed too',
+    ).toHaveLength(2);
   });
 
   it('for ANOTHER tab it is ignored', async () => {
