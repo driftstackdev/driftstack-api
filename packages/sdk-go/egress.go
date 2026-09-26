@@ -93,12 +93,12 @@ type AccountProxyMetadata struct {
 	// a caller adopting ExitObserved should refuse an observation dated at or
 	// before it. Cleared by the next exit observation (session or probe).
 	// Driftstack's background reachability check, run from its own servers,
-	// can set it too, so it is not a verdict about where sessions run: read
-	// FullCheckOk for that.
+	// can set it too, so it does not say whether the proxy works where sessions
+	// run: read FullCheckOk for that.
 	ExitSupersededAt *string `json:"exit_superseded_at"`
-	// FullCheckOk is the verdict of the last ?check=full test a phone measured
+	// FullCheckOk is the result of the last ?check=full test a phone measured
 	// (measured_by "phone"): true = the proxy was usable, false = the check
-	// reached a verdict and it was not, nil = no such check since the proxy's
+	// finished and the proxy was not usable, nil = no such check since the proxy's
 	// address, scheme or credentials last changed. FullCheckAt is when it was
 	// measured (RFC 3339), or nil. Nothing else sets them: not a quick check,
 	// not a full check that fell back to Driftstack's servers, not a check

@@ -24,8 +24,6 @@ use zeroize::{Zeroize, Zeroizing};
 
 mod socks5_probe;
 use socks5_probe::{run_socks5_probe, ProxyTestResult, UdpRelay};
-#[cfg(test)]
-use socks5_probe::{socks5_greeting, socks5_userpass};
 
 /// Wall-clock ceiling on each blocking socket op in the SOCKS5 probe.
 /// Eight seconds is generous for a reachable proxy yet short enough
@@ -2787,6 +2785,7 @@ mod tests {
     // (key formatting + service constant) which IS testable purely.
 
     use super::*;
+    use crate::socks5_probe::{socks5_greeting, socks5_userpass};
 
     #[test]
     fn keyring_user_prefix_is_stable() {
