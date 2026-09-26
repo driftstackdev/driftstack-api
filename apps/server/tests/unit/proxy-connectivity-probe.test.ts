@@ -486,6 +486,39 @@ describe('ProxyConnectivityProbe — SOCKS5', () => {
     const res = await probe.probe(SOCKS5_PROXY);
     expect(res.ok).toBe(true);
   });
+
+  it('EGRESS_BLOCKED (S10): CONNECT REP 0x00 then the proxy closes the tunnel AT ONCE → egress_blocked, never timeout', async () => {
+    // A dead proxy that accepts a CONNECT and closes in the same turn as REP 0x00.
+    // The raw tunnel socket is already ended by the time the egress round-trip
+    // starts, so (in prod) the node:tls upgrade emits neither `connect` nor `error`
+    // and the whole probe budget burns down to a 12 s `timeout` — "too slow, try
+    // again shortly" for a tunnel that is simply dead. It must read egress_blocked
+    // FAST. This is NOT the CF hard-drop above: there the close lands DURING the
+    // GET (the tunnel carried bytes first); here it lands BEFORE the round-trip.
+    const { dial } = await fakeProxy((sock) => {
+      let step = 0;
+      sock.on('data', () => {
+        if (step === 0) {
+          sock.write(Buffer.from([0x05, 0x00]));
+          step = 1;
+        } else if (step === 1) {
+          // CONNECT granted, then FIN in the same handler turn — nothing ever
+          // travels through the tunnel.
+          sock.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+          sock.end();
+          step = 2;
+        }
+      });
+    });
+    // A generous budget so a failure would surface as the slow `timeout` the
+    // finding describes rather than a deadline the test itself imposed.
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET, timeoutMs: 5000 });
+    const startedAt = Date.now();
+    const res = await probe.probe(SOCKS5_PROXY);
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('egress_blocked');
+    expect(Date.now() - startedAt, 'answered fast, not after the budget').toBeLessThan(2000);
+  });
 });
 
 describe('the exit identity survives a body that arrives late (V-2154)', () => {
