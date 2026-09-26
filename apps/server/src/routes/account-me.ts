@@ -2514,7 +2514,21 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             return 'The test could not be completed. Try again shortly.';
           }
           if (!r.reachable) {
-            return 'The proxy did not answer. Check the host and port, and that it is online.';
+            // ⛔ S4 (paths-11 interim) — the fleet reaches a SOCKS5 upstream through
+            // gost, whose HTTP listener answers 503 identically whether the upstream
+            // is dead, has the wrong credentials, or refuses to route by ruleset.
+            // Since W3417 all three arrive here as reachable=false, so this leg
+            // CANNOT name which. "The proxy did not answer" (or "rejected the
+            // username and password" on the arm below) would send a customer with a
+            // rotated password or a ruleset block to the wrong setting — a lie a
+            // large share of the time. Name no cause until D4 lets the node classify
+            // the upstream handshake directly (greeting → RFC 1929 status → CONNECT
+            // REP), which is the only vantage that can tell these apart. The
+            // control-plane branch keeps its specific sentences: it dials the
+            // upstream itself and its verdict is honestly attributed.
+            return row.scheme === 'socks5'
+              ? 'Driftstack could not use this proxy from where your sessions run. Check its host, port and credentials with your proxy provider.'
+              : 'The proxy did not answer. Check the host and port, and that it is online.';
           }
           if (!r.auth_ok) {
             return 'The proxy rejected the username and password. Re-enter them and try again.';

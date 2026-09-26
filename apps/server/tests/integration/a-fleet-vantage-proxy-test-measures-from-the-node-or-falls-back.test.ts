@@ -270,7 +270,15 @@ describe('POST /v1/account/me/proxies/:id/test — vantage', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<Record<string, unknown>>();
     expect(body.ok, 'a proxy that answered nothing must not read as a pass').toBe(false);
-    expect(body.reason).toMatch(/did not answer/i);
+    // S4 — the fleet reaches a SOCKS5 upstream through gost, whose 503 is identical
+    // whether the upstream is dead, has the wrong credentials, or refuses to route
+    // by ruleset: all three arrive as reachable=false. So the reply must NOT name a
+    // cause — "did not answer" would send a customer with a rotated password to the
+    // wrong setting. (D4 is the harness change that lets the node classify the
+    // upstream handshake directly; until then the sentence names nothing.)
+    expect(body.reason).not.toMatch(/did not answer/i);
+    expect(body.reason).not.toMatch(/rejected the username/i);
+    expect(body.reason).toMatch(/could not use this proxy/i);
     // Still honestly labelled as a fleet measurement — the verdict changed, not
     // the provenance, and the customer is owed both.
     expect(body.measured_from).toBe('fleet');
@@ -278,6 +286,31 @@ describe('POST /v1/account/me/proxies/:id/test — vantage', () => {
     // (d) — a MEASURED failure carries no `not_run`: the discriminator marks
     // only a test that did not happen, never one that happened and failed.
     expect('not_run' in body).toBe(false);
+  });
+
+  it('S4 a wrong-password SOCKS5 proxy reads the SAME cause-free sentence — gost cannot tell it from a dead one', async () => {
+    // Since W3417 a dead proxy and a wrong-credentials proxy both come back
+    // reachable=false / auth_ok=false from the fleet's gost chain. The reply must
+    // therefore not claim "rejected the username and password" (nor "did not
+    // answer"): the fleet genuinely cannot tell which, and naming either is a lie
+    // half the time.
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    // A node frame with auth_ok:false too — the shape gost's 503 produces.
+    registerDeadProxyNode('mac-us-006', { reachable: false, auth_ok: false });
+    const id = await makeProxy('fleet-wrongpw.example.com');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(false);
+    expect(body.reason).not.toMatch(/rejected the username/i);
+    expect(body.reason).not.toMatch(/did not answer/i);
+    expect(body.reason).toMatch(/could not use this proxy/i);
   });
 
   it('CRITICAL the failing LEG picks the sentence, in the order the probe establishes them', async () => {
