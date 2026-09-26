@@ -193,6 +193,48 @@ describe('a trustworthy-LOOKING reading from an untrustworthy vantage', () => {
   });
 });
 
+describe('G17 (prod-5) — a web-port reading of the entry point says so, never "forwards from the device"', () => {
+  // The prod shape MEASURED 2026-09-14: macos-or-ios / high / proxy_host, taken on
+  // the web port (V-219 makes a front-door reading on that port a green verdict).
+  // The SYN came from the address we DIALLED — the proxy's entry point — not the
+  // exit device, yet the hint read "This provider forwards FROM the device", the
+  // opposite of what proxy_host means. The verdict (green) is unchanged; only the
+  // sentence that names where the reading was taken is corrected.
+  const webPortFrontDoor: OsFingerprint = {
+    ...fp('macos-or-ios'),
+    observedVia: 'proxy_host',
+    webPortVantage: true,
+  };
+  it('CRITICAL names the entry point and never claims the device forwards it', () => {
+    const v = osFingerprintVerdict(webPortFrontDoor);
+    expect(v.tone, 'still green — an Apple reading matches').toBe('match');
+    expect(v.hint).not.toMatch(/forwards from the device/i);
+    expect(v.hint).toMatch(/entry point/i);
+  });
+  it('CONTROL — a web-port reading of the EXIT keeps its plain verdict, no entry-point caveat', () => {
+    const exit: OsFingerprint = {
+      ...fp('macos-or-ios'),
+      observedVia: 'exit_ip',
+      webPortVantage: true,
+    };
+    const v = osFingerprintVerdict(exit);
+    expect(v.tone).toBe('match');
+    expect(v.hint).not.toMatch(/entry point/i);
+    expect(v.hint).not.toMatch(/forwards from the device/i);
+  });
+  it('a MISMATCH web-port entry-point reading names the entry point too', () => {
+    const win: OsFingerprint = {
+      ...fp('windows'),
+      observedVia: 'proxy_host',
+      webPortVantage: true,
+    };
+    const v = osFingerprintVerdict(win);
+    expect(v.tone).toBe('mismatch');
+    expect(v.hint).not.toMatch(/forwards from the device/i);
+    expect(v.hint).toMatch(/entry point/i);
+  });
+});
+
 describe('the chip', () => {
   const tones = (
     fingerprint: OsFingerprint | undefined,

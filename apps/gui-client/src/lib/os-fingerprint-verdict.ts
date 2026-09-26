@@ -560,10 +560,15 @@ function osFingerprintVerdictUndated(fp: OsFingerprint | undefined): OsVerdict {
 /** Why a verdict may be asserted, in the customer's terms — whichever vantage
  *  unlocked it. */
 function vantageSentence(fp: OsFingerprint): string {
-  // Customer terms only: no ports, no vantage names, no third-party sites. The
-  // one caveat a customer can act on is that a forwarding provider may route
-  // some sites differently.
+  // Customer terms only: no ports, no vantage names, no third-party sites.
+  // ⛔ G17 (prod-5) — when the reading is of the proxy's ENTRY POINT (`proxy_host`)
+  // rather than the exit device, the caveat has to SAY so. It used to read "This
+  // provider forwards from the device", which is the opposite of what an entry-point
+  // reading is: the SYN came from the front door we dialled, not from the exit
+  // device. The verdict still stands (V-219: a Darwin stack on the web port is
+  // green), but a customer must not be told the device forwarded a reading that was
+  // taken before the device. Same voice as the observer-port entry-point sentence.
   return fp.webPortVantage === true && fp.observedVia === 'proxy_host'
-    ? ' This provider forwards from the device, so some sites may still be routed differently.'
+    ? " This was read at the proxy's entry point, so some sites may reach a different machine."
     : '';
 }
