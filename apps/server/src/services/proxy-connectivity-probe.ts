@@ -466,7 +466,41 @@ export class ProxyConnectivityProbe {
     const reader = new SocketReader(socket);
     const failed = await this.socks5Tunnel(socket, reader, proxy, targetHost, targetPort);
     if (failed !== null) return failed;
+    const dead = await this.tunnelClosedBeforeRoundTrip(socket);
+    if (dead !== null) return dead;
     return this.egressRoundTrip(socket, reader, targetHost, targetPort, useTls, deadlineState);
+  }
+
+  // S10 (empirical-connect-then-close) — a dead proxy that grants the CONNECT
+  // (REP 0x00) and closes the tunnel in the SAME event-loop turn. Nothing ever
+  // travels through such a tunnel, but by the time the round-trip would run the
+  // node:tls upgrade hand shakes over a socket with nothing behind it, emits
+  // neither `connect` nor `error`, and the whole probe budget burns down to a 12 s
+  // `timeout` — "the proxy is too slow, try again shortly" for a tunnel that is
+  // simply dead. This check sits at the TUNNEL BOUNDARY, before the round-trip, on
+  // purpose: it is NOT the Cloudflare hard-drop case (a close DURING the GET, which
+  // proves the tunnel carried the request and stays a pass), and the round-trip
+  // proper must never mint egress_blocked from a target-side status or drop.
+  //
+  // The FIN/RST that closed the tunnel is not always reflected on the socket the
+  // instant the handshake read resolved: the reply bytes and the close can land
+  // together but surface on separate event-loop turns. Give a same-turn close a
+  // few ticks to become visible, breaking the instant it does. This is a readiness
+  // gate, not a delay — no timer is armed; against a socket already dead (the
+  // production shape this fixes) it breaks on the first check, and a live tunnel
+  // simply proceeds once the short budget is spent.
+  private async tunnelClosedBeforeRoundTrip(socket: Socket): Promise<ProxyProbeResult | null> {
+    for (let i = 0; i < 4 && !(socket.destroyed || socket.readableEnded); i++) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    if (socket.destroyed || socket.readableEnded) {
+      return {
+        ok: false,
+        reason: 'egress_blocked',
+        detail: 'proxy closed the tunnel immediately after CONNECT',
+      };
+    }
+    return null;
   }
 
   /** Greeting + (RFC 1929) auth + CONNECT. Returns the failure, or null once the
@@ -570,6 +604,8 @@ export class ProxyConnectivityProbe {
     const reader = new SocketReader(socket);
     const failed = await this.httpTunnel(socket, reader, proxy, targetHost, targetPort);
     if (failed !== null) return failed;
+    const dead = await this.tunnelClosedBeforeRoundTrip(socket);
+    if (dead !== null) return dead;
     return this.egressRoundTrip(socket, reader, targetHost, targetPort, useTls, deadlineState);
   }
 
@@ -864,34 +900,6 @@ export class ProxyConnectivityProbe {
   ): Promise<ProxyProbeResult> {
     let stream: Socket = socket;
     let streamReader: SocketReader = reader;
-    // S10 (empirical-connect-then-close) — a dead proxy that accepts the CONNECT
-    // and closes the tunnel in the SAME event-loop turn as REP 0x00. By the time
-    // we get here the raw socket is already destroyed/ended, and the node:tls
-    // upgrade below then emits neither `connect` nor `error` (there is no live
-    // socket to hand shake over), so the whole probe budget burns down to a 12 s
-    // `timeout` — "the proxy is too slow, try again shortly" for a tunnel that is
-    // simply dead. Nothing ever travelled through this tunnel, so this is NOT the
-    // Cloudflare hard-drop case handled after the GET (there the tunnel carried the
-    // request first, which itself proves reachability). Fail it fast and by cause.
-    //
-    // The FIN/RST that closed the tunnel is not always reflected on the socket the
-    // instant the handshake read resolved: the reply bytes and the close can land
-    // together but surface on separate event-loop turns. Give a same-turn close a
-    // few ticks to become visible before committing to the (blocking) TLS upgrade,
-    // breaking the instant it does. This is a readiness gate, not a delay — no
-    // timer is armed; against a proxy whose socket is already dead (the production
-    // shape this fixes) it breaks on the first check, and a live tunnel simply
-    // proceeds once the short budget is spent, its buffered bytes read below.
-    for (let i = 0; i < 4 && !(socket.destroyed || socket.readableEnded); i++) {
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    }
-    if (socket.destroyed || socket.readableEnded) {
-      return {
-        ok: false,
-        reason: 'egress_blocked',
-        detail: 'proxy closed the tunnel immediately after CONNECT',
-      };
-    }
     if (useTls) {
       // Upgrade the tunneled socket to TLS (SNI = target host). Lazy-import so the
       // unit tests (which use a plaintext paired socket + useTls=false) don't pull
